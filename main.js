@@ -459,6 +459,7 @@ function initializeCoreManagers() {
     pendingActions: createPendingActions(),
     actionLog: createActionLog(databaseManager),
     logger: debugLogger,
+    getAccountId: () => databaseManager.activeAccountId,
   });
   // Pending cards expire in main even when no renderer ever answers them.
   setInterval(() => connectorManager.sweepExpired(), 60 * 1000).unref();

@@ -40,6 +40,11 @@ function policyRefusal(policyState) {
   return "policy_unavailable";
 }
 
+// Actions that write a receipt need the account the receipt belongs to.
+function actionRefusal(policyState, accountId) {
+  return policyRefusal(policyState) ?? (accountId ? null : "signed_out");
+}
+
 function isString(value) {
   return typeof value === "string";
 }
@@ -112,6 +117,7 @@ function createConnectorManager({
   pendingActions,
   actionLog,
   logger,
+  getAccountId,
   randomId = () => crypto.randomBytes(16).toString("hex"),
 }) {
   const byId = new Map(connectors.map((connector) => [connector.id, connector]));
@@ -194,7 +200,8 @@ function createConnectorManager({
 
   async function prepare(connectorId, action, args, policyState) {
     sweepExpired();
-    const refusal = policyRefusal(policyState);
+    const accountId = getAccountId();
+    const refusal = actionRefusal(policyState, accountId);
     if (refusal) return { status: "unavailable", reason: refusal };
     const resolved = resolveAction(connectorId, action, "approval");
     if (resolved.error) return { status: "unavailable", reason: resolved.error };
@@ -205,7 +212,7 @@ function createConnectorManager({
 
     let prepared;
     try {
-      prepared = normalizePrepareResult(await connector.prepare(action, args || {}));
+      prepared = normalizePrepareResult(await connector.prepare(action, args || {}, { binding }));
     } catch (error) {
       logger.warn(
         "connector prepare threw",
@@ -230,6 +237,7 @@ function createConnectorManager({
     const recorded = writeRequired("pending", () => {
       actionLog.insert({
         id: actionId,
+        accountId,
         connector: connectorId,
         action,
         kind: "approval",
@@ -297,7 +305,9 @@ function createConnectorManager({
 
     let result;
     try {
-      result = await connector.commit(entry.action, entry.payload, sanitizeEdits(edits));
+      result = await connector.commit(entry.action, entry.payload, sanitizeEdits(edits), {
+        binding: entry.binding,
+      });
     } catch (error) {
       logger.warn(
         "connector commit threw",
@@ -335,7 +345,8 @@ function createConnectorManager({
   }
 
   async function runDirect(connectorId, action, args, policyState, runtime) {
-    const refusal = policyRefusal(policyState);
+    const accountId = getAccountId();
+    const refusal = actionRefusal(policyState, accountId);
     if (refusal) return { state: "unavailable", reason: refusal };
     const resolved = resolveAction(connectorId, action, "direct");
     if (resolved.error) return { state: "unavailable", reason: resolved.error };
@@ -343,7 +354,14 @@ function createConnectorManager({
 
     const id = randomId();
     const recorded = writeRequired("direct", () => {
-      actionLog.insert({ id, connector: connectorId, action, kind: "direct", state: "committing" });
+      actionLog.insert({
+        id,
+        accountId,
+        connector: connectorId,
+        action,
+        kind: "direct",
+        state: "committing",
+      });
     });
     if (!recorded) return { state: "unavailable", reason: "receipt_unavailable" };
 
@@ -384,8 +402,10 @@ function createConnectorManager({
 
   function recentActions(connectorId, limit) {
     sweepExpired();
+    const accountId = getAccountId();
+    if (!accountId) return [];
     const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 10;
-    return actionLog.listRecent(connectorId, safeLimit);
+    return actionLog.listRecent(connectorId, safeLimit, accountId);
   }
 
   return {

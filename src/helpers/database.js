@@ -515,6 +515,16 @@ class DatabaseManager {
       this.db.exec(
         "CREATE INDEX IF NOT EXISTS idx_connector_actions_connector ON connector_actions(connector, created_at)"
       );
+      // Destination labels name channels and people in someone's workspace,
+      // so a receipt belongs to the OpenWhispr account that made it.
+      try {
+        this.db.exec("ALTER TABLE connector_actions ADD COLUMN account_id TEXT");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
+      this.db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_connector_actions_account ON connector_actions(account_id, connector, created_at)"
+      );
       try {
         this.db.exec("ALTER TABLE agent_conversations ADD COLUMN cloud_id TEXT");
       } catch (err) {
@@ -3320,6 +3330,7 @@ class DatabaseManager {
       this.db.prepare("DELETE FROM analytics_events WHERE account_id = ?").run(accountId);
       this.db.prepare("DELETE FROM analytics_clear_requests WHERE account_id = ?").run(accountId);
       this.db.prepare("DELETE FROM space_accounts WHERE account_id = ?").run(accountId);
+      this.db.prepare("DELETE FROM connector_actions WHERE account_id = ?").run(accountId);
     };
 
     if (typeof this.db.transaction === "function") {
@@ -4676,6 +4687,7 @@ class DatabaseManager {
 
   insertConnectorAction({
     id,
+    accountId = null,
     connector,
     action,
     kind,
@@ -4688,10 +4700,10 @@ class DatabaseManager {
     this.db
       .prepare(
         `INSERT INTO connector_actions
-           (id, connector, action, kind, destination_label, state, result_url, error_code)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+           (id, account_id, connector, action, kind, destination_label, state, result_url, error_code)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(id, connector, action, kind, destinationLabel, state, resultUrl, errorCode);
+      .run(id, accountId, connector, action, kind, destinationLabel, state, resultUrl, errorCode);
   }
 
   // With fromState, only a row still in that state moves, so a caller can tell
@@ -4724,8 +4736,9 @@ class DatabaseManager {
       .run(...params).changes;
   }
 
-  listRecentConnectorActions(connector, limit = 10) {
+  listRecentConnectorActions(connector, limit = 10, accountId = null) {
     if (!this.db) throw new Error("Database not initialized");
+    if (!accountId) return [];
     return this.db
       .prepare(
         `SELECT id, connector, action, kind,
@@ -4733,11 +4746,11 @@ class DatabaseManager {
                 result_url AS resultUrl, error_code AS errorCode,
                 created_at AS createdAt
            FROM connector_actions
-          WHERE connector = ?
+          WHERE connector = ? AND account_id = ?
           ORDER BY created_at DESC, rowid DESC
           LIMIT ?`
       )
-      .all(connector, limit);
+      .all(connector, accountId, limit);
   }
 
   // A quit mid-send can't tell whether the provider acted, so committing rows

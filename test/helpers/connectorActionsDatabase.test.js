@@ -52,17 +52,33 @@ test("an action row moves through its states and lists newest first", (t) => {
   if (!db) return;
   const log = createActionLog(db);
 
-  log.insert({ id: "a1", connector: "email", action: "draft", kind: "direct", destinationLabel: "gabe@example.com", state: "sent" });
-  log.insert({ id: "a2", connector: "slack", action: "send_message", kind: "approval", destinationLabel: "#eng", state: "pending" });
+  log.insert({
+    id: "a1",
+    accountId: "acct-a",
+    connector: "email",
+    action: "draft",
+    kind: "direct",
+    destinationLabel: "gabe@example.com",
+    state: "sent",
+  });
+  log.insert({
+    id: "a2",
+    accountId: "acct-a",
+    connector: "slack",
+    action: "send_message",
+    kind: "approval",
+    destinationLabel: "#eng",
+    state: "pending",
+  });
   log.update("a2", { state: "committing" });
   log.update("a2", { state: "sent", resultUrl: "https://slack.test/p/1" });
 
-  const [row] = log.listRecent("slack", 10);
+  const [row] = log.listRecent("slack", 10, "acct-a");
   assert.equal(row.id, "a2");
   assert.equal(row.state, "sent");
   assert.equal(row.resultUrl, "https://slack.test/p/1");
   assert.equal(row.destinationLabel, "#eng");
-  assert.equal(log.listRecent("email", 10)[0].kind, "direct");
+  assert.equal(log.listRecent("email", 10, "acct-a")[0].kind, "direct");
   db.db.close();
 });
 
@@ -70,13 +86,36 @@ test("rows interrupted by a quit are reconciled on the next launch", (t) => {
   const db = createDb(t);
   if (!db) return;
   const log = createActionLog(db);
-  log.insert({ id: "p1", connector: "slack", action: "send_message", kind: "approval", state: "pending" });
-  log.insert({ id: "c1", connector: "slack", action: "send_message", kind: "approval", state: "committing" });
-  log.insert({ id: "s1", connector: "slack", action: "send_message", kind: "approval", state: "sent" });
+  log.insert({
+    id: "p1",
+    accountId: "acct-a",
+    connector: "slack",
+    action: "send_message",
+    kind: "approval",
+    state: "pending",
+  });
+  log.insert({
+    id: "c1",
+    accountId: "acct-a",
+    connector: "slack",
+    action: "send_message",
+    kind: "approval",
+    state: "committing",
+  });
+  log.insert({
+    id: "s1",
+    accountId: "acct-a",
+    connector: "slack",
+    action: "send_message",
+    kind: "approval",
+    state: "sent",
+  });
 
   assert.deepEqual(log.reconcileInterrupted(), { unknown: 1, cancelled: 1 });
 
-  const states = Object.fromEntries(log.listRecent("slack", 10).map((row) => [row.id, row]));
+  const states = Object.fromEntries(
+    log.listRecent("slack", 10, "acct-a").map((row) => [row.id, row])
+  );
   assert.equal(states.c1.state, "unknown");
   assert.equal(states.c1.errorCode, "app_quit");
   assert.equal(states.p1.state, "cancelled");
@@ -88,7 +127,14 @@ test("a guarded update only moves a row out of the expected state", (t) => {
   const db = createDb(t);
   if (!db) return;
   const log = createActionLog(db);
-  log.insert({ id: "g1", connector: "slack", action: "send_message", kind: "approval", state: "pending" });
+  log.insert({
+    id: "g1",
+    accountId: "acct-a",
+    connector: "slack",
+    action: "send_message",
+    kind: "approval",
+    state: "pending",
+  });
 
   assert.equal(log.update("g1", { state: "committing" }, "pending"), 1);
   assert.equal(log.update("g1", { state: "committing" }, "pending"), 0);
@@ -102,9 +148,56 @@ test("listRecent respects the limit", (t) => {
   if (!db) return;
   const log = createActionLog(db);
   for (let i = 0; i < 5; i += 1) {
-    log.insert({ id: `e${i}`, connector: "email", action: "draft", kind: "direct", state: "sent" });
+    log.insert({
+      id: `e${i}`,
+      accountId: "acct-a",
+      connector: "email",
+      action: "draft",
+      kind: "direct",
+      state: "sent",
+    });
   }
-  assert.equal(log.listRecent("email", 3).length, 3);
+  assert.equal(log.listRecent("email", 3, "acct-a").length, 3);
+  db.db.close();
+});
+
+test("receipts list only for their account and go with it on account deletion", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  const log = createActionLog(db);
+  db.setActiveAccountId("acct-a");
+
+  log.insert({
+    id: "a1",
+    accountId: "acct-a",
+    connector: "slack",
+    action: "send_message",
+    kind: "approval",
+    destinationLabel: "#eng",
+    state: "sent",
+  });
+  log.insert({
+    id: "b1",
+    accountId: "acct-b",
+    connector: "slack",
+    action: "send_message",
+    kind: "approval",
+    destinationLabel: "#ops",
+    state: "sent",
+  });
+
+  assert.deepEqual(
+    log.listRecent("slack", 10, "acct-a").map((row) => row.id),
+    ["a1"]
+  );
+  assert.deepEqual(log.listRecent("slack", 10, null), []);
+
+  db.deleteAccountData("acct-a");
+  assert.deepEqual(log.listRecent("slack", 10, "acct-a"), []);
+  assert.deepEqual(
+    log.listRecent("slack", 10, "acct-b").map((row) => row.id),
+    ["b1"]
+  );
   db.db.close();
 });
 
@@ -126,7 +219,10 @@ test("contact lookup sources cover meetings, synced contacts and the user's acco
   });
   const soon = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const later = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString();
-  db.upsertCalendarEvents([event("evt-later", later, "later@example.com"), event("evt-soon", soon, "soon@example.com")]);
+  db.upsertCalendarEvents([
+    event("evt-later", later, "later@example.com"),
+    event("evt-soon", soon, "soon@example.com"),
+  ]);
   db.upsertContacts([{ email: "Priya@Example.com", displayName: "Priya Shah" }]);
   db.saveGoogleCalendars([{ id: "primary", summary: "Chad" }], "chad@example.com");
   db.saveMicrosoftCalendars([{ id: "work", summary: "Calendar" }], "chad@corp.test");

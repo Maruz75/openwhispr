@@ -119,6 +119,25 @@ test("the default id generator returns distinct 128-bit hex ids", async () => {
   for (const id of ids) assert.match(id, /^[0-9a-f]{32}$/);
 });
 
+test("a binding for another OpenWhispr account never commits", async () => {
+  const { createPendingActions } =
+    await import("../../../src/helpers/connectors/pendingActions.js");
+  const pending = createPendingActions();
+  const approved = { ownerAccountId: "acct-a", accountId: "U1", workspaceId: "T1", generation: 1 };
+  const actionId = pending.create({
+    connectorId: "slack",
+    action: "post",
+    binding: approved,
+    payload: {},
+    preview: {},
+  });
+
+  assert.deepEqual(pending.beginCommit(actionId, { ...approved, ownerAccountId: "acct-b" }), {
+    ok: false,
+    reason: "connection_changed",
+  });
+});
+
 test("expireStale removes only pending actions past the TTL", async () => {
   const { createPendingActions } =
     await import("../../../src/helpers/connectors/pendingActions.js");

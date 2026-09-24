@@ -94,6 +94,10 @@ function createDatabaseManager() {
       account_id TEXT PRIMARY KEY,
       cleared_through TEXT NOT NULL
     );
+    CREATE TABLE connector_actions (
+      id TEXT PRIMARY KEY,
+      account_id TEXT
+    );
     INSERT INTO spaces (id, kind) VALUES (1, 'private'), (2, 'team'), (3, 'team');
     INSERT INTO space_accounts (space_id, account_id) VALUES
       (2, 'account-a'),

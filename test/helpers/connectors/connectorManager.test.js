@@ -35,8 +35,10 @@ function fakeLog({ failInsert = false, failTransition = false, failFinal = false
       rows.set(id, { ...row, ...patch });
       return 1;
     },
-    listRecent: (connector, limit) =>
-      [...rows.values()].filter((row) => row.connector === connector).slice(0, limit),
+    listRecent: (connector, limit, accountId) =>
+      [...rows.values()]
+        .filter((row) => row.connector === connector && row.accountId === accountId)
+        .slice(0, limit),
     reconcileInterrupted: () => {
       reconciled += 1;
       return { unknown: 0, cancelled: 0 };
@@ -56,8 +58,8 @@ function fakeConnector(overrides = {}) {
     async getBinding() {
       return binding;
     },
-    async prepare(action, args) {
-      calls.prepare.push({ action, args });
+    async prepare(action, args, context) {
+      calls.prepare.push({ action, args, context });
       return {
         status: "ready",
         payload: { channel: "C1", text: args.text },
@@ -69,8 +71,8 @@ function fakeConnector(overrides = {}) {
         },
       };
     },
-    async commit(action, payload, edits) {
-      calls.commit.push({ action, payload, edits });
+    async commit(action, payload, edits, context) {
+      calls.commit.push({ action, payload, edits, context });
       return { state: "sent", url: "https://example.test/p/1" };
     },
     async runDirect(action, args, runtime) {
@@ -100,6 +102,7 @@ async function setup(connectorOverrides, logOptions, managerOptions = {}) {
     pendingActions: createPendingActions(),
     actionLog: log,
     logger: silentLogger,
+    getAccountId: () => "acct-1",
     ...managerOptions,
   });
   return { manager, fake, log };
@@ -688,4 +691,39 @@ test("the main process expires a card nobody answered, but never a committing on
     reason: "not_found",
   });
   assert.equal(fake.calls.commit.length, 1);
+});
+
+test("receipts carry the account, and no account means no action", async () => {
+  let accountId = "acct-1";
+  const { manager, fake, log } = await setup(undefined, undefined, {
+    getAccountId: () => accountId,
+  });
+
+  const prepared = await manager.prepare("fake", "post", { text: "hi" }, "allowed");
+  assert.equal(log.rows.get(prepared.actionId).accountId, "acct-1");
+  await manager.runDirect("fake", "draft", {}, "allowed", {});
+  assert.ok([...log.rows.values()].every((row) => row.accountId === "acct-1"));
+  assert.equal(manager.recentActions("fake", 10).length, 2);
+
+  accountId = null;
+  assert.deepEqual(await manager.prepare("fake", "post", { text: "hi" }, "allowed"), {
+    status: "unavailable",
+    reason: "signed_out",
+  });
+  assert.deepEqual(await manager.runDirect("fake", "draft", {}, "allowed", {}), {
+    state: "unavailable",
+    reason: "signed_out",
+  });
+  assert.deepEqual(manager.recentActions("fake", 10), []);
+  assert.equal(fake.calls.prepare.length, 1);
+});
+
+test("the connector acts only under the binding the action was prepared with", async () => {
+  const { manager, fake } = await setup();
+  const prepared = await manager.prepare("fake", "post", { text: "hi" }, "allowed");
+  await manager.commit(prepared.actionId, {}, "allowed");
+
+  const binding = { accountId: "U1", workspaceId: "T1", generation: 1 };
+  assert.deepEqual(fake.calls.prepare[0].context, { binding });
+  assert.deepEqual(fake.calls.commit[0].context, { binding });
 });
