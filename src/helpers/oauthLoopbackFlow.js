@@ -43,6 +43,10 @@ function redirect(res, params) {
   res.end();
 }
 
+function codedError(code, message, extra = {}) {
+  return Object.assign(new Error(message), { code, ...extra });
+}
+
 // Runs a PKCE auth-code flow through an ephemeral 127.0.0.1 server:
 // - buildAuthUrl(redirectUri, state, codeChallenge) → provider authorize URL
 // - handleCallback(code, redirectUri, codeVerifier) → resolves the flow result;
@@ -50,14 +54,37 @@ function redirect(res, params) {
 //   specific callback-page code) to reject.
 // - errorParam — query-param name for the hosted desktop-callback page
 //   (e.g. "gcal_error"); the success param is derived from the same prefix.
-function runOAuthLoopbackFlow({ buildAuthUrl, handleCallback, errorParam }) {
+// - redirectHost / ports / callbackPath — shape redirect_uri for providers
+//   that match it exactly (fixed ports are tried in order); the server
+//   always listens on 127.0.0.1.
+// - renderResultPage({ ok }) — answer the browser from this server instead
+//   of the hosted page, for providers that page doesn't know.
+function runOAuthLoopbackFlow({
+  buildAuthUrl,
+  handleCallback,
+  errorParam,
+  redirectHost = "127.0.0.1",
+  ports = [0],
+  callbackPath = "",
+  renderResultPage = null,
+}) {
   const connectedParam = errorParam.replace(/_error$/, "_connected");
 
   return new Promise((resolve, reject) => {
     const codeVerifier = crypto.randomBytes(32).toString("base64url").slice(0, 43);
     const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url");
     const state = crypto.randomBytes(32).toString("hex");
+    const redirectUriFor = (port) => `http://${redirectHost}:${port}${callbackPath}`;
     let callbackClaimed = false;
+
+    const respond = (res, ok, params) => {
+      if (renderResultPage) {
+        res.writeHead(ok ? 200 : 400, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(renderResultPage({ ok }));
+        return;
+      }
+      redirect(res, params);
+    };
 
     const server = http.createServer(async (req, res) => {
       // Accepted requests can outlive server.close(), so only the first
@@ -76,9 +103,9 @@ function runOAuthLoopbackFlow({ buildAuthUrl, handleCallback, errorParam }) {
 
         if (error) {
           callbackClaimed = true;
-          redirect(res, { [errorParam]: error });
+          respond(res, false, { [errorParam]: error });
           cleanup();
-          reject(new Error(`OAuth error: ${error}`));
+          reject(codedError("oauth_denied", `OAuth error: ${error}`, { providerError: error }));
           return;
         }
 
@@ -91,51 +118,76 @@ function runOAuthLoopbackFlow({ buildAuthUrl, handleCallback, errorParam }) {
           if (code) {
             callbackClaimed = true;
             cleanup();
-            reject(new Error("OAuth state mismatch"));
+            reject(codedError("oauth_state_mismatch", "OAuth state mismatch"));
           }
           return;
         }
 
         callbackClaimed = true;
-        const redirectUri = `http://127.0.0.1:${server.address().port}`;
-        const result = await handleCallback(code, redirectUri, codeVerifier);
+        const result = await handleCallback(
+          code,
+          redirectUriFor(server.address().port),
+          codeVerifier
+        );
 
-        redirect(res, { [connectedParam]: "true" });
+        respond(res, true, { [connectedParam]: "true" });
         cleanup();
         resolve(result);
       } catch (err) {
         callbackClaimed = true;
-        redirect(res, { [errorParam]: err.redirectCode || "server_error" });
+        respond(res, false, { [errorParam]: err.redirectCode || "server_error" });
         cleanup();
         reject(err);
       }
     });
 
     let timeoutId;
+    let listenErrorHandler = null;
 
     const cleanup = () => {
       clearTimeout(timeoutId);
-      server.close();
+      if (server.listening) server.close();
     };
 
-    server.listen(0, "127.0.0.1", () => {
-      const port = server.address().port;
-      const redirectUri = `http://127.0.0.1:${port}`;
-      // Fire-and-forget like the shell.openExternal call it replaced: a failed
-      // browser launch surfaces as the flow timeout.
-      openExternalUrl(buildAuthUrl(redirectUri, state, codeChallenge)).catch(() => {});
+    // One "listening" handler for the whole flow: a failed attempt on a busy
+    // port must not leave behind a second one that opens another tab.
+    server.once("listening", () => {
+      if (listenErrorHandler) server.off("error", listenErrorHandler);
+      server.on("error", (err) => {
+        cleanup();
+        reject(err);
+      });
+      // Fire-and-forget like the shell.openExternal call it replaced: a
+      // failed browser launch surfaces as the flow timeout.
+      openExternalUrl(
+        buildAuthUrl(redirectUriFor(server.address().port), state, codeChallenge)
+      ).catch(() => {});
     });
+
+    // A port in use falls through to the next one in the list.
+    const listenOn = (index) => {
+      listenErrorHandler = (err) => {
+        listenErrorHandler = null;
+        if (err.code === "EADDRINUSE" && index + 1 < ports.length) {
+          listenOn(index + 1);
+          return;
+        }
+        callbackClaimed = true;
+        cleanup();
+        reject(
+          err.code === "EADDRINUSE" ? codedError("ports_busy", "No loopback port was free") : err
+        );
+      };
+      server.once("error", listenErrorHandler);
+      server.listen(ports[index], "127.0.0.1");
+    };
+    listenOn(0);
 
     timeoutId = setTimeout(() => {
       callbackClaimed = true;
-      server.close();
-      reject(new Error("OAuth flow timed out"));
+      if (server.listening) server.close();
+      reject(codedError("oauth_timeout", "OAuth flow timed out"));
     }, OAUTH_TIMEOUT_MS);
-
-    server.on("error", (err) => {
-      cleanup();
-      reject(err);
-    });
   });
 }
 

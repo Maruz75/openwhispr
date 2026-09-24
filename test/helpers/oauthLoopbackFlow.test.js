@@ -22,10 +22,11 @@ function loadLoopback() {
   }
 }
 
-function startFlow(handleCallback = async () => ({ ok: true })) {
+function startFlow(handleCallback = async () => ({ ok: true }), options = {}) {
   const { runOAuthLoopbackFlow } = loadLoopback();
   let redirectUri;
   let state;
+  let authUrlCalls = 0;
   let server;
   const originalCreateServer = http.createServer;
   http.createServer = (...args) => {
@@ -36,14 +37,22 @@ function startFlow(handleCallback = async () => ({ ok: true })) {
   try {
     const flow = runOAuthLoopbackFlow({
       errorParam: "gcal_error",
+      ...options,
       buildAuthUrl: (uri, flowState) => {
         redirectUri = uri;
         state = flowState;
+        authUrlCalls += 1;
         return "https://example.test/auth";
       },
       handleCallback,
     });
-    return { flow, server, getRedirectUri: () => redirectUri, getState: () => state };
+    return {
+      flow,
+      server,
+      getRedirectUri: () => redirectUri,
+      getState: () => state,
+      getAuthUrlCalls: () => authUrlCalls,
+    };
   } finally {
     http.createServer = originalCreateServer;
   }
@@ -184,9 +193,7 @@ async function parkPartialRequest(redirectUri, server) {
 
   return {
     complete: (path) => {
-      socket.end(
-        `${path} HTTP/1.1\r\nHost: ${hostname}:${port}\r\nConnection: close\r\n\r\n`
-      );
+      socket.end(`${path} HTTP/1.1\r\nHost: ${hostname}:${port}\r\nConnection: close\r\n\r\n`);
       return status;
     },
     destroy: () => socket.destroy(),
@@ -244,13 +251,8 @@ test("a provider error query still fails the flow immediately", async () => {
 });
 
 test("a late state mismatch cannot reject a valid callback already in progress", async () => {
-  const {
-    flow,
-    getRedirectUri,
-    getState,
-    callbackStarted,
-    releaseHandleCallback,
-  } = startBlockedFlow();
+  const { flow, getRedirectUri, getState, callbackStarted, releaseHandleCallback } =
+    startBlockedFlow();
   const redirectUri = await waitForListen(getRedirectUri);
   const flowOutcome = flow.then(
     () => "resolved",
@@ -284,13 +286,8 @@ test("a late state mismatch cannot reject a valid callback already in progress",
 });
 
 test("a late malformed request cannot reject a valid callback already in progress", async () => {
-  const {
-    flow,
-    getRedirectUri,
-    getState,
-    callbackStarted,
-    releaseHandleCallback,
-  } = startBlockedFlow();
+  const { flow, getRedirectUri, getState, callbackStarted, releaseHandleCallback } =
+    startBlockedFlow();
   const redirectUri = await waitForListen(getRedirectUri);
   const flowOutcome = flow.then(
     () => "resolved",
@@ -410,4 +407,108 @@ test("an accepted callback cannot run after the flow times out", async () => {
   } finally {
     parkedRequest.destroy();
   }
+});
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+function getLocal(url) {
+  return new Promise((resolve, reject) => {
+    http
+      .get(url, (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
+          body += chunk;
+        });
+        res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body }));
+      })
+      .on("error", reject);
+  });
+}
+
+async function until(read) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const value = read();
+    if (value) return value;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("timed out waiting");
+}
+
+test("a fixed port, redirect host and path shape the redirect uri both times", async () => {
+  const port = await freePort();
+  const started = startFlow(async (code, redirectUri) => ({ code, redirectUri }), {
+    redirectHost: "localhost",
+    ports: [port],
+    callbackPath: "/slack/callback",
+  });
+  const redirectUri = await until(started.getRedirectUri);
+  assert.equal(redirectUri, `http://localhost:${port}/slack/callback`);
+
+  await getLocal(`http://127.0.0.1:${port}/slack/callback?code=c1&state=${started.getState()}`);
+
+  assert.deepEqual(await started.flow, {
+    code: "c1",
+    redirectUri: `http://localhost:${port}/slack/callback`,
+  });
+});
+
+test("a busy fixed port falls through to the next with one browser launch; all busy rejects ports_busy", async () => {
+  const blocker = net.createServer();
+  await new Promise((resolve) => blocker.listen(0, "127.0.0.1", resolve));
+  const busy = blocker.address().port;
+  const free = await freePort();
+  try {
+    const started = startFlow(async (code) => ({ code }), { ports: [busy, free] });
+    assert.equal(await until(started.getRedirectUri), `http://127.0.0.1:${free}`);
+    await getLocal(`http://127.0.0.1:${free}/?code=c2&state=${started.getState()}`);
+    assert.deepEqual(await started.flow, { code: "c2" });
+    assert.equal(started.getAuthUrlCalls(), 1, "exactly one browser launch");
+
+    const allBusy = startFlow(async () => ({}), { ports: [busy] });
+    await assert.rejects(allBusy.flow, (error) => error.code === "ports_busy");
+    assert.equal(allBusy.getAuthUrlCalls(), 0);
+  } finally {
+    blocker.close();
+  }
+});
+
+test("a local result page replaces the hosted desktop-callback redirect", async () => {
+  const started = startFlow(async () => ({ ok: true }), {
+    renderResultPage: ({ ok }) => `<p>${ok ? "connected" : "failed"}</p>`,
+  });
+  const redirectUri = await until(started.getRedirectUri);
+
+  const response = await getLocal(`${redirectUri}/?code=c3&state=${started.getState()}`);
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.location, undefined);
+  assert.equal(response.body, "<p>connected</p>");
+  await started.flow;
+});
+
+test("a denied consent rejects with oauth_denied and shows the failure page", async () => {
+  const started = startFlow(async () => ({}), {
+    renderResultPage: ({ ok }) => (ok ? "yes" : "no"),
+  });
+  const redirectUri = await until(started.getRedirectUri);
+  const outcome = started.flow.catch((error) => error);
+
+  const response = await getLocal(
+    `${redirectUri}/?error=access_denied&state=${started.getState()}`
+  );
+
+  assert.equal(response.body, "no");
+  const error = await outcome;
+  assert.equal(error.code, "oauth_denied");
+  assert.equal(error.providerError, "access_denied");
 });
