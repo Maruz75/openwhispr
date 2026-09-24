@@ -72,3 +72,33 @@ test("a sent card offers Open", async (t) => {
   assert.match(markup, /connectors\.approval\.sent/);
   assert.match(markup, /connectors\.approval\.open/);
 });
+
+test("every outcome is announced from one live region", async (t) => {
+  for (const [state, textKey] of [
+    ["committing", "sending"],
+    ["sent", "sent"],
+    ["failed", "failed"],
+    ["unknown", "unknown"],
+    ["cancelled", "cancelled"],
+    ["not_sent", "notSent"],
+  ]) {
+    const markup = await renderCard(t, {
+      key: "m1::call-1",
+      messageId: "m1",
+      toolCallId: "call-1",
+      actionId: "a1",
+      connectorId: "slack",
+      preview: PREVIEW,
+      draft: { body: PREVIEW.body },
+      state,
+      message: "reason",
+    });
+    assert.match(
+      markup,
+      new RegExp(
+        `role="status" aria-live="polite"[^>]*>(?:(?!</div>).)*connectors\\.approval\\.${textKey}`
+      ),
+      state
+    );
+  }
+});

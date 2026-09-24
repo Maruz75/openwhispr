@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import { useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
 import {
@@ -14,13 +14,38 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
   const { t } = useTranslation();
   const { preview, draft } = entry;
   const [editing, setEditing] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const destination = preview.destinationLabel;
+  // The fields exist only while the card can still change.
+  const showEditor = editing && entry.state === "pending";
+
+  // Send and Cancel remove the button that had focus; the card keeps it, so
+  // keyboard and screen-reader users land on the result.
+  const leaveEditingAndFocusCard = (): void => {
+    setEditing(false);
+    cardRef.current?.focus();
+  };
+
+  // Esc in a field ends editing and keeps the draft. It must not reach the
+  // assistant panel, whose Esc cancels the whole turn and withdraws the card.
+  const onEditorKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    setEditing(false);
+  };
+
+  const openLink = (url: string): void => {
+    void window.electronAPI?.openExternal?.(url);
+  };
 
   return (
     <div
+      ref={cardRef}
+      tabIndex={-1}
       data-approval-card={entry.key}
       data-state={entry.state}
-      className="my-1.5 rounded-lg border border-border/70 bg-surface-2/60 p-3 text-[13px]"
+      className="my-1.5 rounded-lg border border-border/70 bg-surface-2/60 p-3 text-[13px] outline-none focus-visible:ring-1 focus-visible:ring-ring"
     >
       <p className="font-medium text-foreground">
         {t(`connectors.approval.headers.${preview.verbKey}`, {
@@ -37,8 +62,8 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
           : t("connectors.approval.identity", { account: preview.accountLabel })}
       </p>
 
-      {editing ? (
-        <div className="mt-2 space-y-2">
+      {showEditor ? (
+        <div className="mt-2 space-y-2" onKeyDown={onEditorKeyDown}>
           {draft.title !== undefined && (
             <input
               aria-label={t("connectors.approval.titleLabel")}
@@ -71,62 +96,70 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
         </p>
       ))}
 
+      {/* One live region for every outcome, rendered from the start so a
+          screen reader announces each change. */}
+      <div role="status" aria-live="polite" className="text-xs">
+        {entry.state === "committing" && (
+          <p className="mt-2 text-muted-foreground">{t("connectors.approval.sending")}</p>
+        )}
+        {entry.state === "sent" && (
+          <p className="mt-2 text-foreground">
+            {t("connectors.approval.sent", { destination })}
+            {entry.url && (
+              <Button size="sm" variant="link" onClick={() => openLink(entry.url as string)}>
+                {t("connectors.approval.open")}
+              </Button>
+            )}
+          </p>
+        )}
+        {entry.state === "failed" && (
+          <p className="mt-2 text-destructive">
+            {t("connectors.approval.failed", { message: entry.message ?? "" })}
+          </p>
+        )}
+        {entry.state === "unknown" && (
+          <p className="mt-2 text-foreground">
+            {t("connectors.approval.unknown", { destination })}
+            {entry.url && (
+              <Button size="sm" variant="link" onClick={() => openLink(entry.url as string)}>
+                {t("connectors.approval.open")}
+              </Button>
+            )}
+          </p>
+        )}
+        {entry.state === "cancelled" && (
+          <p className="mt-2 text-muted-foreground">{t("connectors.approval.cancelled")}</p>
+        )}
+        {entry.state === "not_sent" && (
+          <p className="mt-2 text-muted-foreground">{t("connectors.approval.notSent")}</p>
+        )}
+      </div>
+
       {entry.state === "pending" && (
         <div className="mt-2 flex gap-2">
-          <Button size="sm" onClick={() => void approveAction(entry.key)}>
+          <Button
+            size="sm"
+            onClick={() => {
+              leaveEditingAndFocusCard();
+              void approveAction(entry.key);
+            }}
+          >
             {t("connectors.approval.send")}
           </Button>
           <Button size="sm" variant="outline" onClick={() => setEditing((value) => !value)}>
             {editing ? t("connectors.approval.doneEditing") : t("connectors.approval.edit")}
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => cancelApproval(entry.key)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              leaveEditingAndFocusCard();
+              cancelApproval(entry.key);
+            }}
+          >
             {t("connectors.approval.cancel")}
           </Button>
         </div>
-      )}
-      {entry.state === "committing" && (
-        <p role="status" className="mt-2 text-xs text-muted-foreground">
-          {t("connectors.approval.sending")}
-        </p>
-      )}
-      {entry.state === "sent" && (
-        <p className="mt-2 text-xs text-foreground">
-          {t("connectors.approval.sent", { destination })}
-          {entry.url && (
-            <Button
-              size="sm"
-              variant="link"
-              onClick={() => void window.electronAPI?.openExternal?.(entry.url as string)}
-            >
-              {t("connectors.approval.open")}
-            </Button>
-          )}
-        </p>
-      )}
-      {entry.state === "failed" && (
-        <p className="mt-2 text-xs text-destructive">
-          {t("connectors.approval.failed", { message: entry.message ?? "" })}
-        </p>
-      )}
-      {entry.state === "unknown" && (
-        <p className="mt-2 text-xs text-foreground">
-          {t("connectors.approval.unknown", { destination })}
-          {entry.url && (
-            <Button
-              size="sm"
-              variant="link"
-              onClick={() => void window.electronAPI?.openExternal?.(entry.url as string)}
-            >
-              {t("connectors.approval.open")}
-            </Button>
-          )}
-        </p>
-      )}
-      {entry.state === "cancelled" && (
-        <p className="mt-2 text-xs text-muted-foreground">{t("connectors.approval.cancelled")}</p>
-      )}
-      {entry.state === "not_sent" && (
-        <p className="mt-2 text-xs text-muted-foreground">{t("connectors.approval.notSent")}</p>
       )}
     </div>
   );
