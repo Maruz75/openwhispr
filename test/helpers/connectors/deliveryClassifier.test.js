@@ -5,7 +5,10 @@ const load = () => import("../../../src/helpers/connectors/deliveryClassifier.js
 
 test("errors raised before the request can reach the provider are failed", async () => {
   const { classifyTransportError } = await load();
-  assert.equal(classifyTransportError(Object.assign(new Error("dns"), { code: "ENOTFOUND" })), "failed");
+  assert.equal(
+    classifyTransportError(Object.assign(new Error("dns"), { code: "ENOTFOUND" })),
+    "failed"
+  );
   assert.equal(
     classifyTransportError(new TypeError("fetch failed", { cause: { code: "ECONNREFUSED" } })),
     "failed"
@@ -16,9 +19,15 @@ test("errors raised before the request can reach the provider are failed", async
 
 test("anything that may have reached the provider is unknown", async () => {
   const { classifyTransportError } = await load();
-  assert.equal(classifyTransportError(Object.assign(new Error("reset"), { code: "ECONNRESET" })), "unknown");
+  assert.equal(
+    classifyTransportError(Object.assign(new Error("reset"), { code: "ECONNRESET" })),
+    "unknown"
+  );
   assert.equal(classifyTransportError(new Error("net::ERR_CONNECTION_RESET")), "unknown");
-  assert.equal(classifyTransportError(Object.assign(new Error("aborted"), { name: "AbortError" })), "unknown");
+  assert.equal(
+    classifyTransportError(Object.assign(new Error("aborted"), { name: "AbortError" })),
+    "unknown"
+  );
   assert.equal(classifyTransportError(new Error("socket hang up")), "unknown");
   assert.equal(classifyTransportError(undefined), "unknown");
 });
