@@ -460,6 +460,8 @@ function initializeCoreManagers() {
     actionLog: createActionLog(databaseManager),
     logger: debugLogger,
   });
+  // Pending cards expire in main even when no renderer ever answers them.
+  setInterval(() => connectorManager.sweepExpired(), 60 * 1000).unref();
   whisperManager = new WhisperManager();
   if (process.platform !== "darwin") {
     whisperCudaManager = new WhisperCudaManager();

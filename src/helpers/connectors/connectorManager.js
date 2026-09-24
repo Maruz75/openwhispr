@@ -31,6 +31,66 @@ function policyRefusal(policyState) {
   return "policy_unavailable";
 }
 
+function isString(value) {
+  return typeof value === "string";
+}
+
+function isPreview(preview) {
+  return (
+    Boolean(preview) &&
+    typeof preview === "object" &&
+    isString(preview.verbKey) &&
+    isString(preview.destinationLabel) &&
+    isString(preview.accountLabel) &&
+    isString(preview.body) &&
+    (preview.title === undefined || isString(preview.title)) &&
+    (preview.workspaceLabel === undefined || isString(preview.workspaceLabel))
+  );
+}
+
+// A connector's prepare result decides whether a card appears and what it
+// shows, so it is checked like a commit result: anything malformed fails
+// closed, with no card and no receipt.
+function normalizePrepareResult(result) {
+  if (result && typeof result === "object") {
+    if (result.status === "ready" && isPreview(result.preview) && result.payload !== undefined) {
+      return result;
+    }
+    if (result.status === "needs_clarification" && isString(result.message)) {
+      return {
+        status: "needs_clarification",
+        message: result.message,
+        candidates: Array.isArray(result.candidates) ? result.candidates.filter(isString) : [],
+      };
+    }
+    if (result.status === "failed" && isString(result.errorCode) && isString(result.message)) {
+      return { status: "failed", errorCode: result.errorCode, message: result.message };
+    }
+  }
+  return {
+    status: "failed",
+    errorCode: "invalid_result",
+    message: "Couldn't prepare that action.",
+  };
+}
+
+function normalizeStatus(status) {
+  const value = status && typeof status === "object" ? status : {};
+  return {
+    connected: value.connected === true,
+    accountLabel: isString(value.accountLabel) ? value.accountLabel : null,
+    workspaceLabel: isString(value.workspaceLabel) ? value.workspaceLabel : null,
+    needsReconnect: value.needsReconnect === true,
+  };
+}
+
+// A binding that can't be compared counts as no connection.
+function normalizeBinding(binding) {
+  if (!binding || typeof binding !== "object") return null;
+  if (!isString(binding.accountId) || !Number.isInteger(binding.generation)) return null;
+  return binding;
+}
+
 function sanitizeEdits(edits) {
   const clean = {};
   if (edits && typeof edits.title === "string") clean.title = edits.title;
@@ -82,28 +142,61 @@ function createConnectorManager({
     return { connector };
   }
 
+  // Cards the renderer never answered are expired here too, so their payload
+  // (message text) doesn't linger and Recent never shows them as waiting.
+  function sweepExpired() {
+    for (const actionId of pendingActions.expireStale()) {
+      record(() =>
+        actionLog.update(actionId, { state: "expired", errorCode: "expired" }, "pending")
+      );
+    }
+  }
+
+  async function statusOf(connector) {
+    try {
+      return { id: connector.id, ...normalizeStatus(await connector.getStatus()) };
+    } catch (error) {
+      logger.warn(
+        "connector status failed",
+        { connectorId: connector.id, ...describeError(error) },
+        "connectors"
+      );
+      return { id: connector.id, ...normalizeStatus(null) };
+    }
+  }
+
+  async function currentBinding(connector) {
+    try {
+      return normalizeBinding(await connector.getBinding());
+    } catch (error) {
+      logger.warn(
+        "connector binding failed",
+        { connectorId: connector.id, ...describeError(error) },
+        "connectors"
+      );
+      return null;
+    }
+  }
+
   async function status() {
-    return Promise.all(
-      [...byId.values()].map(async (connector) => ({
-        id: connector.id,
-        ...(await connector.getStatus()),
-      }))
-    );
+    sweepExpired();
+    return Promise.all([...byId.values()].map(statusOf));
   }
 
   async function prepare(connectorId, action, args, policyState) {
+    sweepExpired();
     const refusal = policyRefusal(policyState);
     if (refusal) return { status: "unavailable", reason: refusal };
     const resolved = resolveAction(connectorId, action, "approval");
     if (resolved.error) return { status: "unavailable", reason: resolved.error };
     const { connector } = resolved;
 
-    const binding = await connector.getBinding();
+    const binding = await currentBinding(connector);
     if (!binding) return { status: "unavailable", reason: "not_connected" };
 
     let prepared;
     try {
-      prepared = await connector.prepare(action, args || {});
+      prepared = normalizePrepareResult(await connector.prepare(action, args || {}));
     } catch (error) {
       logger.warn(
         "connector prepare threw",
@@ -168,7 +261,7 @@ function createConnectorManager({
     }
 
     const connector = byId.get(entry.connectorId);
-    const begun = pendingActions.beginCommit(actionId, await connector.getBinding());
+    const begun = pendingActions.beginCommit(actionId, await currentBinding(connector));
     if (!begun.ok) {
       if (begun.reason === "expired" || begun.reason === "connection_changed") {
         const state = begun.reason === "expired" ? "expired" : "cancelled";
@@ -281,11 +374,21 @@ function createConnectorManager({
   }
 
   function recentActions(connectorId, limit) {
+    sweepExpired();
     const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 10;
     return actionLog.listRecent(connectorId, safeLimit);
   }
 
-  return { status, prepare, commit, cancel, runDirect, invalidate, recentActions };
+  return {
+    status,
+    prepare,
+    commit,
+    cancel,
+    runDirect,
+    invalidate,
+    recentActions,
+    sweepExpired,
+  };
 }
 
 module.exports = { createConnectorManager };

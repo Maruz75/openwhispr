@@ -51,6 +51,8 @@ export interface ConnectorStatus {
   id: string;
   connected: boolean;
   accountLabel: string | null;
+  workspaceLabel: string | null;
+  needsReconnect: boolean;
 }
 
 export interface ConnectorActionRecord {

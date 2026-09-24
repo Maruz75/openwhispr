@@ -118,3 +118,24 @@ test("the default id generator returns distinct 128-bit hex ids", async () => {
   assert.equal(ids.size, 50);
   for (const id of ids) assert.match(id, /^[0-9a-f]{32}$/);
 });
+
+test("expireStale removes only pending actions past the TTL", async () => {
+  const { createPendingActions } =
+    await import("../../../src/helpers/connectors/pendingActions.js");
+  const clock = { now: 0 };
+  const pending = createPendingActions({ now: () => clock.now, ttlMs: 1000 });
+  const binding = { accountId: "U1", workspaceId: "T1", generation: 1 };
+  const make = () =>
+    pending.create({ connectorId: "slack", action: "post", binding, payload: {}, preview: {} });
+
+  const stale = make();
+  const sending = make();
+  pending.beginCommit(sending, binding);
+  clock.now = 1001;
+  const fresh = make();
+
+  assert.deepEqual(pending.expireStale(), [stale]);
+  assert.equal(pending.get(stale), null);
+  assert.equal(pending.get(sending).state, "committing");
+  assert.equal(pending.get(fresh).state, "pending");
+});

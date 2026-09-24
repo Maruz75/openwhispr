@@ -84,7 +84,21 @@ function createPendingActions({
     return removed;
   }
 
-  return { create, get, beginCommit, finish, cancel, invalidateConnector };
+  // Pending actions whose card outlived the TTL without the renderer ever
+  // answering (window closed, renderer crashed). Committing ones are never
+  // touched: their real outcome must still be recorded.
+  function expireStale() {
+    const expired = [];
+    for (const [actionId, entry] of actions) {
+      if (entry.state === "pending" && now() - entry.createdAt > ttlMs) {
+        actions.delete(actionId);
+        expired.push(actionId);
+      }
+    }
+    return expired;
+  }
+
+  return { create, get, beginCommit, finish, cancel, invalidateConnector, expireStale };
 }
 
 module.exports = { createPendingActions, bindingsMatch, PENDING_TTL_MS };

@@ -532,3 +532,126 @@ test("connector logs carry error names and codes, never messages", async () => {
   assert.doesNotMatch(logged, /xoxp-secret|slack\.com/);
   assert.match(logged, /ECONNRESET/);
 });
+
+const VALID_PREVIEW = {
+  verbKey: "default",
+  destinationLabel: "#eng",
+  accountLabel: "chad",
+  body: "hi",
+};
+const NOT_CONNECTED = {
+  connected: false,
+  accountLabel: null,
+  workspaceLabel: null,
+  needsReconnect: false,
+};
+
+test("a malformed prepare result fails closed with no card and no receipt", async () => {
+  for (const bad of [
+    undefined,
+    null,
+    { status: "ready" },
+    { status: "ready", payload: {}, preview: { verbKey: "default" } },
+    { status: "weird" },
+    { status: "failed" },
+    { status: "needs_clarification" },
+  ]) {
+    const { manager, log } = await setup({
+      async prepare() {
+        return bad;
+      },
+    });
+    assert.deepEqual(await manager.prepare("fake", "post", { text: "hi" }, "allowed"), {
+      status: "failed",
+      errorCode: "invalid_result",
+      message: "Couldn't prepare that action.",
+    });
+    assert.equal(log.rows.size, 0);
+  }
+});
+
+test("a well-formed clarification keeps only its string candidates", async () => {
+  const { manager } = await setup({
+    async prepare() {
+      return {
+        status: "needs_clarification",
+        message: "Which one?",
+        candidates: ["A", 7, null, "B"],
+      };
+    },
+  });
+  assert.deepEqual(await manager.prepare("fake", "post", { text: "hi" }, "allowed"), {
+    status: "needs_clarification",
+    message: "Which one?",
+    candidates: ["A", "B"],
+  });
+});
+
+test("a status or binding that throws or is malformed reads as not connected", async () => {
+  const throwing = await setup({
+    async getStatus() {
+      throw new Error("disk");
+    },
+    async getBinding() {
+      throw new Error("disk");
+    },
+  });
+  assert.deepEqual(await throwing.manager.status(), [{ id: "fake", ...NOT_CONNECTED }]);
+  assert.deepEqual(await throwing.manager.prepare("fake", "post", { text: "hi" }, "allowed"), {
+    status: "unavailable",
+    reason: "not_connected",
+  });
+
+  const malformed = await setup({
+    async getStatus() {
+      return { connected: "yes", accountLabel: 7 };
+    },
+    async getBinding() {
+      return { accountId: 42 };
+    },
+  });
+  assert.deepEqual((await malformed.manager.status())[0], { id: "fake", ...NOT_CONNECTED });
+  assert.equal(
+    (await malformed.manager.prepare("fake", "post", { text: "hi" }, "allowed")).reason,
+    "not_connected"
+  );
+});
+
+test("the main process expires a card nobody answered, but never a committing one", async () => {
+  const { createPendingActions } = await loadPending();
+  const clock = { now: 1_000 };
+  let finishSend;
+  const { manager, fake, log } = await setup(
+    {
+      commit(action, payload, edits) {
+        fake.calls.commit.push({ action, payload, edits });
+        return new Promise((resolve) => {
+          finishSend = resolve;
+        });
+      },
+    },
+    undefined,
+    { pendingActions: createPendingActions({ now: () => clock.now }) }
+  );
+  const abandoned = await manager.prepare("fake", "post", { text: "hi" }, "allowed");
+  const sending = await manager.prepare("fake", "post", { text: "hi" }, "allowed");
+  const inFlight = manager.commit(sending.actionId, {}, "allowed");
+  // Let commit's own await (fetching the binding to guard beginCommit) settle
+  // and flip the entry to "committing" before the sweep runs, the same way an
+  // in-flight IPC call would have already reserved it by the time a real
+  // 60s-interval sweep landed.
+  await new Promise((resolve) => setImmediate(resolve));
+
+  clock.now += 10 * 60 * 1000 + 1;
+  manager.sweepExpired();
+
+  assert.equal(log.rows.get(abandoned.actionId).state, "expired");
+  assert.equal(log.rows.get(sending.actionId).state, "committing");
+  finishSend({ state: "sent" });
+  assert.equal((await inFlight).state, "sent");
+  assert.deepEqual(await manager.commit(abandoned.actionId, {}, "allowed"), {
+    state: "not_sent",
+    reason: "not_found",
+  });
+  assert.equal(fake.calls.commit.length, 1);
+});
