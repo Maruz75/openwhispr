@@ -73,6 +73,22 @@ test("a sent card offers Open", async (t) => {
   assert.match(markup, /connectors\.approval\.open/);
 });
 
+test("a pending card after a failed policy check says why nothing was sent", async (t) => {
+  const markup = await renderCard(t, {
+    key: "m1::call-1",
+    messageId: "m1",
+    toolCallId: "call-1",
+    actionId: "a1",
+    connectorId: "slack",
+    preview: PREVIEW,
+    draft: { body: PREVIEW.body },
+    state: "pending",
+    notice: "policy_retry",
+  });
+  assert.match(markup, /aria-live="polite"[^>]*>(?:(?!<\/div>).)*connectors\.approval\.policyRetry/);
+  assert.match(markup, /connectors\.approval\.send/);
+});
+
 test("every outcome is announced from one live region", async (t) => {
   for (const [state, textKey] of [
     ["committing", "sending"],

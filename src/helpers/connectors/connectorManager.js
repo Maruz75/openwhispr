@@ -153,6 +153,11 @@ function createConnectorManager({
     if (entry.state !== "pending") return { state: "not_sent", reason: "not_pending" };
 
     const refusal = policyRefusal(policyState);
+    // A policy lookup that timed out or went offline says nothing about this
+    // action: leave it pending so the user can press Send again.
+    if (refusal === "policy_unavailable") {
+      return { state: "not_sent", reason: refusal, retryable: true };
+    }
     if (refusal) {
       pendingActions.cancel(actionId);
       record(() =>

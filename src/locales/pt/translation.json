@@ -3824,7 +3824,8 @@
       "failed": "Não foi possível enviar: {{message}}",
       "unknown": "Não foi possível confirmar o envio. Verifique {{destination}}.",
       "cancelled": "Cancelado. Nada foi enviado.",
-      "notSent": "Não enviado."
+      "notSent": "Não enviado.",
+      "policyRetry": "Não foi possível verificar as configurações da sua organização, então nada foi enviado. Pressione Enviar para tentar novamente."
     },
     "policyOff": "Sua organização desativou os conectores.",
     "upgrade": "Atualizar",

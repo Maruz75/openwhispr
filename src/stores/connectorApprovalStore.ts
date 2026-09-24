@@ -30,6 +30,8 @@ export interface ApprovalEntry {
   state: ApprovalState;
   url?: string;
   message?: string;
+  /** Shown on a pending card after a Send that could not run. */
+  notice?: "policy_retry";
 }
 
 interface ApprovalStoreState {
@@ -51,6 +53,8 @@ interface PendingResolution {
   resolve: (outcome: ApprovalOutcome) => void;
   timer: ReturnType<typeof setTimeout>;
   detach: () => void;
+  signal: AbortSignal;
+  expiresAt: number;
 }
 
 // Promise resolvers stay outside zustand state: they are not renderable.
@@ -95,7 +99,7 @@ function settle(
   resolutions.delete(key);
   clearTimeout(pending.timer);
   pending.detach();
-  patchEntry(key, { state, ...patch });
+  patchEntry(key, { state, notice: undefined, ...patch });
   pending.resolve(outcome);
 }
 
@@ -106,6 +110,17 @@ function withdraw(key: string, reason: "conversation_ended" | "expired"): void {
   if (!entry || entry.state !== "pending") return;
   void window.electronAPI?.connectorCancel?.(entry.actionId, reason);
   settle(key, { state: "not_sent", reason }, "not_sent");
+}
+
+// A Send whose policy check couldn't finish sent nothing, so the card goes
+// back to pending. An abort or expiry that fired meanwhile — when only a
+// pending card can be withdrawn — is applied now.
+function returnToPending(key: string): void {
+  patchEntry(key, { state: "pending", notice: "policy_retry" });
+  const pending = resolutions.get(key);
+  if (!pending) return;
+  if (pending.signal.aborted) withdraw(key, "conversation_ended");
+  else if (Date.now() >= pending.expiresAt) withdraw(key, "expired");
 }
 
 export function requestApproval(
@@ -133,6 +148,8 @@ export function requestApproval(
       resolve,
       timer,
       detach: () => signal.removeEventListener("abort", onAbort),
+      signal,
+      expiresAt: Date.now() + APPROVAL_TTL_MS,
     });
     const draft: ApprovalDraft = {
       ...(request.preview.title !== undefined ? { title: request.preview.title } : {}),
@@ -175,12 +192,10 @@ export async function approveAction(key: string): Promise<void> {
   const entry = entryFor(key);
   if (!entry || entry.state !== "pending") return;
   const edits: ConnectorEdits = { ...entry.draft };
-  patchEntry(key, { state: "committing" });
-  const pending = resolutions.get(key);
-  if (pending) {
-    clearTimeout(pending.timer);
-    pending.detach();
-  }
+  // The expiry timer and abort listener stay armed while sending. They only
+  // withdraw a pending card, and a Send that comes back retryable returns
+  // the card to pending; settle() disarms them for every final outcome.
+  patchEntry(key, { state: "committing", notice: undefined });
 
   let raw: unknown;
   try {
@@ -192,6 +207,11 @@ export async function approveAction(key: string): Promise<void> {
   // A missing or unrecognized result is exactly as uncertain as a thrown
   // IPC call — never let it fall through with no case to settle.
   const result: ConnectorCommitResult = isConnectorCommitResult(raw) ? raw : { state: "unknown" };
+
+  if (result.state === "not_sent" && result.retryable === true) {
+    returnToPending(key);
+    return;
+  }
 
   const finalText = entry.draft.body !== entry.preview.body ? entry.draft.body : undefined;
   switch (result.state) {

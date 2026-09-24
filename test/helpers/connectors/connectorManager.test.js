@@ -149,9 +149,9 @@ test("a blocked or unavailable policy refuses prepare, commit and runDirect", as
   assert.equal(fake.calls.prepare.length, 0);
 
   const { actionId } = await manager.prepare("fake", "post", { text: "x" }, "allowed");
-  assert.deepEqual(await manager.commit(actionId, {}, "unavailable"), {
+  assert.deepEqual(await manager.commit(actionId, {}, "blocked"), {
     state: "not_sent",
-    reason: "policy_unavailable",
+    reason: "policy_blocked",
   });
   assert.equal(fake.calls.commit.length, 0);
   assert.equal(log.rows.get(actionId).state, "cancelled");
@@ -160,6 +160,23 @@ test("a blocked or unavailable policy refuses prepare, commit and runDirect", as
     state: "unavailable",
     reason: "policy_unavailable",
   });
+});
+
+test("an unavailable policy at Send leaves the action pending for another try", async () => {
+  const { manager, fake, log } = await setup();
+  const prepared = await manager.prepare("fake", "post", { text: "hi" }, "allowed");
+
+  assert.deepEqual(await manager.commit(prepared.actionId, {}, "unavailable"), {
+    state: "not_sent",
+    reason: "policy_unavailable",
+    retryable: true,
+  });
+  assert.equal(log.rows.get(prepared.actionId).state, "pending");
+  assert.equal(fake.calls.commit.length, 0);
+
+  const sent = await manager.commit(prepared.actionId, {}, "allowed");
+  assert.equal(sent.state, "sent");
+  assert.equal(fake.calls.commit.length, 1);
 });
 
 test("signed out refuses every action, and an unknown state fails closed", async () => {

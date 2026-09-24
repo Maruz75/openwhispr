@@ -3877,7 +3877,8 @@
       "failed": "No se pudo enviar: {{message}}",
       "unknown": "No se pudo confirmar el envío. Verifica {{destination}}.",
       "cancelled": "Cancelado. No se envió nada.",
-      "notSent": "No enviado."
+      "notSent": "No enviado.",
+      "policyRetry": "No se pudieron comprobar los ajustes de tu organización, así que no se envió nada. Pulsa Enviar para intentarlo de nuevo."
     },
     "policyOff": "Tu organización ha desactivado los conectores.",
     "upgrade": "Mejorar",

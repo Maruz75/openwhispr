@@ -33,7 +33,7 @@ export type ConnectorCommitResult =
   | { state: "sent"; url?: string }
   | { state: "failed"; errorCode: string; message: string }
   | { state: "unknown"; checkUrl?: string }
-  | { state: "not_sent"; reason: string };
+  | { state: "not_sent"; reason: string; retryable?: boolean };
 
 export type ConnectorDirectResult =
   | { state: "sent"; destinationLabel: string; bodyCopied?: boolean; subjectCopied?: boolean }

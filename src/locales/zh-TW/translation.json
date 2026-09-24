@@ -3824,7 +3824,8 @@
       "failed": "無法傳送：{{message}}",
       "unknown": "無法確認是否已傳送，請檢查 {{destination}}。",
       "cancelled": "已取消，未傳送任何內容。",
-      "notSent": "未傳送。"
+      "notSent": "未傳送。",
+      "policyRetry": "無法檢查您的組織設定，因此未傳送任何內容。請點一下「傳送」重試。"
     },
     "policyOff": "您的組織已關閉連接器。",
     "upgrade": "升級",

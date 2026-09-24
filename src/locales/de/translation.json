@@ -3993,7 +3993,8 @@
       "failed": "Senden fehlgeschlagen: {{message}}",
       "unknown": "Konnte nicht bestätigt werden. Bitte {{destination}} prüfen.",
       "cancelled": "Abgebrochen. Es wurde nichts gesendet.",
-      "notSent": "Nicht gesendet."
+      "notSent": "Nicht gesendet.",
+      "policyRetry": "Die Einstellungen deiner Organisation konnten nicht geprüft werden, daher wurde nichts gesendet. Auf Senden drücken, um es erneut zu versuchen."
     },
     "policyOff": "Konnektoren wurden von deiner Organisation deaktiviert.",
     "upgrade": "Upgrade",

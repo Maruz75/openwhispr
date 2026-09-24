@@ -3824,7 +3824,8 @@
       "failed": "发送失败：{{message}}",
       "unknown": "无法确认是否已发送，请检查 {{destination}}。",
       "cancelled": "已取消，未发送任何内容。",
-      "notSent": "未发送。"
+      "notSent": "未发送。",
+      "policyRetry": "无法检查您的组织设置，因此未发送任何内容。请点击“发送”重试。"
     },
     "policyOff": "您的组织已关闭连接器。",
     "upgrade": "升级",

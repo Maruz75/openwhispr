@@ -99,6 +99,9 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
       {/* One live region for every outcome, rendered from the start so a
           screen reader announces each change. */}
       <div role="status" aria-live="polite" className="text-xs">
+        {entry.state === "pending" && entry.notice === "policy_retry" && (
+          <p className="mt-2 text-muted-foreground">{t("connectors.approval.policyRetry")}</p>
+        )}
         {entry.state === "committing" && (
           <p className="mt-2 text-muted-foreground">{t("connectors.approval.sending")}</p>
         )}

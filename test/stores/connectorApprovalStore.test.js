@@ -297,6 +297,57 @@ test("a duplicate request for the same tool call cancels the new action and leav
   ]);
 });
 
+test("a policy check that couldn't finish returns the card to pending", async (t) => {
+  let attempt = 0;
+  const electron = fakeElectron(() => {
+    attempt += 1;
+    return attempt === 1
+      ? { state: "not_sent", reason: "policy_unavailable", retryable: true }
+      : { state: "sent", url: "https://slack.test/p/2" };
+  });
+  installBrowserGlobals(t, { window: { electronAPI: electron.api } });
+  const store = await freshStore();
+  const outcome = store.requestApproval(context("call-r").value, {
+    actionId: "ar",
+    connectorId: "slack",
+    preview: PREVIEW,
+  });
+  const key = keyOf(store, "call-r");
+
+  await store.approveAction(key);
+  const afterFirst = store.useConnectorApprovalStore.getState().entries[key];
+  assert.equal(afterFirst.state, "pending");
+  assert.equal(afterFirst.notice, "policy_retry");
+
+  await store.approveAction(key);
+  assert.deepEqual(await outcome, { state: "sent", url: "https://slack.test/p/2" });
+  assert.equal(store.useConnectorApprovalStore.getState().entries[key].notice, undefined);
+  assert.equal(electron.calls.commit.length, 2);
+});
+
+test("a conversation that ended during a retryable Send withdraws the card", async (t) => {
+  const controller = new AbortController();
+  const electron = fakeElectron(() => {
+    controller.abort();
+    return { state: "not_sent", reason: "policy_unavailable", retryable: true };
+  });
+  installBrowserGlobals(t, { window: { electronAPI: electron.api } });
+  const store = await freshStore();
+  const outcome = store.requestApproval(context("call-s", controller).value, {
+    actionId: "as",
+    connectorId: "slack",
+    preview: PREVIEW,
+  });
+
+  await store.approveAction(keyOf(store, "call-s"));
+
+  assert.deepEqual(await outcome, { state: "not_sent", reason: "conversation_ended" });
+  assert.deepEqual(
+    electron.calls.cancel.map((call) => call.reason),
+    ["conversation_ended"]
+  );
+});
+
 test("the same tool-call id on two messages gets two separate cards", async (t) => {
   const electron = fakeElectron();
   installBrowserGlobals(t, { window: { electronAPI: electron.api } });

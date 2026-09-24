@@ -3993,7 +3993,8 @@
       "failed": "Couldn't send: {{message}}",
       "unknown": "Couldn't confirm it was sent. Check {{destination}}.",
       "cancelled": "Cancelled. Nothing was sent.",
-      "notSent": "Not sent."
+      "notSent": "Not sent.",
+      "policyRetry": "Couldn't check your organization's settings, so nothing was sent. Press Send to try again."
     },
     "policyOff": "Connectors are turned off by your organization.",
     "upgrade": "Upgrade",

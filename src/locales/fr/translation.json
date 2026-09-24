@@ -3993,7 +3993,8 @@
       "failed": "Échec de l'envoi : {{message}}",
       "unknown": "Impossible de confirmer l'envoi. Vérifiez {{destination}}.",
       "cancelled": "Annulé. Rien n'a été envoyé.",
-      "notSent": "Non envoyé."
+      "notSent": "Non envoyé.",
+      "policyRetry": "Impossible de vérifier les paramètres de votre organisation, rien n'a donc été envoyé. Cliquez sur Envoyer pour réessayer."
     },
     "policyOff": "Votre organisation a désactivé les connecteurs.",
     "upgrade": "Passer au supérieur",
