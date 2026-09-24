@@ -78,27 +78,99 @@ test("malformed arguments never reach the manager", async () => {
   assert.equal(manager.calls.length, 0);
 });
 
-test("the policy resolver allows signed-out users and maps snapshots", async () => {
+test("signed out refuses, a lookup that can't tell fails closed, snapshots still map", async () => {
   const { createConnectorPolicyResolver } = await load();
+  const neverCalled = async () => {
+    throw new Error("must not be called");
+  };
+
   const signedOut = createConnectorPolicyResolver({
     getAuthHeader: async () => ({}),
-    getPolicy: async () => {
-      throw new Error("must not be called");
-    },
+    getPolicy: neverCalled,
     getAuthGeneration: () => 1,
   });
-  assert.equal(await signedOut({}), "allowed");
+  assert.equal(await signedOut({}), "signed_out");
+
+  const cannotTell = createConnectorPolicyResolver({
+    getAuthHeader: async () => null,
+    getPolicy: neverCalled,
+    getAuthGeneration: () => 1,
+  });
+  assert.equal(await cannotTell({}), "unavailable");
 
   const blocked = createConnectorPolicyResolver({
     getAuthHeader: async () => ({ Authorization: "Bearer t" }),
     getPolicy: async () => ({
       success: true,
       managed: true,
-      policy: { features: { connectorsEnabled: false } },
+      policy: { features: { agentEnabled: true, connectorsEnabled: false } },
     }),
     getAuthGeneration: () => 1,
   });
   assert.equal(await blocked({}), "blocked");
+});
+
+test("the auth generation is read before the header lookup", async () => {
+  const { createConnectorPolicyResolver } = await load();
+  let generation = 1;
+  const expected = [];
+  const resolver = createConnectorPolicyResolver({
+    // A sign-in lands while the header lookup is running.
+    getAuthHeader: async () => {
+      generation = 2;
+      return { Authorization: "Bearer new-session" };
+    },
+    getPolicy: async ({ expectedAuthGeneration }) => {
+      expected.push(expectedAuthGeneration);
+      return { success: false, status: "error", code: "AUTH_CONTEXT_CHANGED" };
+    },
+    getAuthGeneration: () => generation,
+  });
+
+  assert.equal(await resolver({}), "unavailable");
+  assert.deepEqual(expected, [1]);
+});
+
+test("a slow refresh still falls back to the cached verdict for the same request", async () => {
+  const { createConnectorPolicyResolver } = await load();
+  let generation = 4;
+  const peeked = [];
+  const resolver = createConnectorPolicyResolver({
+    getAuthHeader: async () => {
+      generation = 5;
+      return { Authorization: "Bearer t" };
+    },
+    getPolicy: () => new Promise(() => {}),
+    peekPolicy: (request) => {
+      peeked.push(request.expectedAuthGeneration);
+      return { success: true, managed: false, policy: null };
+    },
+    getAuthGeneration: () => generation,
+    timeoutMs: 20,
+  });
+
+  assert.equal(await resolver({}), "allowed");
+  assert.deepEqual(peeked, [4]);
+});
+
+test("the auth lookup never reads a destroyed window as signed out", async () => {
+  const { createConnectorAuthLookup } = await load();
+  const live = { isDestroyed: () => false };
+  const gone = { isDestroyed: () => true };
+  const lookup = (hasToken, win) =>
+    createConnectorAuthLookup({
+      hasBearerToken: () => hasToken,
+      windowFor: () => win,
+      authHeaderFor: async (w) => {
+        if (hasToken) return { Authorization: "Bearer t" };
+        return w === live ? {} : { Cookie: "session=1" };
+      },
+    });
+
+  assert.deepEqual(await lookup(true, null)({}), { Authorization: "Bearer t" });
+  assert.equal(await lookup(false, null)({}), null);
+  assert.equal(await lookup(false, gone)({}), null);
+  assert.deepEqual(await lookup(false, live)({}), {});
 });
 
 test("a policy lookup that hangs or throws fails closed", async () => {

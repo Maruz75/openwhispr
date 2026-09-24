@@ -162,6 +162,32 @@ test("a blocked or unavailable policy refuses prepare, commit and runDirect", as
   });
 });
 
+test("signed out refuses every action, and an unknown state fails closed", async () => {
+  const { manager, fake, log } = await setup();
+
+  assert.deepEqual(await manager.prepare("fake", "post", { text: "hi" }, "signed_out"), {
+    status: "unavailable",
+    reason: "signed_out",
+  });
+  assert.deepEqual(await manager.runDirect("fake", "draft", {}, "signed_out", {}), {
+    state: "unavailable",
+    reason: "signed_out",
+  });
+  assert.deepEqual(await manager.prepare("fake", "post", { text: "hi" }, "weird"), {
+    status: "unavailable",
+    reason: "policy_unavailable",
+  });
+  assert.equal(fake.calls.prepare.length + fake.calls.runDirect.length, 0);
+
+  const prepared = await manager.prepare("fake", "post", { text: "hi" }, "allowed");
+  assert.deepEqual(await manager.commit(prepared.actionId, {}, "signed_out"), {
+    state: "not_sent",
+    reason: "signed_out",
+  });
+  assert.equal(log.rows.get(prepared.actionId).state, "cancelled");
+  assert.equal(fake.calls.commit.length, 0);
+});
+
 test("a connection change between prepare and commit refuses the send", async () => {
   const { manager, fake, log } = await setup();
   const { actionId } = await manager.prepare("fake", "post", { text: "x" }, "allowed");

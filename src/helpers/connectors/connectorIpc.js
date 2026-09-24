@@ -10,6 +10,18 @@ function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+// Connectors must tell "signed out" ({}) from "can't tell" (null). Without a
+// bearer token only the sender's window can read the cookie session, so a
+// window that is already gone must not read as signed out.
+function createConnectorAuthLookup({ hasBearerToken, windowFor, authHeaderFor }) {
+  return async (event) => {
+    if (hasBearerToken()) return authHeaderFor(null);
+    const win = windowFor(event);
+    if (!win || win.isDestroyed()) return null;
+    return authHeaderFor(win);
+  };
+}
+
 function createConnectorPolicyResolver({
   getAuthHeader,
   getPolicy,
@@ -22,10 +34,16 @@ function createConnectorPolicyResolver({
   return async (event) => {
     let request = null;
     const resolution = (async () => {
-      const authHeaders = (await getAuthHeader(event)) || {};
-      // No account means no org policy can apply (same rule as screen context).
-      if (!authHeaders.Authorization && !authHeaders.Cookie) return "allowed";
-      request = { expectedAuthGeneration: getAuthGeneration(), authHeaders };
+      // Read before the lookup: a sign-in or sign-out during it then fails
+      // the policy fetch's generation check instead of passing it.
+      const expectedAuthGeneration = getAuthGeneration();
+      const authHeaders = await getAuthHeader(event);
+      if (!authHeaders || typeof authHeaders !== "object") return "unavailable";
+      // Connector logins outlive an OpenWhispr sign-out, so no account means
+      // no action (unlike screen context, where signed out is allowed).
+      if (!authHeaders.Authorization && !authHeaders.Cookie) return "signed_out";
+      // Assigned before the fetch: the deadline's fallback peeks this request.
+      request = { expectedAuthGeneration, authHeaders };
       const snapshot = await getPolicy(request);
       return connectorPolicyState(snapshot);
     })().catch(() => "unavailable");
@@ -92,4 +110,4 @@ function registerConnectorIpc({ ipcMain, manager, getPolicyState, findContacts }
   }
 }
 
-module.exports = { registerConnectorIpc, createConnectorPolicyResolver };
+module.exports = { registerConnectorIpc, createConnectorPolicyResolver, createConnectorAuthLookup };

@@ -34,6 +34,7 @@ const { resolveSystemDefaultMicrophone } = require("./systemDefaultMicrophone");
 const {
   registerConnectorIpc,
   createConnectorPolicyResolver,
+  createConnectorAuthLookup,
 } = require("./connectors/connectorIpc");
 const { searchContacts } = require("./connectors/contactSearch");
 // The renderer's ModelRegistry is not main-loadable; the raw registry data is
@@ -6096,7 +6097,11 @@ class IPCHandlers {
         ipcMain,
         manager: this.connectorManager,
         getPolicyState: createConnectorPolicyResolver({
-          getAuthHeader,
+          getAuthHeader: createConnectorAuthLookup({
+            hasBearerToken: () => Boolean(tokenStore.get()),
+            windowFor: (event) => BrowserWindow.fromWebContents(event.sender),
+            authHeaderFor: getAuthHeaderFromWindow,
+          }),
           getPolicy: (options) => workspacePolicyManager.getPolicy(options),
           peekPolicy: (options) => workspacePolicyManager.peekPolicy(options),
           getAuthGeneration: () => tokenStore.getState().generation,
