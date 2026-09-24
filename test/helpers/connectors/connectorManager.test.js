@@ -61,7 +61,12 @@ function fakeConnector(overrides = {}) {
       return {
         status: "ready",
         payload: { channel: "C1", text: args.text },
-        preview: { verbKey: "default", destinationLabel: "#eng", accountLabel: "chad", body: args.text },
+        preview: {
+          verbKey: "default",
+          destinationLabel: "#eng",
+          accountLabel: "chad",
+          body: args.text,
+        },
       };
     },
     async commit(action, payload, edits) {
@@ -83,7 +88,7 @@ function fakeConnector(overrides = {}) {
   };
 }
 
-async function setup(connectorOverrides, logOptions) {
+async function setup(connectorOverrides, logOptions, managerOptions = {}) {
   const [{ createConnectorManager }, { createPendingActions }] = await Promise.all([
     loadManager(),
     loadPending(),
@@ -95,6 +100,7 @@ async function setup(connectorOverrides, logOptions) {
     pendingActions: createPendingActions(),
     actionLog: log,
     logger: silentLogger,
+    ...managerOptions,
   });
   return { manager, fake, log };
 }
@@ -241,7 +247,10 @@ test("a connector commit resolving undefined is recorded as unknown and never or
   assert.deepEqual(await manager.commit(actionId, {}, "allowed"), { state: "unknown" });
   assert.equal(log.rows.get(actionId).state, "unknown");
   // The entry must not be orphaned in "committing": a second commit finds no pending action.
-  assert.deepEqual(await manager.commit(actionId, {}, "allowed"), { state: "not_sent", reason: "not_found" });
+  assert.deepEqual(await manager.commit(actionId, {}, "allowed"), {
+    state: "not_sent",
+    reason: "not_found",
+  });
 });
 
 test("a connector commit resolving an unrecognized state is recorded as unknown", async () => {
@@ -277,7 +286,11 @@ test("a runDirect resolving undefined is recorded as failed, matching the thrown
 test("clarification and prepare failures create no pending action", async () => {
   const { manager, log } = await setup({
     async prepare() {
-      return { status: "needs_clarification", message: "Which #eng?", candidates: ["#eng-web", "#eng-ios"] };
+      return {
+        status: "needs_clarification",
+        message: "Which #eng?",
+        candidates: ["#eng-web", "#eng-ios"],
+      };
     },
   });
   const result = await manager.prepare("fake", "post", { text: "x" }, "allowed");
@@ -359,7 +372,10 @@ test("the send never starts unless committing was durably recorded", async () =>
     reason: "receipt_unavailable",
   });
   assert.equal(fake.calls.commit.length, 0);
-  assert.deepEqual(await manager.commit(actionId, {}, "allowed"), { state: "not_sent", reason: "not_found" });
+  assert.deepEqual(await manager.commit(actionId, {}, "allowed"), {
+    state: "not_sent",
+    reason: "not_found",
+  });
 });
 
 test("a failed final write still reports the real outcome and leaves the row committing", async () => {
@@ -464,4 +480,55 @@ test("invalidate during a gated commit cancels the action without overwriting it
   const row = log.rows.get(actionId);
   assert.equal(row.state, "cancelled");
   assert.equal(row.errorCode, "connection_changed");
+});
+
+function recordingLogger() {
+  const lines = [];
+  const capture =
+    (level) =>
+    (...args) =>
+      lines.push({ level, args });
+  return { lines, info: capture("info"), warn: capture("warn"), error: capture("error") };
+}
+
+test("connector logs carry error names and codes, never messages", async () => {
+  const logger = recordingLogger();
+  const leaky = () =>
+    Object.assign(
+      new Error("POST https://slack.com/api/chat.postMessage?token=xoxp-secret failed"),
+      {
+        code: "ECONNRESET",
+      }
+    );
+
+  const throwing = await setup(
+    {
+      async prepare() {
+        throw leaky();
+      },
+      async runDirect() {
+        throw leaky();
+      },
+    },
+    undefined,
+    { logger }
+  );
+  await throwing.manager.prepare("fake", "post", { text: "hi" }, "allowed");
+  await throwing.manager.runDirect("fake", "draft", {}, "allowed", {});
+
+  const committing = await setup(
+    {
+      async commit() {
+        throw leaky();
+      },
+    },
+    undefined,
+    { logger }
+  );
+  const prepared = await committing.manager.prepare("fake", "post", { text: "hi" }, "allowed");
+  await committing.manager.commit(prepared.actionId, {}, "allowed");
+
+  const logged = JSON.stringify(logger.lines);
+  assert.doesNotMatch(logged, /xoxp-secret|slack\.com/);
+  assert.match(logged, /ECONNRESET/);
 });

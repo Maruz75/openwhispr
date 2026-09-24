@@ -4063,7 +4063,8 @@ class IPCHandlers {
       } catch (e) {
         errors.push(`Device setting files: ${e.message}`);
       }
-      for (const directoryName of ["bin", "llama-cpp"]) {
+      // "connectors" holds encrypted connector logins (Slack, …).
+      for (const directoryName of ["bin", "llama-cpp", "connectors"]) {
         try {
           fs.rmSync(path.join(app.getPath("userData"), directoryName), {
             recursive: true,

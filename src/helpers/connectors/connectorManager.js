@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { describeError } = require("./errorSummary");
 
 const CANCEL_REASONS = new Set(["cancelled_by_user", "conversation_ended", "expired"]);
 const COMMIT_RESULT_STATES = new Set(["sent", "failed", "unknown"]);
@@ -52,7 +53,7 @@ function createConnectorManager({
     try {
       return write() !== false;
     } catch (error) {
-      logger.error("connector receipt write failed", { step, error: error.message });
+      logger.error("connector receipt write failed", { step, ...describeError(error) });
       return false;
     }
   }
@@ -63,7 +64,7 @@ function createConnectorManager({
     try {
       write();
     } catch (error) {
-      logger.warn("connector receipt update failed", { error: error.message }, "connectors");
+      logger.warn("connector receipt update failed", { ...describeError(error) }, "connectors");
     }
   }
 
@@ -106,7 +107,7 @@ function createConnectorManager({
     } catch (error) {
       logger.warn(
         "connector prepare threw",
-        { connectorId, action, error: error.message },
+        { connectorId, action, ...describeError(error) },
         "connectors"
       );
       return {
@@ -198,7 +199,7 @@ function createConnectorManager({
     } catch (error) {
       logger.warn(
         "connector commit threw",
-        { connectorId: entry.connectorId, action: entry.action, error: error.message },
+        { connectorId: entry.connectorId, action: entry.action, ...describeError(error) },
         "connectors"
       );
       result = { state: "unknown" };
@@ -249,7 +250,7 @@ function createConnectorManager({
     } catch (error) {
       logger.warn(
         "connector direct action threw",
-        { connectorId, action, error: error.message },
+        { connectorId, action, ...describeError(error) },
         "connectors"
       );
       result = {
