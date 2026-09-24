@@ -33,7 +33,7 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
    - Main Process: Electron main, IPC handlers, database operations
    - Renderer Process: React app with context isolation
    - Preload Script: Secure bridge between processes
-   - ONNX Utility Process: hosts all `onnxruntime-node` inference (text embeddings, speaker embeddings, fbank). Lazy-spawned on first use via `src/helpers/onnxWorkerClient.js` → `src/workers/onnxWorker.js`. Native crashes (e.g., ORT `bad_alloc`) confine to the worker; main process rejects in-flight requests and respawns with backoff. Stopped in `will-quit`.
+   - ONNX Utility Process: hosts all `onnxruntime-node` inference (text embeddings, speaker embeddings, fbank). Lazy-spawned on first use via `src/helpers/onnxWorkerClient.js` → `src/workers/onnxWorker.js`. Native crashes (e.g., ORT `bad_alloc`) confine to the worker; main process rejects in-flight requests and respawns with backoff. A request that times out kills the worker so it respawns the same way; the embedding clients reload their sessions on the new worker. Exits once idle with no session loaded (`releaseIfIdle`, after semantic search releases its model). Stopped in `will-quit`.
 
 3. **Audio Pipeline**:
    - MediaRecorder API → Blob → ArrayBuffer → IPC → File → whisper.cpp
@@ -127,9 +127,11 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
   - Gates notifications during recording (tap-to-talk and push-to-talk)
   - Post-recording cooldown (2.5s) before showing queued notifications
   - Priority-based coalescing (process > audio) — one notification, not three
+  - Both detectors start off and only run once the renderer has synced its saved notification preferences (`sync-notification-preferences`); they stop when meeting prompts are disabled and restart when re-enabled. The derivation lives in `meetingDetectionPreferencePolicy.js` (pure, unit-tested in `test/helpers/meetingDetectionPreferencePolicy.test.js`); `ipcHandlers.js` is a thin adapter over it
 - **meetingProcessDetector.js**: Detects running meeting apps
   - macOS: Event-driven via `systemPreferences.subscribeWorkspaceNotification` (zero CPU)
   - Windows/Linux: Shared `processListCache` polling (30s interval)
+  - Scans are start-generation guarded: a process-list read that completes after `stop()` or a newer `start()` is discarded, since the detector is now stopped and started at runtime (notification toggles, auto-end sessions)
 - **audioActivityDetector.js**: Detects microphone usage for unscheduled meetings
   - macOS: Event-driven via `macos-mic-listener` binary (CoreAudio process objects; aggregate device activity prompts only while a known meeting app is running)
   - Windows: Event-driven via `windows-mic-listener.exe` (WASAPI sessions, self-PID exclusion)
@@ -158,8 +160,9 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
 - **parakeet.js**: NVIDIA Parakeet model management via sherpa-onnx
 - **parakeetServer.js**: sherpa-onnx CLI wrapper for transcription
 - **qdrantManager.js**: Qdrant vector DB sidecar process lifecycle (spawn, health check, shutdown)
+- **semanticSearchLifecycle.js**: Single owner of the semantic search resources — starts Qdrant and the embedding model on demand, drains the SQLite change journal, and releases both after 5 minutes idle
 - **localEmbeddings.js**: Local text embedding via ONNX Runtime + all-MiniLM-L6-v2 (384-dim vectors)
-- **vectorIndex.js**: Qdrant collection management — upsert, delete, search, batch reindex
+- **vectorIndex.js**: Qdrant collection management — upsert, delete, search
 - **windowConfig.js**: Centralized window configuration
 - **windowManager.js**: Window creation and lifecycle management
 - **cliBridge.js**: Loopback HTTP server on ports 8200–8219, bearer-token auth (token at `~/.openwhispr/cli-bridge.json`), 127.0.0.1-only. Used by the unified CLI to talk to a running desktop app. `POST /v1/transcribe` takes a file **path** (never audio) and runs the user's downloaded local model through `IPCHandlers.transcribeLocalFile`, approving the path with `approveAudioPath` first; `GET /v1/transcribe/models` lists local models with download state and the app's default (`localTranscriptionModels.js`, read from the `.env` pre-warm values).
@@ -168,8 +171,8 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
   - `pendingActions.js`: pending → committing → sent/failed/unknown; actions are bound to the connection (account, workspace, `generation`) they were prepared on
   - `connector_actions` (SQLite) is the durable receipt: destination labels, states and links only, never content. Interrupted rows are reconciled on launch (committing → unknown)
   - Policy fails closed (`connectorPolicy.js`'s `connectorPolicyState` classifies the snapshot; `connectorIpc.js`'s `createConnectorPolicyResolver` enforces the 1.5s deadline): only a successful, well-formed snapshot allows; unresolvable, any error code, or >1.5s with no verdict already held for the account (`workspacePolicyManager.peekPolicy`) → unavailable; org switch `features.connectorsEnabled`, and `agentEnabled: false` turns connectors off too
-  - `emailConnector.js` opens Gmail/Outlook/mailto compose windows (`emailCompose.js`, shared ESM); a body that won't fit the 2,000-char compose URL goes to the clipboard instead, then the subject too if it's still too long; a recipient list that alone doesn't fit is refused
-  - `contactSearch.js` (`find_contact`) searches the meetings nearest to now (`calendar_events` only spans the sync window) plus the never-pruned `contacts` table; the user's calendar accounts, `self` and `resource` attendees (rooms, flagged by all three calendar managers) and `*.calendar.google.com` addresses are excluded
+  - `emailConnector.js` opens Gmail/Outlook/mailto compose windows (`emailCompose.js`, shared ESM); a body that won't fit the compose URL (2,000 chars; 6,000 for Gmail on macOS/Linux, since Windows caps opened URLs near 2,081) goes to the clipboard once the window has opened, then the subject too if it's still too long; a recipient list that alone doesn't fit is refused. `email_draft` opens at most 3 drafts per turn, and only one of them may use the clipboard (`ToolExecutionContext.claimTurnSlot`)
+  - `contactSearch.js` (`find_contact`) searches the meetings nearest to now (`calendar_events` only spans the sync window; cancelled and declined meetings don't count) plus the `contacts` table, most recently synced first, behind the same org policy check as the actions. The user's calendar accounts, Apple's `self` attendee (Google's `self` marks a shared calendar's owner), `resource` attendees (rooms, flagged by all three calendar managers) and `*.calendar.google.com` addresses are excluded; the calendar managers also keep the user and rooms out of `contacts` and purge rows older builds stored
 - **postMigrationDetector.js**: Detects users returning from the pre-Gizmo bundle ID via a `.bundle-migrated` sentinel in userData; consumed by `ipcHandlers.js` to drive the `PostMigrationOnboarding` modal
 
 ### React Components (src/components/)
@@ -245,20 +248,22 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
 
 ### Local Semantic Search (Qdrant + MiniLM)
 
-Always-on offline semantic search that finds notes by meaning, not just keywords. Used by the AI agent's `search_notes` tool. Qdrant starts automatically on app launch; embedding model auto-downloads on first run if missing.
+Offline semantic search that finds notes by meaning, not just keywords. Used by the AI agent's `search_notes` tool. Its resources are lazy (#2143): Qdrant and the embedding model start on the first semantic search (or the first vector write while the index is active), the embedding model downloads on that first activation if missing, and everything is released after 5 minutes idle. While asleep, keyword FTS5 serves searches and note changes are journaled in SQLite.
 
 **Architecture**:
 
 - **Qdrant sidecar**: Rust binary spawned as child process (`qdrantManager.js`), port 6333–6350
 - **Embedding model**: `all-MiniLM-L6-v2` via ONNX Runtime (`localEmbeddings.js`), 384-dim vectors
 - **Vector index**: Qdrant collection management (`vectorIndex.js`), cosine distance
+- **Lifecycle owner**: `semanticSearchLifecycle.js` — the only caller that starts or stops Qdrant, the embedding model and the collection
 - **Hybrid search**: FTS5 + Qdrant in parallel → Reciprocal Rank Fusion (K=60) with 0.3 cosine score threshold
 
 **Pipeline**:
 
-1. App launches → Qdrant binary starts → collection created. Embedding model auto-downloads if missing (~22MB)
-2. Note create/update/delete → SQLite write → background vector upsert/delete via `_asyncVectorUpsert()`/`_asyncVectorDelete()`
+1. App launches → nothing starts. The first `db-semantic-search-notes` call activates the lifecycle: embedding model downloaded if missing (~22MB) → Qdrant binary starts → collection ensured → the journal is drained. A cold search does not wait: it answers with FTS5 results while activation runs in the background. An existing collection serves searches while the journal drains; a newly created one waits until that activation's drain finishes. A journal row whose upsert keeps failing is parked after three failed attempts, so one bad note never blocks the rest of the index
+2. Note create/update/delete → SQLite write → triggers journal the note id in `pending_vector_changes` → `IPCHandlers.notifyVectorChanges()` wakes an already-active index to drain the journal; an idle index drains it on its next activation
 3. Agent searches → `db-semantic-search-notes` IPC → parallel FTS5 + vector search → RRF merge → ranked results
+4. 5 minutes without a search or write → Qdrant is stopped and the embedding session released; FTS5 keeps serving
 
 **Search fallback chain** (in `searchNotesTool.ts`): cloud search → local semantic → FTS5 keyword
 
@@ -266,11 +271,12 @@ Always-on offline semantic search that finds notes by meaning, not just keywords
 
 - Qdrant data: `~/.cache/openwhispr/qdrant-data/` (`qdrant-data-dev/` in development)
 - Qdrant binary: `resources/bin/qdrant-{platform}-{arch}` (bundled — downloaded during `prebuild` / `predev:main`)
-- Embedding model: `~/.cache/openwhispr/embedding-models/all-MiniLM-L6-v2/` (auto-downloaded on first launch)
+- Embedding model: `~/.cache/openwhispr/embedding-models/all-MiniLM-L6-v2/` (downloaded on the first semantic search)
+- Change journal: `pending_vector_changes` table in the notes SQLite database, maintained by triggers
 
 **Dependencies**: `@qdrant/js-client-rest`, `onnxruntime-node`
 
-**Dev setup**: The Qdrant binary downloads automatically via `predev`/`prestart`. The embedding model auto-downloads on first app launch. To manually download: `npm run download:qdrant` and `npm run download:embedding-model`.
+**Dev setup**: The Qdrant binary downloads automatically via `predev`/`prestart`. The embedding model downloads on the first semantic search. To manually download: `npm run download:qdrant` and `npm run download:embedding-model`.
 
 ### Build Scripts (scripts/)
 
@@ -659,7 +665,7 @@ Detects meetings via three independent sources, orchestrated by `MeetingDetectio
 
 - All prompts render in one always-on-top overlay window (`MeetingNotificationCard`), content-protected so it never appears in screen shares
 - Prompt copy is derived in the renderer from `{ variant, event, joinUrl }` (`meetingNotification.*` i18n keys); variants: `detected` (mic evidence), `starting` (calendar event not yet started), `underway` (event in progress)
-- Per-source notification prefs: `notifyCalendarReminders` gates calendar prompts, `notifyMeetingDetection` gates mic/process prompts
+- Per-source notification prefs: `notifyCalendarReminders` gates calendar prompts, `notifyMeetingDetection` gates mic/process prompts and, with `notificationsEnabled`, whether the mic and process detectors run at all (`meetingProcessDetection` additionally gates the process detector); nothing runs until the renderer has synced the saved snapshot
 - During recording (tap-to-talk or push-to-talk): ALL notifications suppressed
 - After recording: 2.5s cooldown before showing queued notifications
 - Multiple signals coalesced: one overlay at a time; a newer prompt replaces the current one
@@ -690,7 +696,7 @@ A dedicated global hotkey that starts a dictation whose transcript is sent strai
 4. Standalone commands (no text selected) run through the chat pipeline (`src/components/dictation/AssistantPanel.tsx`): chat tools (notes search/create/update, calendar, web search, clipboard, `get_snippet` — triggers listed in the tool description, body fetched on demand — and `update_dictionary` / `update_snippets`, which write through the settings store so the change syncs like a UI edit), RAG memory, and the custom dictionary plus snippet triggers injected into the system prompt. Conversations persist in the `agent_conversations` table and are browsable from the ControlPanel chat
 5. Response delivery: a capture with `status: "editable"` (a focused writable non-terminal field with no selection) plus auto-paste banks a `deliverySessionId`; the completed answer is pasted via `paste-at-captured-target`, which revalidates the target and fails closed to the panel + clipboard on any change (`assistantResponseDelivery.ts`, `pasteAtCapturedTarget` in `selectionManager.js`). A follow-up spoken while the panel is already open stays panel-first. Cancelled or empty responses never paste and never touch the clipboard
 6. Selection edits are unchanged: highlighted text goes through the `dictationAgent` scope and is safely replaced in place — it never opens the panel
-7. Connector tools (email_draft, find_contact; paid, policy-gated, off in the onboarding demo) run through src/helpers/connectors. An approval card, any `email_draft` (its compose window takes focus) and a `find_contact` that must ask the user hold the turn in the panel (`onHoldDelivery`) instead of pasting at the caret
+7. Connector tools (email_draft, find_contact; paid, policy-gated, off in the onboarding demo) run through src/helpers/connectors. An approval card, any `email_draft` (its compose window takes focus) and any `find_contact` (a lookup is almost always followed by a question for the user) hold the turn in the panel (`onHoldDelivery`) instead of pasting at the caret
 
 **Storage & IPC**:
 
@@ -811,7 +817,7 @@ UI icons come from `src/components/icons/` (vendored Nucleo core outline compone
 - [ ] Test meeting notification suppression during recording
 - [ ] Test post-recording cooldown (notifications shouldn't flash immediately)
 - [ ] Create a note about "quarterly revenue projections", search via agent for "financial forecast" — should match semantically
-- [ ] Verify Qdrant starts on app launch (check debug logs for "qdrant started successfully")
+- [ ] Verify Qdrant stays down at launch and starts on the first agent search (check debug logs for "qdrant started successfully"), then stops after 5 idle minutes
 - [ ] Kill Qdrant process manually — verify FTS5 keyword search still works as fallback
 
 ### Common Issues and Solutions
@@ -861,7 +867,7 @@ UI icons come from `src/components/icons/` (vendored Nucleo core outline compone
 
 7. **Local Semantic Search Not Working**:
    - Qdrant binary should be in `resources/bin/qdrant-{platform}-{arch}` (auto-downloaded during `predev`/`prebuild`)
-   - Embedding model should be in `~/.cache/openwhispr/embedding-models/all-MiniLM-L6-v2/model.onnx` (auto-downloaded on first app launch)
+   - Embedding model should be in `~/.cache/openwhispr/embedding-models/all-MiniLM-L6-v2/model.onnx` (downloaded on the first semantic search)
    - Run `npm run download:qdrant` and `npm run download:embedding-model` manually if missing
    - Check debug logs for "qdrant" entries (port, health check, errors)
    - If Qdrant fails to start, search still works via FTS5 keyword fallback

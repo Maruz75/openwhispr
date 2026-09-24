@@ -6,7 +6,7 @@ function stringList(value) {
 
 // A compose window is the user's review step: they press Send in their own
 // mail client, so drafting needs no approval card.
-function createEmailConnector({ openExternal, writeClipboard }) {
+function createEmailConnector({ openExternal, writeClipboard, platform = process.platform }) {
   return {
     id: "email",
     actions: { draft: { kind: "direct" } },
@@ -42,6 +42,7 @@ function createEmailConnector({ openExternal, writeClipboard }) {
         cc,
         subject: typeof args.subject === "string" ? args.subject : "",
         body: typeof args.body === "string" ? args.body : "",
+        platform,
       });
       if (!request.ok) {
         return {
@@ -54,9 +55,6 @@ function createEmailConnector({ openExternal, writeClipboard }) {
       }
 
       try {
-        if (request.clipboardText !== null) {
-          await writeClipboard(request.clipboardText, runtime.webContents ?? null);
-        }
         await openExternal(request.url);
       } catch {
         return {
@@ -65,6 +63,11 @@ function createEmailConnector({ openExternal, writeClipboard }) {
           message: "Couldn't open your email app.",
           destinationLabel,
         };
+      }
+      // Only once the window opened, so a failed open leaves the user's
+      // clipboard as it was.
+      if (request.clipboardText !== null) {
+        await writeClipboard(request.clipboardText, runtime.webContents ?? null);
       }
       // The compose URL carries the body, so it is never returned or logged.
       return {

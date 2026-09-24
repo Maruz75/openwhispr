@@ -121,6 +121,7 @@
       "mouseButtonOnlyMac": "Atalhos com botões do mouse atualmente são compatíveis apenas no macOS.",
       "alreadyRegistered": "\"{{hotkey}}\" já está registrada por outro aplicativo.",
       "osReserved": "\"{{hotkey}}\" pode estar reservada pelo seu ambiente de desktop.",
+      "rightModifierNeedsListener": "\"{{hotkey}}\" não pode ser usada neste ambiente de trabalho, cujos atalhos precisam de uma tecla normal. Adicione uma tecla, como Control+Alt+Space.",
       "holdNeedsReleaseKey": "Segurar para falar precisa de uma tecla cuja soltura o macOS detecte: Globo, uma tecla direita como Option direita ou um atalho com modificador. Tocar funciona com qualquer tecla.",
       "registrationFailed": "Não foi possível registrar \"{{hotkey}}\". Pode estar em uso por outro aplicativo.",
       "updateFailedCheckFormat": "Não foi possível atualizar o atalho para \"{{hotkey}}\". Verifique se o formato é válido.",
@@ -898,6 +899,7 @@
         "streamingOnlyProvider": "Este provedor só suporta transcrição ao vivo. Escolha outro provedor para uploads de arquivos e novas tentativas.",
         "providerKeyMissing": "Nenhuma chave de API definida para seu provedor de transcrição. Adicione-a em Configurações → Fala para texto.",
         "cleanupTruncated": "O modelo de IA ficou sem espaço antes de terminar a limpeza do seu ditado.",
+        "cleanupDuplicated": "A limpeza por IA repetiu a transcrição. O texto original foi mantido.",
         "cleanupEmptyReply": "O modelo de IA devolveu uma resposta vazia em vez do ditado limpo."
       },
       "translationFallback": {
@@ -919,6 +921,18 @@
         "unavailable": "O OpenWhispr não conseguiu ler o texto selecionado com segurança. Verifique as permissões de acessibilidade ou automação.",
         "tooLarge": "A seleção é muito grande. Selecione no máximo 6.000 caracteres.",
         "reasoningFailed": "A IA não conseguiu concluir a edição. O texto original não foi alterado."
+      },
+      "pastePermission": {
+        "title": "Permitir colagem automática",
+        "description": "Ative o OpenWhispr em Ajustes do Sistema → Privacidade e Segurança → Acessibilidade.",
+        "settingsFailed": "Não foi possível abrir os ajustes. Abra Ajustes do Sistema → Privacidade e Segurança → Acessibilidade e ative o OpenWhispr.",
+        "manualPaste": "Copie o texto abaixo e pressione {{shortcut}} para colá-lo.",
+        "openSettings": "Abrir ajustes",
+        "copyToClipboard": "Copiar texto",
+        "copyFailed": "Falha ao copiar"
+      },
+      "pasteFailed": {
+        "title": "Não foi possível colar automaticamente"
       }
     },
     "clipboard": {
@@ -3828,10 +3842,11 @@
       "policyRetry": "Não foi possível verificar as configurações da sua organização, então nada foi enviado. Pressione Enviar para tentar novamente."
     },
     "policyOff": "Sua organização desativou os conectores.",
-    "upgrade": "Atualizar",
+    "viewPlans": "Ver planos",
     "email": {
       "title": "Rascunhos de e-mail",
       "description": "O assistente abre um rascunho pré-preenchido no seu aplicativo de e-mail. Você revisa e aperta Enviar.",
+      "proRequired": "Atualize para um plano pago para que o assistente escreva rascunhos de e-mail para você.",
       "targetLabel": "Criar rascunhos de e-mail em",
       "targets": {
         "auto": "Automático",
@@ -3867,6 +3882,8 @@
       "unavailable": "Os conectores não estão disponíveis no momento.",
       "failed": "Não funcionou.",
       "contactsFound": "Contatos encontrados: {{total}}",
+      "draftLimit": "Só é possível abrir {{count}} rascunhos por solicitação.",
+      "clipboardBusy": "Não aberto: o texto de outro rascunho ainda está na sua área de transferência.",
       "errors": {
         "open_failed": "Não foi possível abrir seu aplicativo de e-mail.",
         "draft_too_long": "Destinatários demais para um link de rascunho.",

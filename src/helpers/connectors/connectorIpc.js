@@ -1,6 +1,8 @@
-const { connectorPolicyState } = require("./connectorPolicy");
+const { connectorPolicyState, policyRefusal } = require("./connectorPolicy");
 
 const POLICY_TIMEOUT_MS = 1500;
+// A name or part of an address; anything longer is not a lookup.
+const MAX_CONTACT_QUERY_LENGTH = 200;
 
 function isNonEmptyString(value) {
   return typeof value === "string" && value.length > 0;
@@ -69,6 +71,11 @@ function createConnectorPolicyResolver({
 }
 
 function registerConnectorIpc({ ipcMain, manager, getPolicyState, findContacts }) {
+  // Direct runs still waiting on their policy lookup, by the renderer's run
+  // id. A cancel that lands during that wait (Esc) stops the run before it
+  // acts; once policy resolves, the action runs without another wait.
+  const waitingRuns = new Map();
+
   ipcMain.handle("connector-status", () => manager.status());
 
   ipcMain.handle("connector-prepare", async (event, connectorId, action, args) => {
@@ -85,14 +92,25 @@ function registerConnectorIpc({ ipcMain, manager, getPolicyState, findContacts }
 
   ipcMain.handle("connector-cancel", (_event, actionId, reason) => {
     if (!isNonEmptyString(actionId)) return { cancelled: false };
+    const waitingRun = waitingRuns.get(actionId);
+    if (waitingRun) {
+      waitingRun.cancelled = true;
+      return { cancelled: true };
+    }
     return manager.cancel(actionId, reason);
   });
 
-  ipcMain.handle("connector-run-direct", async (event, connectorId, action, args) => {
+  ipcMain.handle("connector-run-direct", async (event, connectorId, action, args, runId) => {
     if (!isNonEmptyString(connectorId) || !isNonEmptyString(action) || !isPlainObject(args)) {
       return { state: "unavailable", reason: "invalid_request" };
     }
-    return manager.runDirect(connectorId, action, args, await getPolicyState(event), {
+    const run = { cancelled: false };
+    const tracked = isNonEmptyString(runId);
+    if (tracked) waitingRuns.set(runId, run);
+    const policyState = await getPolicyState(event);
+    if (tracked) waitingRuns.delete(runId);
+    if (run.cancelled) return { state: "not_sent", reason: "cancelled" };
+    return manager.runDirect(connectorId, action, args, policyState, {
       webContents: event.sender,
     });
   });
@@ -103,9 +121,15 @@ function registerConnectorIpc({ ipcMain, manager, getPolicyState, findContacts }
   });
 
   if (findContacts) {
-    ipcMain.handle("connector-find-contacts", (_event, query) => {
-      if (typeof query !== "string" || !query.trim()) return { contacts: [] };
-      return { contacts: findContacts(query.trim()) };
+    // The results go to the model (and its provider), so the org switch
+    // applies here too, not just to actions that leave the device.
+    ipcMain.handle("connector-find-contacts", async (event, query) => {
+      if (typeof query !== "string" || !query.trim() || query.length > MAX_CONTACT_QUERY_LENGTH) {
+        return { contacts: [] };
+      }
+      const refusal = policyRefusal(await getPolicyState(event));
+      if (refusal) return { contacts: [], unavailableReason: refusal };
+      return findContacts(query.trim());
     });
   }
 }

@@ -47,7 +47,7 @@ test("empty fields are left out of the URL", async () => {
 });
 
 test("a body that would push the URL past the limit moves to the clipboard", async () => {
-  const { buildComposeRequest, MAX_COMPOSE_URL_LENGTH } = await load();
+  const { buildComposeRequest } = await load();
   const body = "é".repeat(400);
   const { url, clipboardText } = buildComposeRequest({
     target: "gmail",
@@ -58,7 +58,7 @@ test("a body that would push the URL past the limit moves to the clipboard", asy
   assert.equal(clipboardText, body);
   assert.equal(new URL(url).searchParams.get("body"), null);
   assert.equal(new URL(url).searchParams.get("su"), "Notes");
-  assert.ok(url.length <= MAX_COMPOSE_URL_LENGTH);
+  assert.ok(url.length <= 2000);
 });
 
 test("a body that fits stays in the URL", async () => {
@@ -70,7 +70,7 @@ test("a body that fits stays in the URL", async () => {
 });
 
 test("a subject too long for any link moves to the clipboard, even with no body", async () => {
-  const { buildComposeRequest, MAX_COMPOSE_URL_LENGTH } = await load();
+  const { buildComposeRequest } = await load();
   const subject = "Quarterly planning ".repeat(120).trim();
   for (const body of ["", "See the agenda below."]) {
     const result = buildComposeRequest({ target: "outlookWork", to: ["a@example.com"], subject, body });
@@ -78,7 +78,7 @@ test("a subject too long for any link moves to the clipboard, even with no body"
     assert.equal(result.subjectCopied, true);
     assert.equal(result.clipboardText, body ? `${subject}\n\n${body}` : subject);
     assert.equal(new URL(result.url).searchParams.get("subject"), null);
-    assert.ok(result.url.length <= MAX_COMPOSE_URL_LENGTH);
+    assert.ok(result.url.length <= 2000);
   }
 });
 
@@ -92,22 +92,26 @@ test("recipients too long for any link are refused instead of opening a broken l
 });
 
 test("no returned link ever exceeds the limit", async () => {
-  const { buildComposeRequest, COMPOSE_TARGETS, MAX_COMPOSE_URL_LENGTH } = await load();
-  for (const target of COMPOSE_TARGETS) {
-    for (const recipients of [1, 10, 40, 80]) {
-      for (const subjectLength of [0, 50, 900, 2500]) {
-        for (const bodyLength of [0, 300, 1900, 5000]) {
-          const result = buildComposeRequest({
-            target,
-            to: Array.from({ length: recipients }, (_, i) => `person${i}@example.com`),
-            subject: "ü".repeat(subjectLength),
-            body: "é ".repeat(bodyLength),
-          });
-          if (result.ok) {
-            assert.ok(
-              result.url.length <= MAX_COMPOSE_URL_LENGTH,
-              `${target} ${recipients}/${subjectLength}/${bodyLength}: ${result.url.length}`
-            );
+  const { buildComposeRequest, COMPOSE_TARGETS, maxComposeUrlLength } = await load();
+  for (const platform of ["darwin", "linux", "win32"]) {
+    for (const target of COMPOSE_TARGETS) {
+      const limit = maxComposeUrlLength(target, platform);
+      for (const recipients of [1, 10, 40, 80]) {
+        for (const subjectLength of [0, 50, 900, 2500]) {
+          for (const bodyLength of [0, 300, 1900, 5000]) {
+            const result = buildComposeRequest({
+              target,
+              to: Array.from({ length: recipients }, (_, i) => `person${i}@example.com`),
+              subject: "ü".repeat(subjectLength),
+              body: "é ".repeat(bodyLength),
+              platform,
+            });
+            if (result.ok) {
+              assert.ok(
+                result.url.length <= limit,
+                `${platform} ${target} ${recipients}/${subjectLength}/${bodyLength}: ${result.url.length}`
+              );
+            }
           }
         }
       }
@@ -115,13 +119,59 @@ test("no returned link ever exceeds the limit", async () => {
   }
 });
 
+test("Gmail on macOS and Linux keeps a longer non-ASCII body in the link", async () => {
+  const { buildComposeRequest, maxComposeUrlLength } = await load();
+  // ~500 Cyrillic characters encode to ~5,000 URL characters.
+  const body = "Привет, это письмо. ".repeat(25);
+  const request = (target, platform) =>
+    buildComposeRequest({ target, to: ["a@example.com"], subject: "Notes", body, platform });
+
+  for (const platform of ["darwin", "linux"]) {
+    const { url, clipboardText } = request("gmail", platform);
+    assert.equal(clipboardText, null, platform);
+    assert.equal(new URL(url).searchParams.get("body"), body, platform);
+    assert.ok(url.length <= maxComposeUrlLength("gmail", platform));
+  }
+  // Windows caps every opened URL near 2,081; the other targets are unmeasured.
+  assert.equal(request("gmail", "win32").clipboardText, body);
+  assert.equal(request("outlookWork", "darwin").clipboardText, body);
+  assert.equal(request("mailto", "linux").clipboardText, body);
+  assert.equal(maxComposeUrlLength("gmail", undefined), 2000);
+});
+
 test("email address validation", async () => {
   const { isValidEmailAddress } = await load();
-  for (const good of ["a@example.com", "gabe+lunch@example.co.uk", "o'neil@example.com"]) {
+  for (const good of [
+    "a@example.com",
+    "gabe+lunch@example.co.uk",
+    "o'neil@example.com",
+    "josé@münchen.de",
+    "a@xn--80ak6aa92e.com",
+    "first.last@sub-domain.example.org",
+  ]) {
     assert.equal(isValidEmailAddress(good), true, good);
   }
   for (const bad of ["Gabe", "gabe@", "@example.com", "a@b", "a b@example.com", "a@example.com,b@example.com", "", null]) {
     assert.equal(isValidEmailAddress(bad), false, String(bad));
+  }
+});
+
+test("addresses that could disguise the recipient or carry URL junk are refused", async () => {
+  const { isValidEmailAddress } = await load();
+  for (const bad of [
+    "‮moc.proc@evil.io", // right-to-left override: displays as oi.live@corp.com
+    "alice@corp.com​.evil.io", // zero-width space
+    "alice‍@corp.com", // zero-width joiner
+    "alice\u0000@corp.com",
+    "alice\u0007@corp.com",
+    "a@b.com?subject=x",
+    "a@b.com#frag",
+    "a@b.com&",
+    "a@b..com",
+    "a@b.com/../x",
+    "a@-corp.com",
+  ]) {
+    assert.equal(isValidEmailAddress(bad), false, JSON.stringify(bad));
   }
 });
 

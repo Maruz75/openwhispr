@@ -25,6 +25,12 @@ export interface ToolExecutionContext {
    * put user content on the clipboard, or needs the user to answer.
    */
   onHoldDelivery: () => void;
+  /**
+   * Counts one use of `key` in this turn and reports whether it stays within
+   * `limit`, so a tool can cap what one turn does (drafts opened, clipboard
+   * writes). Synchronous, so tool calls running in parallel can't overshoot.
+   */
+  claimTurnSlot: (key: string, limit: number) => boolean;
 }
 
 export interface ToolDefinition {
@@ -33,6 +39,33 @@ export interface ToolDefinition {
   parameters: Record<string, unknown>;
   readOnly: boolean;
   execute: (args: Record<string, unknown>, context?: ToolExecutionContext) => Promise<ToolResult>;
+}
+
+// What an aborted call returns; its turn is over, so nobody shows it.
+const ABORTED_RESULT: ToolResult = { success: false, data: null, displayText: "" };
+
+/**
+ * Runs a tool, but settles as soon as its turn is aborted: a tool that
+ * ignores the signal (a fetch with no timeout) must not keep a cancelled turn,
+ * and the chat's send lock, waiting. Its late result is dropped, and a call
+ * that arrives after the abort never runs.
+ */
+export function executeTool(
+  def: ToolDefinition,
+  args: Record<string, unknown>,
+  context?: ToolExecutionContext
+): Promise<ToolResult> {
+  const signal = context?.signal;
+  if (!signal) return def.execute(args, context);
+  if (signal.aborted) return Promise.resolve(ABORTED_RESULT);
+  return new Promise((resolve, reject) => {
+    const settleAborted = () => resolve(ABORTED_RESULT);
+    signal.addEventListener("abort", settleAborted, { once: true });
+    def
+      .execute(args, context)
+      .then(resolve, reject)
+      .finally(() => signal.removeEventListener("abort", settleAborted));
+  });
 }
 
 export class ToolRegistry {
@@ -65,7 +98,8 @@ export class ToolRegistry {
         inputSchema: jsonSchema(def.parameters),
         execute: async (args: unknown, options: ToolExecutionOptions) => {
           try {
-            const toolResult = await def.execute(
+            const toolResult = await executeTool(
+              def,
               args as Record<string, unknown>,
               createContext?.(options.toolCallId, options.abortSignal)
             );

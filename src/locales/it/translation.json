@@ -121,6 +121,7 @@
       "mouseButtonOnlyMac": "Le scorciatoie con i tasti del mouse sono attualmente supportate solo su macOS.",
       "alreadyRegistered": "\"{{hotkey}}\" è già registrata da un'altra applicazione.",
       "osReserved": "\"{{hotkey}}\" potrebbe essere riservata dal sistema operativo.",
+      "rightModifierNeedsListener": "\"{{hotkey}}\" non può essere usato su questo desktop, le cui scorciatoie richiedono un tasto normale. Aggiungi un tasto, ad esempio Control+Alt+Space.",
       "holdNeedsReleaseKey": "Tieni premuto per parlare richiede un tasto di cui macOS rilevi il rilascio: Globo, un tasto destro come Opzione destra o una scorciatoia con modificatore. Tocca funziona con qualsiasi tasto.",
       "registrationFailed": "Impossibile registrare \"{{hotkey}}\". Potrebbe essere in uso da un'altra applicazione.",
       "updateFailedCheckFormat": "Impossibile aggiornare la scorciatoia a \"{{hotkey}}\". Verifica che il formato sia valido.",
@@ -919,6 +920,7 @@
         "streamingOnlyProvider": "Questo provider supporta solo la trascrizione dal vivo. Scegli un altro provider per i caricamenti di file e i nuovi tentativi.",
         "providerKeyMissing": "Nessuna chiave API impostata per il tuo provider di trascrizione. Aggiungila in Impostazioni → Da voce a testo.",
         "cleanupTruncated": "Il modello IA ha esaurito lo spazio prima di finire la pulizia della dettatura.",
+        "cleanupDuplicated": "La pulizia con IA ha ripetuto la trascrizione. Il testo originale è stato conservato.",
         "cleanupEmptyReply": "Il modello IA ha restituito una risposta vuota invece della dettatura pulita."
       },
       "translationFallback": {
@@ -940,6 +942,18 @@
         "unavailable": "OpenWhispr non ha potuto leggere in sicurezza il testo selezionato. Controlla i permessi di accessibilità o automazione.",
         "tooLarge": "La selezione è troppo grande. Seleziona al massimo 6.000 caratteri.",
         "reasoningFailed": "L’IA non ha potuto completare la modifica. Il testo originale non è stato cambiato."
+      },
+      "pastePermission": {
+        "title": "Consenti di incollare automaticamente",
+        "description": "Abilita OpenWhispr in Impostazioni di Sistema → Privacy e sicurezza → Accessibilità.",
+        "settingsFailed": "Impossibile aprire le impostazioni. Apri Impostazioni di Sistema → Privacy e sicurezza → Accessibilità e abilita OpenWhispr.",
+        "manualPaste": "Copia il testo qui sotto, poi premi {{shortcut}} per incollarlo.",
+        "openSettings": "Apri impostazioni",
+        "copyToClipboard": "Copia negli appunti",
+        "copyFailed": "Copia non riuscita"
+      },
+      "pasteFailed": {
+        "title": "Impossibile incollare automaticamente"
       }
     },
     "clipboard": {
@@ -3828,10 +3842,11 @@
       "policyRetry": "Non è stato possibile verificare le impostazioni della tua organizzazione, quindi non è stato inviato nulla. Premi Invia per riprovare."
     },
     "policyOff": "La tua organizzazione ha disattivato i connettori.",
-    "upgrade": "Aggiorna",
+    "viewPlans": "Visualizza i piani",
     "email": {
       "title": "Bozze email",
       "description": "L'assistente apre una bozza precompilata nella tua app di posta. La rivedi e premi Invia tu stesso.",
+      "proRequired": "Passa a un piano a pagamento per far scrivere all'assistente le bozze delle email.",
       "targetLabel": "Crea bozze email in",
       "targets": {
         "auto": "Automatico",
@@ -3867,6 +3882,8 @@
       "unavailable": "I connettori non sono disponibili al momento.",
       "failed": "Non ha funzionato.",
       "contactsFound": "Contatti trovati: {{total}}",
+      "draftLimit": "Si possono aprire solo {{count}} bozze per richiesta.",
+      "clipboardBusy": "Non aperta: il testo di un'altra bozza è ancora negli appunti.",
       "errors": {
         "open_failed": "Impossibile aprire l'app email.",
         "draft_too_long": "Troppi destinatari per un link di bozza.",

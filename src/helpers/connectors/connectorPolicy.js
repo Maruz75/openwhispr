@@ -15,4 +15,14 @@ function connectorPolicyState(snapshot) {
     : "allowed";
 }
 
-module.exports = { connectorPolicyState };
+// The reason a connector call reports for a verdict other than "allowed".
+// Signing out is its own refusal (connector logins outlive it); anything
+// unrecognized fails closed as unavailable.
+function policyRefusal(policyState) {
+  if (policyState === "allowed") return null;
+  if (policyState === "blocked") return "policy_blocked";
+  if (policyState === "signed_out") return "signed_out";
+  return "policy_unavailable";
+}
+
+module.exports = { connectorPolicyState, policyRefusal };

@@ -39,7 +39,8 @@ export type ConnectorDirectResult =
   | { state: "sent"; destinationLabel: string; bodyCopied?: boolean; subjectCopied?: boolean }
   | { state: "failed"; errorCode: string; message: string; destinationLabel?: string }
   | { state: "unknown"; errorCode?: string; checkUrl?: string; destinationLabel?: string }
-  | { state: "unavailable"; reason: string };
+  | { state: "unavailable"; reason: string }
+  | { state: "not_sent"; reason: string };
 
 export type ApprovalOutcome =
   | { state: "sent"; url?: string; finalText?: string }

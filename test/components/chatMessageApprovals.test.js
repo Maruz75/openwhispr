@@ -2,12 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const React = require("react");
 const { createRoot } = require("react-dom/client");
-const {
-  createRendererServer,
-  installBrowserGlobals,
-  installInteractiveDom,
-  findElement,
-} = require("../lib/rendererTestHarness");
+const { createRendererServer, installBrowserGlobals } = require("../lib/rendererTestHarness");
+const { installInteractiveDom, findElement } = require("../lib/interactiveDom");
 
 const PREVIEW = {
   verbKey: "default",

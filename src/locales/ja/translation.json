@@ -121,6 +121,7 @@
       "mouseButtonOnlyMac": "マウスボタンのホットキーは現在 macOS でのみサポートされています。",
       "alreadyRegistered": "\"{{hotkey}}\" は別のアプリケーションで既に登録されています。",
       "osReserved": "\"{{hotkey}}\" はデスクトップ環境で予約されている可能性があります。",
+      "rightModifierNeedsListener": "\"{{hotkey}}\" はこのデスクトップでは使用できません。ショートカットには通常のキーが必要です。Control+Alt+Space のようにキーを追加してください。",
       "holdNeedsReleaseKey": "ホールドして話すには、macOS が離したことを検知できるキーが必要です。Globe、右 Option のような右側のキー、または修飾キー付きのショートカットです。タップならどのキーでも使えます。",
       "registrationFailed": "\"{{hotkey}}\" を登録できませんでした。別のアプリケーションで使用されている可能性があります。",
       "updateFailedCheckFormat": "「{{hotkey}}」へのホットキーの更新に失敗しました。形式が正しいか確認してください。",
@@ -919,6 +920,7 @@
         "streamingOnlyProvider": "このプロバイダーはライブ文字起こしのみに対応しています。ファイルのアップロードや再実行には別のプロバイダーを選択してください。",
         "providerKeyMissing": "文字起こしプロバイダーのAPIキーが設定されていません。設定 → 音声テキスト変換 から追加してください。",
         "cleanupTruncated": "AI モデルの出力が上限に達し、ディクテーションのクリーンアップが完了しませんでした。",
+        "cleanupDuplicated": "AI クリーンアップが文字起こしを繰り返しました。元のテキストを保持しました。",
         "cleanupEmptyReply": "AI モデルが空の応答を返したため、クリーンアップされたテキストがありません。"
       },
       "translationFallback": {
@@ -940,6 +942,18 @@
         "unavailable": "OpenWhispr は選択したテキストを安全に読み取れませんでした。アクセシビリティまたは入力自動化の権限を確認してください。",
         "tooLarge": "選択範囲が大きすぎます。6,000文字以内を選択してください。",
         "reasoningFailed": "AI は選択範囲の編集を完了できませんでした。元のテキストは変更されていません。"
+      },
+      "pastePermission": {
+        "title": "自動貼り付けを許可",
+        "description": "システム設定 → プライバシーとセキュリティ → アクセシビリティでOpenWhisprを有効にしてください。",
+        "settingsFailed": "設定を開けませんでした。システム設定 → プライバシーとセキュリティ → アクセシビリティを開き、OpenWhisprを有効にしてください。",
+        "manualPaste": "下のボタンでテキストをコピーし、{{shortcut}}を押して貼り付けてください。",
+        "openSettings": "設定を開く",
+        "copyToClipboard": "テキストをコピー",
+        "copyFailed": "コピーに失敗しました"
+      },
+      "pasteFailed": {
+        "title": "自動貼り付けに失敗しました"
       }
     },
     "clipboard": {
@@ -3828,10 +3842,11 @@
       "policyRetry": "組織の設定を確認できなかったため、何も送信されていません。もう一度「送信」を押してください。"
     },
     "policyOff": "組織によってコネクタが無効にされています。",
-    "upgrade": "アップグレード",
+    "viewPlans": "プランを表示",
     "email": {
       "title": "メール下書き",
       "description": "アシスタントがメールアプリに下書きを自動入力して開きます。内容を確認し、自分で送信を押してください。",
+      "proRequired": "アシスタントにメールの下書きを作成させるには、有料プランへのアップグレードが必要です。",
       "targetLabel": "メールを作成するアプリ",
       "targets": {
         "auto": "自動",
@@ -3867,6 +3882,8 @@
       "unavailable": "現在コネクタを利用できません。",
       "failed": "うまくいきませんでした。",
       "contactsFound": "見つかった連絡先: {{total}}",
+      "draftLimit": "1回のリクエストで開ける下書きは{{count}}件までです。",
+      "clipboardBusy": "開いていません：別の下書きのテキストがまだクリップボードにあります。",
       "errors": {
         "open_failed": "メールアプリを開けませんでした。",
         "draft_too_long": "下書きリンクには宛先が多すぎます。",

@@ -27,8 +27,15 @@ interface ToolExecutionHandlers {
  */
 export function createToolExecutionScope(handlers: ToolExecutionHandlers = {}): ToolExecutionScope {
   const controller = new AbortController();
+  const turnSlots = new Map<string, number>();
   const notify = (handler?: () => void) => () => {
     if (!controller.signal.aborted) handler?.();
+  };
+  const claimTurnSlot = (key: string, limit: number): boolean => {
+    const used = turnSlots.get(key) ?? 0;
+    if (used >= limit) return false;
+    turnSlots.set(key, used + 1);
+    return true;
   };
   return {
     createContext: ({ messageId, toolCallId, signal }) => ({
@@ -39,6 +46,7 @@ export function createToolExecutionScope(handlers: ToolExecutionHandlers = {}): 
       signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
       onApprovalRequested: notify(handlers.onApprovalRequested),
       onHoldDelivery: notify(handlers.onHoldDelivery),
+      claimTurnSlot,
     }),
     abort: () => controller.abort(),
   };

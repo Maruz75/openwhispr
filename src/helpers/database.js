@@ -693,6 +693,18 @@ class DatabaseManager {
         this.db.pragma("user_version = 2");
       }
 
+      // One-time reset (user_version 3): older builds stored rooms without a
+      // resource flag, and incremental syncs never resend unchanged events; a
+      // forced full sync stores them flagged and purges the rooms those builds
+      // wrote to contacts.
+      if (this.db.pragma("user_version", { simple: true }) < 3) {
+        this.db.exec("UPDATE google_calendars SET sync_token = NULL, sync_token_expires_at = NULL");
+        this.db.exec(
+          "UPDATE microsoft_calendars SET sync_token = NULL, sync_token_expires_at = NULL"
+        );
+        this.db.pragma("user_version = 3");
+      }
+
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS calendar_events (
           id TEXT PRIMARY KEY,
@@ -1303,13 +1315,14 @@ class DatabaseManager {
       }
 
       // Space vector purges owed to Qdrant while the sidecar was down/booting;
-      // drained once the vector index is ready.
+      // drained on the next semantic search activation.
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS pending_vector_purges (
           space_id   INTEGER PRIMARY KEY,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);
+      this._initVectorChangeJournal();
 
       return true;
     } catch (error) {
@@ -3979,6 +3992,76 @@ class DatabaseManager {
     }
   }
 
+  _initVectorChangeJournal() {
+    this.db.transaction(() => {
+      const journalExists = this.db
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pending_vector_changes'"
+        )
+        .get();
+      // AUTOINCREMENT keeps acknowledgements unique even after the queue is
+      // emptied or a deleted note id is reused while indexing is in flight.
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS pending_vector_changes (
+          revision INTEGER PRIMARY KEY AUTOINCREMENT,
+          note_id INTEGER NOT NULL UNIQUE
+        );
+        CREATE TRIGGER IF NOT EXISTS notes_vector_insert AFTER INSERT ON notes BEGIN
+          INSERT INTO pending_vector_changes (note_id) VALUES (NEW.id)
+          ON CONFLICT(note_id) DO UPDATE SET revision = excluded.revision;
+        END;
+        CREATE TRIGGER IF NOT EXISTS notes_vector_update
+        AFTER UPDATE OF title, content, enhanced_content, space_id, folder_id, deleted_at ON notes
+        WHEN OLD.title IS NOT NEW.title OR OLD.content IS NOT NEW.content
+          OR OLD.enhanced_content IS NOT NEW.enhanced_content
+          OR OLD.space_id IS NOT NEW.space_id OR OLD.folder_id IS NOT NEW.folder_id
+          OR OLD.deleted_at IS NOT NEW.deleted_at
+        BEGIN
+          INSERT INTO pending_vector_changes (note_id) VALUES (NEW.id)
+          ON CONFLICT(note_id) DO UPDATE SET revision = excluded.revision;
+        END;
+        CREATE TRIGGER IF NOT EXISTS notes_vector_delete AFTER DELETE ON notes BEGIN
+          INSERT INTO pending_vector_changes (note_id) VALUES (OLD.id)
+          ON CONFLICT(note_id) DO UPDATE SET revision = excluded.revision;
+        END;
+      `);
+      if (!journalExists) this.enqueueAllVectorChanges();
+    })();
+  }
+
+  getPendingVectorChanges(limit = 50, afterRevision = 0) {
+    if (!this.db) throw new Error("Database not initialized");
+    return this.db
+      .prepare(
+        "SELECT note_id, revision FROM pending_vector_changes WHERE revision > ? ORDER BY revision LIMIT ?"
+      )
+      .all(afterRevision, limit);
+  }
+
+  clearPendingVectorChange(noteId, revision) {
+    if (!this.db) throw new Error("Database not initialized");
+    const result = this.db
+      .prepare("DELETE FROM pending_vector_changes WHERE note_id = ? AND revision = ?")
+      .run(noteId, revision);
+    return { success: true, changes: result.changes };
+  }
+
+  enqueueAllVectorChanges() {
+    if (!this.db) throw new Error("Database not initialized");
+    this.db.exec(`
+      INSERT INTO pending_vector_changes (note_id) SELECT id FROM notes WHERE TRUE
+      ON CONFLICT(note_id) DO UPDATE SET revision = excluded.revision
+    `);
+    return { success: true };
+  }
+
+  getNoteForVectorIndex(noteId) {
+    if (!this.db) throw new Error("Database not initialized");
+    // The durable index spans accounts; renderer/search reads still use the
+    // scoped getNote API before exposing any indexed result.
+    return this.db.prepare("SELECT * FROM notes WHERE id = ?").get(noteId) || null;
+  }
+
   addPendingVectorPurge(spaceId) {
     try {
       if (!this.db) throw new Error("Database not initialized");
@@ -4773,21 +4856,28 @@ class DatabaseManager {
   // What find_contact searches. calendar_events only holds a sync window
   // (about two days back to a month ahead), so the meetings nearest to now go
   // first, and the contacts table (every synced attendee, never pruned) covers
-  // older ones. The connected calendar accounts are the user's own addresses.
+  // older ones, most recently seen first. A cancelled or declined meeting is
+  // one the user never had, so it can't count as meeting someone; its people
+  // are still in contacts. The connected calendar accounts are the user's own
+  // addresses.
   getContactLookupSources(meetingLimit = 1000) {
     try {
       if (!this.db) throw new Error("Database not initialized");
       const meetings = this.db
         .prepare(
-          `SELECT provider, start_time, organizer_email, attendees
+          `SELECT provider, start_time, is_all_day, organizer_email, attendees
              FROM calendar_events
-            WHERE attendees IS NOT NULL OR organizer_email IS NOT NULL
+            WHERE (attendees IS NOT NULL OR organizer_email IS NOT NULL)
+              AND status IN ('confirmed', 'tentative')
+              AND self_response_status != 'declined'
             ORDER BY ABS(julianday(start_time) - julianday('now')) IS NULL,
                      ABS(julianday(start_time) - julianday('now'))
             LIMIT ?`
         )
         .all(meetingLimit);
-      const contacts = this.db.prepare("SELECT email, display_name FROM contacts").all();
+      const contacts = this.db
+        .prepare("SELECT email, display_name FROM contacts ORDER BY updated_at DESC")
+        .all();
       const accountEmails = this.db
         .prepare(
           `SELECT account_email FROM google_calendars WHERE account_email IS NOT NULL
@@ -4843,6 +4933,21 @@ class DatabaseManager {
       return { success: true };
     } catch (error) {
       debugLogger.error("Error upserting contacts", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  removeContacts(emails) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const stmt = this.db.prepare("DELETE FROM contacts WHERE email = ?");
+      const transaction = this.db.transaction((list) => {
+        for (const email of list) stmt.run(email.toLowerCase().trim());
+      });
+      transaction(emails);
+      return { success: true };
+    } catch (error) {
+      debugLogger.error("Error removing contacts", { error: error.message }, "database");
       throw error;
     }
   }

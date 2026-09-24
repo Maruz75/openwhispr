@@ -19,12 +19,13 @@ import { hasConnectorPlan } from "../../utils/connectorEligibility";
 import { resolveEmailDraftTarget } from "../../utils/emailDraftTarget";
 import {
   appendDictionarySuffix,
+  appendPlainTextResponseSuffix,
   appendScreenContextSuffix,
   getAgentSystemPrompt,
 } from "../../config/prompts";
 import { getDictionaryHintWords } from "../../utils/snippets";
 import { createToolRegistry } from "../../services/tools";
-import type { ToolRegistry } from "../../services/tools/ToolRegistry";
+import { executeTool, type ToolRegistry } from "../../services/tools/ToolRegistry";
 import { createToolExecutionScope, type ToolExecutionScope } from "./toolExecutionScope";
 import { getAgentToolActivityRemainingMs } from "../../helpers/agentToolPresentation";
 import type { Message, AgentState, ChatImageAttachment, ToolCallInfo } from "./types";
@@ -102,6 +103,8 @@ export interface SendToAIOptions {
   selectedContext?: AgentSelectionContext;
   /** Keeps a caret-destined voice response in the compact pill while it streams. */
   suppressResponseContent?: boolean;
+  /** Asks the model for plain prose because the answer will be pasted into a plain-text app. */
+  plainTextResponse?: boolean;
   /** Per-request completion hook used to deliver a finished voice response. */
   onComplete?: (result: {
     assistantId: string;
@@ -416,6 +419,9 @@ export function useChatStreaming({
           // for cloud context once openwhispr-api#157 vision-routes that field.
           systemPrompt = appendScreenContextSuffix(systemPrompt, settings.uiLanguage);
         }
+        if (options?.plainTextResponse) {
+          systemPrompt = appendPlainTextResponseSuffix(systemPrompt);
+        }
         if (attachment) {
           transformLastUserMessage(history, (message) => ({
             role: "user",
@@ -480,7 +486,8 @@ export function useChatStreaming({
                       displayText: t("agentMode.tools.invalidArgs", { name }),
                     };
                   }
-                  const result = await tool.execute(
+                  const result = await executeTool(
+                    tool,
                     args,
                     toolScope.createContext({ messageId: assistantId, toolCallId })
                   );

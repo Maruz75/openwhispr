@@ -121,6 +121,7 @@
       "mouseButtonOnlyMac": "Maustasten-Hotkeys werden derzeit nur auf macOS unterstützt.",
       "alreadyRegistered": "\"{{hotkey}}\" ist bereits von einer anderen Anwendung registriert.",
       "osReserved": "\"{{hotkey}}\" ist möglicherweise von Ihrer Desktop-Umgebung reserviert.",
+      "rightModifierNeedsListener": "„{{hotkey}}“ kann auf diesem Desktop nicht verwendet werden, da seine Tastenkürzel eine normale Taste benötigen. Fügen Sie eine Taste hinzu, z. B. Control+Alt+Space.",
       "holdNeedsReleaseKey": "Halten zum Sprechen braucht eine Taste, deren Loslassen macOS erkennt: Globe, eine rechte Taste wie Rechte Option oder ein Kürzel mit Modifikator. Tippen funktioniert mit jeder Taste.",
       "registrationFailed": "\"{{hotkey}}\" konnte nicht registriert werden. Möglicherweise wird es von einer anderen Anwendung verwendet.",
       "updateFailedCheckFormat": "Hotkey konnte nicht auf \"{{hotkey}}\" aktualisiert werden. Prüfen Sie, ob das Format gültig ist.",
@@ -919,6 +920,7 @@
         "streamingOnlyProvider": "Dieser Anbieter unterstützt nur Live-Transkription. Wähle für Datei-Uploads und Wiederholungen einen anderen Anbieter.",
         "providerKeyMissing": "Für Ihren Transkriptionsanbieter ist kein API-Schlüssel hinterlegt. Fügen Sie ihn unter Einstellungen → Sprache zu Text hinzu.",
         "cleanupTruncated": "Dem KI-Modell ging der Platz aus, bevor es dein Diktat fertig bereinigt hatte.",
+        "cleanupDuplicated": "Die KI-Bereinigung hat das Transkript wiederholt. Der Originaltext wurde beibehalten.",
         "cleanupEmptyReply": "Das KI-Modell lieferte eine leere Antwort statt des bereinigten Diktats."
       },
       "translationFallback": {
@@ -940,6 +942,18 @@
         "unavailable": "OpenWhispr konnte den ausgewählten Text nicht sicher lesen. Prüfe die Bedienungshilfen oder Eingabeautomatisierung.",
         "tooLarge": "Die Auswahl ist zu groß. Wähle höchstens 6.000 Zeichen aus.",
         "reasoningFailed": "Die KI konnte die Auswahlbearbeitung nicht abschließen. Dein ursprünglicher Text wurde nicht geändert."
+      },
+      "pastePermission": {
+        "title": "Automatisches Einfügen erlauben",
+        "description": "Aktiviere OpenWhispr unter Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen.",
+        "settingsFailed": "Die Einstellungen konnten nicht geöffnet werden. Öffne Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen und aktiviere OpenWhispr.",
+        "manualPaste": "Kopiere deinen Text unten und drücke dann {{shortcut}}, um ihn einzufügen.",
+        "openSettings": "Einstellungen öffnen",
+        "copyToClipboard": "Text kopieren",
+        "copyFailed": "Kopieren fehlgeschlagen"
+      },
+      "pasteFailed": {
+        "title": "Automatisches Einfügen fehlgeschlagen"
       }
     },
     "clipboard": {
@@ -3997,10 +4011,11 @@
       "policyRetry": "Die Einstellungen deiner Organisation konnten nicht geprüft werden, daher wurde nichts gesendet. Auf Senden drücken, um es erneut zu versuchen."
     },
     "policyOff": "Konnektoren wurden von deiner Organisation deaktiviert.",
-    "upgrade": "Upgrade",
+    "viewPlans": "Pläne ansehen",
     "email": {
       "title": "E-Mail-Entwürfe",
       "description": "Der Assistent öffnet einen vorausgefüllten Entwurf in deiner E-Mail-App. Du prüfst ihn und klickst selbst auf Senden.",
+      "proRequired": "Upgrade auf einen kostenpflichtigen Plan, damit der Assistent E-Mails für dich entwirft.",
       "targetLabel": "E-Mails entwerfen in",
       "targets": {
         "auto": "Automatisch",
@@ -4036,6 +4051,8 @@
       "unavailable": "Konnektoren sind gerade nicht verfügbar.",
       "failed": "Das hat nicht funktioniert.",
       "contactsFound": "Gefundene Kontakte: {{total}}",
+      "draftLimit": "Pro Anfrage können nur {{count}} Entwürfe geöffnet werden.",
+      "clipboardBusy": "Nicht geöffnet: Der Text eines anderen Entwurfs ist noch in deiner Zwischenablage.",
       "errors": {
         "open_failed": "Deine E-Mail-App konnte nicht geöffnet werden.",
         "draft_too_long": "Zu viele Empfänger für einen Entwurfslink.",

@@ -64,6 +64,38 @@ test("each channel reaches the manager, with policy only where something can lea
   assert.equal(policyCalls.length, 3);
 });
 
+test("a cancel that lands while a direct run waits on policy stops it", async () => {
+  const { registerConnectorIpc } = await load();
+  const ipcMain = fakeIpcMain();
+  const manager = fakeManager();
+  const policyWaits = [];
+  registerConnectorIpc({
+    ipcMain,
+    manager,
+    getPolicyState: () => new Promise((resolve) => policyWaits.push(resolve)),
+  });
+  const h = (channel) => ipcMain.handlers.get(channel);
+
+  const cancelledRun = h("connector-run-direct")({}, "email", "draft", { to: ["a@b.co"] }, "run-1");
+  assert.deepEqual(await h("connector-cancel")({}, "run-1", "cancelled_by_user"), {
+    cancelled: true,
+  });
+  policyWaits.shift()("allowed");
+  assert.deepEqual(await cancelledRun, { state: "not_sent", reason: "cancelled" });
+
+  // Once policy resolves the run is no longer tracked, so a later cancel with
+  // the same id is an ordinary (pending approval) cancel.
+  const run = h("connector-run-direct")({}, "email", "draft", { to: ["a@b.co"] }, "run-2");
+  policyWaits.shift()("allowed");
+  await run;
+  await h("connector-cancel")({}, "run-2", "cancelled_by_user");
+
+  assert.deepEqual(
+    manager.calls.map((call) => call.name),
+    ["runDirect", "cancel"]
+  );
+});
+
 test("malformed arguments never reach the manager", async () => {
   const { registerConnectorIpc } = await load();
   const ipcMain = fakeIpcMain();
@@ -253,25 +285,33 @@ test("the deadline covers the auth-header lookup too", async () => {
   assert.equal(await throwingAuth({}), "unavailable");
 });
 
-test("contact lookup trims the query and never needs policy", async () => {
+test("contact lookup trims the query and returns nothing the org policy doesn't allow", async () => {
   const { registerConnectorIpc } = await load();
   const ipcMain = fakeIpcMain();
   const queries = [];
+  const policies = ["allowed", "blocked", "unavailable"];
   registerConnectorIpc({
     ipcMain,
     manager: fakeManager(),
-    getPolicyState: async () => {
-      throw new Error("must not be called");
-    },
+    getPolicyState: async () => policies.shift(),
     findContacts: (query) => {
       queries.push(query);
-      return [{ name: "Gabe", email: "gabe@example.com", lastMet: null }];
+      return { contacts: [{ name: "Gabe", email: "gabe@example.com", lastMet: null }], hasMore: false };
     },
   });
   const handler = ipcMain.handlers.get("connector-find-contacts");
   assert.deepEqual(await handler({}, "  Gabe "), {
     contacts: [{ name: "Gabe", email: "gabe@example.com", lastMet: null }],
+    hasMore: false,
   });
+  assert.deepEqual(await handler({}, "Gabe"), { contacts: [], unavailableReason: "policy_blocked" });
+  assert.deepEqual(await handler({}, "Gabe"), {
+    contacts: [],
+    unavailableReason: "policy_unavailable",
+  });
+  // Malformed or oversized queries never reach the policy lookup or the search.
   assert.deepEqual(await handler({}, 42), { contacts: [] });
+  assert.deepEqual(await handler({}, "a".repeat(201)), { contacts: [] });
   assert.deepEqual(queries, ["Gabe"]);
+  assert.equal(policies.length, 0);
 });

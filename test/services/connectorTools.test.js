@@ -32,21 +32,51 @@ test("email_draft opens a draft through the main process", async (t) => {
     body: "Tomorrow at 1?",
   });
 
-  assert.deepEqual(calls, [
-    [
-      "email",
-      "draft",
-      {
-        target: "gmail",
-        to: ["gabe@example.com"],
-        cc: [],
-        subject: "Lunch",
-        body: "Tomorrow at 1?",
-      },
-    ],
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].slice(0, 3), [
+    "email",
+    "draft",
+    { target: "gmail", to: ["gabe@example.com"], cc: [], subject: "Lunch", body: "Tomorrow at 1?" },
   ]);
+  assert.equal(typeof calls[0][3], "string");
   assert.equal(result.data.status, "draft_opened");
   assert.equal(result.data.bodyCopied, false);
+});
+
+test("email_draft cancels its run in main when the turn is cancelled mid-call", async (t) => {
+  const cancels = [];
+  let finishRun;
+  let runId;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorRunDirect: (_connector, _action, _args, id) => {
+          runId = id;
+          return new Promise((resolve) => {
+            finishRun = resolve;
+          });
+        },
+        connectorCancel: async (...args) => {
+          cancels.push(args);
+          return { cancelled: true };
+        },
+      },
+    },
+  });
+  const { createEmailDraftTool } = await loadEmail();
+  const controller = new AbortController();
+
+  const pending = createEmailDraftTool("gmail").execute(
+    { to: ["a@example.com"], subject: "s", body: "b" },
+    countingContext(controller.signal)
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  finishRun({ state: "not_sent", reason: "cancelled" });
+  const result = await pending;
+
+  assert.deepEqual(cancels, [[runId, "cancelled_by_user"]]);
+  assert.equal(result.data.status, "not_sent");
 });
 
 test("email_draft asks for addresses instead of guessing", async (t) => {
@@ -84,9 +114,98 @@ function countingContext(signal = new AbortController().signal) {
     onHoldDelivery() {
       context.holds += 1;
     },
+    claimTurnSlot: () => true,
   };
   return context;
 }
+
+const loadScope = () => import("../../src/components/chat/toolExecutionScope.ts");
+
+test("email_draft opens at most three drafts per turn", async (t) => {
+  let opened = 0;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorRunDirect: async () => {
+          opened += 1;
+          return { state: "sent", destinationLabel: "a@example.com", bodyCopied: false };
+        },
+      },
+    },
+  });
+  const { createEmailDraftTool } = await loadEmail();
+  const { createToolExecutionScope } = await loadScope();
+  const scope = createToolExecutionScope();
+  const tool = createEmailDraftTool("gmail");
+  const draft = (id) =>
+    tool.execute(
+      { to: ["a@example.com"], subject: "s", body: "b" },
+      scope.createContext({ messageId: "m1", toolCallId: id })
+    );
+
+  // The AI SDK runs a step's tool calls in parallel.
+  const results = await Promise.all(["1", "2", "3", "4"].map(draft));
+
+  assert.equal(opened, 3);
+  assert.deepEqual(
+    results.map((result) => result.data.status),
+    ["draft_opened", "draft_opened", "draft_opened", "not_sent"]
+  );
+  assert.equal(results[3].data.reason, "draft_limit");
+  // A new turn starts over.
+  const next = createToolExecutionScope().createContext({ messageId: "m1", toolCallId: "5" });
+  assert.equal(
+    (await tool.execute({ to: ["a@example.com"], subject: "s", body: "b" }, next)).data.status,
+    "draft_opened"
+  );
+});
+
+test("only one draft per turn may put its text on the clipboard", async (t) => {
+  const opened = [];
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorRunDirect: async (_connector, _action, args) => {
+          opened.push(args.to[0]);
+          return {
+            state: "sent",
+            destinationLabel: args.to[0],
+            bodyCopied: args.body.length > 1000,
+          };
+        },
+      },
+    },
+  });
+  const { createEmailDraftTool } = await loadEmail();
+  const { createToolExecutionScope } = await loadScope();
+  const scope = createToolExecutionScope();
+  // mailto keeps a 2,000-character link on every platform.
+  const tool = createEmailDraftTool("mailto");
+  const longBody = "word ".repeat(600);
+
+  const [first, second] = await Promise.all([
+    tool.execute(
+      { to: ["josh@example.com"], subject: "Recap", body: longBody },
+      scope.createContext({ messageId: "m1", toolCallId: "1" })
+    ),
+    tool.execute(
+      { to: ["dana@example.com"], subject: "Recap", body: longBody },
+      scope.createContext({ messageId: "m1", toolCallId: "2" })
+    ),
+  ]);
+  const short = await tool.execute(
+    { to: ["kim@example.com"], subject: "Hi", body: "Short one." },
+    scope.createContext({ messageId: "m1", toolCallId: "3" })
+  );
+
+  assert.equal(first.data.status, "draft_opened");
+  assert.equal(second.data.status, "not_sent");
+  assert.equal(second.data.reason, "clipboard_in_use");
+  assert.match(second.data.guidance, /paste/);
+  // A draft that fits its link needs no clipboard, so it still opens.
+  assert.equal(short.data.status, "draft_opened");
+  assert.deepEqual(opened, ["josh@example.com", "kim@example.com"]);
+});
 
 test("email_draft tells the model when content went to the clipboard", async (t) => {
   installBrowserGlobals(t, {
@@ -138,6 +257,7 @@ test("email_draft reports an uncertain direct result as unknown, and still holds
     onHoldDelivery() {
       held += 1;
     },
+    claimTurnSlot: () => true,
   };
 
   const result = await createEmailDraftTool("mailto").execute(
@@ -245,7 +365,36 @@ test("find_contact returns matches and guidance for zero or several", async (t) 
   assert.equal(several.displayText, "Contacts found: 2");
 });
 
-test("find_contact keeps its turn out of the user's document only when the user must answer", async (t) => {
+test("find_contact asks for a last name when more people match than it lists", async (t) => {
+  const contacts = Array.from({ length: 5 }, (_, i) => ({
+    name: `Josh ${i}`,
+    email: `josh${i}@example.com`,
+    lastMet: null,
+  }));
+  installBrowserGlobals(t, {
+    window: { electronAPI: { connectorFindContacts: async () => ({ contacts, hasMore: true }) } },
+  });
+  const { findContactTool } = await loadContact();
+  const result = await findContactTool.execute({ name: "Josh" });
+  assert.equal(result.data.contacts.length, 5);
+  assert.match(result.data.guidance, /last name/);
+});
+
+test("find_contact reports an org policy refusal instead of an empty result", async (t) => {
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorFindContacts: async () => ({ contacts: [], unavailableReason: "policy_blocked" }),
+      },
+    },
+  });
+  const { findContactTool } = await loadContact();
+  const result = await findContactTool.execute({ name: "Gabe" });
+  assert.equal(result.data.status, "unavailable");
+  assert.equal(result.data.reason, "policy_blocked");
+});
+
+test("find_contact keeps its turn out of the user's document, whatever it finds", async (t) => {
   const one = [{ name: "Gabe Torres", email: "gabe@example.com", lastMet: null }];
   const two = [...one, { name: "Gabriel Stone", email: "gabriel@acme.test", lastMet: null }];
   const responses = [{ contacts: [] }, { contacts: two }, { contacts: one }];
@@ -262,8 +411,9 @@ test("find_contact keeps its turn out of the user's document only when the user 
 
   assert.equal(await holdsFor("Zed"), 1);
   assert.equal(await holdsFor("Gab"), 1);
-  // "What's Gabe's email?" answered with one address can still be pasted.
-  assert.equal(await holdsFor("Gabe Torres"), 0);
+  // One match is usually followed by a question ("What should it say?"),
+  // which must not be pasted at the caret either.
+  assert.equal(await holdsFor("Gabe Torres"), 1);
 });
 
 test("connector plan eligibility uses usage data, then the persisted isSubscribed flag", async () => {
@@ -315,5 +465,6 @@ test("the system prompt adds connector rules only when a connector tool is prese
   assert.match(withEmail, /Use find_contact/);
   assert.match(withEmail, /Use email_draft/);
   assert.match(withEmail, /needs_clarification/);
+  assert.match(withEmail, /guidance in each connector result/);
   assert.doesNotMatch(withoutEmail, /needs_clarification/);
 });

@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { describeError } = require("./errorSummary");
+const { policyRefusal } = require("./connectorPolicy");
 
 const CANCEL_REASONS = new Set(["cancelled_by_user", "conversation_ended", "expired"]);
 const COMMIT_RESULT_STATES = new Set(["sent", "failed", "unknown"]);
@@ -29,15 +30,6 @@ function normalizeDirectResult(result, actionSpec) {
     return result;
   }
   return uncertainDirectResult(actionSpec, "invalid_result");
-}
-
-// Only "allowed" allows. Signing out is its own refusal (connector logins
-// outlive it); anything unrecognized fails closed as unavailable.
-function policyRefusal(policyState) {
-  if (policyState === "allowed") return null;
-  if (policyState === "blocked") return "policy_blocked";
-  if (policyState === "signed_out") return "signed_out";
-  return "policy_unavailable";
 }
 
 // Actions that write a receipt need the account the receipt belongs to.
