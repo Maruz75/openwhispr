@@ -480,7 +480,10 @@ export function useChatStreaming({
                       displayText: t("agentMode.tools.invalidArgs", { name }),
                     };
                   }
-                  const result = await tool.execute(args, toolScope.createContext(toolCallId));
+                  const result = await tool.execute(
+                    args,
+                    toolScope.createContext({ messageId: assistantId, toolCallId })
+                  );
                   const data = result.success
                     ? typeof result.data === "string"
                       ? result.data
@@ -505,8 +508,14 @@ export function useChatStreaming({
               ...(cloudScreenContext ? { screenContext: cloudScreenContext } : {}),
             });
           } else {
-            const aiTools = registry?.toAISDKFormat(toolScope.createContext, (id, text) =>
-              toolDisplayTexts.set(id, text)
+            const aiTools = registry?.toAISDKFormat(
+              (toolCallId, abortSignal) =>
+                toolScope.createContext({
+                  messageId: assistantId,
+                  toolCallId,
+                  signal: abortSignal,
+                }),
+              (id, text) => toolDisplayTexts.set(id, text)
             );
             stream = ReasoningService.processTextStreamingAI(
               llmMessages,

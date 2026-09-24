@@ -1,7 +1,15 @@
 import type { ToolExecutionContext } from "../../services/tools/ToolRegistry";
 
+export interface ToolContextRequest {
+  /** The assistant message the tool call belongs to. */
+  messageId: string;
+  toolCallId: string;
+  /** The model SDK's own per-call abort signal, when it has one. */
+  signal?: AbortSignal;
+}
+
 export interface ToolExecutionScope {
-  createContext: (toolCallId: string) => ToolExecutionContext;
+  createContext: (request: ToolContextRequest) => ToolExecutionContext;
   abort: () => void;
 }
 
@@ -23,9 +31,12 @@ export function createToolExecutionScope(handlers: ToolExecutionHandlers = {}): 
     if (!controller.signal.aborted) handler?.();
   };
   return {
-    createContext: (toolCallId) => ({
+    createContext: ({ messageId, toolCallId, signal }) => ({
+      messageId,
       toolCallId,
-      signal: controller.signal,
+      // Either the turn ending or the SDK abandoning this one call releases
+      // whatever the tool is waiting on.
+      signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
       onApprovalRequested: notify(handlers.onApprovalRequested),
       onHoldDelivery: notify(handlers.onHoldDelivery),
     }),

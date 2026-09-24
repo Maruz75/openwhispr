@@ -26,6 +26,7 @@ test("toAISDKFormat gives each call its own tool-call id and the shared scope", 
   const controller = new AbortController();
   const onApprovalRequested = () => {};
   const tools = registry.toAISDKFormat((toolCallId) => ({
+    messageId: "m1",
     toolCallId,
     signal: controller.signal,
     onApprovalRequested,
@@ -81,8 +82,8 @@ test("a tool execution scope shares one signal and aborts it once", async () => 
       holds += 1;
     },
   });
-  const first = scope.createContext("call-a");
-  const second = scope.createContext("call-b");
+  const first = scope.createContext({ messageId: "m1", toolCallId: "call-a" });
+  const second = scope.createContext({ messageId: "m1", toolCallId: "call-b" });
 
   assert.equal(first.toolCallId, "call-a");
   assert.equal(first.signal, second.signal);
@@ -108,7 +109,7 @@ test("a scope's notices do nothing once its turn has ended", async () => {
       notices += 1;
     },
   });
-  const context = scope.createContext("call-d");
+  const context = scope.createContext({ messageId: "m1", toolCallId: "call-d" });
 
   // A slow tool result arriving after Esc must not reopen a dismissed panel.
   scope.abort();
@@ -120,7 +121,10 @@ test("a scope's notices do nothing once its turn has ended", async () => {
 
 test("a scope without handlers ignores approval and delivery notices", async () => {
   const { createToolExecutionScope } = await loadScope();
-  const context = createToolExecutionScope().createContext("call-c");
+  const context = createToolExecutionScope().createContext({
+    messageId: "m1",
+    toolCallId: "call-c",
+  });
   assert.doesNotThrow(() => context.onApprovalRequested());
   assert.doesNotThrow(() => context.onHoldDelivery());
 });
@@ -149,20 +153,61 @@ test("the cloud tool loop passes each call's id to executeToolCall", async (t) =
   });
 
   const received = [];
-  const stream = reasoningService.processTextStreamingCloud(
-    [{ role: "user", content: "hi" }],
-    {
-      systemPrompt: "s",
-      tools: [{ name: "record_context", description: "d", parameters: {} }],
-      executeToolCall: async (name, _args, toolCallId) => {
-        received.push({ name, toolCallId });
-        return { data: "ok", displayText: "ok" };
-      },
-    }
-  );
+  const stream = reasoningService.processTextStreamingCloud([{ role: "user", content: "hi" }], {
+    systemPrompt: "s",
+    tools: [{ name: "record_context", description: "d", parameters: {} }],
+    executeToolCall: async (name, _args, toolCallId) => {
+      received.push({ name, toolCallId });
+      return { data: "ok", displayText: "ok" };
+    },
+  });
   for await (const _chunk of stream) {
     // drain
   }
 
   assert.deepEqual(received, [{ name: "record_context", toolCallId: "call-9" }]);
+});
+
+test("toAISDKFormat hands the SDK's own abort signal to the context factory", async () => {
+  const { ToolRegistry } = await loadRegistry();
+  const seen = [];
+  const registry = new ToolRegistry();
+  registry.register(recordingTool(seen));
+  const factoryCalls = [];
+  const tools = registry.toAISDKFormat((toolCallId, abortSignal) => {
+    factoryCalls.push({ toolCallId, abortSignal });
+    return {
+      messageId: "m1",
+      toolCallId,
+      signal: abortSignal ?? new AbortController().signal,
+      onApprovalRequested() {},
+      onHoldDelivery() {},
+    };
+  });
+  const sdk = new AbortController();
+
+  await tools.record_context.execute(
+    {},
+    { toolCallId: "call-1", messages: [], abortSignal: sdk.signal }
+  );
+
+  assert.equal(factoryCalls[0].toolCallId, "call-1");
+  assert.equal(factoryCalls[0].abortSignal, sdk.signal);
+});
+
+test("a context signal aborts when either its turn or its own SDK call aborts", async () => {
+  const { createToolExecutionScope } = await loadScope();
+  const scope = createToolExecutionScope();
+  const sdk = new AbortController();
+  const linked = scope.createContext({ messageId: "m1", toolCallId: "call-a", signal: sdk.signal });
+  const plain = scope.createContext({ messageId: "m1", toolCallId: "call-b" });
+
+  assert.equal(linked.messageId, "m1");
+  assert.equal(linked.signal.aborted, false);
+  sdk.abort();
+  assert.equal(linked.signal.aborted, true);
+  assert.equal(plain.signal.aborted, false, "one call's SDK abort leaves the other calls alone");
+
+  scope.abort();
+  assert.equal(plain.signal.aborted, true);
 });

@@ -26,7 +26,10 @@ function click(element) {
 
 // No i18next instance is initialized, so buttons render their keys.
 function button(root, label) {
-  const found = findElement(root, (element) => element.tagName === "BUTTON" && element.textContent === label);
+  const found = findElement(
+    root,
+    (element) => element.tagName === "BUTTON" && element.textContent === label
+  );
   assert.ok(found, `button ${label} is rendered`);
   return found;
 }
@@ -43,7 +46,12 @@ test("Edit, change, Done editing, Send: the reviewed text is what gets sent", as
         connectorPrepare: async () => ({
           status: "ready",
           actionId: "a1",
-          preview: { verbKey: "default", destinationLabel: "#eng", accountLabel: "chad", body: "Original text" },
+          preview: {
+            verbKey: "default",
+            destinationLabel: "#eng",
+            accountLabel: "chad",
+            body: "Original text",
+          },
         }),
         connectorCommit: async (actionId, edits) => {
           commits.push({ actionId, edits });
@@ -67,7 +75,9 @@ test("Edit, change, Done editing, Send: the reviewed text is what gets sent", as
     },
   });
   const store = await vite.ssrLoadModule("/stores/connectorApprovalStore.ts");
-  const { runApprovalAction } = await vite.ssrLoadModule("/services/tools/connectors/runApprovalAction.ts");
+  const { runApprovalAction } = await vite.ssrLoadModule(
+    "/services/tools/connectors/runApprovalAction.ts"
+  );
   const { ApprovalCard } = await vite.ssrLoadModule("/components/chat/ApprovalCard.tsx");
   store.useConnectorApprovalStore.setState({ entries: {} });
 
@@ -83,7 +93,13 @@ test("Edit, change, Done editing, Send: the reviewed text is what gets sent", as
   let toolResult;
   await React.act(async () => {
     toolResult = runApprovalAction(
-      { toolCallId: "call-1", signal: controller.signal, onApprovalRequested() {}, onHoldDelivery() {} },
+      {
+        messageId: "m1",
+        toolCallId: "call-1",
+        signal: controller.signal,
+        onApprovalRequested() {},
+        onHoldDelivery() {},
+      },
       "slack",
       "send_message",
       { destination: "#eng", text: "Original text" }

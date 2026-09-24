@@ -33,7 +33,17 @@ test("email_draft opens a draft through the main process", async (t) => {
   });
 
   assert.deepEqual(calls, [
-    ["email", "draft", { target: "gmail", to: ["gabe@example.com"], cc: [], subject: "Lunch", body: "Tomorrow at 1?" }],
+    [
+      "email",
+      "draft",
+      {
+        target: "gmail",
+        to: ["gabe@example.com"],
+        cc: [],
+        subject: "Lunch",
+        body: "Tomorrow at 1?",
+      },
+    ],
   ]);
   assert.equal(result.data.status, "draft_opened");
   assert.equal(result.data.bodyCopied, false);
@@ -41,10 +51,22 @@ test("email_draft opens a draft through the main process", async (t) => {
 
 test("email_draft asks for addresses instead of guessing", async (t) => {
   let ran = 0;
-  installBrowserGlobals(t, { window: { electronAPI: { connectorRunDirect: async () => { ran += 1; } } } });
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorRunDirect: async () => {
+          ran += 1;
+        },
+      },
+    },
+  });
   const { createEmailDraftTool } = await loadEmail();
 
-  const result = await createEmailDraftTool("gmail").execute({ to: ["Gabe"], subject: "x", body: "y" });
+  const result = await createEmailDraftTool("gmail").execute({
+    to: ["Gabe"],
+    subject: "x",
+    body: "y",
+  });
 
   assert.equal(result.data.status, "needs_clarification");
   assert.deepEqual(result.data.candidates, ["Gabe"]);
@@ -55,6 +77,7 @@ test("email_draft asks for addresses instead of guessing", async (t) => {
 function countingContext(signal = new AbortController().signal) {
   const context = {
     holds: 0,
+    messageId: "m1",
     toolCallId: "call-1",
     signal,
     onApprovalRequested() {},
@@ -101,7 +124,11 @@ test("email_draft keeps its turn out of the user's document, whatever the outcom
   installBrowserGlobals(t, {
     window: {
       electronAPI: {
-        connectorRunDirect: async () => ({ state: "sent", destinationLabel: "a@example.com", bodyCopied: false }),
+        connectorRunDirect: async () => ({
+          state: "sent",
+          destinationLabel: "a@example.com",
+          bodyCopied: false,
+        }),
       },
     },
   });
@@ -147,10 +174,18 @@ test("email_draft opens nothing once its turn is cancelled", async (t) => {
 
 test("email_draft reports a blocked policy without retrying", async (t) => {
   installBrowserGlobals(t, {
-    window: { electronAPI: { connectorRunDirect: async () => ({ state: "unavailable", reason: "policy_blocked" }) } },
+    window: {
+      electronAPI: {
+        connectorRunDirect: async () => ({ state: "unavailable", reason: "policy_blocked" }),
+      },
+    },
   });
   const { createEmailDraftTool } = await loadEmail();
-  const result = await createEmailDraftTool("gmail").execute({ to: ["a@example.com"], subject: "s", body: "b" });
+  const result = await createEmailDraftTool("gmail").execute({
+    to: ["a@example.com"],
+    subject: "s",
+    body: "b",
+  });
   assert.equal(result.data.status, "unavailable");
   assert.equal(result.data.reason, "policy_blocked");
 });
@@ -220,9 +255,16 @@ test("connector plan eligibility uses usage data, then the persisted isSubscribe
 
 test("connector tools register only when connectors are available", async () => {
   const { createToolRegistry } = await loadRegistry();
-  const base = { isSignedIn: true, calendarConnected: false, cloudBackupEnabled: false, webSearchEnabled: false };
+  const base = {
+    isSignedIn: true,
+    calendarConnected: false,
+    cloudBackupEnabled: false,
+    webSearchEnabled: false,
+  };
 
-  const without = createToolRegistry(base).getAll().map((tool) => tool.name);
+  const without = createToolRegistry(base)
+    .getAll()
+    .map((tool) => tool.name);
   const withConnectors = createToolRegistry({ ...base, connectors: { emailDraftTarget: "gmail" } })
     .getAll()
     .map((tool) => tool.name);

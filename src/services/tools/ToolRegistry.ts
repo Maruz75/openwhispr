@@ -12,6 +12,8 @@ export interface ToolResult {
  * tool runs outside a chat turn (tests, direct calls).
  */
 export interface ToolExecutionContext {
+  /** The assistant message the call belongs to; approval cards key on it. */
+  messageId: string;
   toolCallId: string;
   /** Aborts when the turn is cancelled or its conversation ends. */
   signal: AbortSignal;
@@ -53,7 +55,7 @@ export class ToolRegistry {
    * `onDisplayText` receives each call's displayText for its tool step.
    */
   toAISDKFormat(
-    createContext?: (toolCallId: string) => ToolExecutionContext,
+    createContext?: (toolCallId: string, abortSignal?: AbortSignal) => ToolExecutionContext,
     onDisplayText?: (toolCallId: string, displayText: string) => void
   ): Record<string, Tool> {
     const result: Record<string, Tool> = {};
@@ -65,7 +67,7 @@ export class ToolRegistry {
           try {
             const toolResult = await def.execute(
               args as Record<string, unknown>,
-              createContext?.(options.toolCallId)
+              createContext?.(options.toolCallId, options.abortSignal)
             );
             onDisplayText?.(options.toolCallId, toolResult.displayText);
             return toolResult.success ? toolResult.data : { error: toolResult.displayText };
