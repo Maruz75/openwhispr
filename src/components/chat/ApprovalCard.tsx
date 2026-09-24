@@ -18,7 +18,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
 
   return (
     <div
-      data-approval-card={entry.toolCallId}
+      data-approval-card={entry.key}
       data-state={entry.state}
       className="my-1.5 rounded-lg border border-border/70 bg-surface-2/60 p-3 text-[13px]"
     >
@@ -45,9 +45,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
               className="w-full rounded-md border border-border/70 bg-background px-2 py-1"
               dir="auto"
               value={draft.title}
-              onChange={(event) =>
-                updateApprovalDraft(entry.toolCallId, { title: event.target.value })
-              }
+              onChange={(event) => updateApprovalDraft(entry.key, { title: event.target.value })}
             />
           )}
           <textarea
@@ -55,9 +53,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
             className="min-h-24 w-full rounded-md border border-border/70 bg-background px-2 py-1"
             dir="auto"
             value={draft.body}
-            onChange={(event) =>
-              updateApprovalDraft(entry.toolCallId, { body: event.target.value })
-            }
+            onChange={(event) => updateApprovalDraft(entry.key, { body: event.target.value })}
           />
         </div>
       ) : (
@@ -77,13 +73,13 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
 
       {entry.state === "pending" && (
         <div className="mt-2 flex gap-2">
-          <Button size="sm" onClick={() => void approveAction(entry.toolCallId)}>
+          <Button size="sm" onClick={() => void approveAction(entry.key)}>
             {t("connectors.approval.send")}
           </Button>
           <Button size="sm" variant="outline" onClick={() => setEditing((value) => !value)}>
             {editing ? t("connectors.approval.doneEditing") : t("connectors.approval.edit")}
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => cancelApproval(entry.toolCallId)}>
+          <Button size="sm" variant="ghost" onClick={() => cancelApproval(entry.key)}>
             {t("connectors.approval.cancel")}
           </Button>
         </div>

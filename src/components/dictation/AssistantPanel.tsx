@@ -44,7 +44,7 @@ import {
 } from "../../helpers/assistantResponseDelivery";
 import { buildAssistantCommandSendOptions } from "./assistantCommandOptions";
 import { ApprovalCard } from "../chat/ApprovalCard";
-import { useConnectorApprovalStore } from "../../stores/connectorApprovalStore";
+import { approvalKey, useConnectorApprovalStore } from "../../stores/connectorApprovalStore";
 
 export interface AssistantCommand {
   id: number;
@@ -255,9 +255,11 @@ export function AssistantPanel({
   ]);
 
   const approvalEntries = useConnectorApprovalStore((state) => state.entries);
-  const panelApprovals = (latestAssistantMessage?.toolCalls ?? [])
-    .map((toolCall) => approvalEntries[toolCall.id])
-    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  const panelApprovals = latestAssistantMessage
+    ? (latestAssistantMessage.toolCalls ?? [])
+        .map((toolCall) => approvalEntries[approvalKey(latestAssistantMessage.id, toolCall.id)])
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    : [];
   const approvalAwaitingUser = panelApprovals.some(
     (entry) => entry.state === "pending" || entry.state === "committing"
   );
@@ -522,7 +524,7 @@ export function AssistantPanel({
               </div>
             ) : null}
             {panelApprovals.map((entry) => (
-              <ApprovalCard key={entry.toolCallId} entry={entry} />
+              <ApprovalCard key={entry.key} entry={entry} />
             ))}
             {thinking && (
               <div role="status">

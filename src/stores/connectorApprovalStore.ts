@@ -19,6 +19,9 @@ export interface ApprovalDraft {
 }
 
 export interface ApprovalEntry {
+  /** approvalKey(messageId, toolCallId). */
+  key: string;
+  messageId: string;
   toolCallId: string;
   actionId: string;
   connectorId: string;
@@ -34,6 +37,15 @@ interface ApprovalStoreState {
 }
 
 export const useConnectorApprovalStore = create<ApprovalStoreState>(() => ({ entries: {} }));
+
+/**
+ * Providers may reuse tool-call ids across turns, so a card belongs to the
+ * assistant message and the tool call together: a reused id on a new
+ * message must never show, or settle, an old message's card.
+ */
+export function approvalKey(messageId: string, toolCallId: string): string {
+  return `${messageId}::${toolCallId}`;
+}
 
 interface PendingResolution {
   resolve: (outcome: ApprovalOutcome) => void;
@@ -60,64 +72,64 @@ function isConnectorCommitResult(value: unknown): value is ConnectorCommitResult
   );
 }
 
-function entryFor(toolCallId: string): ApprovalEntry | undefined {
-  return useConnectorApprovalStore.getState().entries[toolCallId];
+function entryFor(key: string): ApprovalEntry | undefined {
+  return useConnectorApprovalStore.getState().entries[key];
 }
 
-function patchEntry(toolCallId: string, patch: Partial<ApprovalEntry>): void {
+function patchEntry(key: string, patch: Partial<ApprovalEntry>): void {
   useConnectorApprovalStore.setState((state) => {
-    const entry = state.entries[toolCallId];
+    const entry = state.entries[key];
     if (!entry) return state;
-    return { entries: { ...state.entries, [toolCallId]: { ...entry, ...patch } } };
+    return { entries: { ...state.entries, [key]: { ...entry, ...patch } } };
   });
 }
 
 function settle(
-  toolCallId: string,
+  key: string,
   outcome: ApprovalOutcome,
   state: ApprovalState,
   patch: Partial<ApprovalEntry> = {}
 ): void {
-  const pending = resolutions.get(toolCallId);
+  const pending = resolutions.get(key);
   if (!pending) return;
-  resolutions.delete(toolCallId);
+  resolutions.delete(key);
   clearTimeout(pending.timer);
   pending.detach();
-  patchEntry(toolCallId, { state, ...patch });
+  patchEntry(key, { state, ...patch });
   pending.resolve(outcome);
 }
 
 // Conversation end and expiry only withdraw a card that is still pending: a
 // committing send may already have reached the provider.
-function withdraw(toolCallId: string, reason: "conversation_ended" | "expired"): void {
-  const entry = entryFor(toolCallId);
+function withdraw(key: string, reason: "conversation_ended" | "expired"): void {
+  const entry = entryFor(key);
   if (!entry || entry.state !== "pending") return;
   void window.electronAPI?.connectorCancel?.(entry.actionId, reason);
-  settle(toolCallId, { state: "not_sent", reason }, "not_sent");
+  settle(key, { state: "not_sent", reason }, "not_sent");
 }
 
 export function requestApproval(
   context: ToolExecutionContext,
   request: { actionId: string; connectorId: string; preview: ConnectorPreview }
 ): Promise<ApprovalOutcome> {
-  const { toolCallId, signal } = context;
+  const { messageId, toolCallId, signal } = context;
+  const key = approvalKey(messageId, toolCallId);
   if (signal.aborted) {
     void window.electronAPI?.connectorCancel?.(request.actionId, "conversation_ended");
     return Promise.resolve({ state: "not_sent", reason: "conversation_ended" });
   }
-  // A second request for the same tool call must never steal the first
-  // card's resolver, timer or entry — that would cross-wire two actions:
-  // the first card would show the second action's outcome (or vice versa)
-  // and the loser's promise would never resolve.
-  if (resolutions.has(toolCallId)) {
+  // A second request for the same message and tool call must never steal
+  // the first card's resolver, timer or entry — that would cross-wire two
+  // actions, and the loser's promise would never resolve.
+  if (resolutions.has(key)) {
     void window.electronAPI?.connectorCancel?.(request.actionId, "cancelled_by_user");
     return Promise.resolve({ state: "not_sent", reason: "duplicate_tool_call" });
   }
   return new Promise((resolve) => {
-    const onAbort = (): void => withdraw(toolCallId, "conversation_ended");
+    const onAbort = (): void => withdraw(key, "conversation_ended");
     signal.addEventListener("abort", onAbort, { once: true });
-    const timer = setTimeout(() => withdraw(toolCallId, "expired"), APPROVAL_TTL_MS);
-    resolutions.set(toolCallId, {
+    const timer = setTimeout(() => withdraw(key, "expired"), APPROVAL_TTL_MS);
+    resolutions.set(key, {
       resolve,
       timer,
       detach: () => signal.removeEventListener("abort", onAbort),
@@ -129,17 +141,17 @@ export function requestApproval(
     useConnectorApprovalStore.setState((state) => ({
       entries: {
         ...state.entries,
-        [toolCallId]: { toolCallId, ...request, draft, state: "pending" },
+        [key]: { key, messageId, toolCallId, ...request, draft, state: "pending" },
       },
     }));
     context.onApprovalRequested();
   });
 }
 
-export function updateApprovalDraft(toolCallId: string, patch: Partial<ApprovalDraft>): void {
-  const entry = entryFor(toolCallId);
+export function updateApprovalDraft(key: string, patch: Partial<ApprovalDraft>): void {
+  const entry = entryFor(key);
   if (!entry || entry.state !== "pending") return;
-  patchEntry(toolCallId, {
+  patchEntry(key, {
     draft: {
       ...entry.draft,
       ...(patch.body !== undefined ? { body: patch.body } : {}),
@@ -150,21 +162,21 @@ export function updateApprovalDraft(toolCallId: string, patch: Partial<ApprovalD
   });
 }
 
-export function cancelApproval(toolCallId: string): void {
-  const entry = entryFor(toolCallId);
+export function cancelApproval(key: string): void {
+  const entry = entryFor(key);
   if (!entry || entry.state !== "pending") return;
   void window.electronAPI?.connectorCancel?.(entry.actionId, "cancelled_by_user");
-  settle(toolCallId, { state: "cancelled" }, "cancelled");
+  settle(key, { state: "cancelled" }, "cancelled");
 }
 
 // Send commits the draft (what the card shows), never an edit-mode snapshot:
 // leaving edit mode must not discard the user's changes.
-export async function approveAction(toolCallId: string): Promise<void> {
-  const entry = entryFor(toolCallId);
+export async function approveAction(key: string): Promise<void> {
+  const entry = entryFor(key);
   if (!entry || entry.state !== "pending") return;
   const edits: ConnectorEdits = { ...entry.draft };
-  patchEntry(toolCallId, { state: "committing" });
-  const pending = resolutions.get(toolCallId);
+  patchEntry(key, { state: "committing" });
+  const pending = resolutions.get(key);
   if (pending) {
     clearTimeout(pending.timer);
     pending.detach();
@@ -177,16 +189,15 @@ export async function approveAction(toolCallId: string): Promise<void> {
     // The request may have reached main and been sent; never claim it wasn't.
     raw = undefined;
   }
-  // A missing result, or one that doesn't match a state the switch below
-  // understands (wrong key, unrecognized state), is exactly as uncertain as
-  // a thrown IPC call — never let it fall through with no case to settle.
+  // A missing or unrecognized result is exactly as uncertain as a thrown
+  // IPC call — never let it fall through with no case to settle.
   const result: ConnectorCommitResult = isConnectorCommitResult(raw) ? raw : { state: "unknown" };
 
   const finalText = entry.draft.body !== entry.preview.body ? entry.draft.body : undefined;
   switch (result.state) {
     case "sent":
       settle(
-        toolCallId,
+        key,
         { state: "sent", url: result.url, ...(finalText !== undefined ? { finalText } : {}) },
         "sent",
         { url: result.url }
@@ -194,7 +205,7 @@ export async function approveAction(toolCallId: string): Promise<void> {
       break;
     case "failed":
       settle(
-        toolCallId,
+        key,
         { state: "failed", errorCode: result.errorCode, message: result.message },
         "failed",
         { message: result.message }
@@ -202,7 +213,7 @@ export async function approveAction(toolCallId: string): Promise<void> {
       break;
     case "unknown":
       settle(
-        toolCallId,
+        key,
         {
           state: "unknown",
           ...(result.checkUrl !== undefined ? { checkUrl: result.checkUrl } : {}),
@@ -212,7 +223,7 @@ export async function approveAction(toolCallId: string): Promise<void> {
       );
       break;
     case "not_sent":
-      settle(toolCallId, { state: "not_sent", reason: result.reason }, "not_sent");
+      settle(key, { state: "not_sent", reason: result.reason }, "not_sent");
       break;
   }
 }

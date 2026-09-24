@@ -28,13 +28,13 @@ function fakeElectron(commitImpl) {
   };
 }
 
-function context(toolCallId, controller = new AbortController()) {
+function context(toolCallId, controller = new AbortController(), messageId = "m1") {
   let requested = 0;
   return {
     controller,
     requestedCount: () => requested,
     value: {
-      messageId: "m1",
+      messageId,
       toolCallId,
       signal: controller.signal,
       onApprovalRequested: () => {
@@ -43,6 +43,8 @@ function context(toolCallId, controller = new AbortController()) {
     },
   };
 }
+
+const keyOf = (store, toolCallId, messageId = "m1") => store.approvalKey(messageId, toolCallId);
 
 async function freshStore() {
   const store = await load();
@@ -58,10 +60,13 @@ test("a request shows a pending card and tells the surface", async (t) => {
 
   void store.requestApproval(ctx.value, { actionId: "a1", connectorId: "slack", preview: PREVIEW });
 
-  assert.equal(store.useConnectorApprovalStore.getState().entries["call-1"].state, "pending");
+  assert.equal(
+    store.useConnectorApprovalStore.getState().entries[keyOf(store, "call-1")].state,
+    "pending"
+  );
   assert.equal(ctx.requestedCount(), 1);
   // Settle it so the 10-minute expiry timer doesn't keep the test process alive.
-  store.cancelApproval("call-1");
+  store.cancelApproval(keyOf(store, "call-1"));
 });
 
 test("Send commits the edited draft once and reports the edited text", async (t) => {
@@ -74,8 +79,11 @@ test("Send commits the edited draft once and reports the edited text", async (t)
     preview: PREVIEW,
   });
 
-  store.updateApprovalDraft("call-2", { body: "Hello team!" });
-  await Promise.all([store.approveAction("call-2"), store.approveAction("call-2")]);
+  store.updateApprovalDraft(keyOf(store, "call-2"), { body: "Hello team!" });
+  await Promise.all([
+    store.approveAction(keyOf(store, "call-2")),
+    store.approveAction(keyOf(store, "call-2")),
+  ]);
 
   assert.deepEqual(await outcome, {
     state: "sent",
@@ -83,7 +91,10 @@ test("Send commits the edited draft once and reports the edited text", async (t)
     finalText: "Hello team!",
   });
   assert.deepEqual(electron.calls.commit, [{ actionId: "a2", edits: { body: "Hello team!" } }]);
-  assert.equal(store.useConnectorApprovalStore.getState().entries["call-2"].state, "sent");
+  assert.equal(
+    store.useConnectorApprovalStore.getState().entries[keyOf(store, "call-2")].state,
+    "sent"
+  );
 });
 
 test("an unedited send commits the preview text and reports no edit", async (t) => {
@@ -96,7 +107,7 @@ test("an unedited send commits the preview text and reports no edit", async (t) 
     preview: PREVIEW,
   });
 
-  await store.approveAction("call-8");
+  await store.approveAction(keyOf(store, "call-8"));
 
   assert.deepEqual(await outcome, { state: "sent", url: "https://slack.test/p/1" });
   assert.deepEqual(electron.calls.commit[0].edits, { body: "Hello team" });
@@ -112,9 +123,9 @@ test("the draft is frozen once sending starts, and a title needs a titled previe
     preview: PREVIEW,
   });
 
-  store.updateApprovalDraft("call-9", { title: "Not allowed" });
-  const sending = store.approveAction("call-9");
-  store.updateApprovalDraft("call-9", { body: "Too late" });
+  store.updateApprovalDraft(keyOf(store, "call-9"), { title: "Not allowed" });
+  const sending = store.approveAction(keyOf(store, "call-9"));
+  store.updateApprovalDraft(keyOf(store, "call-9"), { body: "Too late" });
   await sending;
   await outcome;
 
@@ -131,7 +142,7 @@ test("Cancel withdraws a pending card", async (t) => {
     preview: PREVIEW,
   });
 
-  store.cancelApproval("call-3");
+  store.cancelApproval(keyOf(store, "call-3"));
 
   assert.deepEqual(await outcome, { state: "cancelled" });
   assert.deepEqual(electron.calls.cancel, [{ actionId: "a3", reason: "cancelled_by_user" }]);
@@ -171,7 +182,7 @@ test("ending the conversation during Send keeps the real result", async (t) => {
     preview: PREVIEW,
   });
 
-  const sending = store.approveAction("call-5");
+  const sending = store.approveAction(keyOf(store, "call-5"));
   ctx.controller.abort();
   releaseCommit();
   await sending;
@@ -192,7 +203,7 @@ test("a commit IPC failure is reported as unknown, never as not sent", async (t)
     preview: PREVIEW,
   });
 
-  await store.approveAction("call-6");
+  await store.approveAction(keyOf(store, "call-6"));
 
   assert.deepEqual(await outcome, { state: "unknown" });
 });
@@ -224,10 +235,13 @@ test("a commit result with the wrong key settles as unknown instead of hanging",
     preview: PREVIEW,
   });
 
-  await store.approveAction("call-10");
+  await store.approveAction(keyOf(store, "call-10"));
 
   assert.deepEqual(await outcome, { state: "unknown" });
-  assert.equal(store.useConnectorApprovalStore.getState().entries["call-10"].state, "unknown");
+  assert.equal(
+    store.useConnectorApprovalStore.getState().entries[keyOf(store, "call-10")].state,
+    "unknown"
+  );
 });
 
 test("a commit result that resolves undefined settles as unknown", async (t) => {
@@ -240,10 +254,13 @@ test("a commit result that resolves undefined settles as unknown", async (t) => 
     preview: PREVIEW,
   });
 
-  await store.approveAction("call-11");
+  await store.approveAction(keyOf(store, "call-11"));
 
   assert.deepEqual(await outcome, { state: "unknown" });
-  assert.equal(store.useConnectorApprovalStore.getState().entries["call-11"].state, "unknown");
+  assert.equal(
+    store.useConnectorApprovalStore.getState().entries[keyOf(store, "call-11")].state,
+    "unknown"
+  );
 });
 
 test("a duplicate request for the same tool call cancels the new action and leaves the first alone", async (t) => {
@@ -268,14 +285,45 @@ test("a duplicate request for the same tool call cancels the new action and leav
     { actionId: "a12-second", reason: "cancelled_by_user" },
   ]);
 
-  const entry = store.useConnectorApprovalStore.getState().entries["call-12"];
+  const entry = store.useConnectorApprovalStore.getState().entries[keyOf(store, "call-12")];
   assert.equal(entry.state, "pending");
   assert.equal(entry.actionId, "a12-first");
 
-  await store.approveAction("call-12");
+  await store.approveAction(keyOf(store, "call-12"));
 
   assert.deepEqual(await firstOutcome, { state: "sent", url: "https://slack.test/p/1" });
   assert.deepEqual(electron.calls.commit, [
     { actionId: "a12-first", edits: { body: "Hello team" } },
   ]);
+});
+
+test("the same tool-call id on two messages gets two separate cards", async (t) => {
+  const electron = fakeElectron();
+  installBrowserGlobals(t, { window: { electronAPI: electron.api } });
+  const store = await freshStore();
+  const first = store.requestApproval(context("call-1", undefined, "msg-a").value, {
+    actionId: "a1",
+    connectorId: "slack",
+    preview: PREVIEW,
+  });
+  const second = store.requestApproval(context("call-1", undefined, "msg-b").value, {
+    actionId: "a2",
+    connectorId: "slack",
+    preview: PREVIEW,
+  });
+
+  const entries = store.useConnectorApprovalStore.getState().entries;
+  assert.equal(entries[keyOf(store, "call-1", "msg-a")].actionId, "a1");
+  assert.equal(entries[keyOf(store, "call-1", "msg-b")].actionId, "a2");
+  assert.deepEqual(electron.calls.cancel, [], "a reused id on a new message is not a duplicate");
+
+  await store.approveAction(keyOf(store, "call-1", "msg-b"));
+  assert.deepEqual(
+    electron.calls.commit.map((call) => call.actionId),
+    ["a2"]
+  );
+  assert.equal((await second).state, "sent");
+
+  store.cancelApproval(keyOf(store, "call-1", "msg-a"));
+  assert.equal((await first).state, "cancelled");
 });

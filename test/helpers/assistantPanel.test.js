@@ -99,6 +99,9 @@ async function renderAssistantPanel(
         export function useConnectorApprovalStore(selector) {
           return selector({ entries: globalThis.__assistantPanelApprovals || {} });
         }
+        export function approvalKey(messageId, toolCallId) {
+          return messageId + "::" + toolCallId;
+        }
       `,
       "/chat/ApprovalCard": `
         import React from "react";
@@ -691,13 +694,23 @@ test("a follow-up into an open panel strips caret delivery and stays panel-first
 
   assistant.openRef.current = true;
   await React.act(async () => {
-    assistant.handleCommand({ text: "draft a reply", attachment: null, selectedContext: null, delivery });
+    assistant.handleCommand({
+      text: "draft a reply",
+      attachment: null,
+      selectedContext: null,
+      delivery,
+    });
   });
   assert.equal(assistant.pendingCommand.delivery, null);
 
   assistant.openRef.current = false;
   await React.act(async () => {
-    assistant.handleCommand({ text: "draft a reply", attachment: null, selectedContext: null, delivery });
+    assistant.handleCommand({
+      text: "draft a reply",
+      attachment: null,
+      selectedContext: null,
+      delivery,
+    });
   });
   assert.deepEqual(assistant.pendingCommand.delivery, delivery);
 });
@@ -712,19 +725,28 @@ test("a pending approval shows in the panel and replaces the tool overlay", asyn
         role: "assistant",
         content: "",
         isStreaming: true,
-        toolCalls: [{ id: "call-1", name: "slack_send_message", arguments: "{}", status: "executing" }],
+        toolCalls: [
+          { id: "call-1", name: "slack_send_message", arguments: "{}", status: "executing" },
+        ],
       },
     ],
     {
       agentState: "tool-executing",
       activeToolName: "slack_send_message",
       approvals: {
-        "call-1": {
+        "assistant-1::call-1": {
+          key: "assistant-1::call-1",
+          messageId: "assistant-1",
           toolCallId: "call-1",
           actionId: "a1",
           connectorId: "slack",
           state: "pending",
-          preview: { verbKey: "default", destinationLabel: "#eng", accountLabel: "chad", body: "x" },
+          preview: {
+            verbKey: "default",
+            destinationLabel: "#eng",
+            accountLabel: "chad",
+            body: "x",
+          },
         },
       },
     }

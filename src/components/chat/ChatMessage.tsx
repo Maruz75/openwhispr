@@ -7,9 +7,10 @@ import type { ToolCallInfo } from "./types";
 import { extractNoteCards } from "./noteCards";
 import { toolIcons } from "./toolIcons";
 import { ApprovalCard } from "./ApprovalCard";
-import { useConnectorApprovalStore } from "../../stores/connectorApprovalStore";
+import { approvalKey, useConnectorApprovalStore } from "../../stores/connectorApprovalStore";
 
 interface ChatMessageProps {
+  messageId: string;
   role: "user" | "assistant";
   content: string;
   isStreaming: boolean;
@@ -165,6 +166,7 @@ function NoteCard({
 }
 
 export function ChatMessage({
+  messageId,
   role,
   content,
   isStreaming,
@@ -228,13 +230,14 @@ export function ChatMessage({
               (hasContent || noteCards.length > 0) && "mb-2 pb-1.5 border-b border-border/70"
             )}
           >
-            {toolCalls.map((tc) =>
-              approvals[tc.id] ? (
-                <ApprovalCard key={tc.id} entry={approvals[tc.id]} />
+            {toolCalls.map((tc) => {
+              const approval = approvals[approvalKey(messageId, tc.id)];
+              return approval ? (
+                <ApprovalCard key={tc.id} entry={approval} />
               ) : (
                 <ToolCallStep key={tc.id} toolCall={tc} />
-              )
-            )}
+              );
+            })}
           </div>
         )}
 

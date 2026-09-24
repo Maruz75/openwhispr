@@ -109,7 +109,7 @@ test("runApprovalAction waits for the card and returns the send", async (t) => {
     },
   });
   const { runApprovalAction } = await loadRun();
-  const { approveAction, useConnectorApprovalStore } = await loadStore();
+  const { approvalKey, approveAction, useConnectorApprovalStore } = await loadStore();
   useConnectorApprovalStore.setState({ entries: {} });
   const controller = new AbortController();
 
@@ -120,7 +120,7 @@ test("runApprovalAction waits for the card and returns the send", async (t) => {
     { destination: "#eng", text: "hi" }
   );
   await new Promise((resolve) => setImmediate(resolve));
-  await approveAction("call-2");
+  await approveAction(approvalKey("m1", "call-2"));
 
   const result = await pending;
   assert.equal(result.data.status, "sent");
