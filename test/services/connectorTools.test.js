@@ -120,6 +120,36 @@ test("email_draft tells the model when content went to the clipboard", async (t)
   );
 });
 
+test("email_draft reports an uncertain direct result as unknown, and still holds delivery", async (t) => {
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorRunDirect: async () => ({ state: "unknown", errorCode: "direct_uncertain" }),
+      },
+    },
+  });
+  const { createEmailDraftTool } = await loadEmail();
+  let held = 0;
+  const context = {
+    messageId: "m1",
+    toolCallId: "call-1",
+    signal: new AbortController().signal,
+    onApprovalRequested() {},
+    onHoldDelivery() {
+      held += 1;
+    },
+  };
+
+  const result = await createEmailDraftTool("mailto").execute(
+    { to: ["a@example.com"], subject: "s", body: "b" },
+    context
+  );
+
+  assert.equal(result.data.status, "unknown");
+  assert.equal(result.data.destination, "a@example.com");
+  assert.equal(held, 1);
+});
+
 test("email_draft keeps its turn out of the user's document, whatever the outcome", async (t) => {
   installBrowserGlobals(t, {
     window: {

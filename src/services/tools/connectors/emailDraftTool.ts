@@ -7,6 +7,7 @@ import {
   needsClarificationResult,
   notSentResult,
   unavailableResult,
+  unknownResult,
 } from "./toolOutcome";
 
 function addressList(value: unknown): string[] {
@@ -66,6 +67,7 @@ export function createEmailDraftTool(target: EmailDraftTarget): ToolDefinition {
       if (!result) return unavailableResult("connectors_unavailable");
       if (result.state === "unavailable") return unavailableResult(result.reason);
       if (result.state === "failed") return failedResult(result.errorCode, result.message);
+      if (result.state === "unknown") return unknownResult(to.join(", "), result.checkUrl);
 
       const bodyCopied = Boolean(result.bodyCopied);
       const subjectCopied = Boolean(result.subjectCopied);

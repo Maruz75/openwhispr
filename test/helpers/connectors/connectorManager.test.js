@@ -325,6 +325,40 @@ test("runDirect runs direct actions with the runtime and logs a receipt", async 
   assert.equal(row.state, "sent");
 });
 
+test("a direct action marked onThrow unknown records unknown when it throws", async () => {
+  const { manager, log } = await setup({
+    actions: {
+      post: { kind: "approval" },
+      draft: { kind: "direct" },
+      save: { kind: "direct", onThrow: "unknown" },
+    },
+    async runDirect(action) {
+      if (action === "save") throw new Error("socket hang up");
+      return { state: "sent", destinationLabel: "gabe@example.test" };
+    },
+  });
+
+  assert.deepEqual(await manager.runDirect("fake", "save", {}, "allowed", {}), {
+    state: "unknown",
+    errorCode: "direct_uncertain",
+  });
+  assert.equal([...log.rows.values()][0].state, "unknown");
+});
+
+test("an action that fails on throw can never report unknown", async () => {
+  const { manager } = await setup({
+    async runDirect() {
+      return { state: "unknown" };
+    },
+  });
+
+  assert.deepEqual(await manager.runDirect("fake", "draft", {}, "allowed", {}), {
+    state: "failed",
+    errorCode: "invalid_result",
+    message: "That action didn't complete.",
+  });
+});
+
 test("an action is only reachable through its own kind", async () => {
   const { manager } = await setup();
   assert.deepEqual(await manager.runDirect("fake", "post", {}, "allowed", {}), {

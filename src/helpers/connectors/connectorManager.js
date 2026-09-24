@@ -3,7 +3,7 @@ const { describeError } = require("./errorSummary");
 
 const CANCEL_REASONS = new Set(["cancelled_by_user", "conversation_ended", "expired"]);
 const COMMIT_RESULT_STATES = new Set(["sent", "failed", "unknown"]);
-const DIRECT_RESULT_STATES = new Set(["sent", "failed"]);
+const DIRECT_RESULT_STATES = new Set(["sent", "failed", "unknown"]);
 
 // A connector is third-party code (or a stub in tests); never trust its
 // result shape before it gets written to the receipt or handed back. An
@@ -14,12 +14,21 @@ function normalizeCommitResult(result) {
   return { state: "unknown" };
 }
 
-// runDirect has no "unknown" state: the renderer's email tool treats
-// anything but "failed" as delivered, so a malformed result must fail
-// closed rather than land in a state the caller doesn't check for.
-function normalizeDirectResult(result) {
-  if (result && typeof result === "object" && DIRECT_RESULT_STATES.has(result.state)) return result;
-  return { state: "failed", errorCode: "invalid_result", message: "That action didn't complete." };
+// What a throw or a malformed result means depends on the action: a local
+// compose window that threw reached no one, but a network write (an Outlook
+// saved draft) may have landed. Only actions that say so may be unknown.
+function uncertainDirectResult(actionSpec, errorCode) {
+  return actionSpec.onThrow === "unknown"
+    ? { state: "unknown", errorCode }
+    : { state: "failed", errorCode, message: "That action didn't complete." };
+}
+
+function normalizeDirectResult(result, actionSpec) {
+  const recognized = result && typeof result === "object" && DIRECT_RESULT_STATES.has(result.state);
+  if (recognized && (result.state !== "unknown" || actionSpec.onThrow === "unknown")) {
+    return result;
+  }
+  return uncertainDirectResult(actionSpec, "invalid_result");
 }
 
 // Only "allowed" allows. Signing out is its own refusal (connector logins
@@ -330,6 +339,7 @@ function createConnectorManager({
     if (refusal) return { state: "unavailable", reason: refusal };
     const resolved = resolveAction(connectorId, action, "direct");
     if (resolved.error) return { state: "unavailable", reason: resolved.error };
+    const actionSpec = resolved.connector.actions[action];
 
     const id = randomId();
     const recorded = writeRequired("direct", () => {
@@ -346,13 +356,12 @@ function createConnectorManager({
         { connectorId, action, ...describeError(error) },
         "connectors"
       );
-      result = {
-        state: "failed",
-        errorCode: "direct_failed",
-        message: "That action didn't complete.",
-      };
+      result = uncertainDirectResult(
+        actionSpec,
+        actionSpec.onThrow === "unknown" ? "direct_uncertain" : "direct_failed"
+      );
     }
-    result = normalizeDirectResult(result);
+    result = normalizeDirectResult(result, actionSpec);
     record(() =>
       actionLog.update(id, {
         state: result.state,

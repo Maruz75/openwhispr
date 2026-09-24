@@ -34,6 +34,19 @@ export function notSentResult(reason: string): ToolResult {
   };
 }
 
+export function unknownResult(destination: string, checkUrl?: string): ToolResult {
+  return {
+    success: true,
+    data: {
+      status: "unknown",
+      destination,
+      checkUrl,
+      guidance: `It may or may not have been sent. ${NO_RETRY} Tell the user to check ${destination}.`,
+    },
+    displayText: i18n.t("connectors.approval.unknown", { destination }),
+  };
+}
+
 export function failedResult(errorCode: string, message: string): ToolResult {
   return {
     success: true,
@@ -84,15 +97,6 @@ export function approvalOutcomeResult(outcome: ApprovalOutcome, destination: str
     case "failed":
       return failedResult(outcome.errorCode, outcome.message);
     case "unknown":
-      return {
-        success: true,
-        data: {
-          status: "unknown",
-          destination,
-          checkUrl: outcome.checkUrl,
-          guidance: `It may or may not have been sent. ${NO_RETRY} Tell the user to check ${destination}.`,
-        },
-        displayText: i18n.t("connectors.approval.unknown", { destination }),
-      };
+      return unknownResult(destination, outcome.checkUrl);
   }
 }
