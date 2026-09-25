@@ -1273,6 +1273,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
   connectorRecentActions: (connectorId, limit) =>
     ipcRenderer.invoke("connector-recent-actions", connectorId, limit),
   connectorFindContacts: (query) => ipcRenderer.invoke("connector-find-contacts", query),
+  connectorConnect: (connectorId) => ipcRenderer.invoke("connector-connect", connectorId),
+  connectorDisconnect: (connectorId) => ipcRenderer.invoke("connector-disconnect", connectorId),
+  onConnectorStatusChanged: (callback) => {
+    const listener = (_event, statuses) => callback(statuses);
+    ipcRenderer.on("connector-status-changed", listener);
+    return () => ipcRenderer.removeListener("connector-status-changed", listener);
+  },
   calendarGetAvailability: (request) => ipcRenderer.invoke("calendar-get-availability", request),
   gcalGetEvent: (eventId) => ipcRenderer.invoke("gcal-get-event", eventId),
 

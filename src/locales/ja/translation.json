@@ -3856,6 +3856,14 @@
         "mailto": "既定のメールアプリ"
       }
     },
+    "slack": {
+      "browser": {
+        "connectedTitle": "Slackが接続されました",
+        "connectedBody": "このタブを閉じてOpenWhisprに戻ることができます。",
+        "failedTitle": "Slackは接続されませんでした",
+        "failedBody": "OpenWhisprに戻ってもう一度お試しください。"
+      }
+    },
     "recent": {
       "title": "最近のアクション",
       "actions": {

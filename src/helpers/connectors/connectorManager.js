@@ -107,12 +107,34 @@ function sanitizeEdits(edits) {
   return clean;
 }
 
+const REVOKE_TIMEOUT_MS = 5000;
+const CONNECT_ERROR_CODES = new Set([
+  "not_configured",
+  "oauth_denied",
+  "oauth_timeout",
+  "oauth_state_mismatch",
+  "ports_busy",
+  "token_exchange_failed",
+]);
+
+// A revoke is best effort: nothing may hang on an unreachable provider.
+async function withinDeadline(promise, ms) {
+  let timer;
+  try {
+    await Promise.race([promise, new Promise((resolve) => (timer = setTimeout(resolve, ms)))]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function createConnectorManager({
   connectors,
   pendingActions,
   actionLog,
   logger,
   getAccountId,
+  credentials = null,
+  onStatusChanged = () => {},
   randomId = () => crypto.randomBytes(16).toString("hex"),
 }) {
   const byId = new Map(connectors.map((connector) => [connector.id, connector]));
@@ -198,6 +220,113 @@ function createConnectorManager({
     return Promise.all([...byId.values()].map(statusOf));
   }
 
+  const connecting = new Set();
+  let statusSequence = 0;
+
+  async function notifyStatusChanged() {
+    const sequence = ++statusSequence;
+    try {
+      const statuses = await status();
+      // A later change is already being announced; this snapshot is older.
+      if (sequence === statusSequence) onStatusChanged(statuses);
+    } catch (error) {
+      logger.warn("connector status broadcast failed", describeError(error), "connectors");
+    }
+  }
+
+  async function revokeQuietly(connector, credential) {
+    try {
+      await withinDeadline(connector.revoke(credential), REVOKE_TIMEOUT_MS);
+    } catch (error) {
+      logger.warn(
+        "connector revoke failed",
+        { connectorId: connector.id, ...describeError(error) },
+        "connectors"
+      );
+    }
+  }
+
+  async function connect(connectorId, policyState) {
+    const accountId = getAccountId();
+    const refusal = actionRefusal(policyState, accountId);
+    if (refusal) return { status: "unavailable", reason: refusal };
+    const connector = byId.get(connectorId);
+    if (!connector?.authorize || !credentials) {
+      return { status: "unavailable", reason: "unknown_connector" };
+    }
+    const flowKey = `${accountId}:${connectorId}`;
+    if (connecting.has(flowKey)) return { status: "failed", errorCode: "busy" };
+    connecting.add(flowKey);
+    // The OAuth round trip can take minutes. What it returns belongs to the
+    // account and slot generation that started it, or to no one.
+    const startGeneration = credentials.generation(accountId, connectorId);
+    try {
+      let credential;
+      try {
+        credential = await connector.authorize();
+      } catch (error) {
+        const summary = describeError(error);
+        logger.warn("connector connect failed", { connectorId, ...summary }, "connectors");
+        return {
+          status: "failed",
+          errorCode: CONNECT_ERROR_CODES.has(summary.errorCode)
+            ? summary.errorCode
+            : "connect_failed",
+        };
+      }
+      try {
+        if (getAccountId() !== accountId) {
+          throw Object.assign(new Error("account changed"), { code: "connection_changed" });
+        }
+        // A new login: approvals prepared under the old one must not send.
+        credentials.replace(accountId, connectorId, credential, startGeneration);
+      } catch {
+        // Nobody will use this login, so it is revoked rather than left live.
+        await revokeQuietly(connector, credential);
+        return { status: "failed", errorCode: "connection_changed" };
+      }
+      invalidate(connectorId);
+      await notifyStatusChanged();
+      const current = await statusOf(connector);
+      return {
+        status: "connected",
+        accountLabel: current.accountLabel,
+        workspaceLabel: current.workspaceLabel,
+      };
+    } finally {
+      connecting.delete(flowKey);
+    }
+  }
+
+  // Removing access is always allowed: no policy or plan check.
+  async function disconnect(connectorId) {
+    const connector = byId.get(connectorId);
+    if (!connector?.revoke || !credentials) {
+      return { status: "unavailable", reason: "unknown_connector" };
+    }
+    const accountId = getAccountId();
+    if (!accountId) return { status: "unavailable", reason: "signed_out" };
+    const entry = credentials.read(accountId, connectorId);
+    if (entry) {
+      await revokeQuietly(connector, entry.credential);
+      try {
+        credentials.clear(accountId, connectorId, entry.generation);
+      } catch {
+        // A reconnect landed while revoking: that newer login stays.
+        return { status: "failed", errorCode: "connection_changed" };
+      }
+    }
+    invalidate(connectorId);
+    await notifyStatusChanged();
+    return { status: "disconnected" };
+  }
+
+  async function disconnectAll() {
+    for (const connector of byId.values()) {
+      if (connector.revoke) await disconnect(connector.id);
+    }
+  }
+
   async function prepare(connectorId, action, args, policyState) {
     sweepExpired();
     const accountId = getAccountId();
@@ -221,6 +350,7 @@ function createConnectorManager({
       );
       return { ...INVALID_PREPARE_RESULT, errorCode: "prepare_failed" };
     }
+    if (prepared.errorCode === "reconnect_needed") void notifyStatusChanged();
     if (prepared.status !== "ready") return prepared;
 
     const actionId = pendingActions.create({
@@ -314,6 +444,7 @@ function createConnectorManager({
       result = { state: "unknown" };
     }
     result = normalizeCommitResult(result);
+    if (result.errorCode === "reconnect_needed") void notifyStatusChanged();
 
     pendingActions.finish(actionId);
     record(() =>
@@ -412,6 +543,10 @@ function createConnectorManager({
     invalidate,
     recentActions,
     sweepExpired,
+    connect,
+    disconnect,
+    disconnectAll,
+    notifyStatusChanged,
   };
 }
 

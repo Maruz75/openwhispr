@@ -3909,6 +3909,14 @@
         "mailto": "Aplicación de correo predeterminada"
       }
     },
+    "slack": {
+      "browser": {
+        "connectedTitle": "Slack está conectado",
+        "connectedBody": "Puedes cerrar esta pestaña y volver a OpenWhispr.",
+        "failedTitle": "Slack no se conectó",
+        "failedBody": "Vuelve a OpenWhispr para intentarlo de nuevo."
+      }
+    },
     "recent": {
       "title": "Acciones recientes",
       "actions": {

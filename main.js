@@ -449,17 +449,67 @@ function initializeCoreManagers() {
   const { createConnectorManager } = require("./src/helpers/connectors/connectorManager");
   const { createPendingActions } = require("./src/helpers/connectors/pendingActions");
   const { createActionLog } = require("./src/helpers/connectors/actionLog");
+  const { createCredentialStore } = require("./src/helpers/connectors/credentialStore");
+  const { createConnectorCredentials } = require("./src/helpers/connectors/connectorCredentials");
+  const { createSlackApi } = require("./src/helpers/connectors/slackApi");
+  const { createSlackAuth } = require("./src/helpers/connectors/slackAuth");
+  const { createSlackDirectory } = require("./src/helpers/connectors/slackDirectory");
+  const { createSlackConnector } = require("./src/helpers/connectors/slackConnector");
+  const { renderOAuthResultPage } = require("./src/helpers/connectors/oauthResultPage");
+  const { runOAuthLoopbackFlow, OAuthFlowError } = require("./src/helpers/oauthLoopbackFlow");
+  const { broadcastToWindows } = require("./src/helpers/windowBroadcast");
+  const getConnectorAccountId = () => databaseManager.activeAccountId;
+  const connectorCredentials = createConnectorCredentials({
+    store: createCredentialStore({
+      dir: path.join(app.getPath("userData"), "connectors"),
+      secretCrypto: require("./src/helpers/secretCrypto"),
+      logger: debugLogger,
+    }),
+    getAccountId: getConnectorAccountId,
+  });
+  const slackApi = createSlackApi({
+    fetchImpl: (url, init) => net.fetch(url, { ...init, useSessionCookies: false }),
+  });
+  const slackAuth = createSlackAuth({
+    api: slackApi,
+    credentials: connectorCredentials,
+    getClientId: () => process.env.SLACK_CLIENT_ID,
+    runOAuthLoopbackFlow,
+    OAuthFlowError,
+    renderResultPage: ({ ok }) =>
+      renderOAuthResultPage({
+        ok,
+        title: i18nMain.t(
+          ok ? "connectors.slack.browser.connectedTitle" : "connectors.slack.browser.failedTitle"
+        ),
+        body: i18nMain.t(
+          ok ? "connectors.slack.browser.connectedBody" : "connectors.slack.browser.failedBody"
+        ),
+      }),
+    // Shared by every consumer of Slack auth: its single-flight refresh map is
+    // per instance, so a second instance could spend the same single-use
+    // refresh token.
+    logger: debugLogger,
+  });
   connectorManager = createConnectorManager({
     connectors: [
       require("./src/helpers/connectors/emailConnector").createEmailConnector({
         openExternal: (url) => require("./src/helpers/externalUrlOpener").openExternalUrl(url),
         writeClipboard: (text, webContents) => clipboardManager.writeClipboard(text, webContents),
       }),
+      createSlackConnector({
+        api: slackApi,
+        auth: slackAuth,
+        directory: createSlackDirectory({ api: slackApi }),
+        credentials: connectorCredentials,
+      }),
     ],
     pendingActions: createPendingActions(),
     actionLog: createActionLog(databaseManager),
     logger: debugLogger,
-    getAccountId: () => databaseManager.activeAccountId,
+    getAccountId: getConnectorAccountId,
+    credentials: connectorCredentials,
+    onStatusChanged: (statuses) => broadcastToWindows("connector-status-changed", statuses),
   });
   // Pending cards expire in main even when no renderer ever answers them.
   setInterval(() => connectorManager.sweepExpired(), 60 * 1000).unref();

@@ -27,6 +27,45 @@ function fakeManager() {
   };
 }
 
+test("connect needs policy; disconnect never does", async () => {
+  const { registerConnectorIpc } = await load();
+  const ipcMain = fakeIpcMain();
+  const calls = [];
+  const manager = {
+    ...fakeManager(),
+    connect: async (...args) => {
+      calls.push(["connect", ...args]);
+      return { status: "connected", accountLabel: "chad", workspaceLabel: "Acme" };
+    },
+    disconnect: async (...args) => {
+      calls.push(["disconnect", ...args]);
+      return { status: "disconnected" };
+    },
+  };
+  let policyCalls = 0;
+  registerConnectorIpc({
+    ipcMain,
+    manager,
+    getPolicyState: async () => {
+      policyCalls += 1;
+      return "allowed";
+    },
+  });
+
+  await ipcMain.handlers.get("connector-connect")({}, "slack");
+  await ipcMain.handlers.get("connector-disconnect")({}, "slack");
+
+  assert.deepEqual(calls, [
+    ["connect", "slack", "allowed"],
+    ["disconnect", "slack"],
+  ]);
+  assert.equal(policyCalls, 1);
+  assert.deepEqual(await ipcMain.handlers.get("connector-connect")({}, 7), {
+    status: "unavailable",
+    reason: "invalid_request",
+  });
+});
+
 test("each channel reaches the manager, with policy only where something can leave", async () => {
   const { registerConnectorIpc } = await load();
   const ipcMain = fakeIpcMain();

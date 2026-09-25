@@ -15,7 +15,9 @@ import type {
   ConnectorActionRecord,
   ConnectorCancelReason,
   ConnectorCommitResult,
+  ConnectorConnectResult,
   ConnectorDirectResult,
+  ConnectorDisconnectResult,
   ConnectorEdits,
   ConnectorPrepareResult,
   ConnectorStatus,
@@ -2931,6 +2933,9 @@ declare global {
       connectorFindContacts?: (
         query: string
       ) => Promise<{ contacts: ContactMatch[]; hasMore?: boolean; unavailableReason?: string }>;
+      connectorConnect?: (connectorId: string) => Promise<ConnectorConnectResult>;
+      connectorDisconnect?: (connectorId: string) => Promise<ConnectorDisconnectResult>;
+      onConnectorStatusChanged?: (callback: (statuses: ConnectorStatus[]) => void) => () => void;
       calendarGetAvailability?: (
         request: CalendarAvailabilityRequest
       ) => Promise<

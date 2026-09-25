@@ -4025,6 +4025,14 @@
         "mailto": "Application de messagerie par défaut"
       }
     },
+    "slack": {
+      "browser": {
+        "connectedTitle": "Slack est connecté",
+        "connectedBody": "Vous pouvez fermer cet onglet et retourner à OpenWhispr.",
+        "failedTitle": "Slack n'a pas été connecté",
+        "failedBody": "Retournez à OpenWhispr pour réessayer."
+      }
+    },
     "recent": {
       "title": "Actions récentes",
       "actions": {

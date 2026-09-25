@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
+const { memoryCredentials } = require("./slackFixtures");
+
 const loadManager = () => import("../../../src/helpers/connectors/connectorManager.js");
 const loadPending = () => import("../../../src/helpers/connectors/pendingActions.js");
 
@@ -819,4 +821,246 @@ test("the connector acts only under the binding the action was prepared with", a
   const binding = { accountId: "U1", workspaceId: "T1", generation: 1 };
   assert.deepEqual(fake.calls.prepare[0].context, { binding });
   assert.deepEqual(fake.calls.commit[0].context, { binding });
+});
+
+const connectable = (overrides = {}) => ({
+  async authorize() {
+    return { accessToken: "new" };
+  },
+  async revoke() {},
+  async getStatus() {
+    return { connected: true, accountLabel: "chad", workspaceLabel: "Acme" };
+  },
+  ...overrides,
+});
+
+test("connect saves under the account that started it, cancels old approvals and announces", async () => {
+  const credentials = memoryCredentials(null, { connectorId: "fake" });
+  const announced = [];
+  const { manager, log } = await setup(connectable(), undefined, {
+    credentials,
+    onStatusChanged: (statuses) => announced.push(statuses),
+  });
+  const prepared = await manager.prepare("fake", "post", { text: "hi" }, "allowed");
+
+  assert.deepEqual(await manager.connect("fake", "allowed"), {
+    status: "connected",
+    accountLabel: "chad",
+    workspaceLabel: "Acme",
+  });
+  assert.deepEqual(credentials.read("acct-1", "fake"), {
+    credential: { accessToken: "new" },
+    generation: 1,
+  });
+  assert.equal(log.rows.get(prepared.actionId).state, "cancelled");
+  assert.equal(announced.length, 1);
+});
+
+test("an account switch during the OAuth round trip saves nothing and revokes the new login", async () => {
+  let accountId = "acct-a";
+  const credentials = memoryCredentials();
+  const flow = deferred();
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      authorize: () => flow.promise,
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials, getAccountId: () => accountId }
+  );
+
+  const connecting = manager.connect("fake", "allowed");
+  accountId = "acct-b";
+  flow.resolve({ accessToken: "a-login" });
+
+  assert.deepEqual(await connecting, { status: "failed", errorCode: "connection_changed" });
+  assert.equal(credentials.read("acct-a", "fake"), null);
+  assert.equal(credentials.read("acct-b", "fake"), null);
+  assert.deepEqual(revoked, [{ accessToken: "a-login" }]);
+});
+
+test("a login that changed during the round trip is kept, and the late one is revoked", async () => {
+  const credentials = memoryCredentials();
+  const flow = deferred();
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      authorize: () => flow.promise,
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials }
+  );
+
+  const connecting = manager.connect("fake", "allowed");
+  credentials.replace("acct-1", "fake", { accessToken: "other-window" }, 0);
+  flow.resolve({ accessToken: "late" });
+
+  assert.deepEqual(await connecting, { status: "failed", errorCode: "connection_changed" });
+  assert.equal(credentials.read("acct-1", "fake").credential.accessToken, "other-window");
+  assert.deepEqual(revoked, [{ accessToken: "late" }]);
+});
+
+test("a second Connect for the same account reports busy", async () => {
+  const flow = deferred();
+  const { manager } = await setup(connectable({ authorize: () => flow.promise }), undefined, {
+    credentials: memoryCredentials(),
+  });
+
+  const first = manager.connect("fake", "allowed");
+  assert.deepEqual(await manager.connect("fake", "allowed"), {
+    status: "failed",
+    errorCode: "busy",
+  });
+  flow.resolve({ accessToken: "a" });
+  assert.equal((await first).status, "connected");
+});
+
+test("connect refuses on policy or no account, and reports flow errors by code", async () => {
+  const credentials = memoryCredentials();
+  const refusing = await setup(connectable(), undefined, { credentials });
+  assert.deepEqual(await refusing.manager.connect("fake", "blocked"), {
+    status: "unavailable",
+    reason: "policy_blocked",
+  });
+
+  const signedOut = await setup(connectable(), undefined, {
+    credentials,
+    getAccountId: () => null,
+  });
+  assert.deepEqual(await signedOut.manager.connect("fake", "allowed"), {
+    status: "unavailable",
+    reason: "signed_out",
+  });
+
+  for (const [thrown, errorCode] of [
+    [Object.assign(new Error("OAuth flow timed out"), { code: "oauth_timeout" }), "oauth_timeout"],
+    [
+      Object.assign(new Error("x"), { redirectCode: "token_exchange_failed" }),
+      "token_exchange_failed",
+    ],
+    [new Error("GET https://slack.com/api/oauth.v2.access?code=secret failed"), "connect_failed"],
+  ]) {
+    const failing = await setup(
+      connectable({
+        async authorize() {
+          throw thrown;
+        },
+      }),
+      undefined,
+      { credentials }
+    );
+    assert.deepEqual(await failing.manager.connect("fake", "allowed"), {
+      status: "failed",
+      errorCode,
+    });
+  }
+  assert.equal(credentials.read("acct-1", "fake"), null);
+});
+
+test("disconnect revokes the stored login, clears it, cancels and announces; a failed revoke still disconnects", async () => {
+  const credentials = memoryCredentials(
+    { accessToken: "t", refreshToken: "r" },
+    { connectorId: "fake" }
+  );
+  const revoked = [];
+  const announced = [];
+  const { manager, log } = await setup(
+    connectable({
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials, onStatusChanged: (statuses) => announced.push(statuses) }
+  );
+  const prepared = await manager.prepare("fake", "post", { text: "hi" }, "allowed");
+
+  assert.deepEqual(await manager.disconnect("fake"), { status: "disconnected" });
+  assert.deepEqual(revoked, [{ accessToken: "t", refreshToken: "r" }]);
+  assert.equal(credentials.read("acct-1", "fake"), null);
+  assert.equal(log.rows.get(prepared.actionId).state, "cancelled");
+  assert.equal(announced.length, 1);
+
+  const offline = await setup(
+    connectable({
+      async revoke() {
+        throw new Error("offline");
+      },
+    }),
+    undefined,
+    { credentials: memoryCredentials({ accessToken: "t" }, { connectorId: "fake" }) }
+  );
+  assert.deepEqual(await offline.manager.disconnect("fake"), { status: "disconnected" });
+});
+
+test("a disconnect never deletes a login connected while it was revoking", async () => {
+  const credentials = memoryCredentials({ accessToken: "old" }, { connectorId: "fake" });
+  const revoking = deferred();
+  const { manager } = await setup(connectable({ revoke: () => revoking.promise }), undefined, {
+    credentials,
+  });
+
+  const disconnecting = manager.disconnect("fake");
+  credentials.replace("acct-1", "fake", { accessToken: "new" }, 1);
+  revoking.resolve();
+
+  assert.deepEqual(await disconnecting, { status: "failed", errorCode: "connection_changed" });
+  assert.equal(credentials.read("acct-1", "fake").credential.accessToken, "new");
+});
+
+test("disconnectAll disconnects every connector that can revoke", async () => {
+  const credentials = memoryCredentials({ accessToken: "t" }, { connectorId: "fake" });
+  const { manager } = await setup(connectable(), undefined, { credentials });
+  await manager.disconnectAll();
+  assert.equal(credentials.read("acct-1", "fake"), null);
+});
+
+test("only the newest status change is announced", async () => {
+  const announced = [];
+  const slowFirst = deferred();
+  let reads = 0;
+  const { manager } = await setup(
+    {
+      getStatus: () => {
+        reads += 1;
+        return reads === 1
+          ? slowFirst.promise
+          : Promise.resolve({ connected: false, accountLabel: null });
+      },
+    },
+    undefined,
+    { onStatusChanged: (statuses) => announced.push(statuses[0].connected) }
+  );
+
+  const older = manager.notifyStatusChanged();
+  const newer = manager.notifyStatusChanged();
+  await newer;
+  slowFirst.resolve({ connected: true, accountLabel: "chad" });
+  await older;
+
+  assert.deepEqual(announced, [false]);
+});
+
+test("a reconnect_needed result announces the status change", async () => {
+  const announced = [];
+  const { manager } = await setup(
+    {
+      async prepare() {
+        return { status: "failed", errorCode: "reconnect_needed", message: "Reconnect Slack." };
+      },
+    },
+    undefined,
+    { onStatusChanged: (statuses) => announced.push(statuses) }
+  );
+
+  await manager.prepare("fake", "post", { text: "hi" }, "allowed");
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(announced.length, 1);
 });

@@ -3900,6 +3900,14 @@
         "mailto": "Почтовое приложение по умолчанию"
       }
     },
+    "slack": {
+      "browser": {
+        "connectedTitle": "Slack подключён",
+        "connectedBody": "Вы можете закрыть эту вкладку и вернуться в OpenWhispr.",
+        "failedTitle": "Slack не был подключён",
+        "failedBody": "Вернитесь в OpenWhispr, чтобы попробовать снова."
+      }
+    },
     "recent": {
       "title": "Последние действия",
       "actions": {

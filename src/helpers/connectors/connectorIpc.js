@@ -120,6 +120,17 @@ function registerConnectorIpc({ ipcMain, manager, getPolicyState, findContacts }
     return manager.recentActions(connectorId, limit);
   });
 
+  ipcMain.handle("connector-connect", async (event, connectorId) => {
+    if (!isNonEmptyString(connectorId)) return { status: "unavailable", reason: "invalid_request" };
+    return manager.connect(connectorId, await getPolicyState(event));
+  });
+
+  // Removing access is always allowed, so disconnect skips the policy check.
+  ipcMain.handle("connector-disconnect", (_event, connectorId) => {
+    if (!isNonEmptyString(connectorId)) return { status: "unavailable", reason: "invalid_request" };
+    return manager.disconnect(connectorId);
+  });
+
   if (findContacts) {
     // The results go to the model (and its provider), so the org switch
     // applies here too, not just to actions that leave the device.

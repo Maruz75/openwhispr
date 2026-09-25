@@ -63,6 +63,16 @@ export interface ConnectorStatus {
   needsReconnect: boolean;
 }
 
+export type ConnectorConnectResult =
+  | { status: "connected"; accountLabel: string | null; workspaceLabel: string | null }
+  | { status: "failed"; errorCode: string }
+  | { status: "unavailable"; reason: string };
+
+export type ConnectorDisconnectResult =
+  | { status: "disconnected" }
+  | { status: "failed"; errorCode: string }
+  | { status: "unavailable"; reason: string };
+
 export type ConnectorActionState =
   "pending" | "committing" | "sent" | "failed" | "unknown" | "cancelled" | "expired";
 

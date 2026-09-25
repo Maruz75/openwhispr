@@ -692,6 +692,8 @@ class IPCHandlers {
         generation,
         hasToken: Boolean(token),
       });
+      // A sign-out or another account changes whose login shows.
+      void this.connectorManager?.notifyStatusChanged();
     });
 
     if (this.whisperManager?.serverManager) {
@@ -2214,6 +2216,7 @@ class IPCHandlers {
         "active-account-scope-changed",
         accountId !== null ? { accountId, authGeneration: state.generation } : null
       );
+      void this.connectorManager?.notifyStatusChanged();
       return { success: true };
     });
 
@@ -2239,6 +2242,8 @@ class IPCHandlers {
         };
       }
       try {
+        // Best effort; each revoke has a 5s deadline (connectorManager.js).
+        await this.connectorManager?.disconnectAll();
         const result = this.databaseManager.deleteAccountData(accountId);
         this.notifyVectorChanges();
         for (const noteId of result.deletedNoteIds) {

@@ -748,6 +748,14 @@
         "mailto": "تطبيق البريد الافتراضي"
       }
     },
+    "slack": {
+      "browser": {
+        "connectedTitle": "تم توصيل Slack",
+        "connectedBody": "يمكنك إغلاق هذا التبويب والعودة إلى OpenWhispr.",
+        "failedTitle": "لم يتم توصيل Slack",
+        "failedBody": "عد إلى OpenWhispr للمحاولة مرة أخرى."
+      }
+    },
     "recent": {
       "title": "الإجراءات الأخيرة",
       "actions": {

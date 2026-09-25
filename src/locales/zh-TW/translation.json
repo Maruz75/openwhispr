@@ -3856,6 +3856,14 @@
         "mailto": "預設郵件應用程式"
       }
     },
+    "slack": {
+      "browser": {
+        "connectedTitle": "Slack 已連接",
+        "connectedBody": "您可以關閉此分頁並返回 OpenWhispr。",
+        "failedTitle": "Slack 未連接",
+        "failedBody": "請返回 OpenWhispr 重試。"
+      }
+    },
     "recent": {
       "title": "近期操作",
       "actions": {
