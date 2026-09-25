@@ -4190,7 +4190,11 @@
       "voiceModelsMissing": "La conversazione vocale richiede i suoi modelli vocali. Scaricali dalle Impostazioni.",
       "speechModelMissing": "La conversazione vocale richiede un modello vocale Parakeet. Scaricane uno in Impostazioni → Da voce a testo.",
       "brainNotDownloaded": "Il modello locale dell'Assistente vocale non è ancora stato scaricato.",
-      "workerStopped": "La conversazione vocale si è interrotta perché il suo motore vocale si è chiuso in modo imprevisto. Premi la scorciatoia per ricominciare."
+      "workerStopped": "La conversazione vocale si è interrotta perché il suo motore vocale si è chiuso in modo imprevisto. Premi la scorciatoia per ricominciare.",
+      "micDenied": "La conversazione vocale non può usare il microfono. Consenti l'accesso al microfono per OpenWhispr nelle impostazioni di sistema.",
+      "startFailed": "Impossibile avviare la conversazione vocale. Riprova.",
+      "transcriptionFailed": "Impossibile trascrivere. Prova a ripeterlo.",
+      "brainSignInRequired": "Accedi per usare OpenWhispr Cloud nella conversazione vocale, oppure scegli un modello locale per l'Assistente vocale."
     }
   }
 }

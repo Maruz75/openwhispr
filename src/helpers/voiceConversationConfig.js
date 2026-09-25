@@ -1,10 +1,13 @@
 const VAD_SAMPLE_RATE = 16000;
 const SMART_TURN_PAUSE_MS = 200;
 const SMART_TURN_MAX_SILENCE_MS = 1200;
+const SMART_TURN_MAX_TURN_MS = 30000;
 
 /**
  * Silero cuts at a short pause and Smart Turn decides whether the turn is over;
- * max silence commits the turn when the classifier keeps saying no.
+ * max silence commits the turn when the classifier keeps saying no. Background
+ * speech (a TV, people nearby) can keep every gap under max silence, so max turn
+ * commits at the next pause rather than growing one turn without bound.
  */
 function buildVoiceWorkerConfig({ modelPaths, numThreads = 4 }) {
   const { lmFlow, lmMain, encoder, decoder, textConditioner, vocabJson, tokenScoresJson } =
@@ -13,6 +16,7 @@ function buildVoiceWorkerConfig({ modelPaths, numThreads = 4 }) {
     smartTurn: {
       model: modelPaths.smartTurn,
       maxSilenceMs: SMART_TURN_MAX_SILENCE_MS,
+      maxTurnMs: SMART_TURN_MAX_TURN_MS,
       // Pipecat uses 0.5; offline, 0.8 kept the same turn-end speed with fewer mid-sentence cuts.
       threshold: 0.8,
       numThreads: 4,
@@ -64,7 +68,10 @@ function float32ToPcm16Buffer(samples) {
   const buffer = Buffer.alloc(samples.length * 2);
   for (let index = 0; index < samples.length; index += 1) {
     const clamped = Math.max(-1, Math.min(1, samples[index]));
-    buffer.writeInt16LE(clamped < 0 ? Math.round(clamped * 32768) : Math.round(clamped * 32767), index * 2);
+    buffer.writeInt16LE(
+      clamped < 0 ? Math.round(clamped * 32768) : Math.round(clamped * 32767),
+      index * 2
+    );
   }
   return buffer;
 }

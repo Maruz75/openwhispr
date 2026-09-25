@@ -71,10 +71,19 @@ function getVoiceModelPaths(modelsDir = getVoiceModelsDir()) {
   };
 }
 
+// An archive is extracted beside its download (Pocket's ~98 MB unpacks to
+// ~200 MB), so reserve three times the download size.
+const DISK_SPACE_FACTOR = 3;
+
 function defaultDeps() {
+  const logger = require("./debugLogger");
+  const { downloadFile, checkDiskSpace } = require("./downloadUtils");
+  const { extractTarBz2 } = require("./systemTar");
   return {
-    downloadFile: require("./downloadUtils").downloadFile,
-    extractTarBz2: require("./systemTar").extractTarBz2,
+    downloadFile,
+    checkDiskSpace,
+    extractTarBz2: (archivePath, destDir) => extractTarBz2(archivePath, destDir, { logger }),
+    logger,
   };
 }
 
@@ -84,39 +93,69 @@ function findMissingFile(model, rootDir) {
   return model.requiredFiles.find((file) => !fs.existsSync(path.join(rootDir, file)));
 }
 
+// Windows refuses to delete a file another process holds open (EBUSY). A
+// leftover is cleared by a later run, so cleanup must never turn a finished
+// install into a failure, or replace the error that made it fail.
+function removeBestEffort(target, logger) {
+  try {
+    fs.rmSync(target, { recursive: true, force: true });
+  } catch (error) {
+    logger.warn("Voice model cleanup failed", { path: target, error: error.message });
+  }
+}
+
 // Status only checks that files exist, so an archive must never be extracted
 // in place: a crash mid-write would leave every file present and one truncated
 // (reported ready, then the worker fails), and a status check during
 // extraction could see it ready early. Extract beside the target, verify, then
 // swap the whole directory in with one rename.
-async function extractArchiveModel(model, archivePath, modelsDir, extractTarBz2) {
+async function extractArchiveModel(
+  model,
+  archivePath,
+  modelsDir,
+  { extractTarBz2, signal, logger }
+) {
   const stagingDir = path.join(modelsDir, `${stagingPrefix(model)}${process.pid}-${Date.now()}`);
   fs.mkdirSync(stagingDir, { recursive: true });
   try {
     await extractTarBz2(archivePath, stagingDir);
+    // Extraction doesn't watch the signal, so a cancel during it lands here.
+    if (signal?.aborted) {
+      throw Object.assign(new Error("Download cancelled"), { isAbort: true });
+    }
     const missingFile = findMissingFile(model, stagingDir);
     if (missingFile) {
       throw new Error(`${model.id}: download finished but ${missingFile} is missing`);
     }
     const targetDir = path.join(modelsDir, model.target);
     if (fs.existsSync(targetDir)) {
-      // An incomplete earlier copy; moved into staging so the finally drops it.
+      // An incomplete earlier copy; moved into staging so the cleanup drops it.
       fs.renameSync(targetDir, path.join(stagingDir, "previous"));
     }
     fs.renameSync(path.join(stagingDir, model.target), targetDir);
   } finally {
-    fs.rmSync(stagingDir, { recursive: true, force: true });
+    removeBestEffort(stagingDir, logger);
   }
 }
 
-// A crash skips the finally above; clear staging left by an earlier process.
-function removeStaleStaging(modelsDir) {
-  const ownPrefixes = VOICE_MODELS.filter((model) => model.archive).map(stagingPrefix);
-  const ownPid = `${process.pid}-`;
+function isProcessRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+
+// A crash skips the cleanup above, so clear staging whose process is gone.
+// Staging owned by a live process (a second instance, or the dev download
+// script beside the app) may still be mid-extraction.
+function removeStaleStaging(modelsDir, logger) {
+  const prefixes = VOICE_MODELS.filter((model) => model.archive).map(stagingPrefix);
   for (const name of fs.readdirSync(modelsDir)) {
-    const prefix = ownPrefixes.find((candidate) => name.startsWith(candidate));
-    if (prefix && !name.slice(prefix.length).startsWith(ownPid)) {
-      fs.rmSync(path.join(modelsDir, name), { recursive: true, force: true });
+    const prefix = prefixes.find((candidate) => name.startsWith(candidate));
+    if (prefix && !isProcessRunning(Number.parseInt(name.slice(prefix.length), 10))) {
+      removeBestEffort(path.join(modelsDir, name), logger);
     }
   }
 }
@@ -128,9 +167,17 @@ async function downloadVoiceModels({
   onProgress = () => {},
   deps = {},
 } = {}) {
-  const { downloadFile, extractTarBz2 } = { ...defaultDeps(), ...deps };
+  const { downloadFile, extractTarBz2, checkDiskSpace, logger } = { ...defaultDeps(), ...deps };
   fs.mkdirSync(modelsDir, { recursive: true });
-  removeStaleStaging(modelsDir);
+  removeStaleStaging(modelsDir, logger);
+  const requiredBytes = getVoiceModelStatus(modelsDir).missingBytes * DISK_SPACE_FACTOR;
+  const spaceCheck = await checkDiskSpace(modelsDir, requiredBytes);
+  if (!spaceCheck.ok) {
+    throw new Error(
+      `Not enough disk space. Need ~${Math.round(requiredBytes / 1_000_000)}MB, ` +
+        `only ${Math.round(spaceCheck.availableBytes / 1_000_000)}MB available.`
+    );
+  }
   for (const model of VOICE_MODELS) {
     if (isPresent(model, modelsDir, fs.existsSync)) continue;
     // Single-file models land atomically: downloadFile writes `${dest}.tmp`
@@ -143,9 +190,9 @@ async function downloadVoiceModels({
     });
     if (model.archive) {
       try {
-        await extractArchiveModel(model, dest, modelsDir, extractTarBz2);
+        await extractArchiveModel(model, dest, modelsDir, { extractTarBz2, signal, logger });
       } finally {
-        fs.rmSync(dest, { force: true });
+        removeBestEffort(dest, logger);
       }
     }
     const missingFile = findMissingFile(model, modelsDir);

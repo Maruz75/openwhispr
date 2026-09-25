@@ -464,7 +464,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     speak: (request) => ipcRenderer.invoke("voice-conversation:speak", request),
     cancelSpeech: (utteranceId) =>
       ipcRenderer.invoke("voice-conversation:cancel-speech", { utteranceId }),
-    stop: () => ipcRenderer.invoke("voice-conversation:stop"),
+    stop: (sessionId) => ipcRenderer.invoke("voice-conversation:stop", sessionId),
     getReadiness: (request) => ipcRenderer.invoke("voice-conversation:get-readiness", request),
     downloadModels: () => ipcRenderer.invoke("voice-conversation:download-models"),
     cancelModelDownload: () => ipcRenderer.invoke("voice-conversation:cancel-download"),

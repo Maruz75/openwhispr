@@ -34,6 +34,7 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
    - Renderer Process: React app with context isolation
    - Preload Script: Secure bridge between processes
    - ONNX Utility Process: hosts all `onnxruntime-node` inference (text embeddings, speaker embeddings, fbank). Lazy-spawned on first use via `src/helpers/onnxWorkerClient.js` → `src/workers/onnxWorker.js`. Native crashes (e.g., ORT `bad_alloc`) confine to the worker; main process rejects in-flight requests and respawns with backoff. A request that times out kills the worker so it respawns the same way; the embedding clients reload their sessions on the new worker. Exits once idle with no session loaded (`releaseIfIdle`, after semantic search releases its model). Stopped in `will-quit`.
+   - Voice Utility Process: hosts the hands-free voice conversation's audio models (Silero VAD, Smart Turn via onnxruntime-web, Pocket TTS via sherpa-onnx-node). Spawned by the first session via `src/helpers/voiceWorkerClient.js` → `src/workers/voiceWorker.js`, stopped 5 minutes after the last session ends and in `will-quit`. `src/helpers/voiceConversationIpc.js` owns the session and reports it to `windowManager.setVoiceConversationActive()`, which holds dictation and meeting prompts off while it runs.
 
 3. **Audio Pipeline**:
    - MediaRecorder API → Blob → ArrayBuffer → IPC → File → whisper.cpp

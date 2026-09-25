@@ -9,16 +9,15 @@ const {
   installHookDom,
 } = require("../lib/rendererTestHarness");
 
-// Task 5 / controller ruling R4: the tool registry is cached in toolRegistryRef
-// under a cache key built from settings alone. voiceReplies changes which tools
-// the registry may offer (voice turns exclude update_snippets — see
-// voiceToolPolicy.ts), but voiceReplies isn't a "settings" value, so a registry
-// built for a typed turn (no exclusion) could get reused for a later voice turn
-// on the SAME hook instance, unless voiceReplies is folded into the cache key.
+// The tool registry is cached in toolRegistryRef under a cache key built from
+// settings alone. A voice turn changes which tools the registry may offer (voice
+// turns exclude update_snippets — see voiceToolPolicy.ts), but that isn't a
+// "settings" value, so a registry built for a typed turn (no exclusion) could get
+// reused for a later voice turn on the SAME hook instance, unless the voice flag
+// is folded into the cache key.
 //
-// This drives the real hook across two renders of the same component instance
-// (refs, including toolRegistryRef, persist across a re-render) so the second
-// sendToAI call sees whatever registry the first call's cache entry left behind.
+// This drives the real hook through two sends on the same instance, so the
+// second sendToAI call sees whatever registry the first call's cache entry left.
 test("a typed turn's cached registry is not reused for a later voice turn (update_snippets stays excluded)", async (t) => {
   // Registered before installBrowserGlobals/installHookDom so it runs first on
   // cleanup (Node's t.after runs in registration order) — the root must unmount
@@ -73,16 +72,20 @@ test("a typed turn's cached registry is not reused for a later voice turn (updat
     messages = typeof updater === "function" ? updater(messages) : updater;
   };
   const toolsAvailableCalls = [];
-  const options = { voiceReplies: false };
+  const voiceTap = {
+    onContentDelta() {},
+    onResponseDone() {},
+    onToolCall() {},
+    onToolsAvailable: (toolNames) => toolsAvailableCalls.push(toolNames),
+    onWriteToolResult() {},
+    dryRunWrites: false,
+    brainOverride: null,
+    cancelRef: { current: null },
+  };
 
   let captured = null;
   function Harness() {
-    captured = useChatStreaming({
-      messages,
-      setMessages,
-      voiceReplies: options.voiceReplies,
-      onToolsAvailable: (toolNames) => toolsAvailableCalls.push(toolNames),
-    });
+    captured = useChatStreaming({ messages, setMessages });
     return null;
   }
 
@@ -92,18 +95,14 @@ test("a typed turn's cached registry is not reused for a later voice turn (updat
   unmount = () => React.act(async () => root.unmount());
 
   // First turn: typed chat. Populates toolRegistryRef's cache with a registry
-  // that has NOT excluded update_snippets (voiceReplies was false when built).
+  // that has NOT excluded update_snippets.
   await React.act(async () => {
     await captured.sendToAI("edit my snippets", []);
   });
   assert.deepEqual(toolsAvailableCalls, [], "onToolsAvailable only fires for voice turns");
 
-  // Re-render the SAME component instance as a voice turn — refs (including
-  // toolRegistryRef) persist across this re-render, only their values change.
-  options.voiceReplies = true;
-  await React.act(async () => root.render(React.createElement(Harness)));
   await React.act(async () => {
-    await captured.sendToAI("read my snippet back", []);
+    await captured.sendToAI("read my snippet back", [], { voiceTap });
   });
 
   assert.equal(toolsAvailableCalls.length, 1);

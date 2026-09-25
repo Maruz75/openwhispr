@@ -11,7 +11,10 @@ const { prepareVoiceDependencies, requiredSherpaPackages } = require("../../scri
 
 // Linux/Windows resolve resources to <appOutDir>/resources; macOS to
 // <App>.app/Contents/Resources when appOutDir already ends in .app.
-function makeApp(t, { platform, arch, sherpaPackages, wasm = true }) {
+function makeApp(
+  t,
+  { platform, arch, sherpaPackages, wasm = true, peImages = platform === "win32" }
+) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "afterpack-voice-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const appOutDir = platform === "darwin" ? path.join(root, "OpenWhispr.app") : root;
@@ -24,7 +27,7 @@ function makeApp(t, { platform, arch, sherpaPackages, wasm = true }) {
   for (const name of sherpaPackages) {
     const dir = path.join(modulesDir, name);
     fs.mkdirSync(dir);
-    if (platform === "win32") {
+    if (peImages) {
       fs.writeFileSync(
         path.join(dir, "onnxruntime.dll"),
         buildPeImage({ imports: ["KERNEL32.dll"] })
@@ -111,7 +114,7 @@ test("fails when the Smart Turn WASM was not unpacked", (t) => {
   assert.throws(() => prepareVoiceDependencies(context), /ort-wasm-simd-threaded\.wasm/);
 });
 
-test("privatizes ONNX Runtime in the target package only on Windows", (t) => {
+test("privatizes ONNX Runtime in the target Windows package", (t) => {
   const { context, modulesDir } = makeApp(t, {
     platform: "win32",
     arch: "x64",
@@ -130,3 +133,24 @@ test("privatizes ONNX Runtime in the target package only on Windows", (t) => {
   const other = path.join(modulesDir, "sherpa-onnx-win-ia32");
   assert.equal(fs.existsSync(path.join(other, "onnxruntime.dll")), true);
 });
+
+// The fixtures are valid PE images importing onnxruntime.dll, so privatizing
+// would succeed here if it ran: only the platform gate keeps them unchanged.
+for (const platform of ["darwin", "linux"]) {
+  test(`leaves the sherpa package untouched on ${platform}`, (t) => {
+    const name = `sherpa-onnx-${platform}-arm64`;
+    const { context, modulesDir } = makeApp(t, {
+      platform,
+      arch: "arm64",
+      sherpaPackages: [name],
+      peImages: true,
+    });
+    const dir = path.join(modulesDir, name);
+    const addonBefore = fs.readFileSync(path.join(dir, "sherpa-onnx.node"));
+
+    prepareVoiceDependencies(context);
+
+    assert.deepEqual(fs.readdirSync(dir).sort(), ["onnxruntime.dll", "sherpa-onnx.node"]);
+    assert.deepEqual(fs.readFileSync(path.join(dir, "sherpa-onnx.node")), addonBefore);
+  });
+}

@@ -39,6 +39,9 @@ async function mountVoiceConversation(t, { settings = {} } = {}) {
     micStops: 0,
     playerCloses: 0,
     errors: [],
+    stopIds: [],
+    spoken: [],
+    player: [],
   };
   const events = { emit: () => {} };
   const pending = { readiness: [], start: [], mic: [] };
@@ -62,14 +65,18 @@ async function mountVoiceConversation(t, { settings = {} } = {}) {
       pending.start.push(next);
       return next.promise;
     },
-    stop: async () => {
+    stop: async (sessionId) => {
       calls.stops += 1;
+      calls.stopIds.push(sessionId);
       return { stopped: true };
     },
     sendMic: () => {},
     keepModelWarm: async () => {},
     cancelSpeech: async () => {},
-    speak: async () => ({}),
+    speak: async ({ text }) => {
+      calls.spoken.push(text);
+      return {};
+    },
     reportTurn: () => {},
     reportTurnEvent: () => {},
   };
@@ -89,7 +96,9 @@ async function mountVoiceConversation(t, { settings = {} } = {}) {
     },
     createPcmPlayer: () => ({
       enqueue() {},
-      flush() {},
+      flush: () => calls.player.push("flush"),
+      pause: () => calls.player.push("pause"),
+      resume: () => calls.player.push("resume"),
       isPlaying: () => false,
       close: async () => {
         calls.playerCloses += 1;
@@ -164,18 +173,29 @@ async function mountVoiceConversation(t, { settings = {} } = {}) {
     return mic;
   };
   const startListening = async () => {
-    await act(() => hook.current.toggle());
+    await act(() => void hook.current.toggle());
     await act(() => pending.readiness.at(-1).resolve({ ready: true }));
-    await act(() => pending.start.at(-1).resolve({ sampleRate: 24000 }));
+    await act(() => pending.start.at(-1).resolve({ sessionId: 7, sampleRate: 24000 }));
     await act(() => pending.mic.at(-1).resolve(openMic()));
   };
-  return { hook, calls, pending, act, openMic, events, startListening };
+  const say = (text) =>
+    act(() =>
+      events.emit({
+        type: "transcript",
+        text,
+        speechMs: 900,
+        sttMs: 80,
+        endedAt: 0,
+        endpoint: null,
+      })
+    );
+  return { hook, calls, pending, act, openMic, events, startListening, say };
 }
 
 test("stop while readiness is pending: the start never opens anything", async (t) => {
   const { hook, calls, pending, act } = await mountVoiceConversation(t);
 
-  await act(() => hook.current.toggle());
+  await act(() => void hook.current.toggle());
   assert.equal(hook.current.state, "starting");
   await act(() => hook.current.stop());
   await act(() => pending.readiness[0].resolve({ ready: true }));
@@ -188,7 +208,7 @@ test("stop while readiness is pending: the start never opens anything", async (t
 test("stop while the main session is starting: that session is stopped once it exists", async (t) => {
   const { hook, calls, pending, act } = await mountVoiceConversation(t);
 
-  await act(() => hook.current.toggle());
+  await act(() => void hook.current.toggle());
   await act(() => pending.readiness[0].resolve({ ready: true }));
   assert.equal(calls.starts, 1);
   await act(() => hook.current.stop());
@@ -203,7 +223,7 @@ test("stop while the main session is starting: that session is stopped once it e
 test("stop while the mic is opening: the mic is closed, not leaked on the next press", async (t) => {
   const { hook, calls, pending, act, openMic } = await mountVoiceConversation(t);
 
-  await act(() => hook.current.toggle());
+  await act(() => void hook.current.toggle());
   await act(() => pending.readiness[0].resolve({ ready: true }));
   await act(() => pending.start[0].resolve({ sampleRate: 24000 }));
   assert.equal(calls.micOpens, 1);
@@ -215,7 +235,7 @@ test("stop while the mic is opening: the mic is closed, not leaked on the next p
   assert.equal(hook.current.state, "off");
 
   // The next press starts a fresh session; stopping it closes only its own mic.
-  await act(() => hook.current.toggle());
+  await act(() => void hook.current.toggle());
   await act(() => pending.readiness[1].resolve({ ready: true }));
   await act(() => pending.start[1].resolve({ sampleRate: 24000 }));
   await act(() => pending.mic[1].resolve(openMic()));
@@ -229,17 +249,17 @@ test("stop while the mic is opening: the mic is closed, not leaked on the next p
 test("a start cancelled by stop and replaced by a new start leaves the new session alone", async (t) => {
   const { hook, calls, pending, act, openMic } = await mountVoiceConversation(t);
 
-  await act(() => hook.current.toggle());
+  await act(() => void hook.current.toggle());
   await act(() => pending.readiness[0].resolve({ ready: true }));
   await act(() => hook.current.stop());
-  await act(() => hook.current.toggle());
-  const stopsWithNewStartActive = calls.stops;
-  await act(() => pending.start[0].resolve({ sampleRate: 24000 }));
+  await act(() => void hook.current.toggle());
+  await act(() => pending.start[0].resolve({ sessionId: 1, sampleRate: 24000 }));
 
-  assert.equal(calls.stops, stopsWithNewStartActive, "the old start must not stop main's session");
+  // The old start ends only the session it opened; main ignores it once another is running.
+  assert.equal(calls.stopIds.at(-1), 1);
 
   await act(() => pending.readiness[1].resolve({ ready: true }));
-  await act(() => pending.start[1].resolve({ sampleRate: 24000 }));
+  await act(() => pending.start[1].resolve({ sessionId: 2, sampleRate: 24000 }));
   await act(() => pending.mic[0].resolve(openMic()));
   assert.equal(calls.micOpens, 1);
   assert.equal(hook.current.state, "listening");
@@ -285,7 +305,102 @@ test("voice turns use the speech model dictation already runs", async (t) => {
     settings: { localTranscriptionProvider: "cohere", parakeetModel: "parakeet-tdt-0.6b-v3" },
   });
 
-  await act(() => hook.current.toggle());
+  await act(() => void hook.current.toggle());
 
   assert.equal(calls.readiness[0].parakeetModel, "cohere-transcribe-03-2026");
+});
+
+test("talking over an answer pauses it; a sound that transcribes to nothing lets it carry on", async (t) => {
+  const { hook, calls, act, events, startListening, say } = await mountVoiceConversation(t);
+  await startListening();
+  let cancelled = 0;
+  await say("tell me a long story");
+  hook.current.speechTap.cancelRef.current = () => (cancelled += 1);
+
+  await act(() => events.emit({ type: "speech-start", at: 0 }));
+  assert.deepEqual(calls.player, ["pause"]);
+  await say("");
+  assert.deepEqual(calls.player, ["pause", "resume"]);
+  assert.equal(cancelled, 0, "a cough doesn't cancel the answer");
+
+  await act(() => events.emit({ type: "speech-start", at: 0 }));
+  await say("stop, that's enough");
+  assert.equal(cancelled, 1, "words interrupt it for real");
+  assert.equal(calls.player.at(-1), "flush");
+});
+
+test("an answer that claims an action no tool took is corrected out loud", async (t) => {
+  const { hook, calls, act, startListening, say } = await mountVoiceConversation(t);
+  await startListening();
+  await say("add Kubernetes to my dictionary");
+
+  await act(() =>
+    hook.current.speechTap.onContentDelta("I've added Kubernetes to your dictionary.")
+  );
+  await act(() => hook.current.speechTap.onResponseDone());
+
+  assert.equal(calls.spoken.at(-1), "Sorry, I didn't actually do that. Want me to try again?");
+});
+
+test("a refused start shows the translated reason and reports it never started", async (t) => {
+  const { hook, calls, pending, act } = await mountVoiceConversation(t);
+  let started;
+  await act(() => {
+    started = hook.current.toggle();
+  });
+  await act(() => pending.readiness[0].resolve({ ready: false, reason: "language-unsupported" }));
+
+  assert.equal(await started, false);
+  assert.deepEqual(calls.errors, ["voiceConversation.errors.languageUnsupported"]);
+  assert.equal(hook.current.state, "off");
+});
+
+test("a denied microphone shows a translated message, not the browser's", async (t) => {
+  const { hook, calls, pending, act } = await mountVoiceConversation(t);
+  await act(() => void hook.current.toggle());
+  await act(() => pending.readiness[0].resolve({ ready: true }));
+  await act(() => pending.start[0].resolve({ sessionId: 3, sampleRate: 24000 }));
+  await act(() =>
+    pending.mic[0].reject(
+      Object.assign(new Error("Permission denied"), { name: "NotAllowedError" })
+    )
+  );
+
+  assert.deepEqual(calls.errors, ["voiceConversation.errors.micDenied"]);
+  assert.deepEqual(calls.stopIds, [3], "only the session this start opened is stopped");
+  assert.equal(hook.current.state, "off");
+});
+
+test("stop names the session it ends, so a late stop can't end a newer one", async (t) => {
+  const { hook, calls, act, startListening } = await mountVoiceConversation(t);
+  await startListening();
+  await act(() => hook.current.stop());
+  assert.deepEqual(calls.stopIds, [7]);
+});
+
+test("an idle session stops after 2.5 minutes, but not while an answer is in progress", async (t) => {
+  const { hook, act, startListening, say } = await mountVoiceConversation(t);
+  t.mock.timers.enable({ apis: ["setInterval", "Date"], now: 0 });
+  await startListening();
+
+  await say("what's the weather");
+  await act(() => t.mock.timers.tick(200_000));
+  assert.notEqual(hook.current.state, "off", "a turn in progress keeps the session");
+
+  await act(() => hook.current.speechTap.onResponseDone());
+  await act(() => t.mock.timers.tick(150_000));
+  assert.equal(hook.current.state, "off");
+});
+
+test("a paused answer that ends with nothing to say un-pauses the player for the next one", async (t) => {
+  const { hook, calls, act, events, startListening, say } = await mountVoiceConversation(t);
+  await startListening();
+  await say("what's on today");
+  await act(() => events.emit({ type: "speech-start", at: 0 }));
+  assert.deepEqual(calls.player, ["pause"]);
+
+  // The answer fails (or is empty) while the user is still talking.
+  await act(() => hook.current.speechTap.onResponseDone());
+
+  assert.deepEqual(calls.player, ["pause", "resume"]);
 });

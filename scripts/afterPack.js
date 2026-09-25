@@ -21,11 +21,9 @@ const { buildLinuxWrapperScript } = require("./lib/linux-launcher");
 const {
   WINDOWS_ONNXRUNTIME_PRIVATE_NAME,
   WINDOWS_ONNXRUNTIME_UPSTREAM_NAME,
-} = require("./download-sherpa-onnx");
-const {
   privatizeOnnxRuntimeDir,
   verifyOnnxRuntimePrivatizedDir,
-} = require("./lib/privatize-onnxruntime");
+} = require("./download-sherpa-onnx");
 
 // ---------------------------------------------------------------------------
 // macOS resource binary signing
@@ -329,16 +327,16 @@ function prepareVoiceDependencies(context) {
   }
   const wasmPath = path.join(modulesDir, "onnxruntime-web", "dist", "ort-wasm-simd-threaded.wasm");
   if (!fs.existsSync(wasmPath)) {
-    throw new Error(`afterPack: missing ${wasmPath}; Smart Turn would fall back to silence-only turns`);
+    throw new Error(
+      `afterPack: missing ${wasmPath}; Smart Turn would fall back to silence-only turns`
+    );
   }
   if (context.electronPlatformName === "win32") {
     for (const name of sherpaDirs) {
       const dir = path.join(modulesDir, name);
-      const { patched } = privatizeOnnxRuntimeDir(dir);
-      console.log(
-        `  afterPack: privatized ONNX Runtime in ${name} (patched ${patched.join(", ") || "nothing"})`
-      );
+      privatizeOnnxRuntimeDir(dir);
       verifyOnnxRuntimePrivatizedDir(dir);
+      console.log(`  afterPack: ${name} loads ${WINDOWS_ONNXRUNTIME_PRIVATE_NAME}`);
     }
   }
 }

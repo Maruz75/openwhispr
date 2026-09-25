@@ -8,6 +8,18 @@ const {
   resolveVoiceParakeetModel,
 } = require("../../src/helpers/voiceConversationConfig");
 const { getVoiceModelPaths } = require("../../src/helpers/voiceModels");
+const { createConfiguredTurnEndpointer } = require("../../src/helpers/voiceTurnEndpointer");
+
+const ms = (value) => (value * 16000) / 1000;
+const segment = (startMs, lengthMs) => ({
+  startSample: ms(startMs),
+  samples: new Float32Array(ms(lengthMs)),
+});
+const workerEndpointer = (classifierLoaded) =>
+  createConfiguredTurnEndpointer({
+    smartTurnConfig: buildVoiceWorkerConfig({ modelPaths: getVoiceModelPaths("/m") }).smartTurn,
+    classifierLoaded,
+  });
 
 test("keeps the requested Parakeet model when it is downloaded", () => {
   const downloaded = new Set(["parakeet-tdt-0.6b-v3", "parakeet-unified-en-0.6b"]);
@@ -30,7 +42,10 @@ test("falls back to the first downloaded candidate when the requested model is m
 });
 
 test("returns the requested model when nothing is downloaded, so the error names it", () => {
-  assert.equal(resolveVoiceParakeetModel("parakeet-tdt-0.6b-v3", () => false), "parakeet-tdt-0.6b-v3");
+  assert.equal(
+    resolveVoiceParakeetModel("parakeet-tdt-0.6b-v3", () => false),
+    "parakeet-tdt-0.6b-v3"
+  );
 });
 
 test("config uses Pocket and Smart Turn from the voice models directory", () => {
@@ -43,6 +58,7 @@ test("config uses Pocket and Smart Turn from the voice models directory", () => 
   assert.deepEqual(config.smartTurn, {
     model: path.join("/m", "smart-turn-v3.2-cpu.onnx"),
     maxSilenceMs: 1200,
+    maxTurnMs: 30000,
     threshold: 0.8,
     numThreads: 4,
   });
@@ -50,6 +66,47 @@ test("config uses Pocket and Smart Turn from the voice models directory", () => 
   assert.equal(config.tts.model.kokoro, undefined);
   assert.equal(config.pocketVoiceWav, modelPaths.pocket.referenceVoiceWav);
   assert.equal(config.ttsKind, undefined);
+});
+
+test("the worker's endpointer commits a Smart Turn endpoint only above 0.8", () => {
+  const endpointer = workerEndpointer(true);
+  const [first] = endpointer.onSegment({ ...segment(1000, 800), nowSample: ms(2000) });
+  assert.deepEqual(
+    endpointer.onPrediction({ requestId: first.requestId, probability: 0.79, nowSample: ms(2050) }),
+    []
+  );
+  endpointer.onSpeechStart();
+  const [second] = endpointer.onSegment({ ...segment(2400, 600), nowSample: ms(3200) });
+  const [commit] = endpointer.onPrediction({
+    requestId: second.requestId,
+    probability: 0.81,
+    nowSample: ms(3250),
+  });
+  assert.equal(commit.reason, "smart-turn");
+});
+
+test("the worker's endpointer commits by 1.2 s of silence", () => {
+  const endpointer = workerEndpointer(true);
+  endpointer.onSegment({ ...segment(1000, 800), nowSample: ms(2000) });
+  assert.deepEqual(endpointer.advance(ms(2999)), []);
+  assert.equal(endpointer.advance(ms(3000))[0].reason, "max-silence");
+});
+
+test("the worker's endpointer caps a turn at 30 s of speech", () => {
+  const endpointer = workerEndpointer(true);
+  assert.equal(
+    endpointer.onSegment({ ...segment(0, 20000), nowSample: ms(20200) })[0].type,
+    "classify"
+  );
+  endpointer.onSpeechStart();
+  const [commit] = endpointer.onSegment({ ...segment(21000, 10000), nowSample: ms(31200) });
+  assert.equal(commit.reason, "max-turn");
+});
+
+test("without the classifier the worker's endpointer commits every pause", () => {
+  const endpointer = workerEndpointer(false);
+  const [commit] = endpointer.onSegment({ ...segment(1000, 800), nowSample: ms(2000) });
+  assert.equal(commit.reason, "silence");
 });
 
 test("float32ToPcm16Buffer clamps and scales samples little-endian", () => {

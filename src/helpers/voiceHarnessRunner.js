@@ -31,6 +31,10 @@ const BARGE_IN_AFTER_AUDIO_MS = 1200;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Reports for turns that ended before `since`: a late report from a timed-out
+// scenario must not be filed under the next one.
+const turnReportSince = (since) => (report) => report?.endedAt >= since;
+
 function waitFor(emitter, event, timeoutMs, predicate = () => true) {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
@@ -105,6 +109,7 @@ async function runVoiceHarness({ voiceWorker, conversationEvents, getSession, se
   const started = await waitFor(conversationEvents, "session-started", 120_000);
   if (!started) {
     debugLogger.error("voice harness: no voice session started within 2 minutes");
+    quitIfAsked();
     return null;
   }
   const session = getSession();
@@ -125,19 +130,40 @@ async function runVoiceHarness({ voiceWorker, conversationEvents, getSession, se
   const results = [];
   for (const [index, scenario] of HARNESS_SCENARIOS.entries()) {
     debugLogger.info("voice harness: scenario", { id: scenario.id, say: scenario.say });
-    const report = waitFor(conversationEvents, "turn-report", TURN_TIMEOUT_MS);
+    const report = waitFor(
+      conversationEvents,
+      "turn-report",
+      TURN_TIMEOUT_MS,
+      turnReportSince(Date.now())
+    );
     if (!scenario.bargeIn) {
       await playIntoVad(voiceWorker, audio[index].main);
       results.push(toResult(scenario, await report));
     } else {
-      const firstAudio = waitFor(conversationEvents, "turn-event", TURN_TIMEOUT_MS, (e) => e.type === "first-audio");
+      const firstAudio = waitFor(
+        conversationEvents,
+        "turn-event",
+        TURN_TIMEOUT_MS,
+        (e) => e.type === "first-audio"
+      );
       await playIntoVad(voiceWorker, audio[index].main);
       await firstAudio;
       await delay(BARGE_IN_AFTER_AUDIO_MS);
-      const flushed = waitFor(conversationEvents, "turn-event", 10_000, (e) => e.type === "flushed");
+      const flushed = waitFor(
+        conversationEvents,
+        "turn-event",
+        10_000,
+        (e) => e.type === "flushed"
+      );
+      const bargeInSince = Date.now();
       const followUp = (async () => {
         await report;
-        return waitFor(conversationEvents, "turn-report", TURN_TIMEOUT_MS);
+        return waitFor(
+          conversationEvents,
+          "turn-report",
+          TURN_TIMEOUT_MS,
+          turnReportSince(bargeInSince)
+        );
       })();
       const { speechStartedAt } = await playIntoVad(voiceWorker, audio[index].bargeIn);
       const flush = await flushed;
@@ -147,7 +173,10 @@ async function runVoiceHarness({ voiceWorker, conversationEvents, getSession, se
         })
       );
       results.push(
-        toResult({ id: `${scenario.id}-followup`, say: scenario.bargeIn.say, expectTools: [] }, await followUp)
+        toResult(
+          { id: `${scenario.id}-followup`, say: scenario.bargeIn.say, expectTools: [] },
+          await followUp
+        )
       );
     }
     await delay(BETWEEN_TURNS_MS);
@@ -175,10 +204,14 @@ async function runVoiceHarness({ voiceWorker, conversationEvents, getSession, se
   process.stdout.write(`\nVoice harness report: ${reportPath}\n`);
 
   sendToRenderer("voice-conversation:harness-done");
+  quitIfAsked();
+  return { reportPath, summary };
+}
+
+function quitIfAsked() {
   if (process.env.OPENWHISPR_VOICE_HARNESS_QUIT === "1") {
     setTimeout(() => app.quit(), 1000);
   }
-  return { reportPath, summary };
 }
 
 module.exports = { runVoiceHarness };

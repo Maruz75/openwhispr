@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
 const {
   VOICE_MODELS,
@@ -25,12 +26,22 @@ function touch(dir, relative) {
 
 const partialDirs = (dir) => fs.readdirSync(dir).filter((name) => name.includes(".partial-"));
 
-// Fakes that "download" by creating files, so no network is touched.
+const pocket = VOICE_MODELS.find((model) => model.id === "pocket-tts");
+
+// A PID whose process has already exited.
+const deadPid = () => spawnSync(process.execPath, ["-e", ""]).pid;
+
+// Fakes that "download" by creating files, so neither the network nor the real
+// disk is consulted.
 function fakeDeps(dir, { skipFile } = {}) {
   const downloads = [];
+  const warnings = [];
   return {
     downloads,
+    warnings,
     deps: {
+      checkDiskSpace: async () => ({ ok: true, availableBytes: Infinity }),
+      logger: { warn: (message, meta) => warnings.push({ message, meta }) },
       downloadFile: async (url, dest, { onProgress }) => {
         downloads.push(url);
         fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -38,7 +49,6 @@ function fakeDeps(dir, { skipFile } = {}) {
         onProgress?.(5, 10);
       },
       extractTarBz2: async (_archive, destDir) => {
-        const pocket = VOICE_MODELS.find((model) => model.id === "pocket-tts");
         for (const file of pocket.requiredFiles) {
           if (file !== skipFile) touch(destDir, file);
         }
@@ -58,7 +68,6 @@ test("a partly extracted Pocket archive does not count as downloaded", (t) => {
   const dir = tempDir(t);
   touch(dir, "silero_vad.onnx");
   touch(dir, "smart-turn-v3.2-cpu.onnx");
-  const pocket = VOICE_MODELS.find((model) => model.id === "pocket-tts");
   for (const file of pocket.requiredFiles.slice(0, -1)) touch(dir, file);
 
   const status = getVoiceModelStatus(dir);
@@ -71,7 +80,6 @@ test("resuming a partly extracted Pocket download finishes only that model", asy
   const dir = tempDir(t);
   touch(dir, "silero_vad.onnx");
   touch(dir, "smart-turn-v3.2-cpu.onnx");
-  const pocket = VOICE_MODELS.find((model) => model.id === "pocket-tts");
   for (const file of pocket.requiredFiles.slice(0, -1)) touch(dir, file);
   const { deps, downloads } = fakeDeps(dir);
 
@@ -93,25 +101,33 @@ test("download fetches only what is missing and reports ready", async (t) => {
   const { deps, downloads } = fakeDeps(dir);
   const progress = [];
 
-  const status = await downloadVoiceModels({ modelsDir: dir, deps, onProgress: (p) => progress.push(p) });
+  const status = await downloadVoiceModels({
+    modelsDir: dir,
+    deps,
+    onProgress: (p) => progress.push(p),
+  });
 
   assert.equal(status.ready, true);
   assert.equal(downloads.length, 2);
   assert.ok(!downloads.some((url) => url.endsWith("silero_vad.onnx")));
   assert.deepEqual(progress[0], { model: "smart-turn", downloadedBytes: 5, totalBytes: 10 });
-  assert.equal(fs.existsSync(path.join(dir, "sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2")), false);
+  assert.equal(
+    fs.existsSync(path.join(dir, "sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2")),
+    false
+  );
 });
 
 test("an archive missing a required file fails loudly instead of reporting ready", async (t) => {
   const dir = tempDir(t);
-  const { deps } = fakeDeps(dir, { skipFile: path.join("sherpa-onnx-pocket-tts-int8-2026-01-26", "vocab.json") });
+  const { deps } = fakeDeps(dir, {
+    skipFile: path.join("sherpa-onnx-pocket-tts-int8-2026-01-26", "vocab.json"),
+  });
   await assert.rejects(downloadVoiceModels({ modelsDir: dir, deps }), /pocket-tts.*vocab\.json/);
   assert.equal(fs.existsSync(path.join(dir, "sherpa-onnx-pocket-tts-int8-2026-01-26")), false);
 });
 
 test("an extraction interrupted mid-write leaves nothing that reads as ready", async (t) => {
   const dir = tempDir(t);
-  const pocket = VOICE_MODELS.find((model) => model.id === "pocket-tts");
   const { deps } = fakeDeps(dir);
   deps.extractTarBz2 = async (_archive, destDir) => {
     // Every required file lands, the last one truncated, then extraction dies.
@@ -129,7 +145,6 @@ test("an extraction interrupted mid-write leaves nothing that reads as ready", a
 
 test("the model is not visible until extraction has finished", async (t) => {
   const dir = tempDir(t);
-  const pocket = VOICE_MODELS.find((model) => model.id === "pocket-tts");
   const { deps } = fakeDeps(dir);
   const extract = deps.extractTarBz2;
   let readyDuringExtraction = null;
@@ -147,14 +162,82 @@ test("the model is not visible until extraction has finished", async (t) => {
 
 test("staging left by a crashed earlier run is cleared on the next download", async (t) => {
   const dir = tempDir(t);
-  const pocket = VOICE_MODELS.find((model) => model.id === "pocket-tts");
-  touch(dir, path.join(`.${pocket.target}.partial-999999-1`, pocket.requiredFiles[0]));
+  touch(dir, path.join(`.${pocket.target}.partial-${deadPid()}-1`, pocket.requiredFiles[0]));
   const { deps } = fakeDeps(dir);
 
   const status = await downloadVoiceModels({ modelsDir: dir, deps });
 
   assert.equal(status.ready, true);
   assert.deepEqual(partialDirs(dir), []);
+});
+
+test("staging owned by another live process is left alone", async (t) => {
+  const dir = tempDir(t);
+  // The parent (the test runner) stands in for a second instance mid-extraction.
+  const liveStaging = `.${pocket.target}.partial-${process.ppid}-1`;
+  touch(dir, path.join(liveStaging, pocket.requiredFiles[0]));
+  const { deps } = fakeDeps(dir);
+
+  const status = await downloadVoiceModels({ modelsDir: dir, deps });
+
+  assert.equal(status.ready, true);
+  assert.deepEqual(partialDirs(dir), [liveStaging]);
+});
+
+test("refuses to start without room for the archive and its extraction", async (t) => {
+  const dir = tempDir(t);
+  const { deps, downloads } = fakeDeps(dir);
+  let requested = null;
+  deps.checkDiskSpace = async (_dir, requiredBytes) => {
+    requested = requiredBytes;
+    return { ok: false, availableBytes: 50_000_000 };
+  };
+
+  await assert.rejects(downloadVoiceModels({ modelsDir: dir, deps }), /Not enough disk space/);
+
+  assert.equal(downloads.length, 0);
+  assert.ok(requested >= 3 * pocket.approxBytes, `reserved only ${requested} bytes`);
+});
+
+test("a cleanup failure after the swap does not fail a finished install", async (t) => {
+  const dir = tempDir(t);
+  const { deps, warnings } = fakeDeps(dir);
+  const rmSync = fs.rmSync;
+  let failedOnce = false;
+  t.mock.method(fs, "rmSync", (target, options) => {
+    if (!failedOnce && target.includes(".partial-")) {
+      failedOnce = true;
+      throw Object.assign(new Error("resource busy or locked"), { code: "EBUSY" });
+    }
+    return rmSync(target, options);
+  });
+
+  const status = await downloadVoiceModels({ modelsDir: dir, deps });
+
+  assert.equal(status.ready, true);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0].meta.path, /\.partial-/);
+});
+
+test("a cancel during extraction discards it instead of reporting ready", async (t) => {
+  const dir = tempDir(t);
+  const { deps } = fakeDeps(dir);
+  const signal = { aborted: false };
+  const extract = deps.extractTarBz2;
+  deps.extractTarBz2 = async (archive, destDir) => {
+    await extract(archive, destDir);
+    signal.aborted = true;
+  };
+
+  await assert.rejects(downloadVoiceModels({ modelsDir: dir, signal, deps }), (error) => {
+    assert.equal(error.isAbort, true);
+    return true;
+  });
+
+  assert.equal(fs.existsSync(path.join(dir, pocket.target)), false);
+  assert.deepEqual(getVoiceModelStatus(dir).missing, ["pocket-tts"]);
+  assert.deepEqual(partialDirs(dir), []);
+  assert.equal(fs.existsSync(path.join(dir, `${pocket.target}.tar.bz2`)), false);
 });
 
 test("paths point inside the models directory", () => {

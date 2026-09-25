@@ -123,18 +123,8 @@ export function AssistantPanel({
     inferenceScope: "dictationAgent",
     onStreamComplete: (_assistantId, content, toolCalls) => {
       void persistence.saveAssistantMessage(content, toolCalls);
-      speechTap?.onResponseDone();
     },
-    // A failed voice turn still ends, so the session can listen again and idle out.
-    onStreamFailed: speechTap?.onResponseDone,
     onResponseContent,
-    onContentDelta: speechTap?.onContentDelta,
-    onToolCall: speechTap?.onToolCall,
-    onToolsAvailable: speechTap?.onToolsAvailable,
-    onWriteToolResult: speechTap?.onWriteToolResult,
-    voiceDryRunWrites: speechTap?.dryRunWrites ?? false,
-    voiceModelOverride: speechTap?.brainOverride ?? null,
-    voiceReplies: speechTap !== null,
   });
 
   useEffect(() => {
@@ -232,6 +222,8 @@ export function AssistantPanel({
       selectedContext: pendingCommand.selectedContext ?? undefined,
       suppressResponseContent: targetsCapturedInput,
       plainTextResponse,
+      // Spoken turns only: a follow-up typed during a voice session stays typed chat.
+      voiceTap: speechTap ?? undefined,
       onComplete: delivery
         ? async ({ content }) => {
             const result = await deliverAssistantResponse(delivery, content);

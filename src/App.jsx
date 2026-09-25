@@ -198,14 +198,32 @@ export default function App() {
     onError: (message) =>
       toast({ title: t("voiceConversation.title"), description: message, variant: "destructive" }),
   });
+  const {
+    enabled: voiceConversationEnabled,
+    active: voiceConversationActive,
+    toggle: toggleVoiceConversation,
+    stop: stopVoiceConversation,
+  } = voiceConversation;
+  const { handleClose: closeAssistant } = assistant;
   const interceptVoiceAgentToggle = React.useCallback(() => {
     // A session outlives the setting being turned off; the press must still stop it.
-    if (!voiceConversation.enabled && !voiceConversation.active) return false;
-    // Open the (empty) panel on start so the listening state is visible at once.
-    if (!voiceConversation.active) void openAssistantPanel();
-    voiceConversation.toggle();
+    if (!voiceConversationEnabled && !voiceConversationActive) return false;
+    // Open the (empty) panel on start so the listening state is visible at once, and
+    // close it again if the session never starts (refused, cancelled, mic denied).
+    const opensPanel = !voiceConversationActive && !assistantOpenRef.current;
+    if (opensPanel) void openAssistantPanel();
+    void toggleVoiceConversation().then((listening) => {
+      if (opensPanel && !listening) closeAssistant();
+    });
     return true;
-  }, [openAssistantPanel, voiceConversation]);
+  }, [
+    assistantOpenRef,
+    closeAssistant,
+    openAssistantPanel,
+    toggleVoiceConversation,
+    voiceConversationActive,
+    voiceConversationEnabled,
+  ]);
   // Voice conversation harness: open the panel and start a mic-less session once, after
   // the app has settled; the main process then plays the scripted conversation.
   const startHarnessRef = React.useRef(null);
@@ -221,9 +239,9 @@ export default function App() {
   }, [harnessAvailable]);
 
   const handleAssistantClose = React.useCallback(() => {
-    void voiceConversation.stop();
-    assistant.handleClose();
-  }, [assistant, voiceConversation]);
+    void stopVoiceConversation();
+    closeAssistant();
+  }, [closeAssistant, stopVoiceConversation]);
 
   const handleDictationError = React.useCallback(
     (options = {}) => {

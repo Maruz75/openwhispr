@@ -8,13 +8,21 @@
  * as dry runs in harness mode, so nothing in the user's data changes.
  */
 const HARNESS_SCENARIOS = [
-  { id: "calendar-tomorrow", say: "What's on my calendar tomorrow?", expectTools: ["get_calendar_events"] },
+  {
+    id: "calendar-tomorrow",
+    say: "What's on my calendar tomorrow?",
+    expectTools: ["get_calendar_events"],
+  },
   {
     id: "free-thursday",
     say: "When am I free on Thursday afternoon?",
     expectTools: ["get_calendar_availability", "get_calendar_events"],
   },
-  { id: "notes-revenue", say: "Find my notes about quarterly revenue.", expectTools: ["search_notes"] },
+  {
+    id: "notes-revenue",
+    say: "Find my notes about quarterly revenue.",
+    expectTools: ["search_notes"],
+  },
   {
     id: "note-create",
     say: "Make a note to call the dentist on Friday.",
@@ -25,9 +33,21 @@ const HARNESS_SCENARIOS = [
     say: "Actually, make that Thursday instead.",
     expectTools: ["update_note", "create_note", "search_notes"],
   },
-  { id: "dictionary-add", say: "Add Kubernetes to my dictionary.", expectTools: ["update_dictionary"] },
-  { id: "clipboard-copy", say: "Copy the words hello world to my clipboard.", expectTools: ["copy_to_clipboard"] },
-  { id: "web-artemis", say: "What's the latest news on the Artemis mission?", expectTools: ["web_search"] },
+  {
+    id: "dictionary-add",
+    say: "Add Kubernetes to my dictionary.",
+    expectTools: ["update_dictionary"],
+  },
+  {
+    id: "clipboard-copy",
+    say: "Copy the words hello world to my clipboard.",
+    expectTools: ["copy_to_clipboard"],
+  },
+  {
+    id: "web-artemis",
+    say: "What's the latest news on the Artemis mission?",
+    expectTools: ["web_search"],
+  },
   { id: "snippet-standup", say: "Read back my standup snippet.", expectTools: ["get_snippet"] },
   { id: "plain-rag", say: "Explain what RAG means in one sentence.", expectTools: [] },
   {
@@ -71,7 +91,10 @@ function scoreTurn({ expectTools, calledTools, availableTools }) {
       : { status: "fail", reason: `called ${calledTools.join(", ")} but no tool was needed` };
   }
   if (!expectTools.some((name) => availableTools.includes(name))) {
-    return { status: "skipped", reason: `${expectTools.join(" / ")} not available in this session` };
+    return {
+      status: "skipped",
+      reason: `${expectTools.join(" / ")} not available in this session`,
+    };
   }
   return expectTools.some((name) => calledTools.includes(name))
     ? { status: "pass" }
@@ -89,7 +112,11 @@ function percentile(values, p) {
 }
 
 function stats(values) {
-  return { p50: percentile(values, 50), p90: percentile(values, 90), n: values.filter(Number.isFinite).length };
+  return {
+    p50: percentile(values, 50),
+    p90: percentile(values, 90),
+    n: values.filter(Number.isFinite).length,
+  };
 }
 
 function summarizeHarness(results) {
@@ -111,7 +138,11 @@ function summarizeHarness(results) {
 }
 
 const seconds = (ms) => (Number.isFinite(ms) ? `${(ms / 1000).toFixed(2)} s` : "–");
-const cell = (text) => String(text ?? "").replace(/\|/g, "/").replace(/\s+/g, " ").trim();
+const cell = (text) =>
+  String(text ?? "")
+    .replace(/\|/g, "/")
+    .replace(/\s+/g, " ")
+    .trim();
 
 function formatHarnessReport({ results, summary, environment }) {
   const scoredTotal = summary.passed + summary.failed;

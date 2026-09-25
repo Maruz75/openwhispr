@@ -9,11 +9,28 @@ const {
   installHookDom,
 } = require("../lib/rendererTestHarness");
 
-// A voice turn ends when the panel reports the response done. A failed request
-// never reached onStreamComplete, so the turn stayed open: nothing was spoken,
-// the session never went back to listening and its idle stop never fired.
+// A voice turn ends when the voice tap hears the response is done. A failed
+// request never said so, so the turn stayed open: nothing was spoken, the session
+// never went back to listening and its idle stop never fired.
 
-async function mountChatStreaming(t, { settings, electronAPI = {}, hookOptions = {} }) {
+function makeVoiceTap({ dryRunWrites = false } = {}) {
+  const heard = { responseDone: 0, writes: [] };
+  return {
+    heard,
+    tap: {
+      onContentDelta() {},
+      onResponseDone: () => (heard.responseDone += 1),
+      onToolCall() {},
+      onToolsAvailable() {},
+      onWriteToolResult: (name, ok) => heard.writes.push([name, ok]),
+      dryRunWrites,
+      brainOverride: null,
+      cancelRef: { current: null },
+    },
+  };
+}
+
+async function mountChatStreaming(t, { settings, electronAPI = {} }) {
   let unmount;
   t.after(async () => {
     await unmount?.();
@@ -51,16 +68,13 @@ async function mountChatStreaming(t, { settings, electronAPI = {}, hookOptions =
   const setMessages = (updater) => {
     messages = typeof updater === "function" ? updater(messages) : updater;
   };
-  const turnEnds = { failed: 0, completed: 0 };
+  const completed = { count: 0 };
   let captured = null;
   function Harness() {
     captured = useChatStreaming({
       messages,
       setMessages,
-      voiceReplies: true,
-      onStreamComplete: () => (turnEnds.completed += 1),
-      onStreamFailed: () => (turnEnds.failed += 1),
-      ...hookOptions,
+      onStreamComplete: () => (completed.count += 1),
     });
     return null;
   }
@@ -69,7 +83,13 @@ async function mountChatStreaming(t, { settings, electronAPI = {}, hookOptions =
   await React.act(async () => root.render(React.createElement(Harness)));
   unmount = () => React.act(async () => root.unmount());
 
-  return { hook: () => captured, reasoningService, usePolicyStore, turnEnds };
+  return {
+    hook: () => captured,
+    messages: () => messages,
+    reasoningService,
+    usePolicyStore,
+    completed,
+  };
 }
 
 // Stands in for a real stream: `run` is where it would call tools or fail.
@@ -88,7 +108,7 @@ const LOCAL_TOOL_MODEL = {
 };
 
 test("a failed request ends the voice turn", async (t) => {
-  const { hook, reasoningService, turnEnds } = await mountChatStreaming(t, {
+  const { hook, reasoningService, completed } = await mountChatStreaming(t, {
     settings: LOCAL_TOOL_MODEL,
   });
   t.mock.method(reasoningService, "processTextStreamingAI", () =>
@@ -96,70 +116,140 @@ test("a failed request ends the voice turn", async (t) => {
       throw new Error("llama-server failed to start");
     })
   );
+  const { tap, heard } = makeVoiceTap();
 
   await React.act(async () => {
-    await hook().sendToAI("what's on my calendar", []);
+    await hook().sendToAI("what's on my calendar", [], { voiceTap: tap });
   });
 
-  assert.deepEqual(turnEnds, { failed: 1, completed: 0 });
+  assert.equal(heard.responseDone, 1);
+  assert.equal(completed.count, 0);
 });
 
 test("a request the org policy blocks ends the voice turn", async (t) => {
-  const { hook, usePolicyStore, turnEnds } = await mountChatStreaming(t, {
-    settings: LOCAL_TOOL_MODEL,
-  });
+  const { hook, usePolicyStore } = await mountChatStreaming(t, { settings: LOCAL_TOOL_MODEL });
   usePolicyStore.setState({ status: "managed", policy: null });
+  const { tap, heard } = makeVoiceTap();
 
   await React.act(async () => {
-    await hook().sendToAI("what's on my calendar", []);
+    await hook().sendToAI("what's on my calendar", [], { voiceTap: tap });
   });
 
-  assert.deepEqual(turnEnds, { failed: 1, completed: 0 });
+  assert.equal(heard.responseDone, 1);
 });
 
-test("a cancelled request is not reported as failed (barge-in already ended that turn)", async (t) => {
-  const { hook, reasoningService, turnEnds } = await mountChatStreaming(t, {
-    settings: LOCAL_TOOL_MODEL,
-  });
+test("a cancelled request doesn't end the turn (barge-in already ended it)", async (t) => {
+  const { hook, reasoningService } = await mountChatStreaming(t, { settings: LOCAL_TOOL_MODEL });
   t.mock.method(reasoningService, "processTextStreamingAI", () =>
     streamAfter(() => {
       hook().cancelStream();
       throw new Error("aborted");
     })
   );
+  const { tap, heard } = makeVoiceTap();
 
   await React.act(async () => {
-    await hook().sendToAI("what's on my calendar", []);
+    await hook().sendToAI("what's on my calendar", [], { voiceTap: tap });
   });
 
-  assert.equal(turnEnds.failed, 0);
+  assert.equal(heard.responseDone, 0);
 });
+
+const CLOUD = { chatAgentMode: "openwhispr", chatAgentModel: "", isSignedIn: true };
+const NOTE_ARGS = JSON.stringify({ title: "Dentist", content: "Call the dentist on Friday" });
 
 test("harness dry-run writes change nothing on the OpenWhispr Cloud path either", async (t) => {
   const savedNotes = [];
   const { hook, reasoningService } = await mountChatStreaming(t, {
-    settings: { chatAgentMode: "openwhispr", chatAgentModel: "", isSignedIn: true },
+    settings: CLOUD,
     electronAPI: {
       saveNote: async (...args) => {
         savedNotes.push(args);
         return { success: true, note: { id: 1 } };
       },
     },
-    hookOptions: { voiceDryRunWrites: true },
   });
   const toolResults = [];
   t.mock.method(reasoningService, "processTextStreamingCloud", (_messages, options) =>
     streamAfter(async () => {
-      const args = JSON.stringify({ title: "Dentist", content: "Call the dentist on Friday" });
-      toolResults.push(await options.executeToolCall("create_note", args));
+      toolResults.push(await options.executeToolCall("create_note", NOTE_ARGS, "call-1"));
     })
   );
 
   await React.act(async () => {
-    await hook().sendToAI("make a note to call the dentist", []);
+    await hook().sendToAI("make a note to call the dentist", [], {
+      voiceTap: makeVoiceTap({ dryRunWrites: true }).tap,
+    });
   });
 
   assert.equal(toolResults.length, 1);
   assert.match(toolResults[0].data, /"dryRun":true/);
   assert.deepEqual(savedNotes, [], "the harness must not write the user's notes");
+});
+
+test("a repeat write the guard blocked tells the model and leaves no tool chip", async (t) => {
+  const { hook, messages, reasoningService } = await mountChatStreaming(t, { settings: CLOUD });
+  const toolResults = [];
+  t.mock.method(reasoningService, "processTextStreamingCloud", async function* (_m, options) {
+    for (const id of ["call-1", "call-2"]) {
+      yield { type: "tool_calls", calls: [{ id, name: "create_note", arguments: NOTE_ARGS }] };
+      const result = await options.executeToolCall("create_note", NOTE_ARGS, id);
+      toolResults.push(result);
+      yield { type: "tool_result", callId: id, displayText: result.displayText };
+    }
+  });
+
+  await React.act(async () => {
+    await hook().sendToAI("make two notes", [], {
+      voiceTap: makeVoiceTap({ dryRunWrites: true }).tap,
+    });
+  });
+
+  assert.match(toolResults[1].data, /NOT run/);
+  const assistant = messages().find((message) => message.role === "assistant");
+  assert.deepEqual(
+    assistant.toolCalls.map((call) => call.id),
+    ["call-1"]
+  );
+});
+
+test("a write that settles after the request was cancelled isn't credited to any turn", async (t) => {
+  const { hook, reasoningService } = await mountChatStreaming(t, {
+    settings: CLOUD,
+    electronAPI: {
+      saveNote: async () => {
+        // The user barges in while the note is being written.
+        hook().cancelStream();
+        return { success: true, note: { id: 1, title: "Dentist" } };
+      },
+    },
+  });
+  t.mock.method(reasoningService, "processTextStreamingCloud", (_messages, options) =>
+    streamAfter(() => options.executeToolCall("create_note", NOTE_ARGS, "call-1"))
+  );
+  const { tap, heard } = makeVoiceTap();
+
+  await React.act(async () => {
+    await hook().sendToAI("make a note to call the dentist", [], { voiceTap: tap });
+  });
+
+  assert.deepEqual(heard.writes, []);
+});
+
+test("chunks that arrive after a barge-in cancelled the answer aren't spoken", async (t) => {
+  const { hook, reasoningService } = await mountChatStreaming(t, { settings: LOCAL_TOOL_MODEL });
+  t.mock.method(reasoningService, "processTextStreamingAI", async function* () {
+    yield { type: "content", text: "It's sunny" };
+    hook().cancelStream();
+    yield { type: "content", text: " and warm." };
+  });
+  const spoken = [];
+  const { tap } = makeVoiceTap();
+  tap.onContentDelta = (delta) => spoken.push(delta);
+
+  await React.act(async () => {
+    await hook().sendToAI("what's the weather", [], { voiceTap: tap });
+  });
+
+  assert.deepEqual(spoken, ["It's sunny"]);
 });

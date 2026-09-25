@@ -3,11 +3,6 @@ const assert = require("node:assert/strict");
 
 const load = () => import("../../../src/services/voice/voiceToolPolicy.ts");
 
-test("voice turns never offer snippet editing", async () => {
-  const { VOICE_EXCLUDED_TOOLS } = await load();
-  assert.deepEqual([...VOICE_EXCLUDED_TOOLS], ["update_snippets"]);
-});
-
 test("a write tool runs once per turn; a second call returns the first result without running", async () => {
   const { createWriteOnceGuard } = await load();
   const guard = createWriteOnceGuard(new Set(["create_note"]));
@@ -25,7 +20,7 @@ test("a write tool runs once per turn; a second call returns the first result wi
   assert.deepEqual(first, { id: 1 });
   assert.equal(second.alreadyDone, true);
   assert.deepEqual(second.result, { id: 1 });
-  // R14: the blocked call must read as not done, or "make two notes" is answered as both made.
+  // The blocked call must read as not done, or "make two notes" is answered as both made.
   assert.match(second.note, /second create_note call .* NOT run/);
   assert.match(second.note, /only the first one was done/);
   assert.match(second.note, /ask for the next one separately/);
@@ -56,21 +51,69 @@ test("reports each write's outcome once; an error result counts as failed", asyn
   ]);
 });
 
-// R8: a repeat call after a FAILED first write must not read as a plain
-// success (the model would go on to tell the user the write worked).
-test("a repeat call after a failed first run reports the failure, not a plain success", async () => {
+test("a failed write may be retried once, e.g. with a corrected note id", async () => {
+  const { createWriteOnceGuard } = await load();
+  const outcomes = [];
+  const guard = createWriteOnceGuard(new Set(["update_note"]), (name, ok) =>
+    outcomes.push([name, ok])
+  );
+
+  const first = await guard.run("update_note", async () => ({ error: "Note 12 not found" }));
+  const retry = await guard.run("update_note", async () => ({ id: 21 }));
+  const repeat = await guard.run("update_note", async () => ({ id: 22 }));
+
+  assert.deepEqual(first, { error: "Note 12 not found" });
+  assert.deepEqual(retry, { id: 21 });
+  assert.equal(repeat.alreadyDone, true);
+  assert.match(repeat.note, /NOT run/);
+  assert.deepEqual(outcomes, [
+    ["update_note", false],
+    ["update_note", true],
+  ]);
+});
+
+// A repeat after a FAILED write must not read as a plain success, or the model
+// goes on to tell the user the write worked.
+test("after a failed retry, further calls report the failure instead of running", async () => {
   const { createWriteOnceGuard } = await load();
   const guard = createWriteOnceGuard(new Set(["create_note"]));
-  const execute = async () => ({ error: "Notes are full" });
+  let runs = 0;
+  const execute = async () => {
+    runs += 1;
+    return { error: "Notes are full" };
+  };
 
-  const first = await guard.run("create_note", execute);
-  const second = await guard.run("create_note", execute);
+  await guard.run("create_note", execute);
+  await guard.run("create_note", execute);
+  const third = await guard.run("create_note", execute);
 
-  assert.deepEqual(first, { error: "Notes are full" });
-  assert.equal(second.alreadyDone, true);
-  assert.deepEqual(second.result, { error: "Notes are full" });
-  assert.match(second.note, /already failed/i);
-  assert.match(second.note, /Notes are full/);
+  assert.equal(runs, 2);
+  assert.equal(third.alreadyDone, true);
+  assert.deepEqual(third.result, { error: "Notes are full" });
+  assert.match(third.note, /already failed/i);
+  assert.match(third.note, /Notes are full/);
+});
+
+test("a write that throws counts as failed and can be retried once", async () => {
+  const { createWriteOnceGuard } = await load();
+  const outcomes = [];
+  const guard = createWriteOnceGuard(new Set(["create_note"]), (name, ok) =>
+    outcomes.push([name, ok])
+  );
+
+  await assert.rejects(
+    guard.run("create_note", async () => {
+      throw new Error("database is locked");
+    }),
+    /database is locked/
+  );
+  const retry = await guard.run("create_note", async () => ({ id: 3 }));
+
+  assert.deepEqual(retry, { id: 3 });
+  assert.deepEqual(outcomes, [
+    ["create_note", false],
+    ["create_note", true],
+  ]);
 });
 
 test("two parallel calls in one step still run the tool once", async () => {
@@ -81,11 +124,14 @@ test("two parallel calls in one step still run the tool once", async () => {
     runs += 1;
     return { copied: true };
   };
-  await Promise.all([guard.run("copy_to_clipboard", execute), guard.run("copy_to_clipboard", execute)]);
+  await Promise.all([
+    guard.run("copy_to_clipboard", execute),
+    guard.run("copy_to_clipboard", execute),
+  ]);
   assert.equal(runs, 1);
 });
 
-// R5: the OpenWhispr Cloud tool-call path executes tools directly
+// The OpenWhispr Cloud tool-call path executes tools directly
 // (registry.get(name).execute(args)) and gets back a ToolResult
 // ({ success, data, displayText }), not the AI-SDK { error } shape the guard
 // above understands. runToolResultOnce adapts createWriteOnceGuard for that
@@ -130,9 +176,9 @@ test("runToolResultOnce reports a failed ToolResult write as ok: false, preservi
   assert.deepEqual(outcomes, [["update_dictionary", false]]);
 });
 
-// R8: the cloud adapter's repeat call must not turn a failed write into a
-// plain success just because "the guard ran the tool successfully once".
-test("runToolResultOnce: a repeat call after a failed first write reports success: false and reuses the original displayText", async () => {
+// The cloud adapter's repeat call must not turn a failed write into a plain
+// success just because "the guard ran the tool successfully once".
+test("runToolResultOnce: a repeat after a failed retry reports success: false and reuses the original displayText", async () => {
   const { createWriteOnceGuard, runToolResultOnce } = await load();
   const outcomes = [];
   const guard = createWriteOnceGuard(new Set(["create_note"]), (name, ok) =>
@@ -145,15 +191,19 @@ test("runToolResultOnce: a repeat call after a failed first write reports succes
   };
 
   const first = await runToolResultOnce(guard, "create_note", execute);
-  const second = await runToolResultOnce(guard, "create_note", execute);
+  await runToolResultOnce(guard, "create_note", execute);
+  const third = await runToolResultOnce(guard, "create_note", execute);
 
-  assert.equal(runs, 1);
+  assert.equal(runs, 2);
   assert.deepEqual(first, { success: false, data: null, displayText: "Notes are full" });
-  assert.equal(second.success, false);
-  assert.match(String(second.data), /already failed/i);
-  assert.match(String(second.data), /Notes are full/);
-  assert.equal(second.displayText, "Notes are full");
-  assert.deepEqual(outcomes, [["create_note", false]]);
+  assert.equal(third.success, false);
+  assert.match(String(third.data), /already failed/i);
+  assert.match(String(third.data), /Notes are full/);
+  assert.equal(third.displayText, "Notes are full");
+  assert.deepEqual(outcomes, [
+    ["create_note", false],
+    ["create_note", false],
+  ]);
 });
 
 test("runToolResultOnce leaves read-only cloud tools unlimited", async () => {

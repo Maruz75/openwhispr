@@ -6,15 +6,19 @@
 // Runs under plain `node`, not Electron, so it can't use the app's
 // net.request-based downloadFile (src/helpers/downloadUtils.js). It passes
 // this script's own Electron-free downloader instead.
+const fs = require("fs");
 const path = require("path");
 const { downloadFile: scriptDownloadFile } = require("./lib/download-utils");
 const { downloadVoiceModels, getVoiceModelsDir } = require("../src/helpers/voiceModels");
 
 downloadVoiceModels({
   deps: {
-    downloadFile: (url, dest) => {
+    // This downloader writes in place; land the file like the app's does, so an
+    // interrupted run never leaves a partial model that reads as ready.
+    downloadFile: async (url, dest) => {
       console.log(`[voice-models] downloading ${path.basename(url)}`);
-      return scriptDownloadFile(url, dest);
+      await scriptDownloadFile(url, `${dest}.tmp`);
+      fs.renameSync(`${dest}.tmp`, dest);
     },
   },
 })

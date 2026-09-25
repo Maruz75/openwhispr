@@ -4190,7 +4190,11 @@
       "voiceModelsMissing": "语音对话需要其语音模型。请在设置中下载。",
       "speechModelMissing": "语音对话需要 Parakeet 语音模型。请在设置 → 语音转文字 中下载。",
       "brainNotDownloaded": "语音助手的本地模型尚未下载。",
-      "workerStopped": "语音引擎意外退出，语音对话已停止。按快捷键即可重新开始。"
+      "workerStopped": "语音引擎意外退出，语音对话已停止。按快捷键即可重新开始。",
+      "micDenied": "语音对话无法使用麦克风。请在系统设置中允许 OpenWhispr 访问麦克风。",
+      "startFailed": "无法开始语音对话。请重试。",
+      "transcriptionFailed": "无法转写这段语音。请再说一遍。",
+      "brainSignInRequired": "请登录以在语音对话中使用 OpenWhispr Cloud，或为语音助手选择本地模型。"
     }
   }
 }

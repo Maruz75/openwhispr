@@ -141,7 +141,6 @@ test("a voice session's brain stays in llama-server's needs when the Voice Assis
     {
       ...ALL_CLOUD,
       useDictationAgent: "false",
-      voiceConversationEnabled: "true",
       dictationAgentMode: "local",
       dictationAgentProvider: "qwen",
       dictationAgentModel: MODEL,
@@ -162,7 +161,10 @@ test("a voice session's brain stays in llama-server's needs when the Voice Assis
   );
 
   const needs = s.resolveLocalServerNeeds(s.selectLocalServerPrefs(state, UNMANAGED));
-  assert.ok(needs.models.includes(CHAT_MODEL), "the model the voice session actually uses is needed");
+  assert.ok(
+    needs.models.includes(CHAT_MODEL),
+    "the model the voice session actually uses is needed"
+  );
   assert.equal(s.shouldStopLocalServer(needs, CHAT_MODEL), false);
   assert.ok(
     !needs.models.includes(MODEL),
@@ -176,7 +178,6 @@ test("with the Voice Assistant on, the voice brain is its model and stays in the
     {
       ...ALL_CLOUD,
       useDictationAgent: "true",
-      voiceConversationEnabled: "true",
       dictationAgentMode: "local",
       dictationAgentProvider: "qwen",
       dictationAgentModel: MODEL,

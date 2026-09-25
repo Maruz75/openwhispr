@@ -233,7 +233,7 @@ class LlamaServerManager {
     // --swa-full, without which the prompt cache can't reuse a prefix that
     // reaches past its sliding window.
     if (Array.isArray(options.extraArgs)) {
-      args.push(...options.extraArgs.filter((arg) => typeof arg === "string" && arg.startsWith("--")));
+      args.push(...options.extraArgs.filter((arg) => typeof arg === "string"));
     }
 
     return args;

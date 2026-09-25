@@ -4190,7 +4190,11 @@
       "voiceModelsMissing": "A conversa por voz precisa de seus modelos de voz. Baixe-os em Configurações.",
       "speechModelMissing": "A conversa por voz precisa de um modelo de voz Parakeet. Baixe um em Configurações → Fala para texto.",
       "brainNotDownloaded": "O modelo local do Assistente de voz ainda não foi baixado.",
-      "workerStopped": "A conversa por voz parou porque o mecanismo de voz fechou inesperadamente. Pressione o atalho para começar de novo."
+      "workerStopped": "A conversa por voz parou porque o mecanismo de voz fechou inesperadamente. Pressione o atalho para começar de novo.",
+      "micDenied": "A conversa por voz não consegue usar o microfone. Permita o acesso ao microfone para o OpenWhispr nas configurações do sistema.",
+      "startFailed": "Não foi possível iniciar a conversa por voz. Tente novamente.",
+      "transcriptionFailed": "Não foi possível transcrever isso. Tente dizer de novo.",
+      "brainSignInRequired": "Entre na sua conta para usar o OpenWhispr Cloud na conversa por voz, ou escolha um modelo local para o Assistente de voz."
     }
   }
 }

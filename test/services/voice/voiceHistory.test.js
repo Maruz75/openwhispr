@@ -53,7 +53,12 @@ test("without per-turn context the newest user turn is sent and remembered as-is
 test("an already-sent newest turn (a retry) keeps its original context", async () => {
   const { buildVoiceHistory } = await load();
   const sent = new Map([["u1", "[ctx-old] hi"]]);
-  const history = buildVoiceHistory([{ id: "u1", role: "user", content: "hi" }], sent, "ctx-new", wrap);
+  const history = buildVoiceHistory(
+    [{ id: "u1", role: "user", content: "hi" }],
+    sent,
+    "ctx-new",
+    wrap
+  );
   assert.deepEqual(history, [{ role: "user", content: "[ctx-old] hi" }]);
 });
 
@@ -94,4 +99,18 @@ test("the window never starts on an assistant message", async () => {
   messages.splice(1, 1); // odd gap shifts every later role by one index
   const history = buildVoiceHistory(messages, new Map(), "", wrap);
   assert.equal(history[0].role, "user");
+});
+
+test("an answer cancelled before its first word is left out of the replay", async () => {
+  const { buildVoiceHistory } = await load();
+  const messages = [
+    { id: "u1", role: "user", content: "what's the weather" },
+    { id: "a1", role: "assistant", content: "" },
+    { id: "u2", role: "user", content: "never mind, what time is it" },
+  ];
+  const history = buildVoiceHistory(messages, new Map(), "", (text) => text);
+  assert.deepEqual(
+    history.map((message) => message.role),
+    ["user", "user"]
+  );
 });

@@ -10,7 +10,7 @@ import type {
   VoiceConversationEvent,
   VoiceTurnEndpoint,
 } from "../services/voice/types";
-import { shouldStopForIdle, voiceToolFiller } from "../services/voice/voiceTools";
+import { voiceToolFiller } from "../services/voice/voiceTools";
 import { resolveChatStreamingInference } from "../helpers/dictationAgentInference.js";
 import { findUnbackedActionClaim, UNBACKED_CLAIM_CORRECTION } from "../services/voice/actionClaims";
 
@@ -69,6 +69,7 @@ const READINESS_MESSAGE_KEYS = {
   "voice-models-missing": "voiceConversation.errors.voiceModelsMissing",
   "speech-model-missing": "voiceConversation.errors.speechModelMissing",
   "brain-not-downloaded": "voiceConversation.errors.brainNotDownloaded",
+  "brain-sign-in-required": "voiceConversation.errors.brainSignInRequired",
 } as const;
 
 /**
@@ -112,11 +113,13 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
   const activeRef = useRef(false);
   const micRef = useRef<MicStream | null>(null);
   const playerRef = useRef<PcmPlayer | null>(null);
-  const chunkerRef = useRef(createSpeechChunker({ maxChunks: MAX_SPOKEN_SENTENCES }));
+  const [chunker] = useState(() => createSpeechChunker({ maxChunks: MAX_SPOKEN_SENTENCES }));
   const utteranceRef = useRef<string | null>(null);
   const responseDoneRef = useRef(false);
   const chunkIndexRef = useRef(0);
   const pendingSpeaksRef = useRef(0);
+  // Playback is paused while the user may be talking over the answer (see speech-start).
+  const heldForSpeechRef = useRef(false);
   const harnessRef = useRef(false);
   const [harnessAvailable, setHarnessAvailable] = useState(false);
   const [harnessActive, setHarnessActive] = useState(false);
@@ -126,6 +129,7 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
   const turnRef = useRef<TurnMetrics | null>(null);
   const cancelRef = useRef<(() => void) | null>(null);
   const startGenerationRef = useRef(0);
+  const sessionIdRef = useRef<number | null>(null);
   const onUserTurnRef = useRef(onUserTurn);
   onUserTurnRef.current = onUserTurn;
   const onErrorRef = useRef(onError);
@@ -178,7 +182,11 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
       chunks: turn.chunks,
     };
     const endpointReason = turn.endpoint?.reason ?? null;
-    logger.info("Voice conversation turn", { outcome, endpointReason, ...metrics }, "voice-conversation");
+    logger.info(
+      "Voice conversation turn",
+      { outcome, endpointReason, ...metrics },
+      "voice-conversation"
+    );
     if (harnessRef.current) {
       window.electronAPI?.voiceConversation?.reportTurn({
         outcome,
@@ -187,6 +195,7 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
         availableTools: turn.availableTools,
         ranWrites: turn.ranWrites,
         answer: turn.answer,
+        endedAt: turn.endedAt,
         metrics,
       });
     }
@@ -198,6 +207,11 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
     if (!utteranceRef.current || !responseDoneRef.current) return;
     if (pendingSpeaksRef.current > 0 || playerRef.current?.isPlaying()) return;
     utteranceRef.current = null;
+    // Nothing is left to hold: un-pause, or the next answer would play into a paused player.
+    if (heldForSpeechRef.current) {
+      heldForSpeechRef.current = false;
+      playerRef.current?.resume();
+    }
     logTurn(chunkIndexRef.current === 0 ? "empty" : "spoke");
     // A turn that spoke nothing (empty or failed answer) never reaches the player's onIdle.
     if (activeRef.current) setState("listening");
@@ -223,7 +237,11 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
           }
         })
         .catch((error: Error) => {
-          logger.warn("Voice conversation TTS failed", { error: error.message }, "voice-conversation");
+          logger.warn(
+            "Voice conversation TTS failed",
+            { error: error.message },
+            "voice-conversation"
+          );
         })
         .finally(() => {
           pendingSpeaksRef.current -= 1;
@@ -233,33 +251,56 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
     [api, finishUtteranceIfDrained]
   );
 
-  const bargeIn = useCallback(() => {
-    const utteranceId = utteranceRef.current;
-    utteranceRef.current = null;
-    chunkerRef.current.reset();
-    playerRef.current?.flush();
-    if (utteranceId) {
-      if (harnessRef.current) api?.reportTurnEvent({ type: "flushed", at: Date.now() });
-      if (!responseDoneRef.current) cancelRef.current?.();
-      void api?.cancelSpeech(utteranceId);
-      logTurn("barge-in");
-    }
-  }, [api, logTurn]);
+  /** Drops the answer in progress: the user interrupted it with words, or the session ended. */
+  const dropAnswer = useCallback(
+    (outcome: "barge-in" | "stopped") => {
+      const utteranceId = utteranceRef.current;
+      const wasHeld = heldForSpeechRef.current;
+      utteranceRef.current = null;
+      heldForSpeechRef.current = false;
+      chunker.reset();
+      playerRef.current?.flush();
+      if (utteranceId) {
+        if (harnessRef.current && !wasHeld)
+          api?.reportTurnEvent({ type: "flushed", at: Date.now() });
+        if (!responseDoneRef.current) cancelRef.current?.();
+        void api?.cancelSpeech(utteranceId);
+        logTurn(outcome);
+      }
+    },
+    [api, chunker, logTurn]
+  );
+
+  // A cough or a sound the VAD mistook for speech transcribes to nothing, so talking
+  // over the answer only pauses it; the words it transcribes to decide whether to drop it.
+  const releaseHold = useCallback(() => {
+    if (!heldForSpeechRef.current) return;
+    heldForSpeechRef.current = false;
+    playerRef.current?.resume();
+    setState(playerRef.current?.isPlaying() ? "speaking" : "thinking");
+  }, []);
 
   const handleEvent = useCallback(
     (event: VoiceConversationEvent) => {
       if (!activeRef.current) return;
       if (event.type !== "error") lastActivityRef.current = Date.now();
       if (event.type === "speech-start") {
-        if (utteranceRef.current) bargeIn();
+        if (utteranceRef.current && !heldForSpeechRef.current) {
+          heldForSpeechRef.current = true;
+          playerRef.current?.pause();
+          if (harnessRef.current) api?.reportTurnEvent({ type: "flushed", at: Date.now() });
+        }
         setState("listening");
       } else if (event.type === "transcript") {
-        if (!event.text) return;
-        if (utteranceRef.current) bargeIn();
+        if (!event.text) {
+          releaseHold();
+          return;
+        }
+        if (utteranceRef.current) dropAnswer("barge-in");
         utteranceRef.current = crypto.randomUUID();
         responseDoneRef.current = false;
         chunkIndexRef.current = 0;
-        chunkerRef.current.reset();
+        chunker.reset();
         turnRef.current = {
           endedAt: event.endedAt,
           endpoint: event.endpoint,
@@ -281,21 +322,28 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
         const turn = turnRef.current;
         if (turn && turn.firstAudioAt === undefined) {
           turn.firstAudioAt = Date.now();
-          if (harnessRef.current) api?.reportTurnEvent({ type: "first-audio", at: turn.firstAudioAt });
+          if (harnessRef.current)
+            api?.reportTurnEvent({ type: "first-audio", at: turn.firstAudioAt });
         }
         playerRef.current?.enqueue(event.samples);
       } else if (event.type === "error") {
-        logger.warn("Voice conversation error", { stage: event.stage, message: event.message }, "voice-conversation");
+        logger.warn(
+          "Voice conversation error",
+          { stage: event.stage, message: event.message },
+          "voice-conversation"
+        );
         if (event.stage === "worker") {
           // Main has already ended the session; release the mic and player too.
           onErrorRef.current?.(t("voiceConversation.errors.workerStopped"));
           void stopRef.current();
         } else {
-          onErrorRef.current?.(event.message);
+          // That speech never becomes a turn, so an answer it paused carries on.
+          releaseHold();
+          onErrorRef.current?.(t("voiceConversation.errors.transcriptionFailed"));
         }
       }
     },
-    [api, bargeIn, t]
+    [api, chunker, dropAnswer, releaseHold, t]
   );
 
   const handleEventRef = useRef(handleEvent);
@@ -310,7 +358,7 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
     // A start() still awaiting sees the new generation and backs out.
     startGenerationRef.current += 1;
     if (!activeRef.current && !micRef.current) return;
-    bargeIn();
+    dropAnswer("stopped");
     activeRef.current = false;
     if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
     sessionTimerRef.current = null;
@@ -318,155 +366,172 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
     micRef.current = null;
     await playerRef.current?.close().catch(() => {});
     playerRef.current = null;
-    await api?.stop().catch(() => {});
+    await api?.stop(sessionIdRef.current).catch(() => {});
+    sessionIdRef.current = null;
+    harnessRef.current = false;
+    setHarnessActive(false);
     setState("off");
     logger.info("Voice conversation stopped", {}, "voice-conversation");
-  }, [api, bargeIn]);
+  }, [api, dropAnswer]);
 
-  const start = useCallback(async (harness = false) => {
-    if (activeRef.current || !api) return;
-    activeRef.current = true;
-    // stop() (hotkey, Esc, unmount) can land during any await below; it has already
-    // reset state, so a stale start only undoes what it opened itself.
-    const generation = ++startGenerationRef.current;
-    const isStale = () => startGenerationRef.current !== generation;
-    let sessionStarted = false;
-    let mic: MicStream | null = null;
-    const abandon = async () => {
-      await mic?.stop().catch(() => {});
-      // Main keeps one session; a newer start() that is already active owns it now.
-      if (sessionStarted && !activeRef.current) await api.stop().catch(() => {});
-    };
-    harnessRef.current = harness;
-    setHarnessActive(harness);
-    setState("starting");
-    try {
-      const settings = getSettings();
-      const { config: voiceModel } = resolveChatStreamingInference(settings, {
-        inferenceScope: "dictationAgent",
-      });
-      const parakeetModel = dictationSpeechModel(settings);
-      const brain = resolveVoiceBrain(voiceModel, brainOverride);
-      // The harness plays English speech and must not depend on user settings (same
-      // reason `enabled` ORs in `harnessAvailable`), so it checks readiness as English
-      // regardless of the dev profile's actual dictation language.
-      const readiness = await api.getReadiness({
-        parakeetModel,
-        language: harness ? "en" : settings.preferredLanguage,
-        brain,
-      });
-      if (isStale()) return;
-      // `readiness.ready === false`, not `!readiness.ready`: negation narrowing doesn't
-      // discriminate this union in TS, so `readiness.reason` stays unresolved otherwise.
-      if (readiness.ready === false) {
-        logger.warn(
-          "Voice conversation not ready",
-          { reason: readiness.reason, missing: readiness.missing, harness },
+  /** Resolves true once the session is listening; false if it never got there. */
+  const start = useCallback(
+    async (harness = false): Promise<boolean> => {
+      if (activeRef.current || !api) return false;
+      activeRef.current = true;
+      // stop() (hotkey, Esc, unmount) can land during any await below; it has already
+      // reset state, so a stale start only undoes what it opened itself.
+      const generation = ++startGenerationRef.current;
+      const isStale = () => startGenerationRef.current !== generation;
+      let sessionId: number | null = null;
+      let mic: MicStream | null = null;
+      const abandon = async () => {
+        await mic?.stop().catch(() => {});
+        // Ends only the session this start opened, never a newer one.
+        if (sessionId !== null) await api.stop(sessionId).catch(() => {});
+        return false;
+      };
+      harnessRef.current = harness;
+      setHarnessActive(harness);
+      setState("starting");
+      try {
+        const settings = getSettings();
+        const { config: voiceModel } = resolveChatStreamingInference(settings, {
+          inferenceScope: "dictationAgent",
+        });
+        const parakeetModel = dictationSpeechModel(settings);
+        const brain = resolveVoiceBrain(voiceModel, brainOverride);
+        // The harness plays English speech and must not depend on user settings (same
+        // reason `enabled` ORs in `harnessAvailable`), so it checks readiness as English
+        // regardless of the dev profile's actual dictation language.
+        const readiness = await api.getReadiness({
+          parakeetModel,
+          language: harness ? "en" : settings.preferredLanguage,
+          brain: { ...brain, signedIn: settings.isSignedIn },
+        });
+        if (isStale()) return false;
+        // `readiness.ready === false`, not `!readiness.ready`: negation narrowing doesn't
+        // discriminate this union in TS, so `readiness.reason` stays unresolved otherwise.
+        if (readiness.ready === false) {
+          logger.warn(
+            "Voice conversation not ready",
+            { reason: readiness.reason, missing: readiness.missing, harness },
+            "voice-conversation"
+          );
+          onErrorRef.current?.(t(READINESS_MESSAGE_KEYS[readiness.reason]));
+          activeRef.current = false;
+          setState("off");
+          return false;
+        }
+        const info = await api.start({
+          parakeetModel,
+          brainModel: brainOverride || voiceModel.model,
+          harness,
+        });
+        sessionId = info.sessionId;
+        if (isStale()) return abandon();
+        sessionIdRef.current = sessionId;
+        // stop() closes this player if it lands while the mic is opening.
+        playerRef.current = createPcmPlayer({
+          // Pocket synthesizes at 24 kHz.
+          sampleRate: info.sampleRate || 24000,
+          onStart: () => {
+            if (!heldForSpeechRef.current) setState("speaking");
+          },
+          onIdle: () => {
+            finishUtteranceIfDrained();
+            if (activeRef.current) setState("listening");
+          },
+        });
+        // One diagnostic line ~2 s in: proves frames flow and the mic isn't silent.
+        // The harness plays synthesized speech into the VAD instead of the mic.
+        let frames = 0;
+        let peak = 0;
+        mic = harness
+          ? null
+          : await startMicStream({
+              deviceId: settings.selectedMicDeviceId || null,
+              onFrame: (frame) => {
+                frames += 1;
+                if (frames <= 64) {
+                  for (const sample of frame) peak = Math.max(peak, Math.abs(sample));
+                  if (frames === 64) {
+                    logger.info(
+                      "Voice conversation mic check",
+                      { frames, peak: peak.toFixed(4) },
+                      "voice-conversation"
+                    );
+                  }
+                }
+                api.sendMic(frame);
+              },
+            });
+        if (isStale()) return abandon();
+        micRef.current = mic;
+        setState("listening");
+        logger.info("Voice conversation started", info, "voice-conversation");
+
+        // Keep a local voice model loaded for the whole session: warm it now so the
+        // first turn skips the cold start, then beat llama-server's 5-minute idle stop.
+        const keepWarm = () => {
+          const localModel = brain.mode === "local" ? brain.model : null;
+          if (localModel) {
+            void api.keepModelWarm(localModel).catch(() => {});
+          }
+        };
+        keepWarm();
+        lastActivityRef.current = Date.now();
+        let ticks = 0;
+        sessionTimerRef.current = setInterval(() => {
+          ticks += 1;
+          if (ticks % KEEP_WARM_TICKS === 0) keepWarm();
+          const busy = utteranceRef.current !== null || !!playerRef.current?.isPlaying();
+          if (!busy && Date.now() - lastActivityRef.current >= IDLE_STOP_MS) {
+            logger.info(
+              "Voice conversation idle stop",
+              { idleMs: IDLE_STOP_MS },
+              "voice-conversation"
+            );
+            void stopRef.current();
+          }
+        }, SESSION_TICK_MS);
+        return true;
+      } catch (error) {
+        // Cancelled mid-start: not an error for the user, and stop() here could end
+        // a newer session.
+        if (isStale()) return abandon();
+        const failure = error as DOMException & { constraint?: string };
+        const message =
+          failure?.message ||
+          [failure?.name, failure?.constraint].filter(Boolean).join(": ") ||
+          String(error);
+        logger.error(
+          "Voice conversation failed to start",
+          { error: message, name: failure?.name, constraint: failure?.constraint },
           "voice-conversation"
         );
-        onErrorRef.current?.(t(READINESS_MESSAGE_KEYS[readiness.reason]));
-        activeRef.current = false;
-        setState("off");
-        return;
+        onErrorRef.current?.(
+          t(
+            failure?.name === "NotAllowedError"
+              ? "voiceConversation.errors.micDenied"
+              : "voiceConversation.errors.startFailed"
+          )
+        );
+        await stop();
+        return false;
       }
-      const info = await api.start({
-        parakeetModel,
-        brainModel: brainOverride || voiceModel.model,
-        harness,
-      });
-      sessionStarted = true;
-      if (isStale()) {
-        await abandon();
-        return;
-      }
-      // stop() closes this player if it lands while the mic is opening.
-      playerRef.current = createPcmPlayer({
-        // Pocket synthesizes at 24 kHz.
-        sampleRate: info.sampleRate || 24000,
-        onStart: () => setState("speaking"),
-        onIdle: () => {
-          finishUtteranceIfDrained();
-          if (activeRef.current) setState("listening");
-        },
-      });
-      // One diagnostic line ~2 s in: proves frames flow and the mic isn't silent.
-      // The harness plays synthesized speech into the VAD instead of the mic.
-      let frames = 0;
-      let peak = 0;
-      mic = harness ? null : await startMicStream({
-        deviceId: settings.selectedMicDeviceId || null,
-        onFrame: (frame) => {
-          frames += 1;
-          if (frames <= 64) {
-            for (const sample of frame) peak = Math.max(peak, Math.abs(sample));
-            if (frames === 64) {
-              logger.info("Voice conversation mic check", { frames, peak: peak.toFixed(4) }, "voice-conversation");
-            }
-          }
-          api.sendMic(frame);
-        },
-      });
-      if (isStale()) {
-        await abandon();
-        return;
-      }
-      micRef.current = mic;
-      setState("listening");
-      logger.info("Voice conversation started", info, "voice-conversation");
-
-      // Keep a local voice model loaded for the whole session: warm it now so the
-      // first turn skips the cold start, then beat llama-server's 5-minute idle stop.
-      const keepWarm = () => {
-        const localModel = brain.mode === "local" ? brain.model : null;
-        if (localModel) {
-          void api.keepModelWarm(localModel).catch(() => {});
-        }
-      };
-      keepWarm();
-      lastActivityRef.current = Date.now();
-      let ticks = 0;
-      sessionTimerRef.current = setInterval(() => {
-        ticks += 1;
-        if (ticks % KEEP_WARM_TICKS === 0) keepWarm();
-        const busy = utteranceRef.current !== null || !!playerRef.current?.isPlaying();
-        if (
-          shouldStopForIdle({
-            lastActivityAt: lastActivityRef.current,
-            now: Date.now(),
-            busy,
-            idleMs: IDLE_STOP_MS,
-          })
-        ) {
-          logger.info("Voice conversation idle stop", { idleMs: IDLE_STOP_MS }, "voice-conversation");
-          void stopRef.current();
-        }
-      }, SESSION_TICK_MS);
-    } catch (error) {
-      // Cancelled mid-start: not an error for the user, and stop() here could end
-      // a newer session.
-      if (isStale()) {
-        await abandon();
-        return;
-      }
-      const failure = error as DOMException & { constraint?: string };
-      const message =
-        failure?.message || [failure?.name, failure?.constraint].filter(Boolean).join(": ") || String(error);
-      logger.error(
-        "Voice conversation failed to start",
-        { error: message, name: failure?.name, constraint: failure?.constraint },
-        "voice-conversation"
-      );
-      onErrorRef.current?.(message);
-      await stop();
-    }
-  }, [api, brainOverride, finishUtteranceIfDrained, stop, t]);
+    },
+    [api, brainOverride, finishUtteranceIfDrained, stop, t]
+  );
 
   const stopRef = useRef(stop);
   stopRef.current = stop;
 
-  const toggle = useCallback(() => {
-    void (activeRef.current ? stop() : start());
-  }, [start, stop]);
+  /** Resolves true when the press started a session that is now listening. */
+  const toggle = useCallback(
+    (): Promise<boolean> => (activeRef.current ? stop().then(() => false) : start()),
+    [start, stop]
+  );
 
   useEffect(
     () => () => {
@@ -484,16 +549,20 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
           turn.firstDeltaAt ??= Date.now();
           turn.answer += delta;
         }
-        for (const chunk of chunkerRef.current.push(delta)) speakChunk(chunk);
+        for (const chunk of chunker.push(delta)) speakChunk(chunk);
       },
       onResponseDone: () => {
         if (!utteranceRef.current) return;
         responseDoneRef.current = true;
-        for (const chunk of chunkerRef.current.flush()) speakChunk(chunk);
+        for (const chunk of chunker.flush()) speakChunk(chunk);
         const turn = turnRef.current;
         const claim = turn ? findUnbackedActionClaim(turn.answer, turn.succeededWrites) : null;
         if (claim) {
-          logger.warn("Voice answer claimed an action without a tool call", { claim }, "voice-conversation");
+          logger.warn(
+            "Voice answer claimed an action without a tool call",
+            { claim },
+            "voice-conversation"
+          );
           speakChunk(UNBACKED_CLAIM_CORRECTION);
         }
         finishUtteranceIfDrained();
@@ -503,7 +572,7 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
         turnRef.current?.calledTools.push(...toolNames);
         // Speak whatever the model said before calling the tool ("Let me check…");
         // if it said nothing yet, cover the wait with a short filler line.
-        const pending = chunkerRef.current.flush();
+        const pending = chunker.flush();
         if (pending.length > 0) {
           for (const chunk of pending) speakChunk(chunk);
         } else if (chunkIndexRef.current === 0) {

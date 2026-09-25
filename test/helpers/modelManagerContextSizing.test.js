@@ -563,10 +563,11 @@ test("server options carry a model's registry llama-server flags", () => {
   assert.equal(manager.serverOptions({ model: { contextLength: 8192 } }).extraArgs, undefined);
 });
 
-test("Gemma 4 E4B is registered with --swa-full, so its prompt cache survives edits", () => {
+test("both Gemma 4 E4B builds are registered with --swa-full, so their prompt cache survives edits", () => {
   const gemma = modelRegistryData.localProviders.find((provider) => provider.id === "gemma");
-  const e4b = gemma.models.find((model) => model.id === "gemma-4-e4b-it-q4_k_m");
-  assert.ok(e4b, "Gemma 4 E4B is in the registry");
-  assert.equal(e4b.fileName, "google_gemma-4-E4B-it-Q4_K_M.gguf");
-  assert.deepEqual(e4b.llamaServerArgs, ["--swa-full"]);
+  for (const id of ["gemma-4-e4b-it-q4_k_m", "gemma-4-e4b-it-qat-q4_0"]) {
+    const e4b = gemma.models.find((model) => model.id === id);
+    assert.ok(e4b, `${id} is in the registry`);
+    assert.deepEqual(e4b.llamaServerArgs, ["--swa-full"], id);
+  }
 });

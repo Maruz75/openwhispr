@@ -50,8 +50,12 @@ export function buildVoiceHistory(
       turnContext ? wrapWithContext(newestUser.content, turnContext) : newestUser.content
     );
   }
-  return recent.map((message) => ({
-    role: message.role,
-    content: sentContent.get(message.id) ?? message.content,
-  }));
+  // A barge-in that cancelled an answer before its first word leaves it empty, and
+  // some providers reject an empty assistant message.
+  return recent
+    .filter((message) => message.role !== "assistant" || message.content.trim().length > 0)
+    .map((message) => ({
+      role: message.role,
+      content: sentContent.get(message.id) ?? message.content,
+    }));
 }

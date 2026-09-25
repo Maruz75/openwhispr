@@ -28,6 +28,15 @@ class FakeVoiceWorker extends EventEmitter {
   notify(method, payload) {
     this.notified.push({ method, payload });
   }
+  stop() {
+    return new Promise((resolve) => {
+      this.stopping = () => {
+        this.running = false;
+        this.emit("exit", { code: 0 });
+        resolve();
+      };
+    });
+  }
 }
 const voiceWorker = new FakeVoiceWorker();
 
@@ -61,10 +70,12 @@ Module._load = originalLoad;
 
 const activeChanges = [];
 const startedServers = [];
+const transcriptions = [];
 registerVoiceConversationIpc({
   parakeetManager: {
     isModelDownloaded: () => true,
     startServer: async (model) => void startedServers.push(model),
+    transcribeLocalParakeet: () => new Promise((resolve) => transcriptions.push(resolve)),
   },
   onSessionActiveChange: (active) => activeChanges.push(active),
 });
@@ -89,9 +100,15 @@ async function startSession() {
   return webContents;
 }
 
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+const speak = () => voiceWorker.emit("speech-segment", { samples: new Float32Array(1600) });
+const sentOfType = (webContents, type) =>
+  webContents.sent.map(({ payload }) => payload).filter((payload) => payload.type === type);
+
 test.beforeEach(() => {
   activeChanges.length = 0;
   startedServers.length = 0;
+  transcriptions.length = 0;
   voiceWorker.notified.length = 0;
   voiceWorker.running = false;
 });
@@ -104,7 +121,7 @@ test("a worker crash ends the session in main and tells the renderer", async () 
   assert.deepEqual(activeChanges, [true, false]);
   assert.equal(webContents.sent.at(-1).payload.stage, "worker");
   // Mic frames no longer reach a worker that isn't there.
-  listeners.get("voice-conversation:mic")({}, new Float32Array(4));
+  listeners.get("voice-conversation:mic")({ sender: webContents }, new Float32Array(4));
   assert.equal(
     voiceWorker.notified.some(({ method }) => method === "vad-feed"),
     false
@@ -136,6 +153,20 @@ test("the session holds dictation off while the worker loads, and a stop then wi
   assert.deepEqual(startedServers, [], "a cancelled start doesn't warm the speech model");
 });
 
+test("a late stop naming an earlier session leaves the current one running", async () => {
+  await startSession();
+  await stop();
+  const { sessionId } = await start(fakeRenderer());
+  activeChanges.length = 0;
+
+  const result = await handlers.get("voice-conversation:stop")({}, sessionId - 1);
+
+  assert.deepEqual(result, { stopped: false });
+  assert.deepEqual(activeChanges, []);
+  await handlers.get("voice-conversation:stop")({}, sessionId);
+  assert.deepEqual(activeChanges, [false]);
+});
+
 test("a worker that fails to load ends the session", async () => {
   const started = start(fakeRenderer());
   voiceWorker.configure.reject(new Error("load failed"));
@@ -151,4 +182,73 @@ test("the harness brain override is ignored outside the harness", async () => {
   } finally {
     delete process.env.OPENWHISPR_VOICE_HARNESS_BRAIN;
   }
+});
+
+test("our own shutdown on quit ends the session without a crash toast", async () => {
+  const webContents = await startSession();
+  voiceWorker.emit("exit", { code: 0 });
+
+  assert.deepEqual(activeChanges, [true, false]);
+  assert.deepEqual(sentOfType(webContents, "error"), []);
+});
+
+test("turns decode one at a time, and one that finishes after its session ended is dropped", async () => {
+  const webContents = await startSession();
+  speak();
+  speak();
+  await settle();
+  assert.equal(transcriptions.length, 1, "the second turn waits for the first");
+
+  transcriptions[0]({ success: true, text: "first" });
+  await settle();
+  assert.deepEqual(
+    sentOfType(webContents, "transcript").map(({ text }) => text),
+    ["first"]
+  );
+
+  await stop();
+  transcriptions[1]({ success: true, text: "second" });
+  await settle();
+  assert.equal(sentOfType(webContents, "transcript").length, 1);
+});
+
+test("a transcription that fails is reported, not sent as silence", async () => {
+  const webContents = await startSession();
+  speak();
+  await settle();
+  transcriptions[0]({ success: false, error: "invalid_response" });
+  await settle();
+
+  assert.deepEqual(sentOfType(webContents, "transcript"), []);
+  assert.equal(sentOfType(webContents, "error")[0].stage, "stt");
+});
+
+test("speech that transcribes to nothing is an empty transcript, not an error", async () => {
+  const webContents = await startSession();
+  speak();
+  await settle();
+  transcriptions[0]({ success: false, code: "NO_SPEECH_DETECTED", message: "No audio detected" });
+  await settle();
+
+  assert.deepEqual(sentOfType(webContents, "error"), []);
+  assert.equal(sentOfType(webContents, "transcript")[0].text, "");
+});
+
+test("a session starting while the idle worker shuts down waits for it, then loads a fresh one", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  await startSession();
+  await stop();
+  t.mock.timers.tick(5 * 60 * 1000);
+  assert.ok(voiceWorker.stopping, "the idle worker is being stopped");
+  activeChanges.length = 0;
+
+  const started = start(fakeRenderer());
+  await settle();
+  assert.deepEqual(activeChanges, [], "the new session waits for the old worker to exit");
+
+  voiceWorker.stopping();
+  await settle();
+  voiceWorker.configure.resolve();
+  await started;
+  assert.deepEqual(activeChanges, [true], "its exit doesn't end the new session");
 });

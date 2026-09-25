@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const {
-  createTurnEndpointer,
+  createConfiguredTurnEndpointer,
   createSampleRing,
   withPreRoll,
 } = require("../helpers/voiceTurnEndpointer");
@@ -85,6 +85,7 @@ function resetTurnState() {
   endpointer?.reset();
   micRing = createSampleRing(MIC_RING_SAMPLES);
   latestClassifyId = 0;
+  lastClassify = null;
 }
 
 async function configure({
@@ -107,11 +108,9 @@ async function configure({
   }
   const vadConfig = await loadSmartTurn(smartTurnConfig, requestedVadConfig);
   vad = new lib.Vad(vadConfig, 60);
-  endpointer = createTurnEndpointer({
-    smartTurn: Boolean(smartTurn),
-    sampleRate: VAD_SAMPLE_RATE,
-    maxSilenceMs: smartTurnConfig?.maxSilenceMs,
-    threshold: smartTurnConfig?.threshold,
+  endpointer = createConfiguredTurnEndpointer({
+    smartTurnConfig,
+    classifierLoaded: Boolean(smartTurn),
   });
   resetTurnState();
   log("info", "configured", {
@@ -161,7 +160,12 @@ function speak({ utteranceId, chunkIndex, text }) {
       const samples = new Float32Array(audio.samples);
       emit("tts-audio", { utteranceId, chunkIndex, samples });
     }
-    return { queueWaitMs, firstAudioMs, totalMs: Date.now() - started, sampleRate: audio.sampleRate };
+    return {
+      queueWaitMs,
+      firstAudioMs,
+      totalMs: Date.now() - started,
+      sampleRate: audio.sampleRate,
+    };
   };
   const result = ttsQueue.then(run, run);
   ttsQueue = result.catch(() => {});
@@ -177,6 +181,8 @@ function classify({ requestId, fromSample, toSample }) {
     // A newer pause superseded this one while it waited behind a running call.
     if (requestId !== latestClassifyId || !smartTurn) return;
     let probability = null;
+    // A failed prediction must not report the timings of an earlier one.
+    lastClassify = null;
     const samplesBefore = micRing.totalSamples;
     const started = performance.now();
     try {
@@ -251,6 +257,8 @@ const handlers = {
   speak,
   cancel: ({ utteranceId }) => {
     cancelledUtterances.add(utteranceId);
+    // Every chunk of the utterance is queued ahead of this cancel; once they drain, the id is dead.
+    void ttsQueue.then(() => cancelledUtterances.delete(utteranceId));
     return { cancelled: true };
   },
   "vad-feed": feedVad,

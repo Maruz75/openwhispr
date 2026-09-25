@@ -1,14 +1,16 @@
 // End-of-turn policy for voice conversation, clocked in samples so it is pure and
 // replayable offline. Silence-only mode commits each Silero segment. Smart Turn
 // mode treats a (short) Silero segment end as a candidate pause: the classifier
-// decides whether the turn is complete, and max silence commits it regardless.
+// decides whether the turn is complete, and max silence commits it regardless, as
+// does the first pause once the turn holds max-turn worth of speech.
 
 const DEFAULT_SAMPLE_RATE = 16000;
 const SMART_TURN_CONTEXT_MS = 8000;
 
+const speechLength = (segments) => segments.reduce((sum, entry) => sum + entry.samples.length, 0);
+
 function concatSegments(segments) {
-  const total = segments.reduce((sum, entry) => sum + entry.samples.length, 0);
-  const joined = new Float32Array(total);
+  const joined = new Float32Array(speechLength(segments));
   let offset = 0;
   for (const entry of segments) {
     joined.set(entry.samples, offset);
@@ -21,16 +23,13 @@ function createTurnEndpointer({
   smartTurn,
   sampleRate = DEFAULT_SAMPLE_RATE,
   maxSilenceMs = 1200,
+  maxTurnMs = 30000,
   threshold = 0.5,
-  // Tiered mode: only a confident "complete" commits at the short pause; one
-  // above `threshold` waits for `holdSilenceMs`. Off when fastThreshold is unset.
-  fastThreshold = threshold,
-  holdSilenceMs = maxSilenceMs,
   preRollMs = 500,
 }) {
   const toSamples = (valueMs) => Math.round((valueMs * sampleRate) / 1000);
   const maxSilenceSamples = toSamples(maxSilenceMs);
-  const holdSilenceSamples = toSamples(holdSilenceMs);
+  const maxTurnSamples = toSamples(maxTurnMs);
   const contextSamples = toSamples(SMART_TURN_CONTEXT_MS);
   const preRollSamples = toSamples(preRollMs);
 
@@ -40,14 +39,12 @@ function createTurnEndpointer({
   let nextRequestId = 1;
   let awaitingRequestId = null;
   let lastProbability = null;
-  let holding = false;
 
   const reset = () => {
     segments = [];
     speaking = false;
     awaitingRequestId = null;
     lastProbability = null;
-    holding = false;
   };
 
   const commit = (reason, commitSample, probability) => {
@@ -70,7 +67,6 @@ function createTurnEndpointer({
       speaking = true;
       // Whatever the classifier says about the shorter turn no longer applies.
       awaitingRequestId = null;
-      holding = false;
       return [];
     },
 
@@ -79,6 +75,8 @@ function createTurnEndpointer({
       speaking = false;
       lastSpeechEndSample = startSample + samples.length;
       if (!smartTurn) return commit("silence", nowSample, null);
+      if (speechLength(segments) >= maxTurnSamples)
+        return commit("max-turn", nowSample, lastProbability);
       awaitingRequestId = nextRequestId++;
       const turnStart = Math.max(0, segments[0].startSample - preRollSamples);
       return [
@@ -96,22 +94,23 @@ function createTurnEndpointer({
       awaitingRequestId = null;
       if (probability === null || probability === undefined) return [];
       lastProbability = probability;
-      if (probability > fastThreshold) return commit("smart-turn", nowSample, probability);
-      holding = probability > threshold;
-      return [];
+      return probability > threshold ? commit("smart-turn", nowSample, probability) : [];
     },
 
     advance(nowSample) {
       if (segments.length === 0 || speaking) return [];
-      const silence = nowSample - lastSpeechEndSample;
-      if (holding && silence >= holdSilenceSamples)
-        return commit("smart-turn-hold", nowSample, lastProbability);
-      if (silence < maxSilenceSamples) return [];
+      if (nowSample - lastSpeechEndSample < maxSilenceSamples) return [];
       return commit("max-silence", nowSample, lastProbability);
     },
 
     reset,
   };
+}
+
+/** The worker's endpointer for its `smartTurn` config; silence-only without the classifier. */
+function createConfiguredTurnEndpointer({ smartTurnConfig, classifierLoaded }) {
+  const { maxSilenceMs, maxTurnMs, threshold } = smartTurnConfig || {};
+  return createTurnEndpointer({ smartTurn: classifierLoaded, maxSilenceMs, maxTurnMs, threshold });
 }
 
 /** Rolling mic history addressed by absolute sample index, for classifier windows. */
@@ -161,4 +160,9 @@ function withPreRoll({ ring, turnStartSample, samples, preRollSamples }) {
   return audio;
 }
 
-module.exports = { createTurnEndpointer, createSampleRing, withPreRoll };
+module.exports = {
+  createTurnEndpointer,
+  createConfiguredTurnEndpointer,
+  createSampleRing,
+  withPreRoll,
+};

@@ -15,7 +15,9 @@ test("ready when models, speech model and a downloaded local brain are all prese
 });
 
 test("auto language is accepted as English", () => {
-  assert.deepEqual(checkVoiceConversationReadiness({ ...READY, language: "auto" }), { ready: true });
+  assert.deepEqual(checkVoiceConversationReadiness({ ...READY, language: "auto" }), {
+    ready: true,
+  });
 });
 
 test("a non-English language is refused before anything else is checked", () => {
@@ -48,11 +50,29 @@ test("a missing Parakeet model is reported", () => {
 });
 
 test("a local brain that is not downloaded is reported; cloud brains need no download", () => {
-  const localMissing = { ...READY, brain: { mode: "local", model: "qwen3.5-4b-q4_k_m", downloaded: false } };
+  const localMissing = {
+    ...READY,
+    brain: { mode: "local", model: "qwen3.5-4b-q4_k_m", downloaded: false },
+  };
   assert.deepEqual(checkVoiceConversationReadiness(localMissing), {
     ready: false,
     reason: "brain-not-downloaded",
   });
-  const cloud = { ...READY, brain: { mode: "openwhispr", model: "", downloaded: false } };
+  const cloud = {
+    ...READY,
+    brain: { mode: "openwhispr", model: "", downloaded: false, signedIn: true },
+  };
   assert.deepEqual(checkVoiceConversationReadiness(cloud), { ready: true });
+});
+
+test("an OpenWhispr Cloud brain needs the user signed in", () => {
+  const cloud = { mode: "openwhispr", model: "", downloaded: false };
+  assert.deepEqual(
+    checkVoiceConversationReadiness({ ...READY, brain: { ...cloud, signedIn: false } }),
+    { ready: false, reason: "brain-sign-in-required" }
+  );
+  assert.deepEqual(
+    checkVoiceConversationReadiness({ ...READY, brain: { ...cloud, signedIn: true } }),
+    { ready: true }
+  );
 });

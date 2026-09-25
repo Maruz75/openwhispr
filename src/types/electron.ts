@@ -1806,10 +1806,14 @@ declare global {
       voiceConversation?: {
         start: (options: {
           parakeetModel?: string;
-          language?: string;
           brainModel?: string;
           harness?: boolean;
-        }) => Promise<{ sampleRate: number; loadMs: number; smartTurn: boolean }>;
+        }) => Promise<{
+          sessionId: number;
+          sampleRate: number;
+          loadMs: number;
+          smartTurn: boolean;
+        }>;
         isHarness: () => Promise<boolean>;
         brainOverride: () => Promise<string | null>;
         reportTurn: (report: import("../services/voice/types").VoiceTurnReport) => void;
@@ -1817,30 +1821,31 @@ declare global {
         onHarnessDone: (callback: () => void) => () => void;
         sendMic: (samples: Float32Array) => void;
         keepModelWarm: (modelId: string) => Promise<{ warmed: boolean; reason?: string }>;
-        speak: (request: {
-          utteranceId: string;
-          chunkIndex: number;
-          text: string;
-        }) => Promise<{
+        speak: (request: { utteranceId: string; chunkIndex: number; text: string }) => Promise<{
           queueWaitMs?: number;
           firstAudioMs?: number | null;
           totalMs?: number;
           cancelled?: boolean;
         }>;
         cancelSpeech: (utteranceId: string) => Promise<{ cancelled: boolean }>;
-        stop: () => Promise<{ stopped: boolean }>;
+        /** Ends the named session; null ends whichever is running (e.g. one still starting). */
+        stop: (sessionId: number | null) => Promise<{ stopped: boolean }>;
         onEvent: (
           callback: (event: import("../services/voice/types").VoiceConversationEvent) => void
         ) => () => void;
         getReadiness: (request: {
           parakeetModel: string;
           language: string;
-          brain: { mode: string; model: string };
+          brain: { mode: string; model: string; signedIn: boolean };
         }) => Promise<import("../services/voice/types").VoiceConversationReadiness>;
         downloadModels: () => Promise<{ ready: boolean; missing: string[]; missingBytes: number }>;
         cancelModelDownload: () => Promise<{ cancelled: boolean }>;
         onDownloadProgress: (
-          callback: (progress: { model: string; downloadedBytes: number; totalBytes: number }) => void
+          callback: (progress: {
+            model: string;
+            downloadedBytes: number;
+            totalBytes: number;
+          }) => void
         ) => () => void;
       };
 

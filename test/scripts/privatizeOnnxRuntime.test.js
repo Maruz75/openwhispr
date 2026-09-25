@@ -9,7 +9,7 @@ const { listImportedModules } = require("../../scripts/lib/pe-imports");
 const {
   privatizeOnnxRuntimeDir,
   verifyOnnxRuntimePrivatizedDir,
-} = require("../../scripts/lib/privatize-onnxruntime");
+} = require("../../scripts/download-sherpa-onnx");
 
 function sherpaDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sherpa-win-"));
@@ -27,28 +27,59 @@ function sherpaDir(t) {
   return dir;
 }
 
+const snapshot = (dir) =>
+  Object.fromEntries(
+    fs.readdirSync(dir).map((name) => [name, fs.readFileSync(path.join(dir, name))])
+  );
+
 test("renames the runtime and re-points every importer", (t) => {
   const dir = sherpaDir(t);
-  const result = privatizeOnnxRuntimeDir(dir);
+  privatizeOnnxRuntimeDir(dir);
 
-  assert.equal(result.renamed, true);
-  assert.deepEqual(result.patched.sort(), ["sherpa-onnx-c-api.dll", "sherpa-onnx.node"]);
   assert.equal(fs.existsSync(path.join(dir, "onnxruntime.dll")), false);
   assert.equal(fs.existsSync(path.join(dir, "ow-onnxrt.dll")), true);
   assert.deepEqual(listImportedModules(fs.readFileSync(path.join(dir, "sherpa-onnx.node"))), [
     "sherpa-onnx-c-api.dll",
     "ow-onnxrt.dll",
   ]);
+  assert.deepEqual(listImportedModules(fs.readFileSync(path.join(dir, "sherpa-onnx-c-api.dll"))), [
+    "KERNEL32.dll",
+    "ow-onnxrt.dll",
+  ]);
   assert.doesNotThrow(() => verifyOnnxRuntimePrivatizedDir(dir));
 });
 
-test("running twice changes nothing the second time", (t) => {
+test("an already privatized package passes again unchanged", (t) => {
   const dir = sherpaDir(t);
   privatizeOnnxRuntimeDir(dir);
-  assert.deepEqual(privatizeOnnxRuntimeDir(dir), { renamed: false, patched: [] });
+  const before = snapshot(dir);
+
+  privatizeOnnxRuntimeDir(dir);
+
+  assert.deepEqual(snapshot(dir), before);
+  assert.doesNotThrow(() => verifyOnnxRuntimePrivatizedDir(dir));
+});
+
+test("a package without either runtime name fails loudly", (t) => {
+  const dir = sherpaDir(t);
+  fs.rmSync(path.join(dir, "onnxruntime.dll"));
+
+  assert.throws(() => privatizeOnnxRuntimeDir(dir), /onnxruntime\.dll not found/);
+  assert.throws(() => verifyOnnxRuntimePrivatizedDir(dir), /has no ow-onnxrt\.dll/);
 });
 
 test("verification fails while any image still imports onnxruntime.dll", (t) => {
   const dir = sherpaDir(t);
-  assert.throws(() => verifyOnnxRuntimePrivatizedDir(dir), /onnxruntime\.dll/);
+  fs.renameSync(path.join(dir, "onnxruntime.dll"), path.join(dir, "ow-onnxrt.dll"));
+  assert.throws(
+    () => verifyOnnxRuntimePrivatizedDir(dir),
+    /sherpa-onnx-c-api\.dll still imports onnxruntime\.dll/
+  );
+});
+
+test("verification fails while onnxruntime.dll would still ship", (t) => {
+  const dir = sherpaDir(t);
+  privatizeOnnxRuntimeDir(dir);
+  fs.writeFileSync(path.join(dir, "onnxruntime.dll"), buildPeImage({ imports: ["KERNEL32.dll"] }));
+  assert.throws(() => verifyOnnxRuntimePrivatizedDir(dir), /onnxruntime\.dll must not ship/);
 });

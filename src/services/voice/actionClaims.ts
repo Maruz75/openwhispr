@@ -1,11 +1,13 @@
-// English only, like the rest of v1 voice. Completed-action claims "I did X" with optional
-// hedges (just, already, also, now, successfully, gone ahead and). Matches only at answer
-// start or after a clause boundary (punctuation + space: `.!?,;`). Excludes "I made sure"
-// (negative lookahead after "made"). Offers ("I can add…", "I'll check…"), conditions
-// ("If I've updated…"), and questions stay non-claims: they don't start a clause or use
-// the "made sure" escape hatch, so the regex won't match them.
+// English only, like the rest of v1 voice. Completed-action claims "I did X", matched only
+// at answer start or after a clause boundary (`.!?,;`, a dash or an ellipsis, then a
+// space), optionally after a lead-in word ("Okay", "and", "but"…), a "think"/"believe"
+// hedge and adverbs (just, already, now, gone ahead and…). Offers ("I can add…", "I'll
+// check…"), conditions ("If I've updated…") and questions don't start a clause that way,
+// so they stay non-claims. "I made sure", "I made a mistake" and "I noted that…" are not
+// actions. Passive forms ("It's saved") are left out: they are just as often a true
+// answer about something that already exists.
 const ACTION_CLAIM =
-  /(^|[.!?;,]\s+)(I(?:'ve| have)?\s+(?:just\s+|already\s+|also\s+|now\s+|successfully\s+|gone\s+ahead\s+and\s+)?(?:added|created|made(?!\s+sure\b)|copied|saved|updated|changed|moved|removed|deleted)\b)/i;
+  /(^|[.!?;,…—–]\s+)(?:(?:ok(?:ay)?|sure|done|alright|yes|yep|great|and|but|so|then)\s+)?((?:I\s+(?:think|believe)\s+)?I(?:['’]ve| have)?\s+(?:(?:just|already|also|now|successfully|gone\s+ahead\s+and)\s+)*(?:added|created|made(?!\s+(?:sure|a\s+mistake|an\s+error)\b)|copied|saved|updated|changed|moved|removed|deleted|put|noted(?!\s+that\b)|wrote|written|scheduled|booked|sent|set)\b)/i;
 
 // Reading a note or snippet back quotes the user's own first-person words ("Your standup
 // note says: I finished the report, I updated the tests"); those are not the assistant's

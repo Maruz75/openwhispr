@@ -178,7 +178,7 @@ class DiarizationManager {
           progressCallback({ type: "progress", stage: "extracting", percentage: 100 });
         }
 
-        await this._extractTarBz2(segArchivePath, modelsDir);
+        await extractTarBz2(segArchivePath, modelsDir, { logger: debugLogger });
         await fsPromises.unlink(segArchivePath).catch(() => {});
 
         if (!fs.existsSync(segModelPath)) {
@@ -252,10 +252,6 @@ class DiarizationManager {
     } finally {
       this.currentDownloadProcess = null;
     }
-  }
-
-  async _extractTarBz2(archivePath, destDir) {
-    return extractTarBz2(archivePath, destDir);
   }
 
   async cancelDownload() {

@@ -34,11 +34,3 @@ test("the filler line names what the assistant is doing", async () => {
   assert.equal(voiceToolFiller(["get_calendar_events"]), "Let me check your calendar.");
   assert.equal(voiceToolFiller(["create_note"]), "One moment.");
 });
-
-test("a session stops after the idle window only when nothing is in progress", async () => {
-  const { shouldStopForIdle } = await load();
-  const base = { lastActivityAt: 0, idleMs: 150_000 };
-  assert.equal(shouldStopForIdle({ ...base, now: 149_999, busy: false }), false);
-  assert.equal(shouldStopForIdle({ ...base, now: 150_000, busy: false }), true);
-  assert.equal(shouldStopForIdle({ ...base, now: 400_000, busy: true }), false);
-});

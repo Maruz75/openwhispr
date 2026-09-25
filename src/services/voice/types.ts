@@ -27,12 +27,14 @@ export interface VoiceTurnReport {
   /** Write tools actually executed (not blocked as a repeat by the guard); see TurnMetrics.ranWrites. */
   ranWrites: string[];
   answer: string;
+  /** When the turn's speech ended (main-process clock), so a late report can't be misfiled. */
+  endedAt: number;
   metrics: Record<string, number | null>;
 }
 
 /** How the worker decided the user's turn was over (Smart Turn or plain silence). */
 export interface VoiceTurnEndpoint {
-  reason: "silence" | "smart-turn" | "smart-turn-hold" | "max-silence";
+  reason: "silence" | "smart-turn" | "max-silence" | "max-turn";
   probability: number | null;
   segments: number;
   /** Speech end to turn commit, on the mic clock. */
@@ -46,7 +48,12 @@ export type VoiceConversationReadiness =
   | { ready: true }
   | {
       ready: false;
-      reason: "language-unsupported" | "voice-models-missing" | "speech-model-missing" | "brain-not-downloaded";
+      reason:
+        | "language-unsupported"
+        | "voice-models-missing"
+        | "speech-model-missing"
+        | "brain-not-downloaded"
+        | "brain-sign-in-required";
       missing?: string[];
       missingBytes?: number;
     };
@@ -61,5 +68,11 @@ export type VoiceConversationEvent =
       endedAt: number;
       endpoint: VoiceTurnEndpoint | null;
     }
-  | { type: "tts-audio"; utteranceId: string; chunkIndex: number; samples: Float32Array; at: number }
-  | { type: "error"; stage: string; message: string };
+  | {
+      type: "tts-audio";
+      utteranceId: string;
+      chunkIndex: number;
+      samples: Float32Array;
+      at: number;
+    }
+  | { type: "error"; stage: "stt" | "worker"; message: string };

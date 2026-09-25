@@ -27,20 +27,7 @@ export function voiceToolFiller(toolNames: string[]): string {
   if (toolNames.some((name) => name === "search_notes" || name === "get_note")) {
     return "Let me check your notes.";
   }
-  if (toolNames.some((name) => name.startsWith("get_calendar"))) return "Let me check your calendar.";
+  if (toolNames.some((name) => name.startsWith("get_calendar")))
+    return "Let me check your calendar.";
   return "One moment.";
-}
-
-export function shouldStopForIdle({
-  lastActivityAt,
-  now,
-  busy,
-  idleMs,
-}: {
-  lastActivityAt: number;
-  now: number;
-  busy: boolean;
-  idleMs: number;
-}): boolean {
-  return !busy && now - lastActivityAt >= idleMs;
 }

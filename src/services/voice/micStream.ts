@@ -70,17 +70,27 @@ async function openEchoCancelledMic(deviceId?: string | null): Promise<MediaStre
 export async function startMicStream({ deviceId, onFrame }: MicStreamOptions): Promise<MicStream> {
   const stream = await openEchoCancelledMic(deviceId);
   const context = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: "interactive" });
+  const release = async () => {
+    for (const track of stream.getTracks()) track.stop();
+    await context.close().catch(() => {});
+  };
   // Started from a global hotkey, not a click, so Chromium may create it suspended
-  // and the worklet would never run.
-  if (context.state === "suspended") await context.resume();
+  // and the worklet would never run. Not awaited: resume() can hang when the audio
+  // device is wedged, and the worklet starts whenever it resolves.
+  if (context.state === "suspended") context.resume().catch(() => {});
+  let source: MediaStreamAudioSourceNode;
+  let node: AudioWorkletNode;
   const url = URL.createObjectURL(new Blob([WORKLET_SOURCE], { type: "application/javascript" }));
   try {
     await context.audioWorklet.addModule(url);
+    source = context.createMediaStreamSource(stream);
+    node = new AudioWorkletNode(context, "voice-conversation-frames");
+  } catch (error) {
+    await release();
+    throw error;
   } finally {
     URL.revokeObjectURL(url);
   }
-  const source = context.createMediaStreamSource(stream);
-  const node = new AudioWorkletNode(context, "voice-conversation-frames");
   node.port.onmessage = (event: MessageEvent<Float32Array>) => onFrame(event.data);
   source.connect(node);
 
@@ -89,8 +99,7 @@ export async function startMicStream({ deviceId, onFrame }: MicStreamOptions): P
       node.port.onmessage = null;
       source.disconnect();
       node.disconnect();
-      for (const track of stream.getTracks()) track.stop();
-      await context.close();
+      await release();
     },
   };
 }

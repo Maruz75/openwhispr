@@ -1,7 +1,10 @@
 export interface PcmPlayer {
   enqueue: (samples: Float32Array) => void;
-  /** Stops everything queued or playing, immediately (barge-in). */
+  /** Stops everything queued or playing, immediately (barge-in), and un-pauses. */
   flush: () => void;
+  /** Holds playback where it is; queued audio waits (the user may be talking over it). */
+  pause: () => void;
+  resume: () => void;
   isPlaying: () => boolean;
   close: () => Promise<void>;
 }
@@ -26,6 +29,12 @@ export function createPcmPlayer({ sampleRate, onStart, onIdle }: PcmPlayerOption
   const context = new AudioContext({ sampleRate, latencyHint: "interactive" });
   const active = new Set<AudioBufferSourceNode>();
   let nextStartTime = 0;
+  let paused = false;
+  // A context closed mid-session (stop) rejects these; there is nothing left to play.
+  const resume = () => {
+    paused = false;
+    context.resume().catch(() => {});
+  };
 
   const handleEnded = (source: AudioBufferSourceNode) => {
     active.delete(source);
@@ -35,7 +44,7 @@ export function createPcmPlayer({ sampleRate, onStart, onIdle }: PcmPlayerOption
   return {
     enqueue(samples) {
       if (samples.length === 0) return;
-      if (context.state === "suspended") void context.resume();
+      if (!paused && context.state === "suspended") context.resume().catch(() => {});
       const buffer = context.createBuffer(1, samples.length, sampleRate);
       buffer.copyToChannel(new Float32Array(samples), 0);
       const source = context.createBufferSource();
@@ -60,8 +69,14 @@ export function createPcmPlayer({ sampleRate, onStart, onIdle }: PcmPlayerOption
       const hadAudio = active.size > 0;
       active.clear();
       nextStartTime = 0;
+      if (paused) resume();
       if (hadAudio) onIdle?.();
     },
+    pause() {
+      paused = true;
+      context.suspend().catch(() => {});
+    },
+    resume,
     isPlaying: () => active.size > 0,
     close: () => context.close(),
   };

@@ -115,54 +115,20 @@ test("a failed classification (null probability) leaves the decision to max sile
   assert.equal(endpointer.advance(ms(3000))[0].reason, "max-silence");
 });
 
-test("tiered mode commits at once only above the fast threshold", () => {
-  const endpointer = createTurnEndpointer({
-    smartTurn: true,
-    threshold: 0.5,
-    fastThreshold: 0.9,
-    holdSilenceMs: 500,
-  });
-  const [action] = endpointer.onSegment({ ...segment(1000, 800), nowSample: ms(2000) });
-  const [commit] = endpointer.onPrediction({
-    requestId: action.requestId,
-    probability: 0.95,
-    nowSample: ms(2050),
-  });
-  assert.equal(commit.reason, "smart-turn");
-});
-
-test("tiered mode holds a likely-complete turn until the hold silence", () => {
-  const endpointer = createTurnEndpointer({
-    smartTurn: true,
-    threshold: 0.5,
-    fastThreshold: 0.9,
-    holdSilenceMs: 500,
-    maxSilenceMs: 1200,
-  });
-  const [action] = endpointer.onSegment({ ...segment(1000, 800), nowSample: ms(2000) });
-  assert.deepEqual(
-    endpointer.onPrediction({ requestId: action.requestId, probability: 0.7, nowSample: ms(2050) }),
-    []
-  );
-  assert.deepEqual(endpointer.advance(ms(2299)), []);
-
-  const [commit] = endpointer.advance(ms(2300));
-  assert.equal(commit.reason, "smart-turn-hold");
-  assert.equal(commit.probability, 0.7);
-});
-
-test("tiered mode forgets a held turn when the user speaks again", () => {
-  const endpointer = createTurnEndpointer({
-    smartTurn: true,
-    fastThreshold: 0.9,
-    holdSilenceMs: 500,
-  });
-  const [action] = endpointer.onSegment({ ...segment(1000, 800), nowSample: ms(2000) });
-  endpointer.onPrediction({ requestId: action.requestId, probability: 0.7, nowSample: ms(2050) });
+test("a turn holding max-turn worth of speech commits at that pause without the classifier", () => {
+  const endpointer = createTurnEndpointer({ smartTurn: true, maxTurnMs: 2000 });
+  const [first] = endpointer.onSegment({ ...segment(1000, 1500), nowSample: ms(2700) });
+  assert.equal(first.type, "classify");
+  endpointer.onPrediction({ requestId: first.requestId, probability: 0.3, nowSample: ms(2750) });
   endpointer.onSpeechStart();
-  endpointer.onSegment({ ...segment(2400, 600), nowSample: ms(3200) });
-  // 500 ms after the second pause, with no prediction for it yet: keep waiting.
-  assert.deepEqual(endpointer.advance(ms(3500)), []);
+
+  const [commit] = endpointer.onSegment({ ...segment(3000, 500), nowSample: ms(3700) });
+  assert.equal(commit.type, "commit");
+  assert.equal(commit.reason, "max-turn");
+  assert.equal(commit.probability, 0.3);
+  assert.equal(commit.samples.length, ms(2000));
+  assert.equal(commit.segments, 2);
+  assert.equal(commit.commitSample, ms(3700));
 });
 
 test("reset drops a pending turn", () => {

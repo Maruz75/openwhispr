@@ -127,7 +127,9 @@ export function getVoiceReplyInstructions(availableTools: string[] = []): string
   const has = (name: string) => availableTools.includes(name);
   const uses: string[] = [];
   if (has("web_search")) {
-    uses.push("for anything current, time-sensitive, or that you don't know for certain, call web_search");
+    uses.push(
+      "for anything current, time-sensitive, or that you don't know for certain, call web_search"
+    );
   }
   if (has("search_notes")) uses.push("for the user's own meetings or notes, call search_notes");
   if (has("get_calendar_events") || has("get_calendar_availability")) {
@@ -145,7 +147,8 @@ export function getVoiceReplyInstructions(availableTools: string[] = []): string
       "today, now, prices, news, weather, sports results, schedules, or releases, always call " +
       "web_search rather than answering from memory.";
   }
-  guidance += " When you decide to use a tool, call it in the same response; never just say that you will check.";
+  guidance +=
+    " When you decide to use a tool, call it in the same response; never just say that you will check.";
   // The harness caught "I've added Kubernetes to your dictionary" with no tool call:
   // earlier confirmations in the conversation make the model imitate them.
   guidance +=
