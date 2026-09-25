@@ -1,3 +1,5 @@
+const { describeError } = require("./errorSummary");
+
 const SLACK_AUTHORIZE_URL = "https://slack.com/oauth/v2/authorize";
 const SLACK_USER_SCOPES = [
   "chat:write",
@@ -81,6 +83,11 @@ function createSlackAuth({
   loopback = SLACK_LOOPBACK,
   redirectUri = slackRedirectUri(process.env),
   renderResultPage = null,
+  // Optional: told about a credential write that failed for a reason other
+  // than a reconnect/disconnect race (disk, permission, encryption errors
+  // from credentialStore) via logger.warn(message, describeError(error),
+  // area). Never a token or a raw error.message.
+  logger = null,
   now = Date.now,
 }) {
   const refreshes = new Map();
@@ -140,8 +147,14 @@ function createSlackAuth({
         { ...credential, needsReconnect: true },
         binding.generation
       );
-    } catch {
-      // The login was replaced or removed meanwhile; nothing to mark.
+    } catch (error) {
+      // A reconnect or disconnect landed first: that login, not this stale
+      // one, is the truth now.
+      if (error.code === "connection_changed" || error.code === "signed_out") {
+        return { ok: false, errorCode: "connection_changed" };
+      }
+      // Any other write failure still leaves Slack's own answer true: the
+      // login is gone, even though the local flag could not be recorded.
     }
     return { ok: false, errorCode: "reconnect_needed" };
   }
@@ -163,6 +176,13 @@ function createSlackAuth({
       result = await callRefresh(credential.refreshToken);
     }
     if (!result.ok) {
+      // A reconnect or disconnect may have landed while the network call was
+      // in flight. That always wins over the login this refresh started
+      // with: report connection_changed and write nothing for either the
+      // login-gone or the transient case.
+      if (!sameLogin(credentials.read(binding.ownerAccountId, "slack"), binding)) {
+        return { ok: false, errorCode: "connection_changed" };
+      }
       return OAUTH_LOGIN_GONE.has(result.errorCode)
         ? markReconnect(binding, credential)
         : { ok: false, errorCode: result.errorCode };
@@ -180,8 +200,14 @@ function createSlackAuth({
     // started from: a reconnect or disconnect that landed meanwhile wins.
     try {
       credentials.save(binding.ownerAccountId, "slack", next, binding.generation);
-    } catch {
-      return { ok: false, errorCode: "connection_changed" };
+    } catch (error) {
+      if (error.code === "connection_changed" || error.code === "signed_out") {
+        return { ok: false, errorCode: "connection_changed" };
+      }
+      // A real write failure (disk, permission, encryption): the rotated
+      // token is lost, so this is worth a log line, never the token itself.
+      logger?.warn("slack token save failed", describeError(error), "connectors");
+      return { ok: false, errorCode: "credential_save_failed" };
     }
     return { ok: true, token: next.accessToken, credential: next };
   }

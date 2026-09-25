@@ -30,10 +30,12 @@ async function setup({
   credential = CONNECTED,
   fetchImpl,
   clientId = "123.456",
+  credentials: credentialsOverride,
+  logger,
 } = {}) {
   const [{ createSlackAuth }, { createSlackApi }] = await Promise.all([loadAuth(), loadApi()]);
   const slack = fakeSlackFetch(script);
-  const credentials = memoryCredentials(credential);
+  const credentials = credentialsOverride ?? memoryCredentials(credential);
   const flows = [];
   const auth = createSlackAuth({
     api: createSlackApi({ fetchImpl: fetchImpl ?? slack.fetchImpl, sleep: async () => {} }),
@@ -41,6 +43,7 @@ async function setup({
     getClientId: () => clientId,
     OAuthFlowError: FakeFlowError,
     now: () => NOW,
+    logger,
     // Like the real flow behind a relay: the public redirect URI goes to both calls.
     runOAuthLoopbackFlow: async (options) => {
       const redirectUri = options.publicRedirectUri ?? "http://127.0.0.1:5000";
@@ -284,4 +287,91 @@ test("revoke revokes the refresh token and the access token, and never throws of
 
   const offlineRevoke = await setup({ script: { "auth.revoke": [offline()] } });
   await assert.doesNotReject(offlineRevoke.auth.revoke(CONNECTED));
+});
+
+test("a login-gone refresh code during a reconnect race reports connection_changed, not reconnect_needed", async () => {
+  const credentials = memoryCredentials(EXPIRED);
+  const { auth, slack } = await setup({
+    credentials,
+    script: {
+      "oauth.v2.access": [
+        {
+          ...slackError("invalid_refresh_token"),
+          // Mid-flight: a reconnect lands while the refresh call is still out.
+          during: () =>
+            credentials.replace(
+              "acct-1",
+              "slack",
+              { ...CONNECTED, userId: "U0OTHER", accessToken: "xoxe.xoxp-other" },
+              1
+            ),
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(await auth.getAccessToken(BINDING), {
+    ok: false,
+    errorCode: "connection_changed",
+  });
+  assert.equal(credentials.read("acct-1", "slack").credential.needsReconnect, false);
+  assert.equal(credentials.saves.length, 0, "nothing was written to the new login");
+  assert.equal(slack.calls.length, 1);
+});
+
+test("a transient refresh failure during a reconnect race reports connection_changed, not the transient code", async () => {
+  const credentials = memoryCredentials(EXPIRED);
+  let replaced = false;
+  const { auth } = await setup({
+    credentials,
+    script: {
+      "oauth.v2.access": [
+        {
+          ...httpStatus(503),
+          // Only replace once: an uncertain result is retried once more.
+          during: () => {
+            if (replaced) return;
+            replaced = true;
+            credentials.replace(
+              "acct-1",
+              "slack",
+              { ...CONNECTED, userId: "U0OTHER", accessToken: "xoxe.xoxp-other" },
+              1
+            );
+          },
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(await auth.getAccessToken(BINDING), {
+    ok: false,
+    errorCode: "connection_changed",
+  });
+  assert.equal(credentials.saves.length, 0, "nothing was written to the new login");
+});
+
+test("a save failure that isn't a login race is reported as credential_save_failed and logged without the token", async () => {
+  const warnings = [];
+  const logger = { warn: (...args) => warnings.push(args) };
+  const credentials = {
+    read: () => ({ credential: EXPIRED, generation: 1 }),
+    save: () => {
+      throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+    },
+  };
+  const { auth } = await setup({
+    credentials,
+    logger,
+    script: { "oauth.v2.access": [ok(FIXTURES.refresh)] },
+  });
+
+  assert.deepEqual(await auth.getAccessToken(BINDING), {
+    ok: false,
+    errorCode: "credential_save_failed",
+  });
+  assert.equal(warnings.length, 1);
+  const serialized = JSON.stringify(warnings[0]);
+  assert.match(serialized, /ENOSPC/);
+  assert.doesNotMatch(serialized, /xoxe/);
 });
