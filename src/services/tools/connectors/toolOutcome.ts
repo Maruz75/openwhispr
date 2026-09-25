@@ -38,19 +38,6 @@ export function notSentResult(
   };
 }
 
-export function unknownResult(destination: string, checkUrl?: string): ToolResult {
-  return {
-    success: true,
-    data: {
-      status: "unknown",
-      destination,
-      checkUrl,
-      guidance: `It may or may not have been sent. ${NO_RETRY} Tell the user to check ${destination}.`,
-    },
-    displayText: i18n.t("connectors.approval.unknown", { destination }),
-  };
-}
-
 export function failedResult(errorCode: string, message: string): ToolResult {
   return {
     success: true,
@@ -58,6 +45,15 @@ export function failedResult(errorCode: string, message: string): ToolResult {
     displayText: i18n.t(`connectors.toolStatus.errors.${errorCode}`, {
       defaultValue: i18n.t("connectors.toolStatus.failed"),
     }),
+  };
+}
+
+// A direct action that may already have acted: the model must not retry it.
+export function unknownResult(destination: string, guidance: string): ToolResult {
+  return {
+    success: true,
+    data: { status: "unknown", destination, guidance: `${guidance} ${NO_RETRY}` },
+    displayText: i18n.t("connectors.toolStatus.unknown"),
   };
 }
 
@@ -101,6 +97,15 @@ export function approvalOutcomeResult(outcome: ApprovalOutcome, destination: str
     case "failed":
       return failedResult(outcome.errorCode, outcome.message);
     case "unknown":
-      return unknownResult(destination, outcome.checkUrl);
+      return {
+        success: true,
+        data: {
+          status: "unknown",
+          destination,
+          checkUrl: outcome.checkUrl,
+          guidance: `It may or may not have been sent. ${NO_RETRY} Tell the user to check ${destination}.`,
+        },
+        displayText: i18n.t("connectors.approval.unknown", { destination }),
+      };
   }
 }

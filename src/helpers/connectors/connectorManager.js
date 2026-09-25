@@ -15,22 +15,27 @@ function normalizeCommitResult(result) {
   return { state: "unknown" };
 }
 
-// What a throw or a malformed result means depends on the action: a local
-// compose window that threw reached no one, but a network write (an Outlook
-// saved draft) may have landed. Only actions that say so may be unknown.
-function uncertainDirectResult(actionSpec, errorCode) {
-  return actionSpec.onThrow === "unknown"
-    ? { state: "unknown", errorCode }
-    : { state: "failed", errorCode, message: "That action didn't complete." };
+// A direct action that threw or answered malformed may already have acted
+// (a compose window opened before a later step failed); calling it "failed"
+// would invite a duplicate retry.
+function uncertainDirectResult(errorCode) {
+  return {
+    state: "unknown",
+    errorCode,
+    message: "That action may have gone through. Ask the user to check before trying again.",
+  };
 }
 
-function normalizeDirectResult(result, actionSpec) {
-  const recognized = result && typeof result === "object" && DIRECT_RESULT_STATES.has(result.state);
-  if (recognized && (result.state !== "unknown" || actionSpec.onThrow === "unknown")) {
-    return result;
-  }
-  return uncertainDirectResult(actionSpec, "invalid_result");
+function normalizeDirectResult(result) {
+  if (result && typeof result === "object" && DIRECT_RESULT_STATES.has(result.state)) return result;
+  return uncertainDirectResult("invalid_result");
 }
+
+const INVALID_PREPARE_RESULT = {
+  status: "failed",
+  errorCode: "invalid_result",
+  message: "Couldn't prepare that action.",
+};
 
 // Actions that write a receipt need the account the receipt belongs to.
 function actionRefusal(policyState, accountId) {
@@ -56,11 +61,13 @@ function isPreview(preview) {
 
 // A connector's prepare result decides whether a card appears and what it
 // shows, so it is checked like a commit result: anything malformed fails
-// closed, with no card and no receipt.
+// closed, with no card and no receipt. Only the fields each status defines
+// reach the renderer, so a connector can't leak anything else (such as
+// message text) through an odd result.
 function normalizePrepareResult(result) {
   if (result && typeof result === "object") {
     if (result.status === "ready" && isPreview(result.preview) && result.payload !== undefined) {
-      return result;
+      return { status: "ready", payload: result.payload, preview: result.preview };
     }
     if (result.status === "needs_clarification" && isString(result.message)) {
       return {
@@ -73,11 +80,7 @@ function normalizePrepareResult(result) {
       return { status: "failed", errorCode: result.errorCode, message: result.message };
     }
   }
-  return {
-    status: "failed",
-    errorCode: "invalid_result",
-    message: "Couldn't prepare that action.",
-  };
+  return INVALID_PREPARE_RESULT;
 }
 
 function normalizeStatus(status) {
@@ -120,7 +123,11 @@ function createConnectorManager({
     try {
       return write() !== false;
     } catch (error) {
-      logger.error("connector receipt write failed", { step, ...describeError(error) });
+      logger.error(
+        "connector receipt write failed",
+        { step, ...describeError(error) },
+        "connectors"
+      );
       return false;
     }
   }
@@ -151,8 +158,9 @@ function createConnectorManager({
 
   // Cards the renderer never answered are expired here too, so their payload
   // (message text) doesn't linger and Recent never shows them as waiting.
+  // Their receipts say so rather than a later "app_quit".
   function sweepExpired() {
-    for (const actionId of pendingActions.expireStale()) {
+    for (const actionId of pendingActions.sweepExpired()) {
       record(() =>
         actionLog.update(actionId, { state: "expired", errorCode: "expired" }, "pending")
       );
@@ -211,11 +219,7 @@ function createConnectorManager({
         { connectorId, action, ...describeError(error) },
         "connectors"
       );
-      return {
-        status: "failed",
-        errorCode: "prepare_failed",
-        message: "Couldn't prepare that action.",
-      };
+      return { ...INVALID_PREPARE_RESULT, errorCode: "prepare_failed" };
     }
     if (prepared.status !== "ready") return prepared;
 
@@ -249,6 +253,7 @@ function createConnectorManager({
   }
 
   async function commit(actionId, edits, policyState) {
+    sweepExpired();
     const entry = pendingActions.get(actionId);
     if (!entry) return { state: "not_sent", reason: "not_found" };
     // A second click while the first is sending must neither send nor
@@ -284,7 +289,7 @@ function createConnectorManager({
       () => actionLog.update(actionId, { state: "committing" }, "pending") === 1
     );
     if (!recorded) {
-      pendingActions.finish(actionId, "failed");
+      pendingActions.finish(actionId);
       record(() =>
         actionLog.update(
           actionId,
@@ -310,7 +315,7 @@ function createConnectorManager({
     }
     result = normalizeCommitResult(result);
 
-    pendingActions.finish(actionId, result.state);
+    pendingActions.finish(actionId);
     record(() =>
       actionLog.update(actionId, {
         state: result.state,
@@ -327,6 +332,7 @@ function createConnectorManager({
   }
 
   function cancel(actionId, reason) {
+    sweepExpired();
     const safeReason = CANCEL_REASONS.has(reason) ? reason : "cancelled_by_user";
     const cancelled = pendingActions.cancel(actionId);
     if (cancelled) {
@@ -342,7 +348,6 @@ function createConnectorManager({
     if (refusal) return { state: "unavailable", reason: refusal };
     const resolved = resolveAction(connectorId, action, "direct");
     if (resolved.error) return { state: "unavailable", reason: resolved.error };
-    const actionSpec = resolved.connector.actions[action];
 
     const id = randomId();
     const recorded = writeRequired("direct", () => {
@@ -359,19 +364,17 @@ function createConnectorManager({
 
     let result;
     try {
-      result = await resolved.connector.runDirect(action, args || {}, runtime || {});
+      result = normalizeDirectResult(
+        await resolved.connector.runDirect(action, args || {}, runtime || {})
+      );
     } catch (error) {
       logger.warn(
         "connector direct action threw",
         { connectorId, action, ...describeError(error) },
         "connectors"
       );
-      result = uncertainDirectResult(
-        actionSpec,
-        actionSpec.onThrow === "unknown" ? "direct_uncertain" : "direct_failed"
-      );
+      result = uncertainDirectResult("direct_failed");
     }
-    result = normalizeDirectResult(result, actionSpec);
     record(() =>
       actionLog.update(id, {
         state: result.state,

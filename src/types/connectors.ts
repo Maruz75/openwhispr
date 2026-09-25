@@ -36,9 +36,15 @@ export type ConnectorCommitResult =
   | { state: "not_sent"; reason: string; retryable?: boolean };
 
 export type ConnectorDirectResult =
-  | { state: "sent"; destinationLabel: string; bodyCopied?: boolean; subjectCopied?: boolean }
+  | {
+      state: "sent";
+      destinationLabel: string;
+      bodyCopied?: boolean;
+      subjectCopied?: boolean;
+      copyFailed?: boolean;
+    }
   | { state: "failed"; errorCode: string; message: string; destinationLabel?: string }
-  | { state: "unknown"; errorCode?: string; checkUrl?: string; destinationLabel?: string }
+  | { state: "unknown"; errorCode: string; message: string }
   | { state: "unavailable"; reason: string }
   | { state: "not_sent"; reason: string };
 
@@ -57,13 +63,16 @@ export interface ConnectorStatus {
   needsReconnect: boolean;
 }
 
+export type ConnectorActionState =
+  "pending" | "committing" | "sent" | "failed" | "unknown" | "cancelled" | "expired";
+
 export interface ConnectorActionRecord {
   id: string;
   connector: string;
   action: string;
   kind: "approval" | "direct";
   destinationLabel: string | null;
-  state: string;
+  state: ConnectorActionState;
   resultUrl: string | null;
   errorCode: string | null;
   createdAt: string;

@@ -143,6 +143,8 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
           <Button
             size="sm"
             onClick={() => {
+              // Leaving the editor also means a frozen textarea never looks
+              // editable while the draft sends.
               leaveEditingAndFocusCard();
               void approveAction(entry.key);
             }}

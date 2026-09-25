@@ -73,13 +73,13 @@ test("toAISDKFormat without a context factory passes no context", async () => {
 test("a tool execution scope shares one signal and aborts it once", async () => {
   const { createToolExecutionScope } = await loadScope();
   let approvals = 0;
-  let holds = 0;
+  const holds = [];
   const scope = createToolExecutionScope({
     onApprovalRequested: () => {
       approvals += 1;
     },
-    onHoldDelivery: () => {
-      holds += 1;
+    onHoldDelivery: (options) => {
+      holds.push(options);
     },
   });
   const first = scope.createContext({ messageId: "m1", toolCallId: "call-a" });
@@ -89,9 +89,9 @@ test("a tool execution scope shares one signal and aborts it once", async () => 
   assert.equal(first.signal, second.signal);
   assert.equal(first.signal.aborted, false);
   first.onApprovalRequested();
-  second.onHoldDelivery();
+  second.onHoldDelivery({ preserveClipboard: true });
   assert.equal(approvals, 1);
-  assert.equal(holds, 1);
+  assert.deepEqual(holds, [{ preserveClipboard: true }]);
 
   scope.abort();
   scope.abort();

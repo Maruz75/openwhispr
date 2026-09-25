@@ -62,10 +62,10 @@ test("cancel is refused once an action is committing", async () => {
 test("finish only settles committing actions and then forgets them", async () => {
   const { store } = await makeStore();
   const actionId = prepareOne(store);
-  assert.equal(store.finish(actionId, "sent"), false);
+  assert.equal(store.finish(actionId), false);
 
   store.beginCommit(actionId, { ...BINDING });
-  assert.equal(store.finish(actionId, "unknown"), true);
+  assert.equal(store.finish(actionId), true);
   assert.equal(store.get(actionId), null);
   assert.deepEqual(store.beginCommit(actionId, BINDING), { ok: false, reason: "not_found" });
 });
@@ -79,6 +79,21 @@ test("a pending action expires after the TTL", async () => {
 
   assert.deepEqual(store.beginCommit(actionId, BINDING), { ok: false, reason: "expired" });
   assert.equal(store.get(actionId), null);
+});
+
+test("sweepExpired drops only expired pending actions", async () => {
+  const { PENDING_TTL_MS } = await load();
+  const { store, advance } = await makeStore();
+  const stale = prepareOne(store);
+  const committing = prepareOne(store);
+  store.beginCommit(committing, BINDING);
+  advance(PENDING_TTL_MS + 1);
+  const fresh = prepareOne(store);
+
+  assert.deepEqual(store.sweepExpired(), [stale]);
+  assert.equal(store.get(stale), null);
+  assert.equal(store.get(committing).state, "committing");
+  assert.equal(store.get(fresh).state, "pending");
 });
 
 test("a changed account, workspace or generation refuses the commit", async () => {
@@ -138,7 +153,7 @@ test("a binding for another OpenWhispr account never commits", async () => {
   });
 });
 
-test("expireStale removes only pending actions past the TTL", async () => {
+test("sweepExpired removes only pending actions past a custom TTL", async () => {
   const { createPendingActions } =
     await import("../../../src/helpers/connectors/pendingActions.js");
   const clock = { now: 0 };
@@ -153,7 +168,7 @@ test("expireStale removes only pending actions past the TTL", async () => {
   clock.now = 1001;
   const fresh = make();
 
-  assert.deepEqual(pending.expireStale(), [stale]);
+  assert.deepEqual(pending.sweepExpired(), [stale]);
   assert.equal(pending.get(stale), null);
   assert.equal(pending.get(sending).state, "committing");
   assert.equal(pending.get(fresh).state, "pending");

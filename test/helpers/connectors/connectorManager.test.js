@@ -268,22 +268,28 @@ test("a connector commit resolving an unrecognized state is recorded as unknown"
   assert.equal(log.rows.get(actionId).state, "unknown");
 });
 
-test("a runDirect resolving undefined is recorded as failed, matching the thrown-runDirect shape", async () => {
-  const { manager, log } = await setup({
-    async runDirect() {
-      return undefined;
-    },
-  });
+test("a runDirect that throws or resolves malformed is recorded as unknown, never failed", async () => {
+  // Either may come after the side effect, so "failed" would invite a duplicate retry.
+  for (const [runDirect, errorCode] of [
+    [async () => undefined, "invalid_result"],
+    [async () => ({ state: "banana" }), "invalid_result"],
+    [
+      async () => {
+        throw new Error("clipboard unavailable");
+      },
+      "direct_failed",
+    ],
+  ]) {
+    const { manager, log } = await setup({ runDirect });
 
-  const result = await manager.runDirect("fake", "draft", {}, "allowed", {});
+    const result = await manager.runDirect("fake", "draft", {}, "allowed", {});
 
-  assert.deepEqual(result, {
-    state: "failed",
-    errorCode: "invalid_result",
-    message: "That action didn't complete.",
-  });
-  const [row] = [...log.rows.values()];
-  assert.equal(row.state, "failed");
+    assert.equal(result.state, "unknown");
+    assert.equal(result.errorCode, errorCode);
+    assert.match(result.message, /may have gone through/);
+    const [row] = [...log.rows.values()];
+    assert.equal(row.state, "unknown");
+  }
 });
 
 test("clarification and prepare failures create no pending action", async () => {
@@ -299,6 +305,115 @@ test("clarification and prepare failures create no pending action", async () => 
   const result = await manager.prepare("fake", "post", { text: "x" }, "allowed");
   assert.equal(result.status, "needs_clarification");
   assert.equal(log.rows.size, 0);
+});
+
+test("prepare passes on only the fields each connector result defines", async () => {
+  const cases = [
+    [
+      undefined,
+      { status: "failed", errorCode: "invalid_result", message: "Couldn't prepare that action." },
+    ],
+    [
+      { status: "sent", body: "secret text" },
+      { status: "failed", errorCode: "invalid_result", message: "Couldn't prepare that action." },
+    ],
+    [
+      { status: "ready", payload: { text: "x" } },
+      { status: "failed", errorCode: "invalid_result", message: "Couldn't prepare that action." },
+    ],
+    [
+      {
+        status: "needs_clarification",
+        message: "Which #eng?",
+        candidates: ["#eng-web", 7],
+        body: "secret text",
+      },
+      { status: "needs_clarification", message: "Which #eng?", candidates: ["#eng-web"] },
+    ],
+    [
+      {
+        status: "failed",
+        errorCode: "channel_archived",
+        message: "That channel is archived.",
+        body: "secret text",
+      },
+      { status: "failed", errorCode: "channel_archived", message: "That channel is archived." },
+    ],
+  ];
+  for (const [prepared, expected] of cases) {
+    const { manager, log } = await setup({ prepare: async () => prepared });
+    assert.deepEqual(await manager.prepare("fake", "post", { text: "x" }, "allowed"), expected);
+    assert.equal(log.rows.size, 0);
+  }
+
+  const { manager } = await setup({
+    async prepare() {
+      throw new Error("token=abc123 rejected");
+    },
+  });
+  assert.deepEqual(await manager.prepare("fake", "post", { text: "x" }, "allowed"), {
+    status: "failed",
+    errorCode: "prepare_failed",
+    message: "Couldn't prepare that action.",
+  });
+});
+
+test("a connector lookup that throws never hands its error to the renderer", async () => {
+  const leaky = new Error("token=abc123 rejected");
+  const bindingThrows = await setup({
+    async getBinding() {
+      throw leaky;
+    },
+    async getStatus() {
+      throw leaky;
+    },
+  });
+  assert.deepEqual(await bindingThrows.manager.prepare("fake", "post", { text: "x" }, "allowed"), {
+    status: "unavailable",
+    reason: "not_connected",
+  });
+  assert.deepEqual(await bindingThrows.manager.status(), [
+    {
+      id: "fake",
+      connected: false,
+      accountLabel: null,
+      workspaceLabel: null,
+      needsReconnect: false,
+    },
+  ]);
+
+  const { manager, fake, log } = await setup();
+  const { actionId } = await manager.prepare("fake", "post", { text: "x" }, "allowed");
+  fake.connector.getBinding = async () => {
+    throw leaky;
+  };
+  assert.deepEqual(await manager.commit(actionId, {}, "allowed"), {
+    state: "not_sent",
+    reason: "connection_changed",
+  });
+  assert.equal(fake.calls.commit.length, 0);
+  assert.equal(log.rows.get(actionId).state, "cancelled");
+});
+
+test("expired pending actions are swept and recorded as expired on the next call", async () => {
+  const { PENDING_TTL_MS, createPendingActions } = await loadPending();
+  let clock = 1_000;
+  const { manager, log } = await setup(
+    {},
+    {},
+    { pendingActions: createPendingActions({ now: () => clock }) }
+  );
+  const { actionId } = await manager.prepare("fake", "post", { text: "x" }, "allowed");
+
+  clock += PENDING_TTL_MS + 1;
+  manager.recentActions("fake");
+
+  assert.equal(log.rows.get(actionId).state, "expired");
+  assert.equal(log.rows.get(actionId).errorCode, "expired");
+  assert.deepEqual(await manager.commit(actionId, {}, "allowed"), {
+    state: "not_sent",
+    reason: "not_found",
+  });
 });
 
 test("cancel withdraws only pending actions and records the reason", async () => {
@@ -326,40 +441,6 @@ test("runDirect runs direct actions with the runtime and logs a receipt", async 
   const [row] = [...log.rows.values()];
   assert.equal(row.kind, "direct");
   assert.equal(row.state, "sent");
-});
-
-test("a direct action marked onThrow unknown records unknown when it throws", async () => {
-  const { manager, log } = await setup({
-    actions: {
-      post: { kind: "approval" },
-      draft: { kind: "direct" },
-      save: { kind: "direct", onThrow: "unknown" },
-    },
-    async runDirect(action) {
-      if (action === "save") throw new Error("socket hang up");
-      return { state: "sent", destinationLabel: "gabe@example.test" };
-    },
-  });
-
-  assert.deepEqual(await manager.runDirect("fake", "save", {}, "allowed", {}), {
-    state: "unknown",
-    errorCode: "direct_uncertain",
-  });
-  assert.equal([...log.rows.values()][0].state, "unknown");
-});
-
-test("an action that fails on throw can never report unknown", async () => {
-  const { manager } = await setup({
-    async runDirect() {
-      return { state: "unknown" };
-    },
-  });
-
-  assert.deepEqual(await manager.runDirect("fake", "draft", {}, "allowed", {}), {
-    state: "failed",
-    errorCode: "invalid_result",
-    message: "That action didn't complete.",
-  });
 });
 
 test("an action is only reachable through its own kind", async () => {
@@ -413,6 +494,18 @@ test("the send never starts unless committing was durably recorded", async () =>
     state: "not_sent",
     reason: "not_found",
   });
+});
+
+test("the send never starts when the committing write moves no row", async () => {
+  const { manager, fake, log } = await setup();
+  const { actionId } = await manager.prepare("fake", "post", { text: "x" }, "allowed");
+  log.rows.delete(actionId);
+
+  assert.deepEqual(await manager.commit(actionId, {}, "allowed"), {
+    state: "not_sent",
+    reason: "receipt_unavailable",
+  });
+  assert.equal(fake.calls.commit.length, 0);
 });
 
 test("a failed final write still reports the real outcome and leaves the row committing", async () => {

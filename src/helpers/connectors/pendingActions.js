@@ -23,6 +23,10 @@ function createPendingActions({
 } = {}) {
   const actions = new Map();
 
+  function isExpired(entry) {
+    return now() - entry.createdAt > ttlMs;
+  }
+
   function create({ connectorId, action, binding, payload, preview }) {
     const actionId = randomId();
     actions.set(actionId, {
@@ -47,7 +51,7 @@ function createPendingActions({
     const entry = actions.get(actionId);
     if (!entry) return { ok: false, reason: "not_found" };
     if (entry.state !== "pending") return { ok: false, reason: "not_pending" };
-    if (now() - entry.createdAt > ttlMs) {
+    if (isExpired(entry)) {
       actions.delete(actionId);
       return { ok: false, reason: "expired" };
     }
@@ -59,7 +63,7 @@ function createPendingActions({
     return { ok: true, entry: { ...entry } };
   }
 
-  function finish(actionId, _state) {
+  function finish(actionId) {
     const entry = actions.get(actionId);
     if (!entry || entry.state !== "committing") return false;
     actions.delete(actionId);
@@ -89,10 +93,10 @@ function createPendingActions({
   // Pending actions whose card outlived the TTL without the renderer ever
   // answering (window closed, renderer crashed). Committing ones are never
   // touched: their real outcome must still be recorded.
-  function expireStale() {
+  function sweepExpired() {
     const expired = [];
     for (const [actionId, entry] of actions) {
-      if (entry.state === "pending" && now() - entry.createdAt > ttlMs) {
+      if (entry.state === "pending" && isExpired(entry)) {
         actions.delete(actionId);
         expired.push(actionId);
       }
@@ -100,7 +104,7 @@ function createPendingActions({
     return expired;
   }
 
-  return { create, get, beginCommit, finish, cancel, invalidateConnector, expireStale };
+  return { create, get, beginCommit, finish, cancel, invalidateConnector, sweepExpired };
 }
 
 module.exports = { createPendingActions, bindingsMatch, PENDING_TTL_MS };

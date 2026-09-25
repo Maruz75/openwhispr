@@ -109,6 +109,9 @@ function createDatabaseManager() {
     INSERT INTO analytics_clear_requests (account_id, cleared_through) VALUES
       ('account-a', '2026-08-30T10:00:00.000Z'),
       ('account-b', '2026-08-30T10:00:00.000Z');
+    INSERT INTO connector_actions (id, account_id) VALUES
+      ('action-a', 'account-a'),
+      ('action-b', 'account-b');
   `);
 
   const manager = Object.create(DatabaseManager.prototype);
@@ -281,6 +284,13 @@ test("deleting one account removes only its personal rows and dependent private 
       .all()
       .map((row) => row.account_id),
     ["account-b"]
+  );
+  assert.deepEqual(
+    sqlite
+      .prepare("SELECT id FROM connector_actions ORDER BY id")
+      .all()
+      .map((row) => row.id),
+    ["action-b"]
   );
 });
 

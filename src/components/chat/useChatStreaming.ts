@@ -25,7 +25,11 @@ import {
 } from "../../config/prompts";
 import { getDictionaryHintWords } from "../../utils/snippets";
 import { createToolRegistry } from "../../services/tools";
-import { executeTool, type ToolRegistry } from "../../services/tools/ToolRegistry";
+import {
+  executeTool,
+  type HoldDeliveryOptions,
+  type ToolRegistry,
+} from "../../services/tools/ToolRegistry";
 import { createToolExecutionScope, type ToolExecutionScope } from "./toolExecutionScope";
 import { getAgentToolActivityRemainingMs } from "../../helpers/agentToolPresentation";
 import type { Message, AgentState, ChatImageAttachment, ToolCallInfo } from "./types";
@@ -89,7 +93,10 @@ interface UseChatStreamingOptions {
   noteContext?: string;
   /** Optional container scope applied to RAG and the search_notes tool (container overview chat). */
   searchScope?: ContainerScope;
-  /** Offer connector tools (email drafts, contact lookup) when the plan and policy allow them. */
+  /**
+   * Offer connector tools (email drafts, contact lookup) when the plan and
+   * policy allow them. Off unless a surface opts in: they act outside the app.
+   */
   allowConnectors?: boolean;
   onStreamComplete?: (assistantId: string, content: string, toolCalls?: ToolCallInfo[]) => void;
   /** Fires exactly once when displayable assistant content or tool activity becomes available. */
@@ -114,7 +121,7 @@ export interface SendToAIOptions {
   /** Fires when a tool shows an approval card, so a hidden panel can open. */
   onApprovalRequested?: () => void;
   /** Fires when this turn's answer must not be pasted at the caret (see ToolExecutionContext). */
-  onHoldDelivery?: () => void;
+  onHoldDelivery?: (options?: HoldDeliveryOptions) => void;
 }
 
 export interface ChatStreaming {
@@ -147,7 +154,7 @@ export function useChatStreaming({
   inferenceScope = "chatIntelligence",
   noteContext: externalNoteContext,
   searchScope,
-  allowConnectors = true,
+  allowConnectors = false,
   onStreamComplete,
   onResponseContent,
 }: UseChatStreamingOptions): ChatStreaming {
@@ -255,14 +262,9 @@ export function useChatStreaming({
       toolScopeRef.current = toolScope;
       clearToolActivity();
 
-      // Every exit from this send — normal completion, an early policy
-      // return, or a thrown error — must release this scope's tool
-      // contexts. A pending approval card (connectorApprovalStore's
-      // requestApproval) listens on this signal and would otherwise wait
-      // out its 10-minute TTL. Harmless after a normal completion: a turn
-      // cannot finish streaming while a tool is still awaiting its card. A
-      // newer send may have already replaced toolScopeRef.current with its
-      // own scope, so only clear it here if it still points at this one.
+      // Every exit, thrown errors included, releases tools still waiting on
+      // this turn (an approval card would otherwise sit out its TTL). A newer
+      // send may already own toolScopeRef.
       try {
         await runSend();
       } finally {
@@ -342,18 +344,16 @@ export function useChatStreaming({
           const calendarConnected =
             settings.gcalConnected || settings.mcalConnected || settings.appleCalendarConnected;
           const webSearchEnabled = isWebSearchAllowed(usePolicyStore.getState());
-          const connectorsAvailable =
+          const connectors =
             allowConnectors &&
             settings.isSignedIn &&
             hasConnectorPlan(getUsageState(), readIsSubscribed()) &&
-            isConnectorsAllowed(usePolicyStore.getState());
-          const emailDraftTarget = resolveEmailDraftTarget(settings.emailDraftTarget, {
-            gcalConnected: settings.gcalConnected,
-            mcalAccountEmails: settings.mcalAccounts.map((account) => account.email),
-          });
+            isConnectorsAllowed(usePolicyStore.getState())
+              ? { emailDraftTarget: resolveEmailDraftTarget(settings) }
+              : undefined;
           // Triggers ride in the tool description, so a snippet edit rebuilds the registry.
           const snippetKey = settings.snippets.map((s) => s.trigger).join("|");
-          const cacheKey = `${settings.isSignedIn}-${calendarConnected}-${settings.cloudBackupEnabled}-${scopeKey}-${webSearchEnabled}-${snippetKey}-${connectorsAvailable}-${emailDraftTarget}`;
+          const cacheKey = `${settings.isSignedIn}-${calendarConnected}-${settings.cloudBackupEnabled}-${scopeKey}-${webSearchEnabled}-${snippetKey}-${connectors?.emailDraftTarget ?? "no-connectors"}`;
           if (toolRegistryRef.current?.key === cacheKey) {
             registry = toolRegistryRef.current.registry;
           } else {
@@ -370,7 +370,7 @@ export function useChatStreaming({
                 getSnippets: () => getSettings().snippets,
                 setSnippets: (snippets) => useSettingsStore.getState().setSnippets(snippets),
               },
-              connectors: connectorsAvailable ? { emailDraftTarget } : undefined,
+              connectors,
             });
             toolRegistryRef.current = { key: cacheKey, registry };
           }

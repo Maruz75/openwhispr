@@ -30,7 +30,8 @@ function button(root, label) {
   return found;
 }
 
-test("Edit, change, Done editing, Send: the reviewed text is what gets sent", async (t) => {
+// Mounts a card for a real runApprovalAction turn; returns what the test drives.
+async function mountApprovalTurn(t) {
   let root = null;
   t.after(async () => {
     if (root) await React.act(async () => root.unmount());
@@ -105,7 +106,11 @@ test("Edit, change, Done editing, Send: the reviewed text is what gets sent", as
     await new Promise((resolve) => setImmediate(resolve));
   });
   assert.match(container.textContent, /Original text/);
+  return { container, store, commits, toolResult };
+}
 
+test("Edit, change, Done editing, Send: the reviewed text is what gets sent", async (t) => {
+  const { container, store, commits, toolResult } = await mountApprovalTurn(t);
   await React.act(async () => click(button(container, "connectors.approval.edit")));
   // Editing must not lose the direction-detection the static view gets:
   // an RTL draft opened for editing should still render right-to-left.
@@ -125,4 +130,23 @@ test("Edit, change, Done editing, Send: the reviewed text is what gets sent", as
   assert.equal(result.data.status, "sent");
   assert.equal(result.data.finalText, "Edited text");
   assert.match(container.textContent, /connectors\.approval\.sent/);
+});
+
+test("Send while editing commits the edit and leaves edit mode", async (t) => {
+  const { container, store, commits, toolResult } = await mountApprovalTurn(t);
+
+  await React.act(async () => click(button(container, "connectors.approval.edit")));
+  await React.act(async () =>
+    store.updateApprovalDraft(store.approvalKey("m1", "call-1"), { body: "Edited text" })
+  );
+  await React.act(async () => click(button(container, "connectors.approval.send")));
+  await toolResult;
+
+  assert.deepEqual(commits, [{ actionId: "a1", edits: { body: "Edited text" } }]);
+  // A boolean: a failing assert would otherwise try to print the fake DOM node.
+  assert.ok(
+    !findElement(container, (element) => element.tagName === "TEXTAREA"),
+    "the card left edit mode"
+  );
+  assert.match(container.textContent, /Edited text/);
 });
