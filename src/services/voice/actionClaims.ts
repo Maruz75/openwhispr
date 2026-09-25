@@ -25,6 +25,13 @@ function withoutReadBack(answer: string): string {
   return leadIn === -1 ? unquoted : unquoted.slice(0, leadIn);
 }
 
+// Only this turn's writes are known, so a true recap of an earlier one ("I saved it a
+// moment ago", "I already added that earlier") would read as unbacked. A sentence that
+// points back in time is left alone; the cost is that a false claim phrased as a recap
+// goes uncorrected.
+const RECAP = /\b(?:already|earlier|previously|ago|last time)\b/i;
+const SENTENCE_BREAK = /(?<=[.!?…])\s+/;
+
 export const UNBACKED_CLAIM_CORRECTION = "Sorry, I didn't actually do that. Want me to try again?";
 
 /** The claim text when the answer says an action happened but no write succeeded this turn. */
@@ -33,7 +40,10 @@ export function findUnbackedActionClaim(
   succeededWrites: readonly string[]
 ): string | null {
   if (succeededWrites.length > 0) return null;
-  const match = withoutReadBack(answer).match(ACTION_CLAIM);
-  // Return group 2 (the I... part), stripping the boundary (group 1)
-  return match?.[2] ?? null;
+  for (const sentence of withoutReadBack(answer).split(SENTENCE_BREAK)) {
+    const match = sentence.match(ACTION_CLAIM);
+    // Group 2 is the "I…" claim, without the clause boundary in group 1.
+    if (match && !RECAP.test(sentence)) return match[2];
+  }
+  return null;
 }

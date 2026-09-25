@@ -16,10 +16,14 @@ const POCKET_FILES = {
   referenceVoiceWav: POCKET_REFERENCE_VOICE,
 };
 
+// Every download is pinned by hash: the GitHub release tags are rolling and a Hugging
+// Face branch moves, so an upstream swap fails the check instead of installing a
+// different model. Updating a model means a new URL and hash here.
 const VOICE_MODELS = [
   {
     id: "vad",
     url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+    sha256: "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
     archive: false,
     target: "silero_vad.onnx",
     requiredFiles: ["silero_vad.onnx"],
@@ -27,7 +31,8 @@ const VOICE_MODELS = [
   },
   {
     id: "smart-turn",
-    url: "https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx",
+    url: "https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/f766f81d3cfdf7737ac64aad813d91bbfd56bf93/smart-turn-v3.2-cpu.onnx",
+    sha256: "2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f",
     archive: false,
     target: "smart-turn-v3.2-cpu.onnx",
     requiredFiles: ["smart-turn-v3.2-cpu.onnx"],
@@ -36,6 +41,7 @@ const VOICE_MODELS = [
   {
     id: "pocket-tts",
     url: `https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/${POCKET_DIR}.tar.bz2`,
+    sha256: "2f3b88823cbbb9bf0b2477ec8ae7b3fec417b3a87b6bb5f256dba66f2ad967cb",
     archive: true,
     target: POCKET_DIR,
     requiredFiles: Object.values(POCKET_FILES).map((file) => path.join(POCKET_DIR, file)),
@@ -77,11 +83,12 @@ const DISK_SPACE_FACTOR = 3;
 
 function defaultDeps() {
   const logger = require("./debugLogger");
-  const { downloadFile, checkDiskSpace } = require("./downloadUtils");
+  const { downloadFile, checkDiskSpace, sha256File } = require("./downloadUtils");
   const { extractTarBz2 } = require("./systemTar");
   return {
     downloadFile,
     checkDiskSpace,
+    sha256File,
     extractTarBz2: (archivePath, destDir) => extractTarBz2(archivePath, destDir, { logger }),
     logger,
   };
@@ -167,7 +174,10 @@ async function downloadVoiceModels({
   onProgress = () => {},
   deps = {},
 } = {}) {
-  const { downloadFile, extractTarBz2, checkDiskSpace, logger } = { ...defaultDeps(), ...deps };
+  const { downloadFile, extractTarBz2, checkDiskSpace, sha256File, logger } = {
+    ...defaultDeps(),
+    ...deps,
+  };
   fs.mkdirSync(modelsDir, { recursive: true });
   removeStaleStaging(modelsDir, logger);
   const requiredBytes = getVoiceModelStatus(modelsDir).missingBytes * DISK_SPACE_FACTOR;
@@ -180,20 +190,31 @@ async function downloadVoiceModels({
   }
   for (const model of VOICE_MODELS) {
     if (isPresent(model, modelsDir, fs.existsSync)) continue;
-    // Single-file models land atomically: downloadFile writes `${dest}.tmp`
-    // and renames it into place only once complete.
-    const dest = path.join(modelsDir, model.archive ? `${model.target}.tar.bz2` : model.target);
+    // Nothing lands under its real name until its hash checks out, so a truncated
+    // or substituted download never reads as ready.
+    const dest = path.join(
+      modelsDir,
+      model.archive ? `${model.target}.tar.bz2` : `${model.target}.download`
+    );
     await downloadFile(model.url, dest, {
       signal,
       onProgress: (downloadedBytes, totalBytes) =>
         onProgress({ model: model.id, downloadedBytes, totalBytes }),
     });
-    if (model.archive) {
-      try {
-        await extractArchiveModel(model, dest, modelsDir, { extractTarBz2, signal, logger });
-      } finally {
-        removeBestEffort(dest, logger);
+    try {
+      const actual = await sha256File(dest);
+      if (actual !== model.sha256) {
+        throw new Error(
+          `${model.id}: download failed its checksum (sha256 ${actual}, expected ${model.sha256})`
+        );
       }
+      if (model.archive) {
+        await extractArchiveModel(model, dest, modelsDir, { extractTarBz2, signal, logger });
+      } else {
+        fs.renameSync(dest, path.join(modelsDir, model.target));
+      }
+    } finally {
+      removeBestEffort(dest, logger);
     }
     const missingFile = findMissingFile(model, modelsDir);
     if (missingFile) {

@@ -88,6 +88,7 @@ async function mountChatStreaming(t, { settings, electronAPI = {} }) {
     messages: () => messages,
     reasoningService,
     usePolicyStore,
+    useSettingsStore,
     completed,
   };
 }
@@ -252,4 +253,35 @@ test("chunks that arrive after a barge-in cancelled the answer aren't spoken", a
   });
 
   assert.deepEqual(spoken, ["It's sunny"]);
+});
+
+test("only a local model's voice turn is capped, and loosely enough for a dictated note", async (t) => {
+  const { hook, reasoningService, useSettingsStore } = await mountChatStreaming(t, {
+    settings: LOCAL_TOOL_MODEL,
+  });
+  const caps = [];
+  t.mock.method(
+    reasoningService,
+    "processTextStreamingAI",
+    (_messages, _model, _provider, opts) => {
+      caps.push(opts.maxTokens);
+      return streamAfter(() => {});
+    }
+  );
+  const send = (options) =>
+    React.act(async () => {
+      await hook().sendToAI("take a note", [], options);
+    });
+
+  await send({ voiceTap: makeVoiceTap().tap });
+  await send(undefined);
+  useSettingsStore.setState({
+    chatAgentMode: "providers",
+    chatAgentProvider: "openai",
+    chatAgentModel: "gpt-5-mini",
+  });
+  await send({ voiceTap: makeVoiceTap().tap });
+
+  // Local voice turn; typed chat is never capped; a BYOK model may spend tokens thinking.
+  assert.deepEqual(caps, [1024, undefined, undefined]);
 });

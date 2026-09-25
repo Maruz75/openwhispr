@@ -49,7 +49,11 @@ const RAG_NOTE_SNIPPET_LENGTH = 500;
 const STREAM_FLUSH_INTERVAL_MS = 32;
 
 const LOCAL_TOOL_MIN_PARAMS_B = 4;
-const VOICE_MAX_OUTPUT_TOKENS = 200;
+// Voice turns on a local model: stops one that loops. Speech is already capped at three
+// sentences, so this only has to leave room for tool arguments (a dictated note, up to a
+// 30-second turn) and the answer. Other providers get no cap: a reasoning model spends
+// its thinking tokens from the same budget and would return nothing to say.
+const VOICE_LOCAL_MAX_OUTPUT_TOKENS = 1024;
 
 async function buildRAGContext(userText: string, scope?: ContainerScope): Promise<string> {
   if (!window.electronAPI?.semanticSearchNotes) return "";
@@ -599,8 +603,7 @@ export function useChatStreaming({
               customApiKey:
                 isCustomAgent || isLanAgent ? llmConfig.customApiKey || undefined : undefined,
               disableThinking: llmConfig.disableThinking,
-              // Backstop for spoken replies; the voice prompt keeps them far shorter.
-              ...(voiceTurn ? { maxTokens: VOICE_MAX_OUTPUT_TOKENS } : {}),
+              ...(voiceTurn && isLocalProvider ? { maxTokens: VOICE_LOCAL_MAX_OUTPUT_TOKENS } : {}),
             },
             aiTools
           );

@@ -32,7 +32,10 @@ const pocket = VOICE_MODELS.find((model) => model.id === "pocket-tts");
 const deadPid = () => spawnSync(process.execPath, ["-e", ""]).pid;
 
 // Fakes that "download" by creating files, so neither the network nor the real
-// disk is consulted.
+// disk is consulted. A download's content is the model's pinned hash, and the fake
+// hash reads it back, so it passes the checksum unless a test writes otherwise.
+const pinnedHashOf = (url) => VOICE_MODELS.find((model) => model.url === url).sha256;
+
 function fakeDeps(dir, { skipFile } = {}) {
   const downloads = [];
   const warnings = [];
@@ -45,9 +48,10 @@ function fakeDeps(dir, { skipFile } = {}) {
       downloadFile: async (url, dest, { onProgress }) => {
         downloads.push(url);
         fs.mkdirSync(path.dirname(dest), { recursive: true });
-        fs.writeFileSync(dest, "archive-or-model");
+        fs.writeFileSync(dest, pinnedHashOf(url));
         onProgress?.(5, 10);
       },
+      sha256File: async (filePath) => fs.readFileSync(filePath, "utf8"),
       extractTarBz2: async (_archive, destDir) => {
         for (const file of pocket.requiredFiles) {
           if (file !== skipFile) touch(destDir, file);
@@ -248,4 +252,32 @@ test("paths point inside the models directory", () => {
     paths.pocket.referenceVoiceWav,
     path.join("/models", "sherpa-onnx-pocket-tts-int8-2026-01-26", "test_wavs", "bria.wav")
   );
+});
+
+test("a download that fails its pinned hash is discarded and never counts as ready", async (t) => {
+  const dir = tempDir(t);
+  const { deps } = fakeDeps(dir);
+  const download = deps.downloadFile;
+  deps.downloadFile = async (url, dest, options) => {
+    await download(url, dest, options);
+    // A rolling release tag swapped the file, or a proxy served an error page.
+    if (url.endsWith("smart-turn-v3.2-cpu.onnx")) fs.writeFileSync(dest, "<html>error</html>");
+  };
+
+  await assert.rejects(downloadVoiceModels({ modelsDir: dir, deps }), /smart-turn: .*checksum/);
+
+  const status = getVoiceModelStatus(dir);
+  assert.ok(status.missing.includes("smart-turn"));
+  assert.deepEqual(
+    fs.readdirSync(dir).filter((name) => name.includes("smart-turn")),
+    [],
+    "nothing of the bad download is left behind"
+  );
+});
+
+test("every voice model is pinned to a hash and none follows a moving branch", () => {
+  for (const model of VOICE_MODELS) {
+    assert.match(model.sha256, /^[0-9a-f]{64}$/, model.id);
+    assert.doesNotMatch(model.url, /\/resolve\/main\//, model.id);
+  }
 });

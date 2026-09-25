@@ -311,6 +311,16 @@ function requiredSherpaPackages({ platform, arch }) {
   return archs.map((name) => `sherpa-onnx-${sherpaPlatform}-${name}`);
 }
 
+// All Smart Turn loads from onnxruntime-web in Node (require → ort.node.min.js, which
+// starts the threaded WASM build). electron-builder.json leaves out the package's other
+// builds (~100 MB of browser, WebGPU and JSPI variants), so a mismatch there must fail
+// here: a missing file otherwise only shows up as silence-only turn detection.
+const SMART_TURN_RUNTIME_FILES = [
+  "ort.node.min.js",
+  "ort-wasm-simd-threaded.mjs",
+  "ort-wasm-simd-threaded.wasm",
+];
+
 // The voice worker loads sherpa-onnx-node (native, per-platform package) and
 // Smart Turn on onnxruntime-web, whose WASM threads load from real files.
 function prepareVoiceDependencies(context) {
@@ -325,10 +335,13 @@ function prepareVoiceDependencies(context) {
       `afterPack: missing ${missing.join(", ")} in ${modulesDir}; voice conversation would fail to load for this target (install the target-arch platform package before packaging)`
     );
   }
-  const wasmPath = path.join(modulesDir, "onnxruntime-web", "dist", "ort-wasm-simd-threaded.wasm");
-  if (!fs.existsSync(wasmPath)) {
+  const ortDist = path.join(modulesDir, "onnxruntime-web", "dist");
+  const missingRuntime = SMART_TURN_RUNTIME_FILES.filter(
+    (file) => !fs.existsSync(path.join(ortDist, file))
+  );
+  if (missingRuntime.length > 0) {
     throw new Error(
-      `afterPack: missing ${wasmPath}; Smart Turn would fall back to silence-only turns`
+      `afterPack: missing ${missingRuntime.join(", ")} in ${ortDist}; Smart Turn would fall back to silence-only turns`
     );
   }
   if (context.electronPlatformName === "win32") {

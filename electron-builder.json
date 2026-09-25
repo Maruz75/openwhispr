@@ -83,6 +83,12 @@
     "!**/node_modules/cross-env/**",
     "!**/node_modules/@electron/notarize/**",
 
+    "!**/node_modules/onnxruntime-web/{lib,docs}/**",
+    "!**/node_modules/onnxruntime-web/dist/*.{jsep,asyncify,jspi}.*",
+    "!**/node_modules/onnxruntime-web/dist/ort.{all,bundle,jspi,min,wasm,webgl,webgpu}.*",
+    "!**/node_modules/onnxruntime-web/dist/ort.{js,mjs}",
+    "!**/node_modules/onnxruntime-web/dist/ort.node.min.mjs",
+
     "!**/node_modules/**/test/**",
     "!**/node_modules/**/tests/**",
     "!**/node_modules/**/*.ts",

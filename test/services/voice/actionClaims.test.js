@@ -20,10 +20,6 @@ test("matches hedged claims (just, already, also, now, successfully, gone ahead 
   const { findUnbackedActionClaim } = await load();
   assert.equal(findUnbackedActionClaim("I've just added Kubernetes.", []), "I've just added");
   assert.equal(
-    findUnbackedActionClaim("I've already updated the note.", []),
-    "I've already updated"
-  );
-  assert.equal(
     findUnbackedActionClaim("I've gone ahead and added that.", []),
     "I've gone ahead and added"
   );
@@ -107,4 +103,21 @@ test("admitting a mistake or noting a fact is not an action claim", async () => 
   ]) {
     assert.equal(findUnbackedActionClaim(answer, []), null, answer);
   }
+});
+
+test("a true recap of an earlier turn is not corrected", async () => {
+  const { findUnbackedActionClaim } = await load();
+  for (const answer of [
+    "Yes, I saved it as Groceries a moment ago.",
+    "Earlier, I created a note called Standup.",
+    "I've already added Kubernetes to your dictionary.",
+    "I added it last time you asked.",
+  ]) {
+    assert.equal(findUnbackedActionClaim(answer, []), null, answer);
+  }
+  // A recap in one sentence doesn't hide a fresh claim in the next.
+  assert.equal(
+    findUnbackedActionClaim("I added the first one earlier. I've created the second note.", []),
+    "I've created"
+  );
 });

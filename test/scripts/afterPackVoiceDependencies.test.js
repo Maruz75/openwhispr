@@ -40,11 +40,12 @@ function makeApp(
       fs.writeFileSync(path.join(dir, "sherpa-onnx.node"), "");
     }
   }
-  if (wasm) {
-    const dist = path.join(modulesDir, "onnxruntime-web", "dist");
-    fs.mkdirSync(dist, { recursive: true });
-    fs.writeFileSync(path.join(dist, "ort-wasm-simd-threaded.wasm"), "");
+  const dist = path.join(modulesDir, "onnxruntime-web", "dist");
+  fs.mkdirSync(dist, { recursive: true });
+  for (const file of ["ort.node.min.js", "ort-wasm-simd-threaded.mjs"]) {
+    fs.writeFileSync(path.join(dist, file), "");
   }
+  if (wasm) fs.writeFileSync(path.join(dist, "ort-wasm-simd-threaded.wasm"), "");
   const context = {
     electronPlatformName: platform,
     arch: Arch[arch],
@@ -112,6 +113,16 @@ test("fails when the Smart Turn WASM was not unpacked", (t) => {
     wasm: false,
   });
   assert.throws(() => prepareVoiceDependencies(context), /ort-wasm-simd-threaded\.wasm/);
+});
+
+test("fails when the file list dropped the Node entry Smart Turn loads", (t) => {
+  const { context, modulesDir } = makeApp(t, {
+    platform: "linux",
+    arch: "x64",
+    sherpaPackages: ["sherpa-onnx-linux-x64"],
+  });
+  fs.rmSync(path.join(modulesDir, "onnxruntime-web", "dist", "ort.node.min.js"));
+  assert.throws(() => prepareVoiceDependencies(context), /ort\.node\.min\.js/);
 });
 
 test("privatizes ONNX Runtime in the target Windows package", (t) => {
