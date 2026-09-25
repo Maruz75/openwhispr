@@ -59,6 +59,10 @@ function codedError(code, message, extra = {}) {
 //   always listens on 127.0.0.1.
 // - renderResultPage({ ok }) — answer the browser from this server instead
 //   of the hosted page, for providers that page doesn't know.
+// - publicRedirectUri — for providers that require an HTTPS redirect: the
+//   provider redirects to that URL (a relay), which forwards the browser to
+//   this server by the port carried in state as v1.<port>.<nonce>.
+// - timeoutMs — how long the flow waits for the provider's redirect.
 function runOAuthLoopbackFlow({
   buildAuthUrl,
   handleCallback,
@@ -67,14 +71,20 @@ function runOAuthLoopbackFlow({
   ports = [0],
   callbackPath = "",
   renderResultPage = null,
+  publicRedirectUri = null,
+  timeoutMs = OAUTH_TIMEOUT_MS,
 }) {
   const connectedParam = errorParam.replace(/_error$/, "_connected");
 
   return new Promise((resolve, reject) => {
     const codeVerifier = crypto.randomBytes(32).toString("base64url").slice(0, 43);
     const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url");
-    const state = crypto.randomBytes(32).toString("hex");
-    const redirectUriFor = (port) => `http://${redirectHost}:${port}${callbackPath}`;
+    const nonce = crypto.randomBytes(32).toString("hex");
+    // Behind a relay the provider never sees this server, so the relay finds it
+    // by the port in state. It is set once listening, before the browser opens.
+    let state = nonce;
+    const redirectUriFor = (port) =>
+      publicRedirectUri ?? `http://${redirectHost}:${port}${callbackPath}`;
     let callbackClaimed = false;
 
     const respond = (res, ok, params) => {
@@ -159,9 +169,9 @@ function runOAuthLoopbackFlow({
       });
       // Fire-and-forget like the shell.openExternal call it replaced: a
       // failed browser launch surfaces as the flow timeout.
-      openExternalUrl(
-        buildAuthUrl(redirectUriFor(server.address().port), state, codeChallenge)
-      ).catch(() => {});
+      const port = server.address().port;
+      if (publicRedirectUri) state = `v1.${port}.${nonce}`;
+      openExternalUrl(buildAuthUrl(redirectUriFor(port), state, codeChallenge)).catch(() => {});
     });
 
     // A port in use falls through to the next one in the list.
@@ -187,7 +197,7 @@ function runOAuthLoopbackFlow({
       callbackClaimed = true;
       if (server.listening) server.close();
       reject(codedError("oauth_timeout", "OAuth flow timed out"));
-    }, OAUTH_TIMEOUT_MS);
+    }, timeoutMs);
   });
 }
 

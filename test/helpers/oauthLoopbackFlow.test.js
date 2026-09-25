@@ -512,3 +512,47 @@ test("a denied consent rejects with oauth_denied and shows the failure page", as
   assert.equal(error.code, "oauth_denied");
   assert.equal(error.providerError, "access_denied");
 });
+
+const RELAY = "https://openwhispr.com/auth/slack/callback";
+
+test("behind a relay, the public redirect URI goes to the provider and the exchange, and state carries the port", async () => {
+  const started = startFlow(async (code, redirectUri) => ({ code, redirectUri }), {
+    publicRedirectUri: RELAY,
+    callbackPath: "/slack/callback",
+  });
+  assert.equal(await until(started.getRedirectUri), RELAY);
+  const port = started.server.address().port;
+  assert.match(started.getState(), new RegExp(`^v1\\.${port}\\.[0-9a-f]{64}$`));
+
+  // What the relay does with Slack's redirect.
+  await getLocal(`http://127.0.0.1:${port}/slack/callback?code=c4&state=${started.getState()}`);
+
+  assert.deepEqual(await started.flow, { code: "c4", redirectUri: RELAY });
+  assert.equal(started.getAuthUrlCalls(), 1);
+});
+
+test("behind a relay, the right port with another nonce is a state mismatch", async () => {
+  const started = startFlow(async () => ({ ok: true }), { publicRedirectUri: RELAY });
+  await until(started.getRedirectUri);
+  const port = started.server.address().port;
+  const outcome = started.flow.catch((error) => error);
+
+  await getLocal(`http://127.0.0.1:${port}/?code=c5&state=v1.${port}.${"0".repeat(64)}`);
+
+  assert.equal((await outcome).code, "oauth_state_mismatch");
+});
+
+test("without a relay, the state stays a bare nonce", async () => {
+  const started = startFlow(async (code) => ({ code }));
+  await until(started.getRedirectUri);
+  assert.match(started.getState(), /^[0-9a-f]{64}$/);
+
+  await getLocal(`${started.getRedirectUri()}/?code=c6&state=${started.getState()}`);
+
+  assert.deepEqual(await started.flow, { code: "c6" });
+});
+
+test("timeoutMs bounds how long the flow waits", { timeout: 5000 }, async () => {
+  const started = startFlow(async () => ({}), { timeoutMs: 30 });
+  await assert.rejects(started.flow, (error) => error.code === "oauth_timeout");
+});
