@@ -714,7 +714,8 @@
   "connectors": {
     "approval": {
       "headers": {
-        "default": "إرسال إلى {{destination}}"
+        "default": "إرسال إلى {{destination}}",
+        "slackPost": "نشر في {{destination}}"
       },
       "identity": "بصفتك {{account}}",
       "identityWithWorkspace": "بصفتك {{account}} في {{workspace}}",
@@ -731,7 +732,19 @@
       "unknown": "تعذّر تأكيد الإرسال. تحقق من {{destination}}.",
       "cancelled": "تم الإلغاء. لم يتم إرسال شيء.",
       "notSent": "لم يُرسل.",
-      "policyRetry": "تعذّر التحقق من إعدادات مؤسستك، لذا لم يتم إرسال شيء. اضغط على إرسال للمحاولة مرة أخرى."
+      "policyRetry": "تعذّر التحقق من إعدادات مؤسستك، لذا لم يتم إرسال شيء. اضغط على إرسال للمحاولة مرة أخرى.",
+      "errors": {
+        "not_in_channel": "أنت لست عضوًا في {{destination}}.",
+        "channel_not_found": "تعذّر العثور على {{destination}} في Slack بعد الآن.",
+        "is_archived": "{{destination}} مؤرشفة.",
+        "reconnect_needed": "يلزم إعادة ربط Slack من الإعدادات.",
+        "token_revoked": "يلزم إعادة ربط Slack من الإعدادات.",
+        "connection_changed": "تغيّر اتصال Slack قبل الإرسال، لذا لم يُرسل شيء.",
+        "rate_limited": "Slack مشغول حاليًا. حاول مرة أخرى بعد قليل.",
+        "missing_scope": "لا يملك OpenWhispr إذنًا للنشر هناك. أعد ربط Slack من الإعدادات.",
+        "msg_too_long": "الرسالة طويلة جدًا بالنسبة لـ Slack (12,000 حرف كحد أقصى بعد التنسيق).",
+        "no_text": "الرسالة فارغة."
+      }
     },
     "policyOff": "أوقفت مؤسستك تشغيل الموصلات.",
     "viewPlans": "عرض الخطط",
@@ -789,7 +802,16 @@
       "errors": {
         "open_failed": "تعذّر فتح تطبيق البريد الإلكتروني.",
         "draft_too_long": "عدد المستلمين كبير جدًا لرابط المسودة.",
-        "invalid_address": "يلزم إدخال عناوين بريد إلكتروني كاملة."
+        "invalid_address": "يلزم إدخال عناوين بريد إلكتروني كاملة.",
+        "not_in_channel": "لست عضوًا في تلك القناة.",
+        "channel_not_found": "تعذّر العثور على تلك المحادثة.",
+        "is_archived": "تلك القناة مؤرشفة.",
+        "reconnect_needed": "يلزم إعادة ربط Slack.",
+        "connection_changed": "تغيّر اتصال Slack. لم يُرسل شيء.",
+        "rate_limited": "Slack مشغول حاليًا.",
+        "missing_scope": "إذن Slack مفقود.",
+        "msg_too_long": "الرسالة طويلة جدًا بالنسبة لـ Slack.",
+        "no_text": "الرسالة فارغة."
       }
     }
   },
@@ -1333,6 +1355,7 @@
       "search_notesName": "البحث في الملاحظات",
       "email_draftName": "مسودة بريد إلكتروني",
       "find_contactName": "البحث عن جهة اتصال",
+      "slack_send_messageName": "رسالة Slack",
       "get_noteName": "الحصول على الملاحظة",
       "create_noteName": "إنشاء ملاحظة",
       "update_noteName": "تحديث الملاحظة",
@@ -1347,6 +1370,7 @@
       "search_notesStatus": "جاري البحث في الملاحظات...",
       "email_draftStatus": "جارٍ فتح مسودة بريد إلكتروني...",
       "find_contactStatus": "جارٍ البحث عن جهات الاتصال...",
+      "slack_send_messageStatus": "جارٍ تحضير رسالة Slack...",
       "web_searchStatus": "جاري البحث في الويب...",
       "copy_to_clipboardStatus": "جاري النسخ إلى الحافظة...",
       "get_calendar_eventsStatus": "جاري التحقق من التقويم...",

@@ -3697,6 +3697,7 @@
       "search_notesName": "Поиск заметок",
       "email_draftName": "Черновик письма",
       "find_contactName": "Найти контакт",
+      "slack_send_messageName": "Сообщение Slack",
       "get_noteName": "Получить заметку",
       "create_noteName": "Создать заметку",
       "update_noteName": "Обновить заметку",
@@ -3711,6 +3712,7 @@
       "search_notesStatus": "Поиск в заметках...",
       "email_draftStatus": "Открытие черновика письма...",
       "find_contactStatus": "Поиск контактов...",
+      "slack_send_messageStatus": "Подготовка сообщения Slack...",
       "web_searchStatus": "Поиск в интернете...",
       "copy_to_clipboardStatus": "Копирование в буфер обмена...",
       "get_calendar_eventsStatus": "Проверка календаря...",
@@ -3866,7 +3868,8 @@
   "connectors": {
     "approval": {
       "headers": {
-        "default": "Отправить в {{destination}}"
+        "default": "Отправить в {{destination}}",
+        "slackPost": "Опубликовать в {{destination}}"
       },
       "identity": "От имени {{account}}",
       "identityWithWorkspace": "От имени {{account}} в {{workspace}}",
@@ -3883,7 +3886,19 @@
       "unknown": "Не удалось подтвердить отправку. Проверьте {{destination}}.",
       "cancelled": "Отменено. Ничего не отправлено.",
       "notSent": "Не отправлено.",
-      "policyRetry": "Не удалось проверить настройки Вашей организации, поэтому ничего не было отправлено. Нажмите «Отправить», чтобы попробовать снова."
+      "policyRetry": "Не удалось проверить настройки Вашей организации, поэтому ничего не было отправлено. Нажмите «Отправить», чтобы попробовать снова.",
+      "errors": {
+        "not_in_channel": "Вы не являетесь участником {{destination}}.",
+        "channel_not_found": "{{destination}} больше не найден в Slack.",
+        "is_archived": "{{destination}} архивирован.",
+        "reconnect_needed": "Slack нужно переподключить в настройках.",
+        "token_revoked": "Slack нужно переподключить в настройках.",
+        "connection_changed": "Подключение к Slack изменилось перед отправкой, поэтому ничего не было отправлено.",
+        "rate_limited": "Slack сейчас перегружен. Повторите попытку чуть позже.",
+        "missing_scope": "У OpenWhispr нет разрешения публиковать там. Переподключите Slack в настройках.",
+        "msg_too_long": "Сообщение слишком длинное для Slack (не более 12 000 символов после форматирования).",
+        "no_text": "Сообщение пустое."
+      }
     },
     "policyOff": "Ваша организация отключила коннекторы.",
     "viewPlans": "Посмотреть планы",
@@ -3941,7 +3956,16 @@
       "errors": {
         "open_failed": "Не удалось открыть почтовое приложение.",
         "draft_too_long": "Слишком много получателей для ссылки на черновик.",
-        "invalid_address": "Нужны полные адреса электронной почты."
+        "invalid_address": "Нужны полные адреса электронной почты.",
+        "not_in_channel": "Вы не участник этого канала.",
+        "channel_not_found": "Не удалось найти эту беседу.",
+        "is_archived": "Этот канал архивирован.",
+        "reconnect_needed": "Slack нужно переподключить.",
+        "connection_changed": "Подключение к Slack изменилось. Ничего не было отправлено.",
+        "rate_limited": "Slack сейчас перегружен.",
+        "missing_scope": "Нет разрешения Slack.",
+        "msg_too_long": "Сообщение слишком длинное для Slack.",
+        "no_text": "Сообщение пустое."
       }
     }
   },

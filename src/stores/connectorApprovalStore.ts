@@ -30,6 +30,8 @@ export interface ApprovalEntry {
   state: ApprovalState;
   url?: string;
   message?: string;
+  /** The connector's failure code, when state is "failed"; drives the card's translated copy. */
+  errorCode?: string;
   /** Shown on a pending card after a Send that could not run. */
   notice?: "policy_retry";
 }
@@ -228,7 +230,7 @@ export async function approveAction(key: string): Promise<void> {
         key,
         { state: "failed", errorCode: result.errorCode, message: result.message },
         "failed",
-        { message: result.message }
+        { message: result.message, errorCode: result.errorCode }
       );
       break;
     case "unknown":

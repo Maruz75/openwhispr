@@ -3653,6 +3653,7 @@
       "search_notesName": "搜索笔记",
       "email_draftName": "邮件草稿",
       "find_contactName": "查找联系人",
+      "slack_send_messageName": "Slack 消息",
       "get_noteName": "获取笔记",
       "create_noteName": "创建笔记",
       "update_noteName": "更新笔记",
@@ -3667,6 +3668,7 @@
       "search_notesStatus": "正在搜索笔记...",
       "email_draftStatus": "正在打开邮件草稿...",
       "find_contactStatus": "正在查找联系人...",
+      "slack_send_messageStatus": "正在准备 Slack 消息...",
       "web_searchStatus": "正在搜索网页...",
       "copy_to_clipboardStatus": "正在复制到剪贴板...",
       "get_calendar_eventsStatus": "正在查看日历...",
@@ -3822,7 +3824,8 @@
   "connectors": {
     "approval": {
       "headers": {
-        "default": "发送到 {{destination}}"
+        "default": "发送到 {{destination}}",
+        "slackPost": "发布到 {{destination}}"
       },
       "identity": "以 {{account}} 身份",
       "identityWithWorkspace": "以 {{account}}（{{workspace}}）身份",
@@ -3839,7 +3842,19 @@
       "unknown": "无法确认是否已发送，请检查 {{destination}}。",
       "cancelled": "已取消，未发送任何内容。",
       "notSent": "未发送。",
-      "policyRetry": "无法检查您的组织设置，因此未发送任何内容。请点击“发送”重试。"
+      "policyRetry": "无法检查您的组织设置，因此未发送任何内容。请点击“发送”重试。",
+      "errors": {
+        "not_in_channel": "您不是 {{destination}} 的成员。",
+        "channel_not_found": "在 Slack 中已找不到 {{destination}}。",
+        "is_archived": "{{destination}} 已归档。",
+        "reconnect_needed": "需要在设置中重新连接 Slack。",
+        "token_revoked": "需要在设置中重新连接 Slack。",
+        "connection_changed": "发送前 Slack 连接发生了变化，因此未发送任何内容。",
+        "rate_limited": "Slack 正忙，请稍后重试。",
+        "missing_scope": "OpenWhispr 没有权限在那里发布。请在设置中重新连接 Slack。",
+        "msg_too_long": "消息对 Slack 来说太长了（格式化后最多 12,000 个字符）。",
+        "no_text": "消息为空。"
+      }
     },
     "policyOff": "您的组织已关闭连接器。",
     "viewPlans": "查看套餐",
@@ -3897,7 +3912,16 @@
       "errors": {
         "open_failed": "无法打开您的邮件应用。",
         "draft_too_long": "收件人太多，无法生成草稿链接。",
-        "invalid_address": "需要完整的电子邮件地址。"
+        "invalid_address": "需要完整的电子邮件地址。",
+        "not_in_channel": "不是该频道的成员。",
+        "channel_not_found": "找不到该对话。",
+        "is_archived": "该频道已归档。",
+        "reconnect_needed": "需要重新连接 Slack。",
+        "connection_changed": "Slack 连接已更改。未发送任何内容。",
+        "rate_limited": "Slack 正忙。",
+        "missing_scope": "缺少 Slack 权限。",
+        "msg_too_long": "消息对 Slack 来说太长。",
+        "no_text": "消息为空。"
       }
     }
   },

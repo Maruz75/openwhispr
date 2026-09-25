@@ -12,6 +12,7 @@ import { createSnippetTool, createUpdateSnippetsTool, type SnippetActions } from
 import { createUpdateDictionaryTool, type DictionaryActions } from "./dictionaryTool";
 import { createEmailDraftTool } from "./connectors/emailDraftTool";
 import { findContactTool } from "./connectors/findContactTool";
+import { slackSendMessageTool } from "./connectors/slackSendMessageTool";
 import type { ContainerScope } from "../../types/chat";
 import type { EmailDraftTarget } from "../../utils/emailDraftTarget";
 
@@ -28,7 +29,7 @@ interface ToolRegistrySettings {
   /** Live dictionary and snippet access; enables the vocabulary tools. */
   vocabulary?: DictionaryActions & SnippetActions;
   /** Present only when connectors are available (signed in, paid, policy allows). */
-  connectors?: { emailDraftTarget: EmailDraftTarget };
+  connectors?: { emailDraftTarget: EmailDraftTarget; slackReady: boolean };
 }
 
 export function createToolRegistry(settings: ToolRegistrySettings): ToolRegistry {
@@ -61,6 +62,7 @@ export function createToolRegistry(settings: ToolRegistrySettings): ToolRegistry
   if (settings.connectors) {
     registry.register(findContactTool);
     registry.register(createEmailDraftTool(settings.connectors.emailDraftTarget));
+    if (settings.connectors.slackReady) registry.register(slackSendMessageTool);
   }
 
   return registry;

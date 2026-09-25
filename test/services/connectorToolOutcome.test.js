@@ -150,10 +150,8 @@ test("tool steps show the user plain, localized outcomes instead of codes", asyn
     failedResult("open_failed", "Couldn't open your email app.").displayText,
     "Couldn't open your email app."
   );
-  assert.equal(
-    failedResult("not_in_channel", "raw provider text").displayText,
-    "That didn't work."
-  );
+  // A code with no toolStatus.errors translation falls back to the generic text.
+  assert.equal(failedResult("mystery_error", "raw provider text").displayText, "That didn't work.");
   assert.equal(
     needsClarificationResult("Call find_contact first.").displayText,
     "Needs more details."

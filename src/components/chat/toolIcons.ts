@@ -11,6 +11,7 @@ import {
   Zap,
   Mail,
   Users,
+  MessageSquare,
 } from "../icons";
 
 export const toolIcons: Record<string, typeof Search> = {
@@ -27,4 +28,5 @@ export const toolIcons: Record<string, typeof Search> = {
   update_dictionary: BookOpen,
   email_draft: Mail,
   find_contact: Users,
+  slack_send_message: MessageSquare,
 };

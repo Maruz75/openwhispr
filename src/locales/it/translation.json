@@ -3653,6 +3653,7 @@
       "search_notesName": "Cerca nelle note",
       "email_draftName": "Bozza email",
       "find_contactName": "Trova contatto",
+      "slack_send_messageName": "Messaggio Slack",
       "get_noteName": "Ottieni nota",
       "create_noteName": "Crea nota",
       "update_noteName": "Aggiorna nota",
@@ -3667,6 +3668,7 @@
       "search_notesStatus": "Ricerca nelle note...",
       "email_draftStatus": "Apertura di una bozza email...",
       "find_contactStatus": "Ricerca contatti...",
+      "slack_send_messageStatus": "Preparazione di un messaggio Slack...",
       "web_searchStatus": "Ricerca sul web...",
       "copy_to_clipboardStatus": "Copia negli appunti...",
       "get_calendar_eventsStatus": "Controllo del calendario...",
@@ -3822,7 +3824,8 @@
   "connectors": {
     "approval": {
       "headers": {
-        "default": "Invia a {{destination}}"
+        "default": "Invia a {{destination}}",
+        "slackPost": "Pubblica su {{destination}}"
       },
       "identity": "Come {{account}}",
       "identityWithWorkspace": "Come {{account}} in {{workspace}}",
@@ -3839,7 +3842,19 @@
       "unknown": "Impossibile confermare l'invio. Controlla {{destination}}.",
       "cancelled": "Annullato. Non è stato inviato nulla.",
       "notSent": "Non inviato.",
-      "policyRetry": "Non è stato possibile verificare le impostazioni della tua organizzazione, quindi non è stato inviato nulla. Premi Invia per riprovare."
+      "policyRetry": "Non è stato possibile verificare le impostazioni della tua organizzazione, quindi non è stato inviato nulla. Premi Invia per riprovare.",
+      "errors": {
+        "not_in_channel": "Non sei membro di {{destination}}.",
+        "channel_not_found": "{{destination}} non è più stato trovato su Slack.",
+        "is_archived": "{{destination}} è archiviato.",
+        "reconnect_needed": "Slack deve essere ricollegato nelle Impostazioni.",
+        "token_revoked": "Slack deve essere ricollegato nelle Impostazioni.",
+        "connection_changed": "La connessione Slack è cambiata prima dell'invio, quindi non è stato inviato nulla.",
+        "rate_limited": "Slack è occupato. Riprova a breve.",
+        "missing_scope": "OpenWhispr non ha il permesso di pubblicare lì. Ricollega Slack nelle Impostazioni.",
+        "msg_too_long": "Il messaggio è troppo lungo per Slack (massimo 12.000 caratteri, una volta formattato).",
+        "no_text": "Il messaggio è vuoto."
+      }
     },
     "policyOff": "La tua organizzazione ha disattivato i connettori.",
     "viewPlans": "Visualizza i piani",
@@ -3897,7 +3912,16 @@
       "errors": {
         "open_failed": "Impossibile aprire l'app email.",
         "draft_too_long": "Troppi destinatari per un link di bozza.",
-        "invalid_address": "Servono indirizzi email completi."
+        "invalid_address": "Servono indirizzi email completi.",
+        "not_in_channel": "Non sei membro di quel canale.",
+        "channel_not_found": "Impossibile trovare quella conversazione.",
+        "is_archived": "Quel canale è archiviato.",
+        "reconnect_needed": "Slack deve essere ricollegato.",
+        "connection_changed": "La connessione Slack è cambiata. Non è stato inviato nulla.",
+        "rate_limited": "Slack è occupato.",
+        "missing_scope": "Permesso Slack mancante.",
+        "msg_too_long": "Messaggio troppo lungo per Slack.",
+        "no_text": "Il messaggio è vuoto."
       }
     }
   },

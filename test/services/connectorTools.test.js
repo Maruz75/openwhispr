@@ -4,6 +4,8 @@ const { installBrowserGlobals, createRendererServer } = require("../lib/renderer
 
 const loadEmail = () => import("../../src/services/tools/connectors/emailDraftTool.ts");
 const loadContact = () => import("../../src/services/tools/connectors/findContactTool.ts");
+const loadSlack = () => import("../../src/services/tools/connectors/slackSendMessageTool.ts");
+const loadApprovals = () => import("../../src/stores/connectorApprovalStore.ts");
 const loadEligibility = () => import("../../src/utils/connectorEligibility.ts");
 const loadRegistry = () => import("../../src/services/tools/index.ts");
 // Tool-step text is localized; the UI language otherwise follows the machine's locale.
@@ -156,6 +158,139 @@ function countingContext(signal = new AbortController().signal) {
   };
   return context;
 }
+
+function toolContext(messageId, toolCallId, held = { count: 0 }) {
+  return {
+    messageId,
+    toolCallId,
+    signal: new AbortController().signal,
+    onApprovalRequested() {},
+    onHoldDelivery() {
+      held.count += 1;
+    },
+    claimTurnSlot: () => true,
+  };
+}
+
+test("slack_send_message prepares in main, passes a clarification through, and holds delivery", async (t) => {
+  const prepared = [];
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async (...args) => {
+          prepared.push(args);
+          return {
+            status: "needs_clarification",
+            message: 'More than one match for "gab". Ask the user which one they meant.',
+            candidates: ["Gabe Smith (@gabe)", "Gabriel Stone (@gstone)"],
+          };
+        },
+      },
+    },
+  });
+  const { slackSendMessageTool } = await loadSlack();
+  const held = { count: 0 };
+
+  const result = await slackSendMessageTool.execute(
+    { destination: " gab ", text: "hi" },
+    toolContext("m1", "call-1", held)
+  );
+
+  assert.deepEqual(prepared, [["slack", "send_message", { destination: "gab", text: "hi" }]]);
+  assert.equal(result.data.status, "needs_clarification");
+  assert.deepEqual(result.data.candidates, ["Gabe Smith (@gabe)", "Gabriel Stone (@gstone)"]);
+  assert.equal(held.count, 1, "the question stays in the panel, never pasted at the caret");
+});
+
+test("slack_send_message turns a channel that vanished by Send into a question", async (t) => {
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => ({
+          status: "ready",
+          actionId: "a9",
+          preview: {
+            verbKey: "slackPost",
+            destinationLabel: "#eng",
+            accountLabel: "chad",
+            workspaceLabel: "Acme",
+            body: "hi",
+          },
+        }),
+        connectorCommit: async () => ({
+          state: "failed",
+          errorCode: "channel_not_found",
+          message: "#eng couldn't be found in Slack anymore.",
+        }),
+        connectorCancel: async () => ({ cancelled: true }),
+      },
+    },
+  });
+  const [{ slackSendMessageTool }, approvals] = await Promise.all([loadSlack(), loadApprovals()]);
+  approvals.useConnectorApprovalStore.setState({ entries: {} });
+  const key = approvals.approvalKey("m9", "call-9");
+
+  const pending = slackSendMessageTool.execute(
+    { destination: "#eng", text: "hi" },
+    toolContext("m9", "call-9")
+  );
+  while (!approvals.useConnectorApprovalStore.getState().entries[key]) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  await approvals.approveAction(key);
+  const result = await pending;
+
+  assert.equal(result.data.status, "needs_clarification");
+  assert.match(result.data.message, /#eng/);
+  assert.equal(
+    approvals.useConnectorApprovalStore.getState().entries[key].errorCode,
+    "channel_not_found"
+  );
+});
+
+test("slack_send_message refuses empty text without preparing", async (t) => {
+  let prepared = 0;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => {
+          prepared += 1;
+        },
+      },
+    },
+  });
+  const { slackSendMessageTool } = await loadSlack();
+
+  const result = await slackSendMessageTool.execute(
+    { destination: "#eng", text: "   " },
+    toolContext("m1", "call-2")
+  );
+
+  assert.equal(result.data.status, "failed");
+  assert.equal(result.data.errorCode, "no_text");
+  assert.equal(prepared, 0);
+});
+
+test("slack_send_message registers only when Slack is ready", async () => {
+  const { createToolRegistry } = await loadRegistry();
+  const base = {
+    isSignedIn: true,
+    calendarConnected: false,
+    cloudBackupEnabled: false,
+    webSearchEnabled: false,
+  };
+  const names = (connectors) =>
+    createToolRegistry({ ...base, connectors })
+      .getAll()
+      .map((tool) => tool.name);
+
+  assert.ok(names({ emailDraftTarget: "gmail", slackReady: true }).includes("slack_send_message"));
+  assert.equal(
+    names({ emailDraftTarget: "gmail", slackReady: false }).includes("slack_send_message"),
+    false
+  );
+  assert.equal(names(undefined).includes("slack_send_message"), false);
+});
 
 const loadScope = () => import("../../src/components/chat/toolExecutionScope.ts");
 
@@ -624,4 +759,8 @@ test("the system prompt adds connector rules only when a connector tool is prese
   // A corrected retry or a find_contact follow-up needs no question first.
   assert.doesNotMatch(withEmail, /ask the user before calling it again/);
   assert.doesNotMatch(withoutEmail, /needs_clarification/);
+
+  const withSlack = getAgentSystemPrompt(["slack_send_message"]);
+  assert.match(withSlack, /Use slack_send_message/);
+  assert.match(withSlack, /needs_clarification/);
 });

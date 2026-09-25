@@ -3822,6 +3822,7 @@
       "search_notesName": "Rechercher des notes",
       "email_draftName": "Brouillon d'e-mail",
       "find_contactName": "Rechercher un contact",
+      "slack_send_messageName": "Message Slack",
       "get_noteName": "Obtenir une note",
       "create_noteName": "Créer une note",
       "update_noteName": "Mettre à jour une note",
@@ -3836,6 +3837,7 @@
       "search_notesStatus": "Recherche de notes...",
       "email_draftStatus": "Ouverture d'un brouillon d'e-mail...",
       "find_contactStatus": "Recherche de contacts...",
+      "slack_send_messageStatus": "Préparation d'un message Slack...",
       "web_searchStatus": "Recherche sur le web...",
       "copy_to_clipboardStatus": "Copie dans le presse-papiers...",
       "get_calendar_eventsStatus": "Vérification du calendrier...",
@@ -3991,7 +3993,8 @@
   "connectors": {
     "approval": {
       "headers": {
-        "default": "Envoyer à {{destination}}"
+        "default": "Envoyer à {{destination}}",
+        "slackPost": "Publier dans {{destination}}"
       },
       "identity": "En tant que {{account}}",
       "identityWithWorkspace": "En tant que {{account}} dans {{workspace}}",
@@ -4008,7 +4011,19 @@
       "unknown": "Impossible de confirmer l'envoi. Vérifiez {{destination}}.",
       "cancelled": "Annulé. Rien n'a été envoyé.",
       "notSent": "Non envoyé.",
-      "policyRetry": "Impossible de vérifier les paramètres de votre organisation, rien n'a donc été envoyé. Cliquez sur Envoyer pour réessayer."
+      "policyRetry": "Impossible de vérifier les paramètres de votre organisation, rien n'a donc été envoyé. Cliquez sur Envoyer pour réessayer.",
+      "errors": {
+        "not_in_channel": "Vous n'êtes pas membre de {{destination}}.",
+        "channel_not_found": "{{destination}} n'a pas pu être retrouvé dans Slack.",
+        "is_archived": "{{destination}} est archivé.",
+        "reconnect_needed": "Slack doit être reconnecté dans les Paramètres.",
+        "token_revoked": "Slack doit être reconnecté dans les Paramètres.",
+        "connection_changed": "La connexion Slack a changé avant l'envoi, donc rien n'a été envoyé.",
+        "rate_limited": "Slack est occupé. Réessayez sous peu.",
+        "missing_scope": "OpenWhispr n'a pas la permission de publier là-bas. Reconnectez Slack dans les Paramètres.",
+        "msg_too_long": "Le message est trop long pour Slack (12 000 caractères maximum, une fois formaté).",
+        "no_text": "Le message est vide."
+      }
     },
     "policyOff": "Votre organisation a désactivé les connecteurs.",
     "viewPlans": "Voir les forfaits",
@@ -4066,7 +4081,16 @@
       "errors": {
         "open_failed": "Impossible d'ouvrir votre application de messagerie.",
         "draft_too_long": "Trop de destinataires pour un lien de brouillon.",
-        "invalid_address": "Des adresses e-mail complètes sont nécessaires."
+        "invalid_address": "Des adresses e-mail complètes sont nécessaires.",
+        "not_in_channel": "Pas membre de ce canal.",
+        "channel_not_found": "Cette conversation est introuvable.",
+        "is_archived": "Ce canal est archivé.",
+        "reconnect_needed": "Slack doit être reconnecté.",
+        "connection_changed": "La connexion Slack a changé. Rien n'a été envoyé.",
+        "rate_limited": "Slack est occupé.",
+        "missing_scope": "Permission Slack manquante.",
+        "msg_too_long": "Message trop long pour Slack.",
+        "no_text": "Le message est vide."
       }
     }
   },

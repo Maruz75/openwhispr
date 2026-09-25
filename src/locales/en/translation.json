@@ -3822,6 +3822,7 @@
       "search_notesName": "Search notes",
       "email_draftName": "Email draft",
       "find_contactName": "Find contact",
+      "slack_send_messageName": "Slack message",
       "get_noteName": "Get note",
       "create_noteName": "Create note",
       "update_noteName": "Update note",
@@ -3836,6 +3837,7 @@
       "search_notesStatus": "Searching notes...",
       "email_draftStatus": "Opening an email draft...",
       "find_contactStatus": "Looking up contacts...",
+      "slack_send_messageStatus": "Preparing a Slack message...",
       "web_searchStatus": "Searching the web...",
       "copy_to_clipboardStatus": "Copying to clipboard...",
       "get_calendar_eventsStatus": "Checking calendar...",
@@ -3991,7 +3993,8 @@
   "connectors": {
     "approval": {
       "headers": {
-        "default": "Send to {{destination}}"
+        "default": "Send to {{destination}}",
+        "slackPost": "Post to {{destination}}"
       },
       "identity": "As {{account}}",
       "identityWithWorkspace": "As {{account}} in {{workspace}}",
@@ -4008,7 +4011,19 @@
       "unknown": "Couldn't confirm it was sent. Check {{destination}}.",
       "cancelled": "Cancelled. Nothing was sent.",
       "notSent": "Not sent.",
-      "policyRetry": "Couldn't check your organization's settings, so nothing was sent. Press Send to try again."
+      "policyRetry": "Couldn't check your organization's settings, so nothing was sent. Press Send to try again.",
+      "errors": {
+        "not_in_channel": "You're not a member of {{destination}}.",
+        "channel_not_found": "{{destination}} couldn't be found in Slack anymore.",
+        "is_archived": "{{destination}} is archived.",
+        "reconnect_needed": "Slack needs to be reconnected in Settings.",
+        "token_revoked": "Slack needs to be reconnected in Settings.",
+        "connection_changed": "The Slack connection changed before sending, so nothing was sent.",
+        "rate_limited": "Slack is busy. Try again shortly.",
+        "missing_scope": "OpenWhispr doesn't have permission to post there. Reconnect Slack in Settings.",
+        "msg_too_long": "The message is too long for Slack (12,000 characters at most, once formatted).",
+        "no_text": "The message is empty."
+      }
     },
     "policyOff": "Connectors are turned off by your organization.",
     "viewPlans": "View Plans",
@@ -4066,7 +4081,16 @@
       "errors": {
         "open_failed": "Couldn't open your email app.",
         "draft_too_long": "Too many recipients for a draft link.",
-        "invalid_address": "Needs full email addresses."
+        "invalid_address": "Needs full email addresses.",
+        "not_in_channel": "Not a member of that channel.",
+        "channel_not_found": "Couldn't find that conversation.",
+        "is_archived": "That channel is archived.",
+        "reconnect_needed": "Slack needs to be reconnected.",
+        "connection_changed": "The Slack connection changed. Nothing was sent.",
+        "rate_limited": "Slack is busy.",
+        "missing_scope": "Missing Slack permission.",
+        "msg_too_long": "Message too long for Slack.",
+        "no_text": "The message is empty."
       }
     }
   },

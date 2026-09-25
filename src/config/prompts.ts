@@ -54,6 +54,8 @@ const TOOL_INSTRUCTIONS: Record<string, string> = {
     "Use find_contact to look up a person's email address by name before drafting an email to them.",
   email_draft:
     "Use email_draft to open a pre-filled email draft for the user to review and send themselves; it never sends.",
+  slack_send_message:
+    "Use slack_send_message to post to a Slack channel or person as the user; the user approves each message on a card before it is sent. For a person, pass their name, @handle or email address.",
 };
 
 const twoDigits = (value: number): string => String(value).padStart(2, "0");
@@ -75,7 +77,7 @@ function getLocalCalendarContext(): string {
   return `Current local date and time: ${formatLocalRfc3339(now)}. IANA time zone: ${timeZone}.`;
 }
 
-const CONNECTOR_TOOL_NAMES = ["find_contact", "email_draft"];
+const CONNECTOR_TOOL_NAMES = ["find_contact", "email_draft", "slack_send_message"];
 
 // Each result that must not be retried says so in its own guidance, so the
 // rule needs no list of statuses (and grows with no new connector).

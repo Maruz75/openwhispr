@@ -3822,6 +3822,7 @@
       "search_notesName": "Notizen durchsuchen",
       "email_draftName": "E-Mail-Entwurf",
       "find_contactName": "Kontakt suchen",
+      "slack_send_messageName": "Slack-Nachricht",
       "get_noteName": "Notiz abrufen",
       "create_noteName": "Notiz erstellen",
       "update_noteName": "Notiz aktualisieren",
@@ -3836,6 +3837,7 @@
       "search_notesStatus": "Notizen werden durchsucht...",
       "email_draftStatus": "E-Mail-Entwurf wird geöffnet...",
       "find_contactStatus": "Kontakte werden gesucht...",
+      "slack_send_messageStatus": "Slack-Nachricht wird vorbereitet...",
       "web_searchStatus": "Websuche...",
       "copy_to_clipboardStatus": "In Zwischenablage kopieren...",
       "get_calendar_eventsStatus": "Kalender wird geprüft...",
@@ -3991,7 +3993,8 @@
   "connectors": {
     "approval": {
       "headers": {
-        "default": "An {{destination}} senden"
+        "default": "An {{destination}} senden",
+        "slackPost": "In {{destination}} posten"
       },
       "identity": "Als {{account}}",
       "identityWithWorkspace": "Als {{account}} in {{workspace}}",
@@ -4008,7 +4011,19 @@
       "unknown": "Konnte nicht bestätigt werden. Bitte {{destination}} prüfen.",
       "cancelled": "Abgebrochen. Es wurde nichts gesendet.",
       "notSent": "Nicht gesendet.",
-      "policyRetry": "Die Einstellungen deiner Organisation konnten nicht geprüft werden, daher wurde nichts gesendet. Auf Senden drücken, um es erneut zu versuchen."
+      "policyRetry": "Die Einstellungen deiner Organisation konnten nicht geprüft werden, daher wurde nichts gesendet. Auf Senden drücken, um es erneut zu versuchen.",
+      "errors": {
+        "not_in_channel": "Du bist kein Mitglied von {{destination}}.",
+        "channel_not_found": "{{destination}} konnte in Slack nicht mehr gefunden werden.",
+        "is_archived": "{{destination}} ist archiviert.",
+        "reconnect_needed": "Slack muss in den Einstellungen erneut verbunden werden.",
+        "token_revoked": "Slack muss in den Einstellungen erneut verbunden werden.",
+        "connection_changed": "Die Slack-Verbindung hat sich vor dem Senden geändert, daher wurde nichts gesendet.",
+        "rate_limited": "Slack ist gerade ausgelastet. Versuche es in Kürze erneut.",
+        "missing_scope": "OpenWhispr hat keine Berechtigung, dort zu posten. Slack in den Einstellungen erneut verbinden.",
+        "msg_too_long": "Die Nachricht ist zu lang für Slack (maximal 12.000 Zeichen nach der Formatierung).",
+        "no_text": "Die Nachricht ist leer."
+      }
     },
     "policyOff": "Konnektoren wurden von deiner Organisation deaktiviert.",
     "viewPlans": "Pläne ansehen",
@@ -4066,7 +4081,16 @@
       "errors": {
         "open_failed": "Deine E-Mail-App konnte nicht geöffnet werden.",
         "draft_too_long": "Zu viele Empfänger für einen Entwurfslink.",
-        "invalid_address": "Vollständige E-Mail-Adressen erforderlich."
+        "invalid_address": "Vollständige E-Mail-Adressen erforderlich.",
+        "not_in_channel": "Kein Mitglied dieses Kanals.",
+        "channel_not_found": "Diese Unterhaltung wurde nicht gefunden.",
+        "is_archived": "Dieser Kanal ist archiviert.",
+        "reconnect_needed": "Slack muss erneut verbunden werden.",
+        "connection_changed": "Die Slack-Verbindung hat sich geändert. Nichts wurde gesendet.",
+        "rate_limited": "Slack ist gerade ausgelastet.",
+        "missing_scope": "Slack-Berechtigung fehlt.",
+        "msg_too_long": "Nachricht zu lang für Slack.",
+        "no_text": "Die Nachricht ist leer."
       }
     }
   },

@@ -17,6 +17,7 @@ import { getUsageState } from "../../lib/usageStore";
 import { readIsSubscribed } from "../../lib/subscriptionFlag";
 import { hasConnectorPlan } from "../../utils/connectorEligibility";
 import { resolveEmailDraftTarget } from "../../utils/emailDraftTarget";
+import { ensureConnectorStatus, isConnectorReady } from "../../stores/connectorStatusStore";
 import {
   appendDictionarySuffix,
   appendPlainTextResponseSuffix,
@@ -344,16 +345,20 @@ export function useChatStreaming({
           const calendarConnected =
             settings.gcalConnected || settings.mcalConnected || settings.appleCalendarConnected;
           const webSearchEnabled = isWebSearchAllowed(usePolicyStore.getState());
-          const connectors =
+          const connectorsAvailable =
             allowConnectors &&
             settings.isSignedIn &&
             hasConnectorPlan(getUsageState(), readIsSubscribed()) &&
-            isConnectorsAllowed(usePolicyStore.getState())
-              ? { emailDraftTarget: resolveEmailDraftTarget(settings) }
-              : undefined;
+            isConnectorsAllowed(usePolicyStore.getState());
+          // The first send in a window must not miss a connected Slack.
+          if (connectorsAvailable) await ensureConnectorStatus();
+          const slackReady = connectorsAvailable && isConnectorReady("slack");
+          const connectors = connectorsAvailable
+            ? { emailDraftTarget: resolveEmailDraftTarget(settings), slackReady }
+            : undefined;
           // Triggers ride in the tool description, so a snippet edit rebuilds the registry.
           const snippetKey = settings.snippets.map((s) => s.trigger).join("|");
-          const cacheKey = `${settings.isSignedIn}-${calendarConnected}-${settings.cloudBackupEnabled}-${scopeKey}-${webSearchEnabled}-${snippetKey}-${connectors?.emailDraftTarget ?? "no-connectors"}`;
+          const cacheKey = `${settings.isSignedIn}-${calendarConnected}-${settings.cloudBackupEnabled}-${scopeKey}-${webSearchEnabled}-${snippetKey}-${connectors?.emailDraftTarget ?? "no-connectors"}-${slackReady}`;
           if (toolRegistryRef.current?.key === cacheKey) {
             registry = toolRegistryRef.current.registry;
           } else {
