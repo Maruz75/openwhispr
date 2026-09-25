@@ -280,10 +280,19 @@ function createConnectorManager({
         }
         // A new login: approvals prepared under the old one must not send.
         credentials.replace(accountId, connectorId, credential, startGeneration);
-      } catch {
+      } catch (error) {
         // Nobody will use this login, so it is revoked rather than left live.
         await revokeQuietly(connector, credential);
-        return { status: "failed", errorCode: "connection_changed" };
+        if (error.code === "connection_changed" || error.code === "signed_out") {
+          return { status: "failed", errorCode: "connection_changed" };
+        }
+        // A real write failure (disk, permission, encryption), not a race.
+        logger.warn(
+          "connector login save failed",
+          { connectorId, ...describeError(error) },
+          "connectors"
+        );
+        return { status: "failed", errorCode: "credential_save_failed" };
       }
       invalidate(connectorId);
       await notifyStatusChanged();
@@ -311,9 +320,20 @@ function createConnectorManager({
       await revokeQuietly(connector, entry.credential);
       try {
         credentials.clear(accountId, connectorId, entry.generation);
-      } catch {
-        // A reconnect landed while revoking: that newer login stays.
-        return { status: "failed", errorCode: "connection_changed" };
+      } catch (error) {
+        if (error.code === "connection_changed" || error.code === "signed_out") {
+          // A reconnect landed while revoking: that newer login stays.
+          return { status: "failed", errorCode: "connection_changed" };
+        }
+        // A real write failure (disk, permission): the revoke above already
+        // happened, so the login is dead even though the local slot wasn't
+        // cleared. Never claim "disconnected" for a slot that's still there.
+        logger.warn(
+          "connector login clear failed",
+          { connectorId, ...describeError(error) },
+          "connectors"
+        );
+        return { status: "failed", errorCode: "disconnect_failed" };
       }
     }
     invalidate(connectorId);

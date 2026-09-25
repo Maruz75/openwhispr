@@ -963,6 +963,35 @@ test("connect refuses on policy or no account, and reports flow errors by code",
   assert.equal(credentials.read("acct-1", "fake"), null);
 });
 
+test("connect whose credential save fails for a real reason (not a race) logs it, revokes the new login, and reports credential_save_failed", async () => {
+  const logger = recordingLogger();
+  const credentials = memoryCredentials(null, { connectorId: "fake" });
+  credentials.replace = () => {
+    throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+  };
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials, logger }
+  );
+
+  assert.deepEqual(await manager.connect("fake", "allowed"), {
+    status: "failed",
+    errorCode: "credential_save_failed",
+  });
+  assert.deepEqual(revoked, [{ accessToken: "new" }]);
+  const warnings = logger.lines.filter((line) => line.level === "warn");
+  assert.equal(warnings.length, 1);
+  const logged = JSON.stringify(warnings);
+  assert.match(logged, /EIO/);
+  assert.doesNotMatch(logged, /accessToken/);
+});
+
 test("disconnect revokes the stored login, clears it, cancels and announces; a failed revoke still disconnects", async () => {
   const credentials = memoryCredentials(
     { accessToken: "t", refreshToken: "r" },
@@ -1012,6 +1041,41 @@ test("a disconnect never deletes a login connected while it was revoking", async
 
   assert.deepEqual(await disconnecting, { status: "failed", errorCode: "connection_changed" });
   assert.equal(credentials.read("acct-1", "fake").credential.accessToken, "new");
+});
+
+test("disconnect whose credential clear fails for a real reason (not a race) logs it and reports disconnect_failed", async () => {
+  const logger = recordingLogger();
+  const credentials = memoryCredentials({ accessToken: "t" }, { connectorId: "fake" });
+  credentials.clear = () => {
+    throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+  };
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials, logger }
+  );
+
+  assert.deepEqual(await manager.disconnect("fake"), {
+    status: "failed",
+    errorCode: "disconnect_failed",
+  });
+  // The revoke already happened; the local slot wasn't cleared, so it isn't
+  // pretended away.
+  assert.deepEqual(revoked, [{ accessToken: "t" }]);
+  assert.deepEqual(credentials.read("acct-1", "fake"), {
+    credential: { accessToken: "t" },
+    generation: 1,
+  });
+  const warnings = logger.lines.filter((line) => line.level === "warn");
+  assert.equal(warnings.length, 1);
+  const logged = JSON.stringify(warnings);
+  assert.match(logged, /EPERM/);
+  assert.doesNotMatch(logged, /accessToken/);
 });
 
 test("disconnectAll disconnects every connector that can revoke", async () => {
