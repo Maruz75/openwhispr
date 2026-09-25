@@ -22,13 +22,15 @@ const FIXTURES = {
   refresh: {
     ok: true,
     app_id: "A0TEST",
-    authed_user: { id: "U0CHAD" },
+    user_id: "U0CHAD",
     scope: "chat:write,channels:read,groups:read,im:write,users:read,users:read.email",
     token_type: "user",
     access_token: "xoxe.xoxp-1-test-access-2",
     refresh_token: "xoxe-1-test-refresh-2",
     expires_in: 43200,
     team: { id: "T0TEST", name: "Acme Test" },
+    enterprise: null,
+    is_enterprise_install: false,
   },
   authTest: {
     ok: true,
@@ -48,7 +50,6 @@ const FIXTURES = {
         is_channel: true,
         is_private: false,
         is_archived: false,
-        is_member: true,
       },
       {
         id: "C0ENGBE",
@@ -56,7 +57,6 @@ const FIXTURES = {
         is_channel: true,
         is_private: false,
         is_archived: false,
-        is_member: true,
       },
       {
         id: "G0LEADS",
@@ -64,7 +64,6 @@ const FIXTURES = {
         is_channel: true,
         is_private: true,
         is_archived: false,
-        is_member: true,
       },
     ],
     response_metadata: { next_cursor: "" },
@@ -174,6 +173,7 @@ function fakeSlackFetch(script) {
       method,
       params: Object.fromEntries(new URLSearchParams(init.body)),
       authorization: init.headers.Authorization ?? null,
+      contentType: init.headers["Content-Type"] ?? null,
     });
     const queue = queues.get(method);
     if (!queue || queue.length === 0) throw new Error(`unscripted Slack call: ${method}`);

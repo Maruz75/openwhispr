@@ -53,7 +53,8 @@ function createSlackApi({
   timeoutMs = REQUEST_TIMEOUT_MS,
 }) {
   async function once(method, params, token) {
-    const headers = { "Content-Type": "application/x-www-form-urlencoded; charset=utf-8" };
+    // Slack warns "superfluous_charset" when a form body names a charset.
+    const headers = { "Content-Type": "application/x-www-form-urlencoded" };
     if (token) headers.Authorization = `Bearer ${token}`;
     let response;
     try {

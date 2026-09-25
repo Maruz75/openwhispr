@@ -37,6 +37,7 @@ test("a successful call returns the body and sends the token as a bearer header"
 
   assert.deepEqual(result, { ok: true, data: FIXTURES.posted });
   assert.equal(slack.calls[0].authorization, "Bearer xoxp-t");
+  assert.equal(slack.calls[0].contentType, "application/x-www-form-urlencoded");
   assert.deepEqual(slack.calls[0].params, { channel: "C0ENG", markdown_text: "hi" });
 });
 
