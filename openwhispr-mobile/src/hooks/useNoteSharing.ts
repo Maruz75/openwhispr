@@ -99,8 +99,10 @@ function sharingError(error: unknown): string {
     if (known) return known;
     if (error.status === 401) return 'Your session has expired. Sign in again to manage sharing.';
     if (error.status === 409) return 'Sharing settings changed. Refresh and try again.';
-    // Validation messages (an invalid email, a personal domain) are written for people.
-    if (error.status === 400 || error.status === 426) return error.message;
+    // Validation messages (an invalid email, a personal domain) are written for people; a bare
+    // status from a response without a body is not.
+    if ((error.status === 400 || error.status === 426) && !error.message.startsWith('HTTP '))
+      return error.message;
     return GENERIC_ERROR;
   }
   // expo/fetch rejects with a FetchError (not exported) when the request never reaches the server.
@@ -184,6 +186,7 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
         setHasToken(false);
       }
       if (!user || !remoteId) {
+        loadRequest.current = null;
         setLoading(false);
         return;
       }
@@ -472,15 +475,11 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
 
   // The server mints a first invitation's link without returning it, so mint it here to keep the
   // full link; otherwise switching to a link share later could only replace it, breaking the emails.
-  // Lifting a private note restores paused access, so only do it when there is none to restore:
-  // the server lifts only after validating the invitation, and a rejected one must not reopen it.
+  // Lifting a private note restores paused grants and invitations (listed as `invite:` grants), so
+  // only do it when there are none: a request the server then rejects must not reopen them.
   const ensureFullLink = async (context: SharingOperation): Promise<void> => {
-    const { share, access, invitations } = context.current;
-    if (
-      share.visibility !== 'private' ||
-      access.grants.some((grant) => !isScopeGrant(grant)) ||
-      invitations.some((invite) => !invite.revoked_at && !invite.accepted_at)
-    )
+    const { share, access } = context.current;
+    if (share.visibility !== 'private' || access.grants.some((grant) => !isScopeGrant(grant)))
       return;
     const result = await context.mutate(() =>
       api.setNoteShareVisibility(context.remoteId, 'invited', [], { signal: context.signal }),

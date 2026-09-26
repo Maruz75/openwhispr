@@ -7,6 +7,7 @@ import {
   ScrollView,
   TextInput,
   View,
+  type TextStyle,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,6 +39,7 @@ export interface NoteShareSheetProps {
 }
 
 const PLACEHOLDER_COLOR = iosColor('tertiaryLabel');
+const EMAIL_INPUT_STYLE: TextStyle = { fontFamily: AppFont.regular, borderCurve: 'continuous' };
 
 const VISIBILITY_REACH: Record<ShareVisibility, number> = {
   private: 0,
@@ -471,7 +473,7 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
                       <TextInput
                         accessibilityLabel="Email address"
                         className="h-12 min-w-0 flex-1 rounded-[10px] bg-tertiarySystemFill px-3 text-[15px] text-label"
-                        style={{ fontFamily: AppFont.regular }}
+                        style={EMAIL_INPUT_STYLE}
                         placeholder="name@example.com"
                         placeholderTextColor={PLACEHOLDER_COLOR}
                         autoCapitalize="none"

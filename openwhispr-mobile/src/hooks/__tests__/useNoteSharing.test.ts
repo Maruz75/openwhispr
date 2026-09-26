@@ -791,6 +791,7 @@ it.each([
   ],
   [new ApiError('Note not found', 404), 'Unable to update sharing. Please try again.'],
   [new ApiError('Invalid email address', 400), 'Invalid email address'],
+  [new ApiError('HTTP 400', 400), 'Unable to update sharing. Please try again.'],
   [
     // The shape of expo/fetch's FetchError when the request never reaches the server.
     new Error('fetch failed: The Internet connection appears to be offline.'),
@@ -1004,4 +1005,25 @@ it('does not let a quiet refresh hide the first load failing', async (): Promise
   });
   expect(result.current.error).toMatch(/permission/i);
   expect(sharing.getNoteShareState).toHaveBeenCalledTimes(1);
+});
+it('refreshes on return once a note opened before its upload has a cloud copy', async (): Promise<void> => {
+  let onChange!: (state: AppStateStatus) => void;
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+    onChange = listener;
+    return { remove: jest.fn() };
+  });
+  note = { ...note, remoteId: null };
+  useNotesStore.setState({ notes: [note] });
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(sharing.getNoteShareState).not.toHaveBeenCalled();
+  note = { ...note, remoteId: 'remote' };
+  await act(async (): Promise<void> => {
+    useNotesStore.setState({ notes: [note] });
+  });
+  await act(async (): Promise<void> => {
+    onChange('active');
+  });
+  expect(sharing.getNoteShareState).toHaveBeenCalledTimes(1);
+  expect(result.current.state?.share.visibility).toBe('private');
 });
