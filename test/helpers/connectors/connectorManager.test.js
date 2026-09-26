@@ -1332,7 +1332,7 @@ test("main files connector logins under the credential's account scope, not the 
     "utf8"
   );
   const wiring = source.match(
-    /const getConnectorAccountScope = ([\s\S]*?)\n  const connectorCredentials/
+    /const getConnectorAccountScope = ([\s\S]*?)\n\s+const connectorCredentials/
   );
   assert.ok(wiring, "main.js defines the connector account lookup");
   assert.match(wiring[1], /accountScopeBinding\.resolveActiveAccountScope\(/);
