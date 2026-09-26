@@ -8,7 +8,7 @@ import { RecentActions } from "./connectors/RecentActions";
 import { SlackConnectorRow } from "./connectors/SlackConnectorRow";
 import { useSettingsStore } from "../stores/settingsStore";
 import { usePolicyStore } from "../stores/policyStore";
-import { isConnectorsBlockedByOrg } from "../stores/policyRules";
+import { isConnectorsAllowed, isConnectorsBlockedByOrg } from "../stores/policyRules";
 import { getUsageState, subscribeUsage } from "../lib/usageStore";
 import { readIsSubscribed, subscribeIsSubscribed } from "../lib/subscriptionFlag";
 import { hasConnectorPlan } from "../utils/connectorEligibility";
@@ -25,6 +25,9 @@ interface ConnectorsSectionProps {
 export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactElement {
   const { t } = useTranslation();
   const blockedByOrg = usePolicyStore(isConnectorsBlockedByOrg);
+  // False while the policy loads, after a failed fetch, or when the org requires
+  // a newer app: chat has no connector tools then, so the card mustn't offer them.
+  const connectorsAllowed = usePolicyStore(isConnectorsAllowed);
   const isSignedIn = useSettingsStore((state) => state.isSignedIn);
   const emailDraftTarget = useSettingsStore((state) => state.emailDraftTarget);
   const setEmailDraftTarget = useSettingsStore((state) => state.setEmailDraftTarget);
@@ -34,6 +37,7 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
   const usage = useSyncExternalStore(subscribeUsage, getUsageState);
   const isSubscribedFlag = useSyncExternalStore(subscribeIsSubscribed, readIsSubscribed);
   const isPaid = isSignedIn && hasConnectorPlan(usage, isSubscribedFlag);
+  const showActions = isPaid && connectorsAllowed;
 
   const automaticTarget = resolveEmailDraftTarget({
     emailDraftTarget: "auto",
@@ -49,10 +53,11 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
 
   const description = blockedByOrg
     ? t("connectors.policyOff")
-    : isPaid
-      ? t("connectors.email.description")
-      : t("connectors.email.proRequired");
-  const showActions = isPaid && !blockedByOrg;
+    : !isPaid
+      ? t("connectors.email.proRequired")
+      : connectorsAllowed
+        ? t("connectors.email.description")
+        : t("connectors.email.unavailable");
 
   return (
     <SettingsPanel>
@@ -71,7 +76,7 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
               onValueChange={(value) => setEmailDraftTarget(value as EmailDraftTargetSetting)}
             >
               <SelectTrigger
-                className="w-48 shrink-0"
+                className="h-7 w-48 shrink-0 text-xs rounded-lg px-2.5 [&>svg]:h-3 [&>svg]:w-3"
                 aria-label={t("connectors.email.targetLabel")}
               >
                 <SelectValue />
@@ -87,12 +92,12 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
           )}
           {!isPaid && !blockedByOrg && (
             <Button size="sm" className="shrink-0" onClick={onUpgrade}>
-              {t("connectors.viewPlans")}
+              {t("integrations.api.viewPlans")}
             </Button>
           )}
         </div>
 
-        {isPaid && <RecentActions connectorId="email" />}
+        {showActions && <RecentActions connectorId="email" />}
       </SettingsPanelRow>
       <SlackConnectorRow isPaid={isPaid} blockedByOrg={blockedByOrg} onUpgrade={onUpgrade} />
     </SettingsPanel>

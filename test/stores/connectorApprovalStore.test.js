@@ -244,6 +244,25 @@ test("a commit result with the wrong key settles as unknown instead of hanging",
   );
 });
 
+test("a commit result with an unknown state settles as unknown instead of hanging", async (t) => {
+  const electron = fakeElectron(() => ({ state: "bogus" }));
+  installBrowserGlobals(t, { window: { electronAPI: electron.api } });
+  const store = await freshStore();
+  const outcome = store.requestApproval(context("call-12").value, {
+    actionId: "a12",
+    connectorId: "slack",
+    preview: PREVIEW,
+  });
+
+  await store.approveAction(keyOf(store, "call-12"));
+
+  assert.deepEqual(await outcome, { state: "unknown" });
+  assert.equal(
+    store.useConnectorApprovalStore.getState().entries[keyOf(store, "call-12")].state,
+    "unknown"
+  );
+});
+
 test("a commit result that resolves undefined settles as unknown", async (t) => {
   const electron = fakeElectron(() => undefined);
   installBrowserGlobals(t, { window: { electronAPI: electron.api } });

@@ -3,16 +3,50 @@ const { describeError } = require("./errorSummary");
 const { policyRefusal } = require("./connectorPolicy");
 
 const CANCEL_REASONS = new Set(["cancelled_by_user", "conversation_ended", "expired"]);
-const COMMIT_RESULT_STATES = new Set(["sent", "failed", "unknown"]);
-const DIRECT_RESULT_STATES = new Set(["sent", "failed", "unknown"]);
 
-// A connector is third-party code (or a stub in tests); never trust its
-// result shape before it gets written to the receipt or handed back. An
-// undefined result would otherwise throw reading `.state`, orphaning the
-// pending entry in "committing" forever.
+// A connector is third-party code (or a stub in tests), so none of its result
+// fields are trusted: each state keeps only the fields it defines, with their
+// types checked. Anything else could leak to the renderer, or make the receipt
+// write throw and leave the row stuck at "committing".
+function stringFields(fields) {
+  return Object.fromEntries(
+    Object.entries(fields).filter(([, value]) => typeof value === "string")
+  );
+}
+
+function booleanFields(fields) {
+  return Object.fromEntries(
+    Object.entries(fields).filter(([, value]) => typeof value === "boolean")
+  );
+}
+
+function stringOr(value, fallback) {
+  return typeof value === "string" ? value : fallback;
+}
+
+const FAILED_MESSAGE = "That action didn't go through.";
+
+function failedResult(result) {
+  return {
+    state: "failed",
+    errorCode: stringOr(result.errorCode, "action_failed"),
+    message: stringOr(result.message, FAILED_MESSAGE),
+  };
+}
+
+// Anything other than a recognized outcome may still have reached the
+// provider, so it is "unknown", never "failed".
 function normalizeCommitResult(result) {
-  if (result && typeof result === "object" && COMMIT_RESULT_STATES.has(result.state)) return result;
-  return { state: "unknown" };
+  switch (result?.state) {
+    case "sent":
+      return { state: "sent", ...stringFields({ url: result.url }) };
+    case "failed":
+      return failedResult(result);
+    case "unknown":
+      return { state: "unknown", ...stringFields({ checkUrl: result.checkUrl }) };
+    default:
+      return { state: "unknown" };
+  }
 }
 
 // A direct action that threw or answered malformed may already have acted
@@ -26,9 +60,29 @@ function uncertainDirectResult(errorCode) {
   };
 }
 
+// "not_sent" is the connector saying it stopped before acting (a cancel that
+// landed in time).
 function normalizeDirectResult(result) {
-  if (result && typeof result === "object" && DIRECT_RESULT_STATES.has(result.state)) return result;
-  return uncertainDirectResult("invalid_result");
+  const destination = stringFields({ destinationLabel: result?.destinationLabel });
+  switch (result?.state) {
+    case "sent":
+      return {
+        state: "sent",
+        destinationLabel: "",
+        ...destination,
+        ...booleanFields({
+          bodyCopied: result.bodyCopied,
+          subjectCopied: result.subjectCopied,
+          copyFailed: result.copyFailed,
+        }),
+      };
+    case "failed":
+      return { ...failedResult(result), ...destination };
+    case "not_sent":
+      return { state: "not_sent", reason: stringOr(result.reason, "cancelled") };
+    default:
+      return uncertainDirectResult("invalid_result");
+  }
 }
 
 const INVALID_PREPARE_RESULT = {
@@ -37,7 +91,13 @@ const INVALID_PREPARE_RESULT = {
   message: "Couldn't prepare that action.",
 };
 
-// Actions that write a receipt need the account the receipt belongs to.
+const RECEIPT_UNAVAILABLE_PREPARE_RESULT = {
+  status: "failed",
+  errorCode: "receipt_unavailable",
+  message: "Couldn't record this action, so nothing was prepared.",
+};
+
+// Connecting writes a login for the account, so it needs one.
 function actionRefusal(policyState, accountId) {
   return policyRefusal(policyState) ?? (accountId ? null : "signed_out");
 }
@@ -46,41 +106,61 @@ function isString(value) {
   return typeof value === "string";
 }
 
-function isPreview(preview) {
-  return (
-    Boolean(preview) &&
-    typeof preview === "object" &&
-    isString(preview.verbKey) &&
-    isString(preview.destinationLabel) &&
-    isString(preview.accountLabel) &&
-    isString(preview.body) &&
-    (preview.title === undefined || isString(preview.title)) &&
-    (preview.workspaceLabel === undefined || isString(preview.workspaceLabel))
-  );
+function normalizePreviewNote(note) {
+  if (!note || typeof note.key !== "string") return null;
+  return note.values && typeof note.values === "object"
+    ? { key: note.key, values: stringFields(note.values) }
+    : { key: note.key };
+}
+
+// The card renders exactly this, so a preview missing a field it needs is
+// malformed rather than shown half empty.
+function normalizePreview(preview) {
+  if (!preview || typeof preview !== "object") return null;
+  const { verbKey, destinationLabel, accountLabel, body } = preview;
+  if (![verbKey, destinationLabel, accountLabel, body].every(isString)) return null;
+  return {
+    verbKey,
+    destinationLabel,
+    accountLabel,
+    body,
+    ...stringFields({ workspaceLabel: preview.workspaceLabel, title: preview.title }),
+    ...(Array.isArray(preview.notes)
+      ? { notes: preview.notes.map(normalizePreviewNote).filter(Boolean) }
+      : {}),
+  };
 }
 
 // A connector's prepare result decides whether a card appears and what it
-// shows, so it is checked like a commit result: anything malformed fails
-// closed, with no card and no receipt. Only the fields each status defines
-// reach the renderer, so a connector can't leak anything else (such as
-// message text) through an odd result.
+// shows, so anything malformed fails closed, with no card and no receipt. The
+// payload stays in main; only the fields each status defines reach the
+// renderer, so a connector can't leak anything else (such as message text)
+// through an odd result.
 function normalizePrepareResult(result) {
-  if (result && typeof result === "object") {
-    if (result.status === "ready" && isPreview(result.preview) && result.payload !== undefined) {
-      return { status: "ready", payload: result.payload, preview: result.preview };
+  switch (result?.status) {
+    case "ready": {
+      const preview = normalizePreview(result.preview);
+      return preview && result.payload !== undefined
+        ? { status: "ready", payload: result.payload, preview }
+        : INVALID_PREPARE_RESULT;
     }
-    if (result.status === "needs_clarification" && isString(result.message)) {
+    case "needs_clarification":
+      return isString(result.message)
+        ? {
+            status: "needs_clarification",
+            message: result.message,
+            candidates: Array.isArray(result.candidates) ? result.candidates.filter(isString) : [],
+          }
+        : INVALID_PREPARE_RESULT;
+    case "failed":
       return {
-        status: "needs_clarification",
-        message: result.message,
-        candidates: Array.isArray(result.candidates) ? result.candidates.filter(isString) : [],
+        status: "failed",
+        errorCode: stringOr(result.errorCode, "prepare_failed"),
+        message: stringOr(result.message, INVALID_PREPARE_RESULT.message),
       };
-    }
-    if (result.status === "failed" && isString(result.errorCode) && isString(result.message)) {
-      return { status: "failed", errorCode: result.errorCode, message: result.message };
-    }
+    default:
+      return INVALID_PREPARE_RESULT;
   }
-  return INVALID_PREPARE_RESULT;
 }
 
 function normalizeStatus(status) {
@@ -127,6 +207,11 @@ async function withinDeadline(promise, ms) {
   }
 }
 
+// Every action call carries `auth`: the org policy verdict and the signed-in
+// account it was resolved for. The account owns the receipt, so an action
+// with none (signed out, or mid sign-in or account switch) is refused before
+// anything is written or done. Connecting and disconnecting a login use
+// getAccountId(), the account whose login slot they write.
 function createConnectorManager({
   connectors,
   pendingActions,
@@ -166,7 +251,7 @@ function createConnectorManager({
 
   record(() => {
     const reconciled = actionLog.reconcileInterrupted();
-    if (reconciled.unknown || reconciled.cancelled) {
+    if (reconciled.unknown || reconciled.cancelled || reconciled.orphaned) {
       logger.info("reconciled interrupted connector actions", reconciled, "connectors");
     }
   });
@@ -347,13 +432,13 @@ function createConnectorManager({
     }
   }
 
-  async function prepare(connectorId, action, args, policyState) {
+  async function prepare(connectorId, action, args, { policyState, accountId }) {
     sweepExpired();
-    const accountId = getAccountId();
-    const refusal = actionRefusal(policyState, accountId);
+    const refusal = policyRefusal(policyState);
     if (refusal) return { status: "unavailable", reason: refusal };
     const resolved = resolveAction(connectorId, action, "approval");
     if (resolved.error) return { status: "unavailable", reason: resolved.error };
+    if (!accountId) return RECEIPT_UNAVAILABLE_PREPARE_RESULT;
     const { connector } = resolved;
 
     const binding = await currentBinding(connector);
@@ -377,6 +462,7 @@ function createConnectorManager({
       connectorId,
       action,
       binding,
+      accountId,
       payload: prepared.payload,
       preview: prepared.preview,
     });
@@ -393,16 +479,20 @@ function createConnectorManager({
     });
     if (!recorded) {
       pendingActions.cancel(actionId);
-      return {
-        status: "failed",
-        errorCode: "receipt_unavailable",
-        message: "Couldn't record this action, so nothing was prepared.",
-      };
+      return RECEIPT_UNAVAILABLE_PREPARE_RESULT;
     }
     return { status: "ready", actionId, preview: prepared.preview };
   }
 
-  async function commit(actionId, edits, policyState) {
+  // Withdrawn rather than left pending: a refused card is settled in the
+  // renderer, so nothing may commit it later.
+  function withdrawPending(actionId, reason) {
+    pendingActions.cancel(actionId);
+    record(() => actionLog.update(actionId, { state: "cancelled", errorCode: reason }, "pending"));
+    return { state: "not_sent", reason };
+  }
+
+  async function commit(actionId, edits, { policyState, accountId }) {
     sweepExpired();
     const entry = pendingActions.get(actionId);
     if (!entry) return { state: "not_sent", reason: "not_found" };
@@ -416,13 +506,9 @@ function createConnectorManager({
     if (refusal === "policy_unavailable") {
       return { state: "not_sent", reason: refusal, retryable: true };
     }
-    if (refusal) {
-      pendingActions.cancel(actionId);
-      record(() =>
-        actionLog.update(actionId, { state: "cancelled", errorCode: refusal }, "pending")
-      );
-      return { state: "not_sent", reason: refusal };
-    }
+    if (refusal) return withdrawPending(actionId, refusal);
+    // Another account (or none) must not send what this one prepared.
+    if (entry.accountId !== accountId) return withdrawPending(actionId, "account_changed");
 
     const connector = byId.get(entry.connectorId);
     const begun = pendingActions.beginCommit(actionId, await currentBinding(connector));
@@ -452,9 +538,11 @@ function createConnectorManager({
 
     let result;
     try {
-      result = await connector.commit(entry.action, entry.payload, sanitizeEdits(edits), {
-        binding: entry.binding,
-      });
+      result = normalizeCommitResult(
+        await connector.commit(entry.action, entry.payload, sanitizeEdits(edits), {
+          binding: entry.binding,
+        })
+      );
     } catch (error) {
       logger.warn(
         "connector commit threw",
@@ -463,7 +551,6 @@ function createConnectorManager({
       );
       result = { state: "unknown" };
     }
-    result = normalizeCommitResult(result);
     if (result.errorCode === "reconnect_needed") void notifyStatusChanged();
 
     pendingActions.finish(actionId);
@@ -493,12 +580,14 @@ function createConnectorManager({
     return { cancelled };
   }
 
-  async function runDirect(connectorId, action, args, policyState, runtime) {
-    const accountId = getAccountId();
-    const refusal = actionRefusal(policyState, accountId);
+  // runtime may carry a `signal`: a cancel that lands before the side effect
+  // must stop it (the connector checks it right before acting).
+  async function runDirect(connectorId, action, args, { policyState, accountId }, runtime) {
+    const refusal = policyRefusal(policyState);
     if (refusal) return { state: "unavailable", reason: refusal };
     const resolved = resolveAction(connectorId, action, "direct");
     if (resolved.error) return { state: "unavailable", reason: resolved.error };
+    if (!accountId) return { state: "unavailable", reason: "receipt_unavailable" };
 
     const id = randomId();
     const recorded = writeRequired("direct", () => {
@@ -526,12 +615,12 @@ function createConnectorManager({
       );
       result = uncertainDirectResult("direct_failed");
     }
+    const outcome =
+      result.state === "not_sent"
+        ? { state: "cancelled", errorCode: result.reason }
+        : { state: result.state, errorCode: result.errorCode || null };
     record(() =>
-      actionLog.update(id, {
-        state: result.state,
-        destinationLabel: result.destinationLabel || null,
-        errorCode: result.errorCode || null,
-      })
+      actionLog.update(id, { ...outcome, destinationLabel: result.destinationLabel || null })
     );
     return result;
   }
@@ -546,9 +635,10 @@ function createConnectorManager({
     return removed;
   }
 
-  function recentActions(connectorId, limit) {
+  // Receipts name the people a user wrote to: only the account that took the
+  // action sees them.
+  function recentActions(connectorId, limit, accountId) {
     sweepExpired();
-    const accountId = getAccountId();
     if (!accountId) return [];
     const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 10;
     return actionLog.listRecent(connectorId, safeLimit, accountId);

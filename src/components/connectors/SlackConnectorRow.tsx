@@ -137,7 +137,7 @@ export function SlackConnectorRow({
           )}
           {!connected && !isPaid && (
             <Button size="sm" className="shrink-0" onClick={onUpgrade}>
-              {t("connectors.viewPlans")}
+              {t("integrations.api.viewPlans")}
             </Button>
           )}
         </div>

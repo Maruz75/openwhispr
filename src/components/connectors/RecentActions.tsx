@@ -26,8 +26,20 @@ export function RecentActions({
 }): ReactElement | null {
   const { t, i18n } = useTranslation();
   const [recent, setRecent] = useState<ConnectorActionRecord[]>([]);
+  const [accountScopeChanges, setAccountScopeChanges] = useState(0);
+
+  // Main lists the receipts of its active account scope, which settles after
+  // the renderer's own sign-in state; refetch once it has moved.
+  useEffect(
+    () =>
+      window.electronAPI?.onActiveAccountScopeChanged?.(() =>
+        setAccountScopeChanges((count) => count + 1)
+      ),
+    []
+  );
 
   useEffect(() => {
+    setRecent([]);
     let active = true;
     void window.electronAPI
       ?.connectorRecentActions?.(connectorId, 10)
@@ -40,7 +52,7 @@ export function RecentActions({
     return () => {
       active = false;
     };
-  }, [connectorId, refreshKey]);
+  }, [connectorId, refreshKey, accountScopeChanges]);
 
   if (recent.length === 0) return null;
   return (

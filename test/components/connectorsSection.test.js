@@ -13,6 +13,7 @@ const MOCKS = {
   `,
   "/stores/policyRules": `
     export function isConnectorsBlockedByOrg() { return globalThis.__connectorsBlocked; }
+    export function isConnectorsAllowed() { return globalThis.__connectorsAllowed; }
   `,
   "/stores/settingsStore": `
     const state = {
@@ -80,19 +81,30 @@ const buttonWithText = (container, text) =>
   findElement(container, (node) => node.tagName === "BUTTON" && node.textContent === text);
 
 // `usageState`/`subscribedFlag` are the review round's shape; `isPaid` is a
-// shortcut for tests that don't care about the usage/flag distinction.
+// shortcut for tests that don't care about the usage/flag distinction. An org
+// block is a resolved policy that disallows connectors, so it implies not
+// allowed; `allowed: false` alone is a policy that is loading or failed.
 function setPlan(
   t,
-  { usageState, subscribedFlag = false, blocked = false, isPaid, statuses = {} } = {}
+  {
+    usageState,
+    subscribedFlag = false,
+    blocked = false,
+    allowed = !blocked,
+    isPaid,
+    statuses = {},
+  } = {}
 ) {
   globalThis.__usage = usageState ?? usage(Boolean(isPaid));
   globalThis.__subscribedFlag = isPaid ?? subscribedFlag;
   globalThis.__connectorsBlocked = blocked;
+  globalThis.__connectorsAllowed = allowed;
   globalThis.__connectorStatuses = statuses;
   t.after(() => {
     delete globalThis.__usage;
     delete globalThis.__subscribedFlag;
     delete globalThis.__connectorsBlocked;
+    delete globalThis.__connectorsAllowed;
     delete globalThis.__connectorStatuses;
   });
 }
@@ -117,12 +129,34 @@ async function renderSection(t, plan, electronAPI = {}) {
   return container;
 }
 
+function listItems(container) {
+  const items = [];
+  const walk = (node) => {
+    if (node.tagName === "LI") items.push(node.textContent);
+    for (const child of node.childNodes ?? []) walk(child);
+  };
+  walk(container);
+  return items;
+}
+
+const receipt = (id, destinationLabel, state = "sent") => ({
+  id,
+  connector: "email",
+  action: "draft",
+  kind: "direct",
+  destinationLabel,
+  state,
+  resultUrl: null,
+  errorCode: null,
+  createdAt: "2026-09-24 10:00:00",
+});
+
 test("paid users choose where drafts open", async (t) => {
   const { textContent } = await renderSection(t, { usageState: usage(true) });
   assert.match(textContent, /connectors\.email\.title/);
   assert.match(textContent, /connectors\.email\.targets\.gmail/);
   assert.match(textContent, /connectors\.email\.description/);
-  assert.doesNotMatch(textContent, /connectors\.viewPlans/);
+  assert.doesNotMatch(textContent, /integrations\.api\.viewPlans/);
 });
 
 test("automatic names the app it resolved to", async (t) => {
@@ -153,7 +187,7 @@ test("free users see that a paid plan is required and a View Plans button", asyn
   assert.doesNotMatch(container.textContent, /connectors\.email\.description/);
   assert.doesNotMatch(container.textContent, /connectors\.email\.targets\.gmail/);
   const button = findElement(container, (node) => node.tagName === "BUTTON");
-  assert.match(button.textContent, /connectors\.viewPlans/);
+  assert.match(button.textContent, /integrations\.api\.viewPlans/);
   assert.equal(button.getAttribute("variant"), null);
 });
 
@@ -162,38 +196,84 @@ test("an org that turned connectors off sees why, under the card's header", asyn
   assert.match(textContent, /connectors\.email\.title/);
   assert.match(textContent, /connectors\.policyOff/);
   assert.doesNotMatch(textContent, /connectors\.email\.targets/);
-  assert.doesNotMatch(textContent, /connectors\.viewPlans/);
+  assert.doesNotMatch(textContent, /integrations\.api\.viewPlans/);
+});
+
+test("while the policy is unresolved, the card says drafts are unavailable", async (t) => {
+  let fetches = 0;
+  const container = await renderSection(
+    t,
+    { usageState: usage(true), allowed: false },
+    {
+      connectorRecentActions: async () => {
+        fetches += 1;
+        return [receipt("a", "gabe@example.com")];
+      },
+    }
+  );
+  assert.match(container.textContent, /connectors\.email\.unavailable/);
+  assert.doesNotMatch(container.textContent, /connectors\.email\.description/);
+  assert.doesNotMatch(container.textContent, /connectors\.email\.targets/);
+  assert.doesNotMatch(container.textContent, /connectors\.policyOff/);
+  assert.doesNotMatch(container.textContent, /integrations\.api\.viewPlans/);
+  assert.equal(fetches, 0);
+});
+
+test("an unresolved policy doesn't hide the upsell from a free user", async (t) => {
+  const { textContent } = await renderSection(t, { usageState: usage(false), allowed: false });
+  assert.match(textContent, /connectors\.email\.proRequired/);
+  assert.match(textContent, /integrations\.api\.viewPlans/);
+});
+
+test("a change of main's account scope clears and refetches the receipts", async (t) => {
+  let onScopeChanged = null;
+  let answerSecondFetch = null;
+  const answers = [
+    Promise.resolve([receipt("a", "first@example.com")]),
+    new Promise((resolve) => {
+      answerSecondFetch = resolve;
+    }),
+  ];
+  let fetches = 0;
+  const container = await renderSection(
+    t,
+    { usageState: usage(true) },
+    {
+      onActiveAccountScopeChanged: (callback) => {
+        onScopeChanged = callback;
+        return () => {
+          onScopeChanged = null;
+        };
+      },
+      connectorRecentActions: () => answers[fetches++],
+    }
+  );
+  assert.match(listItems(container).join(), /first@example\.com/);
+
+  assert.equal(typeof onScopeChanged, "function");
+  await React.act(async () => onScopeChanged({ accountId: "acct-b", authGeneration: 2 }));
+  assert.equal(fetches, 2);
+  assert.deepEqual(listItems(container), []);
+
+  await React.act(async () => answerSecondFetch([receipt("b", "second@example.com")]));
+  const items = listItems(container);
+  assert.equal(items.length, 1);
+  assert.match(items[0], /second@example\.com/);
 });
 
 test("recent receipts name the recipient, or the action when a quit cut it short", async (t) => {
-  const row = (id, destinationLabel, state) => ({
-    id,
-    connector: "email",
-    action: "draft",
-    kind: "direct",
-    destinationLabel,
-    state,
-    resultUrl: null,
-    errorCode: null,
-    createdAt: "2026-09-24 10:00:00",
-  });
   const container = await renderSection(
     t,
     { usageState: usage(true) },
     {
       connectorRecentActions: async () => [
-        row("a", "gabe@example.com", "failed"),
-        row("b", null, "unknown"),
+        receipt("a", "gabe@example.com", "failed"),
+        receipt("b", null, "unknown"),
       ],
     }
   );
 
-  const items = [];
-  const walk = (node) => {
-    if (node.tagName === "LI") items.push(node.textContent);
-    for (const child of node.childNodes ?? []) walk(child);
-  };
-  walk(container);
+  const items = listItems(container);
   assert.equal(items.length, 2);
   assert.match(items[0], /^connectors\.recent\.actions\.email_draft/);
   assert.match(items[1], /^connectors\.recent\.unlabeledActions\.email_draft/);
@@ -237,7 +317,7 @@ test("a stale login offers Reconnect and Disconnect", async (t) => {
 
 test("free users with no login see Upgrade for both rows and no Connect", async (t) => {
   const none = await renderSection(t, { isPaid: false, blocked: false });
-  assert.equal(count(none.textContent, /connectors\.viewPlans/g), 2);
+  assert.equal(count(none.textContent, /integrations\.api\.viewPlans/g), 2);
   assert.equal(buttonWithText(none, "connectors.slack.connect"), null);
 });
 
@@ -249,7 +329,7 @@ test("free users can always disconnect a login they have", async (t) => {
   });
   assert.match(lapsed.textContent, /connectors\.slack\.disconnect/);
   assert.equal(
-    count(lapsed.textContent, /connectors\.viewPlans/g),
+    count(lapsed.textContent, /integrations\.api\.viewPlans/g),
     1,
     "only the email row's Upgrade"
   );

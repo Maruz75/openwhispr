@@ -49,11 +49,15 @@ export function failedResult(errorCode: string, message: string): ToolResult {
 }
 
 // A direct action that may already have acted: the model must not retry it.
-export function unknownResult(destination: string, guidance: string): ToolResult {
+export function unknownResult(
+  destination: string,
+  guidance: string,
+  displayText: string = i18n.t("connectors.toolStatus.unknown")
+): ToolResult {
   return {
     success: true,
     data: { status: "unknown", destination, guidance: `${guidance} ${NO_RETRY}` },
-    displayText: i18n.t("connectors.toolStatus.unknown"),
+    displayText,
   };
 }
 

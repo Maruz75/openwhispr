@@ -3910,13 +3910,13 @@
       }
     },
     "policyOff": "Tu organización ha desactivado los conectores.",
-    "viewPlans": "Ver planes",
     "email": {
       "title": "Borradores de correo",
       "description": "El asistente abre un borrador prellenado en tu aplicación de correo. Tú lo revisas y pulsas Enviar.",
       "proRequired": "Actualiza a un plan de pago para que el asistente redacte correos por ti.",
+      "unavailable": "Los borradores de correo no están disponibles en este momento.",
       "targetLabel": "Redactar correos en",
-      "autoResolved": "Automático ({{target}})",
+      "autoResolved": "Automático · {{target}}",
       "targets": {
         "gmail": "Gmail",
         "outlookWork": "Outlook (trabajo o escuela)",
@@ -3985,6 +3985,7 @@
       "unavailable": "Los conectores no están disponibles en este momento.",
       "failed": "No funcionó.",
       "unknown": "Sin confirmar. Comprueba si se completó antes de volver a intentarlo.",
+      "draftUnknown": "Sin confirmar: puede que el borrador para {{destination}} no se haya abierto. Compruébalo antes de volver a intentarlo.",
       "contactsFound": "Contactos encontrados: {{total}}",
       "draftLimit": "Solo se pueden abrir {{count}} borradores por solicitud.",
       "clipboardBusy": "No se abrió: el texto de otro borrador sigue en tu portapapeles.",

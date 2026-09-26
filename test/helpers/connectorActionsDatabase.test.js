@@ -56,7 +56,7 @@ test("an action row moves through its states and lists newest first", (t) => {
 
   log.insert({
     id: "a1",
-    accountId: "acct-a",
+    accountId: "account-a",
     connector: "email",
     action: "draft",
     kind: "direct",
@@ -65,7 +65,7 @@ test("an action row moves through its states and lists newest first", (t) => {
   });
   log.insert({
     id: "a2",
-    accountId: "acct-a",
+    accountId: "account-a",
     connector: "slack",
     action: "send_message",
     kind: "approval",
@@ -75,12 +75,12 @@ test("an action row moves through its states and lists newest first", (t) => {
   log.update("a2", { state: "committing" });
   log.update("a2", { state: "sent", resultUrl: "https://slack.test/p/1" });
 
-  const [row] = log.listRecent("slack", 10, "acct-a");
+  const [row] = log.listRecent("slack", 10, "account-a");
   assert.equal(row.id, "a2");
   assert.equal(row.state, "sent");
   assert.equal(row.resultUrl, "https://slack.test/p/1");
   assert.equal(row.destinationLabel, "#eng");
-  assert.equal(log.listRecent("email", 10, "acct-a")[0].kind, "direct");
+  assert.equal(log.listRecent("email", 10, "account-a")[0].kind, "direct");
   db.db.close();
 });
 
@@ -90,7 +90,7 @@ test("rows interrupted by a quit are reconciled on the next launch", (t) => {
   const log = createActionLog(db);
   log.insert({
     id: "p1",
-    accountId: "acct-a",
+    accountId: "account-a",
     connector: "slack",
     action: "send_message",
     kind: "approval",
@@ -98,7 +98,7 @@ test("rows interrupted by a quit are reconciled on the next launch", (t) => {
   });
   log.insert({
     id: "c1",
-    accountId: "acct-a",
+    accountId: "account-a",
     connector: "slack",
     action: "send_message",
     kind: "approval",
@@ -106,17 +106,17 @@ test("rows interrupted by a quit are reconciled on the next launch", (t) => {
   });
   log.insert({
     id: "s1",
-    accountId: "acct-a",
+    accountId: "account-a",
     connector: "slack",
     action: "send_message",
     kind: "approval",
     state: "sent",
   });
 
-  assert.deepEqual(log.reconcileInterrupted(), { unknown: 1, cancelled: 1 });
+  assert.deepEqual(log.reconcileInterrupted(), { unknown: 1, cancelled: 1, orphaned: 0 });
 
   const states = Object.fromEntries(
-    log.listRecent("slack", 10, "acct-a").map((row) => [row.id, row])
+    log.listRecent("slack", 10, "account-a").map((row) => [row.id, row])
   );
   assert.equal(states.c1.state, "unknown");
   assert.equal(states.c1.errorCode, "app_quit");
@@ -131,7 +131,7 @@ test("a guarded update only moves a row out of the expected state", (t) => {
   const log = createActionLog(db);
   log.insert({
     id: "g1",
-    accountId: "acct-a",
+    accountId: "account-a",
     connector: "slack",
     action: "send_message",
     kind: "approval",
@@ -145,44 +145,73 @@ test("a guarded update only moves a row out of the expected state", (t) => {
   db.db.close();
 });
 
-test("receipts belong to the account that took the action", (t) => {
+test("a receipt belongs to the account it names, whatever the database scope says", (t) => {
   const db = createDb(t);
   if (!db) return;
   const log = createActionLog(db);
-  log.insert({
-    id: "a1",
-    accountId: "account-a",
-    connector: "email",
-    action: "draft",
-    kind: "direct",
-    destinationLabel: "gabe@example.com",
-    state: "sent",
-  });
-  log.insert({
-    id: "b1",
-    accountId: "account-b",
-    connector: "email",
-    action: "draft",
-    kind: "direct",
-    destinationLabel: "dana@example.com",
-    state: "sent",
-  });
+  const draft = (id, accountId, destinationLabel) =>
+    log.insert({
+      id,
+      accountId,
+      connector: "email",
+      action: "draft",
+      kind: "direct",
+      destinationLabel,
+      state: "sent",
+    });
 
-  assert.deepEqual(
-    log.listRecent("email", 10, "account-b").map((row) => row.id),
-    ["b1"]
-  );
-  assert.deepEqual(log.listRecent("email", 10, null), []);
+  draft("a1", "account-a", "gabe@example.com");
+  // The A -> B gap: B's credential is in use, the database scope still says A.
+  draft("b1", "account-b", "dana@example.com");
+  // The null-scope gap: signed in as B, database scope not synced yet.
+  db.setActiveAccountId(null);
+  draft("b2", "account-b", "lee@example.com");
 
+  db.setActiveAccountId("account-a");
   assert.deepEqual(
     log.listRecent("email", 10, "account-a").map((row) => row.id),
     ["a1"]
   );
-  db.deleteAccountData("account-a");
-  assert.deepEqual(log.listRecent("email", 10, "account-a"), []);
   assert.deepEqual(
     log.listRecent("email", 10, "account-b").map((row) => row.id),
-    ["b1"]
+    ["b2", "b1"]
+  );
+  assert.deepEqual(log.listRecent("email", 10, null), []);
+
+  db.deleteAccountData("account-a");
+  assert.deepEqual(log.listRecent("email", 10, "account-a"), []);
+  assert.equal(log.listRecent("email", 10, "account-b").length, 2);
+  db.db.close();
+});
+
+test("receipts with no account are removed on launch", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  const log = createActionLog(db);
+  log.insert({
+    id: "legacy",
+    accountId: null,
+    connector: "email",
+    action: "draft",
+    kind: "direct",
+    state: "sent",
+  });
+  log.insert({
+    id: "kept",
+    accountId: "account-a",
+    connector: "email",
+    action: "draft",
+    kind: "direct",
+    state: "sent",
+  });
+
+  assert.deepEqual(log.reconcileInterrupted(), { unknown: 0, cancelled: 0, orphaned: 1 });
+  assert.deepEqual(
+    db.db
+      .prepare("SELECT id FROM connector_actions")
+      .all()
+      .map((row) => row.id),
+    ["kept"]
   );
   db.db.close();
 });
@@ -194,14 +223,14 @@ test("listRecent respects the limit", (t) => {
   for (let i = 0; i < 5; i += 1) {
     log.insert({
       id: `e${i}`,
-      accountId: "acct-a",
+      accountId: "account-a",
       connector: "email",
       action: "draft",
       kind: "direct",
       state: "sent",
     });
   }
-  assert.equal(log.listRecent("email", 3, "acct-a").length, 3);
+  assert.equal(log.listRecent("email", 3, "account-a").length, 3);
   db.db.close();
 });
 
@@ -285,21 +314,23 @@ test("contact lookup sources cover meetings, synced contacts and the user's acco
     ["soon@example.com", "later@example.com"]
   );
   assert.match(sources.meetings[0].attendees, /Someone/);
-  assert.equal(sources.meetings[0].self_is_user, 1);
   assert.deepEqual(sources.contacts, [{ email: "priya@example.com", display_name: "Priya Shah" }]);
-  assert.deepEqual([...sources.accountEmails].sort(), ["chad@corp.test", "chad@example.com"]);
+  assert.deepEqual([...sources.excludedEmails].sort(), ["chad@corp.test", "chad@example.com"]);
   db.db.close();
 });
 
 test("contacts come most recently synced first, and a sync purges the addresses it keeps out", (t) => {
   const db = createDb(t);
   if (!db) return;
-  db.upsertContacts(
+  db.saveAppleCalendars([{ id: "a-cal", title: "Home" }]);
+  db.syncCalendarContacts(
+    "apple",
+    null,
     [
       { email: "old@example.com", displayName: "Josh Old" },
       { email: "new@example.com", displayName: "Josh New" },
     ],
-    "manual"
+    []
   );
   db.db
     .prepare("UPDATE contacts SET updated_at = '2020-01-01 00:00:00' WHERE email = ?")
@@ -317,16 +348,20 @@ test("contacts come most recently synced first, and a sync purges the addresses 
   db.db.close();
 });
 
-test("an attendee's self flag means the user except on a colleague's shared Google calendar", (t) => {
+test("only meetings on the user's own selected calendars count", (t) => {
   const db = createDb(t);
   if (!db) return;
   db.saveGoogleCalendars(
     [
       { id: "me@example.com", summary: "Me" },
       { id: "dana@example.com", summary: "Dana" },
+      { id: "team@group.calendar.google.com", summary: "Team" },
     ],
     "me@example.com"
   );
+  db.updateCalendarSelection("team@group.calendar.google.com", false);
+  db.saveMicrosoftCalendars([{ id: "work", summary: "Calendar" }], "me@corp.test");
+  db.saveAppleCalendars([{ id: "home", title: "Home" }]);
   const soon = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const event = (id, provider, calendarId) => ({
     id,
@@ -342,20 +377,23 @@ test("an attendee's self flag means the user except on a colleague's shared Goog
   });
   db.upsertCalendarEvents([
     event("own", "google", "me@example.com"),
+    // A colleague's shared calendar: its people come through contacts.
     event("shared", "google", "dana@example.com"),
+    event("deselected", "google", "team@group.calendar.google.com"),
+    // Left behind by a sync that finished after its account was disconnected.
+    event("orphan", "google", "gone@example.com"),
     event("work", "microsoft", "work"),
     event("home", "apple", "home"),
+    event("removed", "apple", "removed-calendar"),
   ]);
 
-  const selfIsUser = Object.fromEntries(
-    db.getContactLookupSources().meetings.map((row) => [row.organizer_email, row.self_is_user])
+  assert.deepEqual(
+    db
+      .getContactLookupSources()
+      .meetings.map((row) => row.organizer_email)
+      .sort(),
+    ["home@example.com", "own@example.com", "work@example.com"]
   );
-  assert.deepEqual(selfIsUser, {
-    "own@example.com": 1,
-    "shared@example.com": 0,
-    "work@example.com": 1,
-    "home@example.com": 1,
-  });
   db.db.close();
 });
 
@@ -376,7 +414,7 @@ test("contact lookup only sees hand-added contacts and connected accounts' conta
   db.syncCalendarContacts("microsoft", "me@corp.test", [{ email: "m@example.com" }], []);
   db.syncCalendarContacts("apple", null, [{ email: "a@example.com" }], []);
   db.upsertContacts([{ email: "hand@example.com" }], "manual");
-  // Synced by both accounts: the latest sync owns it.
+  // Synced by both accounts.
   db.syncCalendarContacts("google", "me@gmail.test", [{ email: "both@example.com" }], []);
   db.syncCalendarContacts("microsoft", "me@corp.test", [{ email: "both@example.com" }], []);
   // Stored by an older build, before contacts had a source.
@@ -452,6 +490,152 @@ test("a hand-added contact stays the user's when a calendar later syncs it", (t)
     ["hand@example.com"]
   );
   db.db.close();
+});
+
+test("a contact another source still has survives a disconnect", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  db.saveGoogleCalendars([{ id: "g-cal", summary: "Me" }], "me@gmail.test");
+  db.saveMicrosoftCalendars([{ id: "m-cal", summary: "Calendar" }], "me@corp.test");
+  db.saveAppleCalendars([{ id: "a-cal", title: "Me (Google)" }]);
+  const josh = [{ email: "josh@example.com", displayName: "Josh" }];
+  // Calendar.app mirrors the Google account, and a Microsoft account has him too.
+  db.syncCalendarContacts("google", "me@gmail.test", josh, []);
+  db.syncCalendarContacts("apple", null, josh, []);
+  db.syncCalendarContacts("microsoft", "me@corp.test", josh, []);
+  const lookup = () => db.getContactLookupSources().contacts.map((row) => row.email);
+
+  db.clearAppleCalendarData();
+  assert.deepEqual(lookup(), ["josh@example.com"]);
+  db.removeMicrosoftAccount("me@corp.test");
+  assert.deepEqual(lookup(), ["josh@example.com"]);
+  db.removeGoogleAccount("me@gmail.test");
+  assert.deepEqual(storedContactEmails(db), []);
+  db.db.close();
+});
+
+test("picking a stored contact for a note doesn't make it a hand-added one", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  db.saveGoogleCalendars([{ id: "g-cal", summary: "Me" }], "me@gmail.test");
+  db.syncCalendarContacts("google", "me@gmail.test", [{ email: "synced@example.com" }], []);
+  db.db
+    .prepare("INSERT INTO contacts (email, display_name) VALUES (?, ?)")
+    .run("legacy@example.com", "Legacy");
+
+  db.addManualContact({ email: "Synced@Example.com", displayName: "Synced" });
+  db.addManualContact({ email: "legacy@example.com", displayName: null });
+  db.addManualContact({ email: "typed@example.com", displayName: null });
+
+  const lookup = () =>
+    db
+      .getContactLookupSources()
+      .contacts.map((row) => row.email)
+      .sort();
+  assert.deepEqual(lookup(), ["synced@example.com", "typed@example.com"]);
+  db.removeGoogleAccount("me@gmail.test");
+  assert.deepEqual(storedContactEmails(db), ["legacy@example.com", "typed@example.com"]);
+  assert.deepEqual(lookup(), ["typed@example.com"]);
+  db.db.close();
+});
+
+test("a sync never purges a hand-added address", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  db.addManualContact({ email: "board@corp.test", displayName: "Board" });
+  db.syncCalendarContacts("google", "me@gmail.test", [{ email: "room@corp.test" }], []);
+
+  db.syncCalendarContacts("google", "me@gmail.test", [], ["Board@corp.test", "room@corp.test"]);
+
+  assert.deepEqual(storedContactEmails(db), ["board@corp.test"]);
+  db.db.close();
+});
+
+test("a room any stored event flags is excluded, even where it isn't flagged", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  db.saveGoogleCalendars(
+    [{ id: "me@example.com", summary: "Me", is_primary: true }],
+    "me@example.com"
+  );
+  const event = (id, attendees, extra = {}) => ({
+    id,
+    calendar_id: "me@example.com",
+    provider: "google",
+    start_time: new Date().toISOString(),
+    end_time: new Date().toISOString(),
+    is_all_day: false,
+    status: "confirmed",
+    attendees_count: attendees.length,
+    attendees: JSON.stringify(attendees),
+    ...extra,
+  });
+  db.upsertCalendarEvents([
+    // Stored by an older build, before rooms were flagged.
+    event("legacy", [{ email: "Lincoln@corp.test", displayName: "Lincoln Room" }]),
+    event(
+      "declined",
+      [{ email: "lincoln@corp.test", displayName: "Lincoln Room", resource: true }],
+      { self_response_status: "declined" }
+    ),
+  ]);
+
+  assert.deepEqual(db.getContactLookupSources().excludedEmails, [
+    "me@example.com",
+    "lincoln@corp.test",
+  ]);
+
+  // One unreadable attendee list must not blank the whole lookup.
+  db.db.prepare("UPDATE calendar_events SET attendees = 'not json' WHERE id = 'legacy'").run();
+  assert.deepEqual(db.getContactLookupSources().excludedEmails, [
+    "me@example.com",
+    "lincoln@corp.test",
+  ]);
+  db.db.close();
+});
+
+test("a Microsoft account keeps its tenant and aliases until it's disconnected", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  const tokens = {
+    microsoft_email: "cpiha@corp.test",
+    access_token: "access",
+    refresh_token: "refresh",
+    expires_at: Date.now() + 60_000,
+    scope: "scope",
+  };
+  db.saveMicrosoftTokens({ ...tokens, tenant_id: "tenant-1" });
+  // A refresh without an id_token carries no tenant.
+  db.saveMicrosoftTokens(tokens);
+  db.saveMicrosoftOwnAddresses("cpiha@corp.test", ["chad.piha@corp.test"]);
+  db.saveMicrosoftCalendars([{ id: "m-cal", summary: "Calendar" }], "cpiha@corp.test");
+
+  assert.deepEqual(db.getMicrosoftAccounts(), [{ email: "cpiha@corp.test", tenantId: "tenant-1" }]);
+  assert.deepEqual(db.getMicrosoftOwnAddresses("cpiha@corp.test"), ["chad.piha@corp.test"]);
+  assert.deepEqual(db.getContactLookupSources().excludedEmails, [
+    "cpiha@corp.test",
+    "chad.piha@corp.test",
+  ]);
+  db.removeMicrosoftAccount("cpiha@corp.test");
+  assert.deepEqual(db.getContactLookupSources().excludedEmails, []);
+  db.db.close();
+});
+
+test("contact sources from pre-release builds move to contact_sources", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  db.db.exec("ALTER TABLE contacts ADD COLUMN source TEXT");
+  db.db
+    .prepare("INSERT INTO contacts (email, display_name, source) VALUES (?, ?, ?)")
+    .run("josh@example.com", "Josh", "google:me@gmail.test");
+  db.db.close();
+
+  const reopened = new DatabaseManager();
+  assert.deepEqual(reopened.db.prepare("SELECT email, source FROM contact_sources").all(), [
+    { email: "josh@example.com", source: "google:me@gmail.test" },
+  ]);
+  assert.equal(reopened.db.prepare("SELECT source FROM contacts").get().source, null);
+  reopened.db.close();
 });
 
 test("upgrading to user_version 3 forces a full calendar re-sync", (t) => {

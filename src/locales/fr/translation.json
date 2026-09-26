@@ -4026,13 +4026,13 @@
       }
     },
     "policyOff": "Votre organisation a désactivé les connecteurs.",
-    "viewPlans": "Voir les forfaits",
     "email": {
       "title": "Brouillons d'e-mails",
       "description": "L'assistant ouvre un brouillon pré-rempli dans votre application de messagerie. Vous le vérifiez et appuyez vous-même sur Envoyer.",
       "proRequired": "Passez à un plan payant pour que l'assistant rédige des e-mails pour vous.",
+      "unavailable": "Les brouillons d'e-mails ne sont pas disponibles pour le moment.",
       "targetLabel": "Rédiger les e-mails dans",
-      "autoResolved": "Automatique ({{target}})",
+      "autoResolved": "Automatique · {{target}}",
       "targets": {
         "gmail": "Gmail",
         "outlookWork": "Outlook (professionnel ou scolaire)",
@@ -4101,6 +4101,7 @@
       "unavailable": "Les connecteurs ne sont pas disponibles pour le moment.",
       "failed": "Cela n'a pas fonctionné.",
       "unknown": "Non confirmé. Vérifiez si l'action a abouti avant de réessayer.",
+      "draftUnknown": "Non confirmé : le brouillon pour {{destination}} ne s'est peut-être pas ouvert. Vérifiez avant de réessayer.",
       "contactsFound": "Contacts trouvés : {{total}}",
       "draftLimit": "Seuls {{count}} brouillons peuvent s'ouvrir par demande.",
       "clipboardBusy": "Non ouvert : le texte d'un autre brouillon est encore dans votre presse-papiers.",

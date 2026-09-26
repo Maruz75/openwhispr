@@ -31,6 +31,7 @@ async function renderAssistantPanel(
     delete globalThis.__assistantPanelAgentState;
     delete globalThis.__assistantPanelActiveToolName;
     delete globalThis.__assistantPanelApprovals;
+    delete globalThis.__assistantPanelStreamingOptions;
   });
 
   const vite = await createRendererServer(t, {
@@ -51,7 +52,8 @@ async function renderAssistantPanel(
         }
       `,
       "/chat/useChatStreaming": `
-        export function useChatStreaming() {
+        export function useChatStreaming(options) {
+          globalThis.__assistantPanelStreamingOptions = options;
           return {
             agentState: globalThis.__assistantPanelAgentState,
             activeToolName: globalThis.__assistantPanelActiveToolName,
@@ -712,6 +714,14 @@ test("a follow-up into an open panel strips caret delivery and stays panel-first
     });
   });
   assert.deepEqual(assistant.pendingCommand.delivery, delivery);
+});
+
+test("spoken commands answer on the Voice Assistant scope with connector tools offered", async (t) => {
+  await renderAssistantPanel(t, []);
+
+  const options = globalThis.__assistantPanelStreamingOptions;
+  assert.equal(options.inferenceScope, "dictationAgent");
+  assert.equal(options.allowConnectors, true);
 });
 
 test("a pending approval shows in the panel and replaces the tool overlay", async (t) => {
