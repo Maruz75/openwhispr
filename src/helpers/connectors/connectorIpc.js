@@ -70,6 +70,13 @@ function createConnectorPolicyResolver({
   };
 }
 
+// Connect, disconnect and the connectors' bindings file logins under the
+// account receipts are filed under: the one getAccountScope() binds to the
+// credential in use, or none.
+function connectorAccountIdFrom(getAccountScope) {
+  return () => getAccountScope()?.accountId ?? null;
+}
+
 function sameAccountScope(left, right) {
   return Boolean(
     left &&
@@ -180,4 +187,9 @@ function registerConnectorIpc({ ipcMain, manager, getPolicyState, getAccountScop
   }
 }
 
-module.exports = { registerConnectorIpc, createConnectorPolicyResolver, createConnectorAuthLookup };
+module.exports = {
+  registerConnectorIpc,
+  createConnectorPolicyResolver,
+  createConnectorAuthLookup,
+  connectorAccountIdFrom,
+};

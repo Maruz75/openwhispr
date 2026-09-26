@@ -1251,6 +1251,99 @@ test("disconnect whose credential clear fails for a real reason (not a race) log
   assert.doesNotMatch(logged, /accessToken/);
 });
 
+function loadAccountScopeBinding() {
+  const Module = require("node:module");
+  const originalLoad = Module._load;
+  Module._load = function loadWithElectronStub(request, parent, isMain) {
+    if (request === "electron") return { app: { getPath: () => require("node:os").tmpdir() } };
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  try {
+    return require("../../../src/helpers/accountScopeBinding.js");
+  } finally {
+    Module._load = originalLoad;
+  }
+}
+
+// connectorCredentials over an in-memory store.
+function memoryStore() {
+  const slots = new Map();
+  const generations = new Map();
+  const bump = (slot) => generations.set(slot, (generations.get(slot) ?? 0) + 1);
+  return {
+    getGeneration: (slot) => generations.get(slot) ?? 0,
+    read: (slot) => slots.get(slot) ?? null,
+    replace: (slot, credential) => {
+      slots.set(slot, credential);
+      bump(slot);
+    },
+    save: (slot, credential) => slots.set(slot, credential),
+    clear: (slot) => {
+      slots.delete(slot);
+      bump(slot);
+    },
+  };
+}
+
+test("logins are filed under the account the credential in use is bound to, as receipts are", async () => {
+  const { resolveActiveAccountScope, hashToken } = loadAccountScopeBinding();
+  const { connectorAccountIdFrom } = require("../../../src/helpers/connectors/connectorIpc.js");
+  const {
+    createConnectorCredentials,
+  } = require("../../../src/helpers/connectors/connectorCredentials.js");
+  // What main.js used to read: it doesn't move when one signed-in token
+  // replaces another.
+  const databaseManager = { activeAccountId: "account-a" };
+  const tokenState = { token: "token-b", generation: 2 };
+  let binding = null;
+  const getAccountId = connectorAccountIdFrom(() =>
+    resolveActiveAccountScope({ ...tokenState, binding })
+  );
+  const credentials = createConnectorCredentials({ store: memoryStore(), getAccountId });
+  let authorized = 0;
+  const { manager } = await setup(
+    connectable({
+      async authorize() {
+        authorized += 1;
+        return { accessToken: "b-login" };
+      },
+    }),
+    undefined,
+    { credentials, getAccountId }
+  );
+
+  // No validated scope for the token in use: refused before any sign-in.
+  assert.deepEqual(await manager.connect("fake", "allowed"), {
+    status: "unavailable",
+    reason: "signed_out",
+  });
+  assert.equal(authorized, 0);
+  assert.equal(credentials.read(databaseManager.activeAccountId, "fake"), null);
+
+  binding = { version: 1, accountId: "account-b", tokenHash: hashToken("token-b") };
+  assert.equal((await manager.connect("fake", "allowed")).status, "connected");
+  assert.deepEqual(credentials.read("account-b", "fake").credential, { accessToken: "b-login" });
+  assert.equal(credentials.read(databaseManager.activeAccountId, "fake"), null);
+});
+
+test("main files connector logins under the credential's account scope, not the database scope", () => {
+  const source = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "../../../main.js"),
+    "utf8"
+  );
+  const wiring = source.match(
+    /const getConnectorAccountScope = ([\s\S]*?)\n  const connectorCredentials/
+  );
+  assert.ok(wiring, "main.js defines the connector account lookup");
+  assert.match(wiring[1], /accountScopeBinding\.resolveActiveAccountScope\(/);
+  assert.match(wiring[1], /require\("\.\/src\/helpers\/tokenStore"\)\.getState\(\)/);
+  assert.match(
+    wiring[1],
+    /getConnectorAccountId = connectorAccountIdFrom\(getConnectorAccountScope\)/
+  );
+  assert.doesNotMatch(wiring[1], /databaseManager\.activeAccountId/);
+});
+
 test("disconnectAll disconnects every connector that can revoke", async () => {
   const credentials = memoryCredentials({ accessToken: "t" }, { connectorId: "fake" });
   const { manager } = await setup(connectable(), undefined, { credentials });

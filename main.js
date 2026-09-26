@@ -458,7 +458,16 @@ function initializeCoreManagers() {
   const { renderOAuthResultPage } = require("./src/helpers/connectors/oauthResultPage");
   const { runOAuthLoopbackFlow, OAuthFlowError } = require("./src/helpers/oauthLoopbackFlow");
   const { broadcastToWindows } = require("./src/helpers/windowBroadcast");
-  const getConnectorAccountId = () => databaseManager.activeAccountId;
+  const { connectorAccountIdFrom } = require("./src/helpers/connectors/connectorIpc");
+  // The same account receipts are filed under (ipcHandlers' getAccountScope):
+  // the one bound to the credential in use. databaseManager's scope doesn't
+  // move when one signed-in token replaces another.
+  const getConnectorAccountScope = () =>
+    accountScopeBinding.resolveActiveAccountScope({
+      ...require("./src/helpers/tokenStore").getState(),
+      binding: accountScopeBinding.read(),
+    });
+  const getConnectorAccountId = connectorAccountIdFrom(getConnectorAccountScope);
   const connectorCredentials = createConnectorCredentials({
     store: createCredentialStore({
       dir: path.join(app.getPath("userData"), "connectors"),
