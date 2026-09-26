@@ -72,7 +72,9 @@ export function SlackConnectorRow({
     setErrorCode(null);
     try {
       const result = await window.electronAPI?.connectorDisconnect?.("slack");
-      if (result?.status === "failed") setErrorCode(result.errorCode);
+      if (!result) setErrorCode("disconnect_failed");
+      else if (result.status === "failed") setErrorCode(result.errorCode);
+      else if (result.status === "unavailable") setErrorCode(result.reason);
     } catch {
       setErrorCode("disconnect_failed");
     } finally {
