@@ -32,7 +32,7 @@ export type ConnectorPrepareResult =
 export type ConnectorCommitResult =
   | { state: "sent"; url?: string }
   | { state: "failed"; errorCode: string; message: string }
-  | { state: "unknown"; checkUrl?: string }
+  | { state: "unknown"; checkUrl?: string; errorCode?: string }
   | { state: "not_sent"; reason: string; retryable?: boolean };
 
 export type ConnectorDirectResult =

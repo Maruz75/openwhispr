@@ -43,7 +43,10 @@ function normalizeCommitResult(result) {
     case "failed":
       return failedResult(result);
     case "unknown":
-      return { state: "unknown", ...stringFields({ checkUrl: result.checkUrl }) };
+      return {
+        state: "unknown",
+        ...stringFields({ checkUrl: result.checkUrl, errorCode: result.errorCode }),
+      };
     default:
       return { state: "unknown" };
   }
@@ -563,7 +566,12 @@ function createConnectorManager({
     );
     logger.info(
       "connector action finished",
-      { connectorId: entry.connectorId, action: entry.action, state: result.state },
+      {
+        connectorId: entry.connectorId,
+        action: entry.action,
+        state: result.state,
+        errorCode: result.errorCode || null,
+      },
       "connectors"
     );
     return result;

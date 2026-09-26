@@ -305,6 +305,34 @@ test("a connector commit resolving undefined is recorded as unknown and never or
   });
 });
 
+test("an unknown commit keeps its errorCode on the receipt and in the finish log", async () => {
+  const logger = recordingLogger();
+  const checkUrl = "https://app.slack.com/client/T1/C1";
+  const { manager, log } = await setup(
+    {
+      async commit() {
+        return { state: "unknown", errorCode: "internal_error", checkUrl };
+      },
+    },
+    undefined,
+    { logger }
+  );
+  const { actionId } = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
+
+  assert.deepEqual(await manager.commit(actionId, {}, ALLOWED), {
+    state: "unknown",
+    checkUrl,
+    errorCode: "internal_error",
+  });
+  const row = log.rows.get(actionId);
+  assert.equal(row.state, "unknown");
+  assert.equal(row.errorCode, "internal_error");
+  assert.equal(row.resultUrl, checkUrl);
+  const finished = logger.lines.find((line) => line.args[0] === "connector action finished");
+  assert.equal(finished.args[1].state, "unknown");
+  assert.equal(finished.args[1].errorCode, "internal_error");
+});
+
 test("a connector commit resolving an unrecognized state is recorded as unknown", async () => {
   const { manager, log } = await setup({
     async commit() {
