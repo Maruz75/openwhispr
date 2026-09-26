@@ -3872,6 +3872,30 @@
       }
     },
     "slack": {
+      "title": "Slack",
+      "description": "アシスタントはチャンネルや個人にあなたとしてメッセージを投稿できます。送信前に必ず内容を承認します。",
+      "connect": "接続",
+      "reconnect": "再接続",
+      "disconnect": "接続を解除",
+      "connecting": "ブラウザで接続を完了してください…",
+      "connectedAs": "{{workspace}} の {{account}} として接続済み",
+      "needsReconnect": "Slackを再接続する必要があります。",
+      "proRequired": "アシスタントにSlackメッセージを送信させるには、有料プランへのアップグレードが必要です。",
+      "errors": {
+        "connect_failed": "Slackを接続できませんでした。もう一度お試しください。",
+        "disconnect_failed": "Slackの接続を解除できませんでした。もう一度お試しください。",
+        "oauth_denied": "アクセスが許可されなかったため、Slackは接続されませんでした。",
+        "oauth_timeout": "接続に時間がかかりすぎました。もう一度お試しください。",
+        "oauth_state_mismatch": "そのサインインリンクは期限切れでした。もう一度お試しください。",
+        "ports_busy": "OpenWhisprが接続に必要なポートを別のアプリが使用しています。そのアプリを閉じてから、もう一度お試しください。",
+        "token_exchange_failed": "Slackの接続が完了しませんでした。もう一度お試しください。",
+        "not_configured": "このビルドではSlackを利用できません。",
+        "busy": "Slackはすでに接続中です。ブラウザで操作を完了してください。",
+        "connection_changed": "接続中にアカウントまたはSlackの接続が変わりました。もう一度お試しください。",
+        "signed_out": "Slackを接続するにはOpenWhisprにサインインしてください。",
+        "policy_blocked": "組織によってコネクタが無効にされています。",
+        "policy_unavailable": "組織の設定を確認できませんでした。もう一度お試しください。"
+      },
       "browser": {
         "connectedTitle": "Slackが接続されました",
         "connectedBody": "このタブを閉じてOpenWhisprに戻ることができます。",
@@ -3882,10 +3906,12 @@
     "recent": {
       "title": "最近のアクション",
       "actions": {
-        "email_draft": "{{destination}} 宛ての下書き"
+        "email_draft": "{{destination}} 宛ての下書き",
+        "slack_send_message": "{{destination}} 宛てのメッセージ"
       },
       "unlabeledActions": {
-        "email_draft": "メール下書き"
+        "email_draft": "メール下書き",
+        "slack_send_message": "Slackメッセージ"
       },
       "states": {
         "pending": "待機中",

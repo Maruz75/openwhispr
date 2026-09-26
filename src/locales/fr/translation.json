@@ -4041,6 +4041,30 @@
       }
     },
     "slack": {
+      "title": "Slack",
+      "description": "L'assistant peut publier des messages dans des canaux et à des personnes en votre nom. Vous approuvez chaque message avant son envoi.",
+      "connect": "Connecter",
+      "reconnect": "Reconnecter",
+      "disconnect": "Déconnecter",
+      "connecting": "Terminez la connexion dans votre navigateur…",
+      "connectedAs": "Connecté en tant que {{account}} dans {{workspace}}",
+      "needsReconnect": "Slack doit être reconnecté.",
+      "proRequired": "Passez à un plan payant pour que l'assistant envoie des messages Slack pour vous.",
+      "errors": {
+        "connect_failed": "Impossible de connecter Slack. Réessayez.",
+        "disconnect_failed": "Impossible de déconnecter Slack. Réessayez.",
+        "oauth_denied": "Slack n'a pas été connecté car l'accès n'a pas été autorisé.",
+        "oauth_timeout": "La connexion a pris trop de temps. Réessayez.",
+        "oauth_state_mismatch": "Ce lien de connexion était périmé. Réessayez.",
+        "ports_busy": "Une autre application utilise les ports dont OpenWhispr a besoin pour se connecter. Fermez-la et réessayez.",
+        "token_exchange_failed": "Slack n'a pas terminé la connexion. Réessayez.",
+        "not_configured": "Slack n'est pas disponible dans cette version.",
+        "busy": "Slack est déjà en cours de connexion. Terminez dans votre navigateur.",
+        "connection_changed": "Votre compte ou la connexion Slack a changé pendant la connexion. Réessayez.",
+        "signed_out": "Connectez-vous à OpenWhispr pour connecter Slack.",
+        "policy_blocked": "Votre organisation a désactivé les connecteurs.",
+        "policy_unavailable": "Impossible de vérifier les paramètres de votre organisation. Réessayez."
+      },
       "browser": {
         "connectedTitle": "Slack est connecté",
         "connectedBody": "Vous pouvez fermer cet onglet et retourner à OpenWhispr.",
@@ -4051,10 +4075,12 @@
     "recent": {
       "title": "Actions récentes",
       "actions": {
-        "email_draft": "Brouillon à {{destination}}"
+        "email_draft": "Brouillon à {{destination}}",
+        "slack_send_message": "Message à {{destination}}"
       },
       "unlabeledActions": {
-        "email_draft": "Brouillon d'e-mail"
+        "email_draft": "Brouillon d'e-mail",
+        "slack_send_message": "Message Slack"
       },
       "states": {
         "pending": "En attente",

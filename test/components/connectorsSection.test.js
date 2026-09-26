@@ -49,6 +49,12 @@ const MOCKS = {
     import React from "react";
     export function Button(props) { return React.createElement("button", props); }
   `,
+  "/stores/connectorStatusStore": `
+    export function useConnectorStatusStore(selector) {
+      return selector({ statuses: globalThis.__connectorStatuses ?? {} });
+    }
+    export async function ensureConnectorStatus() {}
+  `,
 };
 
 const usage = (isSubscribed) => ({
@@ -58,14 +64,36 @@ const usage = (isSubscribed) => ({
   isRefreshing: false,
 });
 
-function setPlan(t, { usageState, subscribedFlag = false, blocked = false }) {
-  globalThis.__usage = usageState;
-  globalThis.__subscribedFlag = subscribedFlag;
+const SLACK = {
+  id: "slack",
+  connected: true,
+  accountLabel: "chad",
+  workspaceLabel: "Acme Test",
+  needsReconnect: false,
+};
+const count = (markup, pattern) => (markup.match(pattern) ?? []).length;
+// This harness's DOM nodes only expose textContent (no innerHTML), so a plain
+// string like "connectors.slack.connect" can't be told apart from a longer
+// key that starts with it ("connectors.slack.connecting",
+// "…connectedAs"). Finding the actual <button> is unambiguous.
+const buttonWithText = (container, text) =>
+  findElement(container, (node) => node.tagName === "BUTTON" && node.textContent === text);
+
+// `usageState`/`subscribedFlag` are the review round's shape; `isPaid` is a
+// shortcut for tests that don't care about the usage/flag distinction.
+function setPlan(
+  t,
+  { usageState, subscribedFlag = false, blocked = false, isPaid, statuses = {} } = {}
+) {
+  globalThis.__usage = usageState ?? usage(Boolean(isPaid));
+  globalThis.__subscribedFlag = isPaid ?? subscribedFlag;
   globalThis.__connectorsBlocked = blocked;
+  globalThis.__connectorStatuses = statuses;
   t.after(() => {
     delete globalThis.__usage;
     delete globalThis.__subscribedFlag;
     delete globalThis.__connectorsBlocked;
+    delete globalThis.__connectorStatuses;
   });
 }
 
@@ -169,4 +197,78 @@ test("recent receipts name the recipient, or the action when a quit cut it short
   assert.equal(items.length, 2);
   assert.match(items[0], /^connectors\.recent\.actions\.email_draft/);
   assert.match(items[1], /^connectors\.recent\.unlabeledActions\.email_draft/);
+});
+
+test("a connected Slack shows the account and Disconnect", async (t) => {
+  const container = await renderSection(t, {
+    isPaid: true,
+    blocked: false,
+    statuses: { slack: SLACK },
+  });
+  const markup = container.textContent;
+  assert.match(markup, /connectors\.slack\.title/);
+  assert.match(markup, /connectors\.slack\.connectedAs/);
+  assert.match(markup, /connectors\.slack\.disconnect/);
+  assert.equal(buttonWithText(container, "connectors.slack.connect"), null);
+});
+
+// Each of the pairs below is one scenario from the brief, split into two
+// tests: this harness's globals (window/document) are installed and torn
+// down per-test in registration order, so a second renderSection() call in
+// the same test tears down the first call's globals out from under its
+// still-pending root.unmount() cleanup.
+test("a disconnected Slack offers Connect", async (t) => {
+  const disconnected = await renderSection(t, { isPaid: true, blocked: false });
+  assert.ok(buttonWithText(disconnected, "connectors.slack.connect"));
+  assert.match(disconnected.textContent, /connectors\.slack\.description/);
+});
+
+test("a stale login offers Reconnect and Disconnect", async (t) => {
+  const stale = await renderSection(t, {
+    isPaid: true,
+    blocked: false,
+    statuses: { slack: { ...SLACK, needsReconnect: true } },
+  });
+  const staleMarkup = stale.textContent;
+  assert.match(staleMarkup, /connectors\.slack\.reconnect/);
+  assert.match(staleMarkup, /connectors\.slack\.disconnect/);
+  assert.match(staleMarkup, /connectors\.slack\.needsReconnect/);
+});
+
+test("free users with no login see Upgrade for both rows and no Connect", async (t) => {
+  const none = await renderSection(t, { isPaid: false, blocked: false });
+  assert.equal(count(none.textContent, /connectors\.viewPlans/g), 2);
+  assert.equal(buttonWithText(none, "connectors.slack.connect"), null);
+});
+
+test("free users can always disconnect a login they have", async (t) => {
+  const lapsed = await renderSection(t, {
+    isPaid: false,
+    blocked: false,
+    statuses: { slack: SLACK },
+  });
+  assert.match(lapsed.textContent, /connectors\.slack\.disconnect/);
+  assert.equal(
+    count(lapsed.textContent, /connectors\.viewPlans/g),
+    1,
+    "only the email row's Upgrade"
+  );
+});
+
+test("an org that turned connectors off still lets the user remove a login", async (t) => {
+  const connected = await renderSection(t, {
+    isPaid: true,
+    blocked: true,
+    statuses: { slack: SLACK },
+  });
+  const connectedMarkup = connected.textContent;
+  assert.match(connectedMarkup, /connectors\.policyOff/);
+  assert.match(connectedMarkup, /connectors\.slack\.disconnect/);
+  assert.equal(buttonWithText(connected, "connectors.slack.connect"), null);
+  assert.doesNotMatch(connectedMarkup, /connectors\.slack\.reconnect/);
+});
+
+test("an org that turned connectors off hides the Slack row when there's no login", async (t) => {
+  const none = await renderSection(t, { isPaid: true, blocked: true });
+  assert.doesNotMatch(none.textContent, /connectors\.slack\.title/);
 });

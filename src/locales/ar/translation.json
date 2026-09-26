@@ -762,6 +762,30 @@
       }
     },
     "slack": {
+      "title": "Slack",
+      "description": "يمكن للمساعد نشر الرسائل في القنوات وللأشخاص نيابةً عنك. توافق على كل رسالة قبل إرسالها.",
+      "connect": "ربط",
+      "reconnect": "إعادة الربط",
+      "disconnect": "قطع الربط",
+      "connecting": "أكمل الربط في متصفحك…",
+      "connectedAs": "متصل بصفتك {{account}} في {{workspace}}",
+      "needsReconnect": "يلزم إعادة ربط Slack.",
+      "proRequired": "قم بالترقية إلى خطة مدفوعة ليتمكن المساعد من إرسال رسائل Slack نيابةً عنك.",
+      "errors": {
+        "connect_failed": "تعذّر ربط Slack. حاول مرة أخرى.",
+        "disconnect_failed": "تعذّر قطع ربط Slack. حاول مرة أخرى.",
+        "oauth_denied": "لم يتم ربط Slack لأن الإذن لم يُمنح.",
+        "oauth_timeout": "استغرق الربط وقتًا طويلاً. حاول مرة أخرى.",
+        "oauth_state_mismatch": "رابط تسجيل الدخول هذا كان قديمًا. حاول مرة أخرى.",
+        "ports_busy": "يستخدم تطبيق آخر المنافذ التي يحتاجها OpenWhispr للربط. أغلقه وحاول مرة أخرى.",
+        "token_exchange_failed": "لم يكمل Slack عملية الربط. حاول مرة أخرى.",
+        "not_configured": "Slack غير متاح في هذا الإصدار.",
+        "busy": "Slack قيد الربط بالفعل. أكمل العملية في متصفحك.",
+        "connection_changed": "تغيّر حسابك أو اتصال Slack أثناء الربط. حاول مرة أخرى.",
+        "signed_out": "سجّل الدخول إلى OpenWhispr لربط Slack.",
+        "policy_blocked": "أوقفت مؤسستك تشغيل الموصلات.",
+        "policy_unavailable": "تعذّر التحقق من إعدادات مؤسستك. حاول مرة أخرى."
+      },
       "browser": {
         "connectedTitle": "تم توصيل Slack",
         "connectedBody": "يمكنك إغلاق هذا التبويب والعودة إلى OpenWhispr.",
@@ -772,10 +796,12 @@
     "recent": {
       "title": "الإجراءات الأخيرة",
       "actions": {
-        "email_draft": "مسودة إلى {{destination}}"
+        "email_draft": "مسودة إلى {{destination}}",
+        "slack_send_message": "رسالة إلى {{destination}}"
       },
       "unlabeledActions": {
-        "email_draft": "مسودة بريد إلكتروني"
+        "email_draft": "مسودة بريد إلكتروني",
+        "slack_send_message": "رسالة Slack"
       },
       "states": {
         "pending": "قيد الانتظار",

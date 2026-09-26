@@ -3872,6 +3872,30 @@
       }
     },
     "slack": {
+      "title": "Slack",
+      "description": "O assistente pode publicar mensagens em canais e para pessoas em seu nome. Você aprova cada mensagem antes de ela ser enviada.",
+      "connect": "Conectar",
+      "reconnect": "Reconectar",
+      "disconnect": "Desconectar",
+      "connecting": "Termine de conectar no seu navegador…",
+      "connectedAs": "Conectado como {{account}} em {{workspace}}",
+      "needsReconnect": "O Slack precisa ser reconectado.",
+      "proRequired": "Atualize para um plano pago para que o assistente envie mensagens do Slack por você.",
+      "errors": {
+        "connect_failed": "Não foi possível conectar o Slack. Tente novamente.",
+        "disconnect_failed": "Não foi possível desconectar o Slack. Tente novamente.",
+        "oauth_denied": "O Slack não foi conectado porque o acesso não foi permitido.",
+        "oauth_timeout": "A conexão demorou demais. Tente novamente.",
+        "oauth_state_mismatch": "Esse link de login estava desatualizado. Tente novamente.",
+        "ports_busy": "Outro aplicativo está usando as portas que o OpenWhispr precisa para conectar. Feche-o e tente novamente.",
+        "token_exchange_failed": "O Slack não concluiu a conexão. Tente novamente.",
+        "not_configured": "O Slack não está disponível nesta versão.",
+        "busy": "O Slack já está conectando. Termine no seu navegador.",
+        "connection_changed": "Sua conta ou a conexão do Slack mudou durante a conexão. Tente novamente.",
+        "signed_out": "Entre no OpenWhispr para conectar o Slack.",
+        "policy_blocked": "Sua organização desativou os conectores.",
+        "policy_unavailable": "Não foi possível verificar as configurações da sua organização. Tente novamente."
+      },
       "browser": {
         "connectedTitle": "O Slack está conectado",
         "connectedBody": "Você pode fechar esta aba e voltar para o OpenWhispr.",
@@ -3882,10 +3906,12 @@
     "recent": {
       "title": "Ações recentes",
       "actions": {
-        "email_draft": "Rascunho para {{destination}}"
+        "email_draft": "Rascunho para {{destination}}",
+        "slack_send_message": "Mensagem para {{destination}}"
       },
       "unlabeledActions": {
-        "email_draft": "Rascunho de e-mail"
+        "email_draft": "Rascunho de e-mail",
+        "slack_send_message": "Mensagem do Slack"
       },
       "states": {
         "pending": "Aguardando",

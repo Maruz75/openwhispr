@@ -3872,6 +3872,30 @@
       }
     },
     "slack": {
+      "title": "Slack",
+      "description": "助手可以代表您在频道和给他人发布消息。每条消息发送前都需要您批准。",
+      "connect": "连接",
+      "reconnect": "重新连接",
+      "disconnect": "断开连接",
+      "connecting": "请在浏览器中完成连接…",
+      "connectedAs": "已以 {{account}} 身份连接到 {{workspace}}",
+      "needsReconnect": "需要重新连接 Slack。",
+      "proRequired": "升级到付费计划，让助手为您发送 Slack 消息。",
+      "errors": {
+        "connect_failed": "无法连接 Slack，请重试。",
+        "disconnect_failed": "无法断开 Slack 连接，请重试。",
+        "oauth_denied": "由于未获得授权，Slack 未连接。",
+        "oauth_timeout": "连接耗时过长，请重试。",
+        "oauth_state_mismatch": "该登录链接已过期，请重试。",
+        "ports_busy": "另一个应用正在使用 OpenWhispr 连接所需的端口。请关闭它后重试。",
+        "token_exchange_failed": "Slack 未完成连接，请重试。",
+        "not_configured": "此版本中 Slack 不可用。",
+        "busy": "Slack 正在连接中，请在浏览器中完成操作。",
+        "connection_changed": "连接过程中您的账户或 Slack 连接发生了变化，请重试。",
+        "signed_out": "请登录 OpenWhispr 以连接 Slack。",
+        "policy_blocked": "您的组织已关闭连接器。",
+        "policy_unavailable": "无法检查您的组织设置，请重试。"
+      },
       "browser": {
         "connectedTitle": "Slack 已连接",
         "connectedBody": "您可以关闭此标签页并返回 OpenWhispr。",
@@ -3882,10 +3906,12 @@
     "recent": {
       "title": "最近的操作",
       "actions": {
-        "email_draft": "发送给 {{destination}} 的草稿"
+        "email_draft": "发送给 {{destination}} 的草稿",
+        "slack_send_message": "发送给 {{destination}} 的消息"
       },
       "unlabeledActions": {
-        "email_draft": "邮件草稿"
+        "email_draft": "邮件草稿",
+        "slack_send_message": "Slack 消息"
       },
       "states": {
         "pending": "等待中",
