@@ -3894,7 +3894,6 @@
         "ports_busy": "另一個應用程式正在使用 OpenWhispr 連接所需的連接埠。請關閉它後重試。",
         "token_exchange_failed": "Slack 未完成連接，請重試。",
         "not_configured": "此版本中 Slack 不可用。",
-        "busy": "Slack 正在連接中，請在瀏覽器中完成操作。",
         "connection_changed": "連接過程中您的帳戶或 Slack 連接發生了變化，請重試。",
         "signed_out": "請登入 OpenWhispr 以連接 Slack。",
         "policy_blocked": "您的組織已關閉連接器。",

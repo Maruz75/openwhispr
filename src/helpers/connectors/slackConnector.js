@@ -337,7 +337,7 @@ function createSlackConnector({ api, auth, directory, credentials }) {
       };
     },
 
-    authorize: () => auth.authorize(),
+    authorize: (options) => auth.authorize(options),
     revoke: (credential) => auth.revoke(credential),
   };
 }

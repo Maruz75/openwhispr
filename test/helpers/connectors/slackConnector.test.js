@@ -521,6 +521,23 @@ test("a login that needs reconnecting fails prepare without calling Slack", asyn
   assert.deepEqual(slack.calls, []);
 });
 
+test("authorize passes the connect's cancel signal on to Slack auth", async () => {
+  const { createSlackConnector } =
+    await import("../../../src/helpers/connectors/slackConnector.js");
+  const seen = [];
+  const connector = createSlackConnector({
+    api: null,
+    auth: { authorize: async (options) => seen.push(options) },
+    directory: null,
+    credentials: null,
+  });
+  const controller = new AbortController();
+
+  await connector.authorize({ signal: controller.signal });
+
+  assert.equal(seen[0].signal, controller.signal);
+});
+
 test("the binding and status follow the active account's login", async () => {
   const { connector, credentials } = await setupSlack({});
   assert.deepEqual(await connector.getBinding(), BINDING);

@@ -308,7 +308,9 @@ function createConnectorManager({
     return Promise.all([...byId.values()].map(statusOf));
   }
 
-  const connecting = new Set();
+  // The sign-in in flight per account and connector. A new Connect replaces
+  // it: a user who closed the browser tab would otherwise wait out the flow.
+  const connecting = new Map();
   let statusSequence = 0;
 
   async function notifyStatusChanged() {
@@ -343,16 +345,20 @@ function createConnectorManager({
       return { status: "unavailable", reason: "unknown_connector" };
     }
     const flowKey = `${accountId}:${connectorId}`;
-    if (connecting.has(flowKey)) return { status: "failed", errorCode: "busy" };
-    connecting.add(flowKey);
+    connecting.get(flowKey)?.abort();
+    const controller = new AbortController();
+    connecting.set(flowKey, controller);
     // The OAuth round trip can take minutes. What it returns belongs to the
     // account and slot generation that started it, or to no one.
     const startGeneration = credentials.generation(accountId, connectorId);
     try {
       let credential;
       try {
-        credential = await connector.authorize();
+        credential = await connector.authorize({ signal: controller.signal });
       } catch (error) {
+        // Replaced by a newer Connect before the provider answered: nothing
+        // was issued, so nothing is saved or revoked.
+        if (controller.signal.aborted) return { status: "failed", errorCode: "oauth_cancelled" };
         const summary = describeError(error);
         logger.warn("connector connect failed", { connectorId, ...summary }, "connectors");
         return {
@@ -361,6 +367,12 @@ function createConnectorManager({
             ? summary.errorCode
             : "connect_failed",
         };
+      }
+      // Replaced after the provider answered: the newer attempt is the one
+      // the user wants, and nobody will use this login.
+      if (controller.signal.aborted) {
+        await revokeQuietly(connector, credential);
+        return { status: "failed", errorCode: "oauth_cancelled" };
       }
       try {
         if (getAccountId() !== accountId) {
@@ -391,7 +403,7 @@ function createConnectorManager({
         workspaceLabel: current.workspaceLabel,
       };
     } finally {
-      connecting.delete(flowKey);
+      if (connecting.get(flowKey) === controller) connecting.delete(flowKey);
     }
   }
 

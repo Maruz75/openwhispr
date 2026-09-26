@@ -3894,7 +3894,6 @@
         "ports_busy": "Outro aplicativo está usando as portas que o OpenWhispr precisa para conectar. Feche-o e tente novamente.",
         "token_exchange_failed": "O Slack não concluiu a conexão. Tente novamente.",
         "not_configured": "O Slack não está disponível nesta versão.",
-        "busy": "O Slack já está conectando. Termine no seu navegador.",
         "connection_changed": "Sua conta ou a conexão do Slack mudou durante a conexão. Tente novamente.",
         "signed_out": "Entre no OpenWhispr para conectar o Slack.",
         "policy_blocked": "Sua organização desativou os conectores.",

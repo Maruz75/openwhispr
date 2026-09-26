@@ -92,7 +92,8 @@ function createSlackAuth({
 }) {
   const refreshes = new Map();
 
-  function authorize() {
+  // `signal` gives the sign-in up when a newer Connect replaces it.
+  function authorize({ signal } = {}) {
     const clientId = getClientId();
     // Fail before opening a browser on a client_id-less URL.
     if (!clientId) return Promise.reject(codedError("not_configured"));
@@ -101,6 +102,7 @@ function createSlackAuth({
       ...loopback,
       publicRedirectUri: redirectUri,
       renderResultPage,
+      signal,
       buildAuthUrl: (redirectUri, state, codeChallenge) => {
         const params = new URLSearchParams({
           client_id: clientId,

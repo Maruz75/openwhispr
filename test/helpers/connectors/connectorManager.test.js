@@ -995,19 +995,103 @@ test("a login that changed during the round trip is kept, and the late one is re
   assert.deepEqual(revoked, [{ accessToken: "late" }]);
 });
 
-test("a second Connect for the same account reports busy", async () => {
-  const flow = deferred();
-  const { manager } = await setup(connectable({ authorize: () => flow.promise }), undefined, {
-    credentials: memoryCredentials(),
-  });
+// The real loopback flow, with Electron's shell stubbed out.
+function loadLoopbackFlow() {
+  const Module = require("node:module");
+  const originalLoad = Module._load;
+  Module._load = function loadWithElectronStub(request, parent, isMain) {
+    if (request === "electron") return { shell: { openExternal: async () => {} } };
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  try {
+    return require("../../../src/helpers/oauthLoopbackFlow.js");
+  } finally {
+    Module._load = originalLoad;
+  }
+}
+
+async function until(read) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (read()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("timed out waiting");
+}
+
+test("a second Connect cancels the abandoned sign-in, and only the new login is saved", async () => {
+  const { runOAuthLoopbackFlow } = loadLoopbackFlow();
+  const credentials = memoryCredentials(null, { connectorId: "fake" });
+  const launches = [];
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      authorize: ({ signal } = {}) =>
+        runOAuthLoopbackFlow({
+          errorParam: "fake_error",
+          signal,
+          renderResultPage: () => "done",
+          buildAuthUrl: (redirectUri, state) => {
+            launches.push({ redirectUri, state });
+            return "https://example.test/authorize";
+          },
+          handleCallback: async (code) => ({ accessToken: code }),
+        }),
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials }
+  );
 
   const first = manager.connect("fake", "allowed");
-  assert.deepEqual(await manager.connect("fake", "allowed"), {
-    status: "failed",
-    errorCode: "busy",
-  });
-  flow.resolve({ accessToken: "a" });
-  assert.equal((await first).status, "connected");
+  await until(() => launches.length === 1);
+  const second = manager.connect("fake", "allowed");
+
+  assert.deepEqual(await first, { status: "failed", errorCode: "oauth_cancelled" });
+  await until(() => launches.length === 2);
+  const [abandoned, current] = launches;
+  // The abandoned tab's server is gone.
+  await assert.rejects(fetch(`${abandoned.redirectUri}/?code=late&state=${abandoned.state}`));
+  await fetch(`${current.redirectUri}/?code=second&state=${current.state}`);
+
+  assert.equal((await second).status, "connected");
+  assert.deepEqual(credentials.read("acct-1", "fake").credential, { accessToken: "second" });
+  assert.equal(launches.length, 2, "one browser launch per attempt");
+  assert.deepEqual(revoked, [], "nothing was revoked for the cancelled attempt");
+});
+
+test("a sign-in that finishes after a newer Connect replaced it is revoked, never saved", async () => {
+  const credentials = memoryCredentials(null, { connectorId: "fake" });
+  const flows = [];
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      // Like a flow whose provider answered before the abort: it resolves.
+      authorize: () => {
+        const flow = deferred();
+        flows.push(flow);
+        return flow.promise;
+      },
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials }
+  );
+
+  const first = manager.connect("fake", "allowed");
+  const second = manager.connect("fake", "allowed");
+  flows[0].resolve({ accessToken: "late" });
+
+  assert.deepEqual(await first, { status: "failed", errorCode: "oauth_cancelled" });
+  assert.deepEqual(revoked, [{ accessToken: "late" }]);
+  assert.equal(credentials.read("acct-1", "fake"), null);
+
+  flows[1].resolve({ accessToken: "second" });
+  assert.equal((await second).status, "connected");
+  assert.deepEqual(credentials.read("acct-1", "fake").credential, { accessToken: "second" });
 });
 
 test("connect refuses on policy or no account, and reports flow errors by code", async () => {

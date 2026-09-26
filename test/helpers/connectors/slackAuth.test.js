@@ -102,6 +102,18 @@ test("authorize asks for user scopes only, exchanges with the PKCE verifier, and
   assert.equal(credentials.saves.length, 0);
 });
 
+test("authorize hands the connect's cancel signal to the loopback flow", async () => {
+  const { auth, flows } = await setup({
+    credential: null,
+    script: { "oauth.v2.access": [ok(FIXTURES.exchange)], "auth.test": [ok(FIXTURES.authTest)] },
+  });
+  const controller = new AbortController();
+
+  await auth.authorize({ signal: controller.signal });
+
+  assert.equal(flows[0].options.signal, controller.signal);
+});
+
 test("authorize without a client id fails fast with not_configured", async () => {
   const { auth, flows } = await setup({ credential: null, clientId: "" });
   await assert.rejects(auth.authorize(), (error) => error.code === "not_configured");

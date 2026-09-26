@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { MessageSquare } from "../icons";
 import { Button } from "../ui/button";
@@ -17,7 +17,6 @@ const ROW_ERRORS = new Set([
   "ports_busy",
   "token_exchange_failed",
   "not_configured",
-  "busy",
   "connection_changed",
   "signed_out",
   "policy_blocked",
@@ -40,6 +39,7 @@ export function SlackConnectorRow({
   const status = useConnectorStatusStore((state) => state.statuses.slack);
   const [phase, setPhase] = useState<RowPhase>("idle");
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  const latestAttempt = useRef(0);
 
   // Loaded for every plan: a lapsed plan must still see, and remove, its login.
   useEffect(() => {
@@ -51,19 +51,26 @@ export function SlackConnectorRow({
   const canConnect = isPaid && !blockedByOrg;
 
   // The status broadcast from main updates the row; results only carry a
-  // failure to show.
+  // failure to show. Connect stays clickable while the browser is open: a
+  // new attempt replaces an abandoned one, which main cancels
+  // ("oauth_cancelled", not an error), so only the latest attempt's result
+  // reaches the row.
   const connect = async (): Promise<void> => {
+    const attempt = ++latestAttempt.current;
+    const isLatest = (): boolean => attempt === latestAttempt.current;
     setPhase("connecting");
     setErrorCode(null);
     try {
       const result = await window.electronAPI?.connectorConnect?.("slack");
+      if (!isLatest()) return;
       if (!result) setErrorCode("connect_failed");
-      else if (result.status === "failed") setErrorCode(result.errorCode);
-      else if (result.status === "unavailable") setErrorCode(result.reason);
+      else if (result.status === "failed" && result.errorCode !== "oauth_cancelled") {
+        setErrorCode(result.errorCode);
+      } else if (result.status === "unavailable") setErrorCode(result.reason);
     } catch {
-      setErrorCode("connect_failed");
+      if (isLatest()) setErrorCode("connect_failed");
     } finally {
-      setPhase("idle");
+      if (isLatest()) setPhase("idle");
     }
   };
 
@@ -116,7 +123,7 @@ export function SlackConnectorRow({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {needsReconnect && canConnect && (
-            <Button size="sm" disabled={phase !== "idle"} onClick={() => void connect()}>
+            <Button size="sm" disabled={phase === "disconnecting"} onClick={() => void connect()}>
               {t("connectors.slack.reconnect")}
             </Button>
           )}
@@ -131,7 +138,7 @@ export function SlackConnectorRow({
             </Button>
           )}
           {!connected && canConnect && (
-            <Button size="sm" disabled={phase !== "idle"} onClick={() => void connect()}>
+            <Button size="sm" disabled={phase === "disconnecting"} onClick={() => void connect()}>
               {t("connectors.slack.connect")}
             </Button>
           )}
