@@ -556,3 +556,62 @@ test("timeoutMs bounds how long the flow waits", { timeout: 5000 }, async () => 
   const started = startFlow(async () => ({}), { timeoutMs: 30 });
   await assert.rejects(started.flow, (error) => error.code === "oauth_timeout");
 });
+
+async function stillWaiting(flow) {
+  return Promise.race([
+    flow.then(
+      () => "resolved",
+      () => "rejected"
+    ),
+    new Promise((resolve) => setTimeout(() => resolve("pending"), 100)),
+  ]);
+}
+
+test("behind a relay, an error without this flow's state is a stray request, not a denial", async () => {
+  const started = startFlow(async (code) => ({ code }), { publicRedirectUri: RELAY });
+  await until(started.getRedirectUri);
+  const port = started.server.address().port;
+
+  const bare = await getLocal(`http://127.0.0.1:${port}/anything?error=access_denied`);
+  const otherState = await getLocal(
+    `http://127.0.0.1:${port}/?error=access_denied&state=v1.${port}.${"0".repeat(64)}`
+  );
+
+  assert.equal(bare.status, 400);
+  assert.equal(otherState.status, 400);
+  assert.equal(await stillWaiting(started.flow), "pending");
+  await getLocal(`http://127.0.0.1:${port}/?code=c7&state=${started.getState()}`);
+  assert.deepEqual(await started.flow, { code: "c7" });
+});
+
+test("behind a relay, an error with this flow's state still denies", async () => {
+  const started = startFlow(async () => ({}), { publicRedirectUri: RELAY });
+  await until(started.getRedirectUri);
+  const port = started.server.address().port;
+  const outcome = started.flow.catch((error) => error);
+
+  await getLocal(`http://127.0.0.1:${port}/?error=access_denied&state=${started.getState()}`);
+
+  assert.equal((await outcome).code, "oauth_denied");
+});
+
+test("with a callback path, only that path is a callback", async () => {
+  const started = startFlow(async (code) => ({ code }), {
+    publicRedirectUri: RELAY,
+    callbackPath: "/slack/callback",
+  });
+  await until(started.getRedirectUri);
+  const port = started.server.address().port;
+  const state = started.getState();
+
+  const wrongPathCode = await getLocal(`http://127.0.0.1:${port}/other?code=stray&state=${state}`);
+  const wrongPathError = await getLocal(
+    `http://127.0.0.1:${port}/other?error=access_denied&state=${state}`
+  );
+
+  assert.equal(wrongPathCode.status, 400);
+  assert.equal(wrongPathError.status, 400);
+  assert.equal(await stillWaiting(started.flow), "pending");
+  await getLocal(`http://127.0.0.1:${port}/slack/callback?code=c8&state=${state}`);
+  assert.deepEqual(await started.flow, { code: "c8" });
+});

@@ -56,12 +56,14 @@ function codedError(code, message, extra = {}) {
 //   (e.g. "gcal_error"); the success param is derived from the same prefix.
 // - redirectHost / ports / callbackPath — shape redirect_uri for providers
 //   that match it exactly (fixed ports are tried in order); the server
-//   always listens on 127.0.0.1.
+//   always listens on 127.0.0.1. With a callbackPath, only that path is a
+//   callback.
 // - renderResultPage({ ok }) — answer the browser from this server instead
 //   of the hosted page, for providers that page doesn't know.
 // - publicRedirectUri — for providers that require an HTTPS redirect: the
 //   provider redirects to that URL (a relay), which forwards the browser to
-//   this server by the port carried in state as v1.<port>.<nonce>.
+//   this server by the port carried in state as v1.<port>.<nonce>. An error
+//   callback then counts only with that state.
 // - timeoutMs — how long the flow waits for the provider's redirect.
 function runOAuthLoopbackFlow({
   buildAuthUrl,
@@ -96,12 +98,16 @@ function runOAuthLoopbackFlow({
       redirect(res, params);
     };
 
+    const invalidRequest = (res) => {
+      res.writeHead(400, { "Content-Type": "text/html" });
+      res.end("<html><body><h3>Invalid request.</h3></body></html>");
+    };
+
     const server = http.createServer(async (req, res) => {
       // Accepted requests can outlive server.close(), so only the first
       // terminal callback may settle the flow or exchange a code.
       if (callbackClaimed) {
-        res.writeHead(400, { "Content-Type": "text/html" });
-        res.end("<html><body><h3>Invalid request.</h3></body></html>");
+        invalidRequest(res);
         return;
       }
 
@@ -110,6 +116,20 @@ function runOAuthLoopbackFlow({
         const returnedState = url.searchParams.get("state");
         const code = url.searchParams.get("code");
         const error = url.searchParams.get("error");
+
+        // With a callback path, nothing else on this port is the provider's
+        // answer: a stray request is refused and the flow keeps waiting.
+        if (callbackPath && url.pathname !== callbackPath) {
+          invalidRequest(res);
+          return;
+        }
+
+        // Behind a relay, an error counts only with this flow's state:
+        // without it, it is a stray request, not the user's answer.
+        if (error && publicRedirectUri && returnedState !== state) {
+          invalidRequest(res);
+          return;
+        }
 
         if (error) {
           callbackClaimed = true;
@@ -120,8 +140,7 @@ function runOAuthLoopbackFlow({
         }
 
         if (!code || returnedState !== state) {
-          res.writeHead(400, { "Content-Type": "text/html" });
-          res.end("<html><body><h3>Invalid request.</h3></body></html>");
+          invalidRequest(res);
           // A real callback with a code but the wrong state is a failed
           // attempt (stale tab, CSRF). Fail the flow now. A request with no
           // code (favicon / bare GET) must keep waiting for the redirect.
