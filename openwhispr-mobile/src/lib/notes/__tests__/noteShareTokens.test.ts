@@ -1,5 +1,6 @@
 const mockStored = new Map<string, string>();
 jest.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 3,
   getItemAsync: jest.fn(async (key: string) => mockStored.get(key) ?? null),
   setItemAsync: jest.fn(async (key: string, value: string) => {
     mockStored.set(key, value);
@@ -15,6 +16,7 @@ import {
   saveNoteShareToken,
   removeNoteShareToken,
   clearNoteShareTokens,
+  claimNoteShareTokens,
   buildNoteShareUrl,
   buildNoteInviteUrl,
 } from '../noteShareTokens';
@@ -104,4 +106,101 @@ it('removes a cached token when the server reports no live token prefix', async 
   await saveNoteShareToken('user', 'note', token);
   expect(await readNoteShareToken('user', 'note', null)).toBeNull();
   expect(await readNoteShareToken('user', 'note')).toBeNull();
+});
+
+it('keeps secrets on this device and readable in the background', async (): Promise<void> => {
+  await claimNoteShareTokens('user');
+  await saveNoteShareToken('user', 'note', token);
+  await readNoteShareToken('user', 'note');
+  await removeNoteShareToken('user', 'note');
+  await clearNoteShareTokens('user');
+  const calls = [
+    ...jest.mocked(SecureStore.getItemAsync).mock.calls.map(([, options]) => options),
+    ...jest.mocked(SecureStore.setItemAsync).mock.calls.map(([, , options]) => options),
+    ...jest.mocked(SecureStore.deleteItemAsync).mock.calls.map(([, options]) => options),
+  ];
+  expect(calls.length).toBeGreaterThan(0);
+  for (const options of calls) {
+    expect(options).toEqual({
+      keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+      requireAuthentication: false,
+    });
+  }
+});
+
+describe('claimNoteShareTokens', () => {
+  it('keeps the links of the account that signs back in', async (): Promise<void> => {
+    await claimNoteShareTokens('account-a');
+    await saveNoteShareToken('account-a', 'note', token);
+    await claimNoteShareTokens('account-a');
+    expect(await readNoteShareToken('account-a', 'note')).toBe(token);
+  });
+
+  it('erases the previous account links when a different account signs in', async (): Promise<void> => {
+    await claimNoteShareTokens('account-a');
+    await saveNoteShareToken('account-a', 'note', token);
+    await claimNoteShareTokens('account-b');
+    expect(await readNoteShareToken('account-a', 'note')).toBeNull();
+    await saveNoteShareToken('account-b', 'note', token);
+    await claimNoteShareTokens('account-b');
+    expect(await readNoteShareToken('account-b', 'note')).toBe(token);
+  });
+
+  it('retries an erase that failed at the next sign-in', async (): Promise<void> => {
+    await claimNoteShareTokens('account-a');
+    await saveNoteShareToken('account-a', 'note', token);
+    jest
+      .mocked(SecureStore.getItemAsync)
+      .mockImplementationOnce(async (key) => mockStored.get(key) ?? null)
+      .mockRejectedValueOnce(new Error('keychain locked'));
+    await expect(claimNoteShareTokens('account-b')).rejects.toThrow();
+    expect(await readNoteShareToken('account-a', 'note')).toBe(token);
+    await saveNoteShareToken('account-b', 'note', token);
+    await claimNoteShareTokens('account-c');
+    expect(await readNoteShareToken('account-a', 'note')).toBeNull();
+    expect(await readNoteShareToken('account-b', 'note')).toBeNull();
+  });
+});
+
+describe('clearNoteShareTokens', () => {
+  it('retries a failed account erase at the next sign-in of another account', async (): Promise<void> => {
+    await claimNoteShareTokens('account-a');
+    await saveNoteShareToken('account-a', 'note', token);
+    jest.mocked(SecureStore.getItemAsync).mockRejectedValueOnce(new Error('keychain locked'));
+    await expect(clearNoteShareTokens('account-a')).rejects.toThrow('keychain locked');
+    expect(await readNoteShareToken('account-a', 'note')).toBe(token);
+    await claimNoteShareTokens('account-b');
+    expect(await readNoteShareToken('account-a', 'note')).toBeNull();
+  });
+
+  it('forgets an erased account so it no longer counts as a previous owner', async (): Promise<void> => {
+    await claimNoteShareTokens('account-a');
+    await clearNoteShareTokens('account-a');
+    expect(mockStored.size).toBe(0);
+  });
+});
+
+describe('owner records', () => {
+  it('records an account when it stores a link, even if its sign-in claim failed', async (): Promise<void> => {
+    await saveNoteShareToken('account-a', 'note', token);
+    await claimNoteShareTokens('account-b');
+    expect(await readNoteShareToken('account-a', 'note')).toBeNull();
+  });
+
+  it('treats a corrupt owners record as empty instead of failing every sign-in', async (): Promise<void> => {
+    mockStored.set('openwhispr.noteShares.owners', '{not json');
+    await expect(claimNoteShareTokens('account-a')).resolves.toBeUndefined();
+    await saveNoteShareToken('account-a', 'note', token);
+    await claimNoteShareTokens('account-b');
+    expect(await readNoteShareToken('account-a', 'note')).toBeNull();
+  });
+
+  it('keeps the owners record consistent when claims overlap', async (): Promise<void> => {
+    await saveNoteShareToken('account-a', 'note', token);
+    await saveNoteShareToken('account-b', 'note', token);
+    await Promise.all([claimNoteShareTokens('account-b'), claimNoteShareTokens('account-c')]);
+    expect(await readNoteShareToken('account-a', 'note')).toBeNull();
+    expect(await readNoteShareToken('account-b', 'note')).toBeNull();
+    expect(mockStored.has('openwhispr.noteShares.owners')).toBe(false);
+  });
 });

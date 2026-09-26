@@ -19,7 +19,7 @@ import {
 import { Sentry } from '@/lib/sentry';
 import { useUsageStore } from '@/store/useUsageStore';
 import { clearAllSessions as clearAgentSessions } from '@/services/agent/AgentComposerService';
-import { clearNoteShareTokens } from '@/lib/notes/noteShareTokens';
+import { claimNoteShareTokens, clearNoteShareTokens } from '@/lib/notes/noteShareTokens';
 
 const GUEST_SESSION_KEY = 'openwhispr_guest_session';
 
@@ -70,6 +70,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     try {
       const user = await getSession();
       if (user) {
+        await claimNoteShares(user);
         const sessionCookie = await getStoredSession();
         set({ user, sessionCookie, isGuest: false, isInitialized: true, isLoading: false });
       } else {
@@ -190,7 +191,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
     await anonymousSignInInFlight?.catch(() => undefined);
     try {
       await deleteAccountApi();
-      await clearPreviousNoteShareTokens();
+      const deletedUserId = useAuthStore.getState().user?.id;
+      if (deletedUserId) await tolerateCacheFailure('clear', clearNoteShareTokens(deletedUserId));
       // Keys survive sign-out by design, but not account deletion. They are erased only
       // once the account is gone, so a failed delete keeps them. A failed erase leaves
       // them for Remove all provider keys rather than undoing a completed deletion.
@@ -215,15 +217,26 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
 type SetState = StoreApi<AuthStore>['setState'];
 
-async function clearPreviousNoteShareTokens(nextUserId?: string): Promise<void> {
-  const previousUserId = useAuthStore.getState().user?.id;
-  if (previousUserId && previousUserId !== nextUserId) {
-    try {
-      await clearNoteShareTokens(previousUserId);
-    } catch {
-      // A local cache failure must not block sign-in or undo a completed account deletion.
-      Sentry.captureMessage('Note sharing cache cleanup failed', 'warning');
-    }
+// A local cache failure must not block sign-in or undo a completed account deletion.
+async function tolerateCacheFailure(
+  operation: 'claim' | 'clear',
+  cleanup: Promise<void>,
+): Promise<void> {
+  try {
+    await cleanup;
+  } catch (error) {
+    Sentry.captureException(error, {
+      level: 'warning',
+      tags: { feature: 'note-sharing', operation },
+    });
+  }
+}
+
+// Every real sign-in, including a session restored at launch, passes through here. Only real
+// accounts can share, so an anonymous session leaves other accounts' stored links in place.
+async function claimNoteShares(user: AuthUser | null): Promise<void> {
+  if (user && !user.isAnonymous) {
+    await tolerateCacheFailure('claim', claimNoteShareTokens(user.id));
   }
 }
 
@@ -234,7 +247,7 @@ async function applyAuthenticatedSession(
 ): Promise<void> {
   await SecureStore.deleteItemAsync(GUEST_SESSION_KEY);
   await initAuthenticatedUser(result.user, fallbackName);
-  await clearPreviousNoteShareTokens(result.user?.id);
+  await claimNoteShares(result.user);
   useUsageStore.getState().reset();
   set({
     user: result.user,
