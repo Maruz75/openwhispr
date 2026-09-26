@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import NoteEditorScreen from '@/screens/NoteEditorScreen';
+import { exportNote } from '@/lib/noteExport';
 import type { Action, ConflictedNote, Note, RemoteNote, Segment, Speaker } from '@/data/types';
 
 const mockUpdateNote = jest.fn();
@@ -126,14 +127,19 @@ jest.mock('@/store/useUsageStore', () => {
   return { useUsageStore };
 });
 
+let mockOnDictationComplete: ((text: string) => void) | null = null;
+
 jest.mock('@/hooks/useAudioRecording', () => ({
-  useAudioRecording: () => ({
-    isRecording: false,
-    isProcessing: false,
-    currentText: '',
-    startRecording: jest.fn(),
-    stopRecording: jest.fn(),
-  }),
+  useAudioRecording: ({ onComplete }: { onComplete: (text: string) => void }) => {
+    mockOnDictationComplete = onComplete;
+    return {
+      isRecording: false,
+      isProcessing: false,
+      currentText: '',
+      startRecording: jest.fn(),
+      stopRecording: jest.fn(),
+    };
+  },
 }));
 
 jest.mock('@/hooks/useKeyboardHeight', () => ({
@@ -372,14 +378,30 @@ describe('NoteEditorScreen — conflict banner', () => {
 });
 
 jest.mock('@/components/notes/NoteShareSheet', () => ({
-  NoteShareSheet: ({ onFlushDraft }: { onFlushDraft: () => void }) => {
-    const { Pressable, Text } = require('react-native');
+  NoteShareSheet: ({
+    onFlushDraft,
+    onExport,
+  }: {
+    onFlushDraft: () => void;
+    onExport: (format: 'md' | 'txt') => void;
+  }) => {
+    const { Pressable, Text, View } = require('react-native');
     return (
-      <Pressable onPress={onFlushDraft}>
-        <Text>Create test link</Text>
-      </Pressable>
+      <View>
+        <Pressable onPress={onFlushDraft}>
+          <Text>Create test link</Text>
+        </Pressable>
+        <Pressable onPress={() => onExport('md')}>
+          <Text>Export Markdown</Text>
+        </Pressable>
+      </View>
     );
   },
+}));
+
+jest.mock('@/lib/noteExport', () => ({
+  ...jest.requireActual('@/lib/noteExport'),
+  exportNote: jest.fn(async () => undefined),
 }));
 
 describe('NoteEditorScreen — sharing drafts', () => {
@@ -401,6 +423,29 @@ describe('NoteEditorScreen — sharing drafts', () => {
     screen.unmount();
     expect(mockUpdateNote).toHaveBeenCalledTimes(1);
     jest.useRealTimers();
+  });
+
+  it('saves dictation that completes after the editor has closed', () => {
+    jest.useFakeTimers();
+    const screen = render(<NoteEditorScreen />);
+    screen.unmount();
+    act(() => {
+      mockOnDictationComplete?.(' dictated words');
+      jest.advanceTimersByTime(1000);
+    });
+    expect(mockUpdateNote).toHaveBeenCalledWith(7, {
+      content: 'Alice owns the launch checklist. dictated words',
+    });
+    jest.useRealTimers();
+  });
+
+  it('exports an untitled note under the untitled label', () => {
+    mockNote = note({ title: '' });
+    mockNotesState.notes = [mockNote];
+    const screen = render(<NoteEditorScreen />);
+    fireEvent.press(screen.getByText('Share note'));
+    fireEvent.press(screen.getByText('Export Markdown'));
+    expect(exportNote).toHaveBeenCalledWith(expect.objectContaining({ title: 'Untitled' }), 'md');
   });
 
   it('does not dirty an unchanged note when opening or publishing', () => {

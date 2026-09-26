@@ -380,6 +380,7 @@ export default function NoteEditorScreen() {
   const handleTitleChange = useCallback(
     (text: string) => {
       setTitle(text);
+      titleRef.current = text;
       debouncedSave();
     },
     [debouncedSave],
@@ -389,6 +390,7 @@ export default function NoteEditorScreen() {
     (text: string) => {
       if (usesSegmentTranscript) return;
       setContent(text);
+      contentRef.current = text;
       debouncedSave();
     },
     [debouncedSave, usesSegmentTranscript],
@@ -438,6 +440,8 @@ export default function NoteEditorScreen() {
       // Re-root the learner baseline to the freshly-dictated text so we only
       // learn from user edits performed after this dictation.
       learnedBaselineRef.current = newContent;
+      // The save reads the ref, and an unmounted editor never re-renders to update it.
+      contentRef.current = newContent;
       debouncedSave();
       safeHaptics('success');
       if (useProcessingModeStore.getState().activeMode === 'cloud') {
@@ -500,7 +504,7 @@ export default function NoteEditorScreen() {
       safeHaptics('light');
       exportNote(
         {
-          title: titleRef.current,
+          title: titleRef.current || 'Untitled',
           content: buildNoteShareContent({
             viewMode,
             enhancedContent: note?.enhancedContent ?? null,
