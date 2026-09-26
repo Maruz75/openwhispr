@@ -3901,12 +3901,16 @@
         "channel_not_found": "{{destination}} ya no se pudo encontrar en Slack.",
         "is_archived": "{{destination}} está archivado.",
         "reconnect_needed": "Slack debe reconectarse en Configuración.",
-        "token_revoked": "Slack debe reconectarse en Configuración.",
         "connection_changed": "La conexión de Slack cambió antes de enviar, así que no se envió nada.",
         "rate_limited": "Slack está ocupado. Vuelve a intentarlo en breve.",
         "missing_scope": "OpenWhispr no tiene permiso para publicar ahí. Reconecta Slack en Configuración.",
         "msg_too_long": "El mensaje es demasiado largo para Slack (12.000 caracteres como máximo, una vez formateado).",
-        "no_text": "El mensaje está vacío."
+        "no_text": "El mensaje está vacío.",
+        "network": "No se pudo conectar con Slack. No se envió nada.",
+        "credential_save_failed": "No se pudo guardar el inicio de sesión de Slack en este equipo. No se envió nada. Inténtalo de nuevo.",
+        "dm_failed": "No se pudo abrir el mensaje directo a {{destination}}. No se envió nada.",
+        "restricted": "{{destination}} es de solo lectura o está restringido para ti.",
+        "generic": "Algo salió mal. No se envió nada."
       }
     },
     "policyOff": "Tu organización ha desactivado los conectores.",
@@ -3983,7 +3987,6 @@
       "draftOpenedOnlySubjectCopied": "Se abrió un borrador para {{destination}}. El asunto está en tu portapapeles.",
       "needsDetails": "Faltan detalles.",
       "unavailable": "Los conectores no están disponibles en este momento.",
-      "failed": "No funcionó.",
       "unknown": "Sin confirmar. Comprueba si se completó antes de volver a intentarlo.",
       "draftUnknown": "Sin confirmar: puede que el borrador para {{destination}} no se haya abierto. Compruébalo antes de volver a intentarlo.",
       "contactsFound": "Contactos encontrados: {{total}}",
@@ -4001,7 +4004,12 @@
         "rate_limited": "Slack está ocupado.",
         "missing_scope": "Falta el permiso de Slack.",
         "msg_too_long": "Mensaje demasiado largo para Slack.",
-        "no_text": "El mensaje está vacío."
+        "no_text": "El mensaje está vacío.",
+        "network": "No se pudo conectar con Slack. No se envió nada.",
+        "credential_save_failed": "No se pudo guardar el inicio de sesión de Slack en este equipo. No se envió nada.",
+        "dm_failed": "No se pudo abrir el mensaje directo. No se envió nada.",
+        "restricted": "Ese canal es de solo lectura o está restringido.",
+        "generic": "No funcionó."
       }
     }
   },

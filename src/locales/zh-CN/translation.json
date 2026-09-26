@@ -3848,12 +3848,16 @@
         "channel_not_found": "在 Slack 中已找不到 {{destination}}。",
         "is_archived": "{{destination}} 已归档。",
         "reconnect_needed": "需要在设置中重新连接 Slack。",
-        "token_revoked": "需要在设置中重新连接 Slack。",
         "connection_changed": "发送前 Slack 连接发生了变化，因此未发送任何内容。",
         "rate_limited": "Slack 正忙，请稍后重试。",
         "missing_scope": "OpenWhispr 没有权限在那里发布。请在设置中重新连接 Slack。",
         "msg_too_long": "消息对 Slack 来说太长了（格式化后最多 12,000 个字符）。",
-        "no_text": "消息为空。"
+        "no_text": "消息为空。",
+        "network": "无法连接到 Slack，未发送任何内容。",
+        "credential_save_failed": "无法在此电脑上保存 Slack 登录信息，未发送任何内容。请重试。",
+        "dm_failed": "无法打开与 {{destination}} 的私信，未发送任何内容。",
+        "restricted": "{{destination}} 对您是只读或受限的。",
+        "generic": "出了点问题，未发送任何内容。"
       }
     },
     "policyOff": "您的组织已关闭连接器。",
@@ -3930,7 +3934,6 @@
       "draftOpenedOnlySubjectCopied": "已打开发给 {{destination}} 的草稿。主题已在剪贴板中。",
       "needsDetails": "需要更多信息。",
       "unavailable": "连接器暂时不可用。",
-      "failed": "操作未成功。",
       "unknown": "未确认。请先检查是否已完成，再重试。",
       "draftUnknown": "未确认：发给 {{destination}} 的草稿可能没有打开。请先检查，再重试。",
       "contactsFound": "找到的联系人：{{total}}",
@@ -3948,7 +3951,12 @@
         "rate_limited": "Slack 正忙。",
         "missing_scope": "缺少 Slack 权限。",
         "msg_too_long": "消息对 Slack 来说太长。",
-        "no_text": "消息为空。"
+        "no_text": "消息为空。",
+        "network": "无法连接到 Slack。未发送任何内容。",
+        "credential_save_failed": "无法在此电脑上保存 Slack 登录信息。未发送任何内容。",
+        "dm_failed": "无法打开私信。未发送任何内容。",
+        "restricted": "该频道为只读或受限。",
+        "generic": "操作未成功。"
       }
     }
   },

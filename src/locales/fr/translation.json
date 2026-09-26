@@ -4017,12 +4017,16 @@
         "channel_not_found": "{{destination}} n'a pas pu être retrouvé dans Slack.",
         "is_archived": "{{destination}} est archivé.",
         "reconnect_needed": "Slack doit être reconnecté dans les Paramètres.",
-        "token_revoked": "Slack doit être reconnecté dans les Paramètres.",
         "connection_changed": "La connexion Slack a changé avant l'envoi, donc rien n'a été envoyé.",
         "rate_limited": "Slack est occupé. Réessayez sous peu.",
         "missing_scope": "OpenWhispr n'a pas la permission de publier là-bas. Reconnectez Slack dans les Paramètres.",
         "msg_too_long": "Le message est trop long pour Slack (12 000 caractères maximum, une fois formaté).",
-        "no_text": "Le message est vide."
+        "no_text": "Le message est vide.",
+        "network": "Slack est injoignable. Rien n'a été envoyé.",
+        "credential_save_failed": "La connexion Slack n'a pas pu être enregistrée sur cet ordinateur. Rien n'a été envoyé. Réessayez.",
+        "dm_failed": "Le message direct à {{destination}} n'a pas pu être ouvert. Rien n'a été envoyé.",
+        "restricted": "{{destination}} est en lecture seule ou restreint pour vous.",
+        "generic": "Un problème est survenu. Rien n'a été envoyé."
       }
     },
     "policyOff": "Votre organisation a désactivé les connecteurs.",
@@ -4099,7 +4103,6 @@
       "draftOpenedOnlySubjectCopied": "Brouillon ouvert pour {{destination}}. L'objet est dans votre presse-papiers.",
       "needsDetails": "Il manque des précisions.",
       "unavailable": "Les connecteurs ne sont pas disponibles pour le moment.",
-      "failed": "Cela n'a pas fonctionné.",
       "unknown": "Non confirmé. Vérifiez si l'action a abouti avant de réessayer.",
       "draftUnknown": "Non confirmé : le brouillon pour {{destination}} ne s'est peut-être pas ouvert. Vérifiez avant de réessayer.",
       "contactsFound": "Contacts trouvés : {{total}}",
@@ -4117,7 +4120,12 @@
         "rate_limited": "Slack est occupé.",
         "missing_scope": "Permission Slack manquante.",
         "msg_too_long": "Message trop long pour Slack.",
-        "no_text": "Le message est vide."
+        "no_text": "Le message est vide.",
+        "network": "Impossible de joindre Slack. Rien n'a été envoyé.",
+        "credential_save_failed": "Impossible d'enregistrer la connexion Slack sur cet ordinateur. Rien n'a été envoyé.",
+        "dm_failed": "Impossible d'ouvrir le message direct. Rien n'a été envoyé.",
+        "restricted": "Ce canal est en lecture seule ou restreint.",
+        "generic": "Cela n'a pas fonctionné."
       }
     }
   },

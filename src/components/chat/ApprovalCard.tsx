@@ -7,21 +7,7 @@ import {
   updateApprovalDraft,
   type ApprovalEntry,
 } from "../../stores/connectorApprovalStore";
-
-// Failures with their own translated copy; anything else shows the
-// connector's message as sent.
-const TRANSLATED_ERRORS = new Set([
-  "not_in_channel",
-  "channel_not_found",
-  "is_archived",
-  "reconnect_needed",
-  "token_revoked",
-  "connection_changed",
-  "rate_limited",
-  "missing_scope",
-  "msg_too_long",
-  "no_text",
-]);
+import { connectorErrorCopyKey } from "../../utils/connectorErrorCopy";
 
 // The draft lives in the store, so edit mode only changes how it is shown:
 // Send always commits exactly what the card displays.
@@ -130,13 +116,15 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
             )}
           </p>
         )}
+        {/* Translated copy only: entry.message is the connector's English,
+            written for the model. */}
         {entry.state === "failed" && (
           <p className="mt-2 text-destructive">
             {t("connectors.approval.failed", {
-              message:
-                entry.errorCode && TRANSLATED_ERRORS.has(entry.errorCode)
-                  ? t(`connectors.approval.errors.${entry.errorCode}`, { destination })
-                  : (entry.message ?? ""),
+              message: t(`connectors.approval.errors.${connectorErrorCopyKey(entry.errorCode)}`, {
+                destination,
+                defaultValue: t("connectors.approval.errors.generic"),
+              }),
             })}
           </p>
         )}

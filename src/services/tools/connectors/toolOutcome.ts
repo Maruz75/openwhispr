@@ -1,4 +1,5 @@
 import i18n from "../../../i18n";
+import { connectorErrorCopyKey } from "../../../utils/connectorErrorCopy";
 import type { ToolResult } from "../ToolRegistry";
 import type { ApprovalOutcome, ConnectorPrepareResult } from "../../../types/connectors";
 
@@ -42,8 +43,8 @@ export function failedResult(errorCode: string, message: string): ToolResult {
   return {
     success: true,
     data: { status: "failed", errorCode, error: message },
-    displayText: i18n.t(`connectors.toolStatus.errors.${errorCode}`, {
-      defaultValue: i18n.t("connectors.toolStatus.failed"),
+    displayText: i18n.t(`connectors.toolStatus.errors.${connectorErrorCopyKey(errorCode)}`, {
+      defaultValue: i18n.t("connectors.toolStatus.errors.generic"),
     }),
   };
 }

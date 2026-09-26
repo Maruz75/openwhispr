@@ -3848,12 +3848,16 @@
         "channel_not_found": "{{destination}} não foi mais encontrado no Slack.",
         "is_archived": "{{destination}} está arquivado.",
         "reconnect_needed": "O Slack precisa ser reconectado nas Configurações.",
-        "token_revoked": "O Slack precisa ser reconectado nas Configurações.",
         "connection_changed": "A conexão do Slack mudou antes do envio, então nada foi enviado.",
         "rate_limited": "O Slack está ocupado. Tente novamente em breve.",
         "missing_scope": "O OpenWhispr não tem permissão para publicar ali. Reconecte o Slack nas Configurações.",
         "msg_too_long": "A mensagem é longa demais para o Slack (no máximo 12.000 caracteres, já formatada).",
-        "no_text": "A mensagem está vazia."
+        "no_text": "A mensagem está vazia.",
+        "network": "Não foi possível acessar o Slack. Nada foi enviado.",
+        "credential_save_failed": "Não foi possível salvar o login do Slack neste computador. Nada foi enviado. Tente novamente.",
+        "dm_failed": "Não foi possível abrir a mensagem direta para {{destination}}. Nada foi enviado.",
+        "restricted": "{{destination}} é somente leitura ou restrito para você.",
+        "generic": "Algo deu errado. Nada foi enviado."
       }
     },
     "policyOff": "Sua organização desativou os conectores.",
@@ -3930,7 +3934,6 @@
       "draftOpenedOnlySubjectCopied": "Rascunho para {{destination}} aberto. O assunto está na sua área de transferência.",
       "needsDetails": "Faltam detalhes.",
       "unavailable": "Os conectores não estão disponíveis no momento.",
-      "failed": "Não funcionou.",
       "unknown": "Não confirmado. Verifique se foi concluído antes de tentar novamente.",
       "draftUnknown": "Não confirmado: o rascunho para {{destination}} pode não ter sido aberto. Verifique antes de tentar novamente.",
       "contactsFound": "Contatos encontrados: {{total}}",
@@ -3948,7 +3951,12 @@
         "rate_limited": "O Slack está ocupado.",
         "missing_scope": "Falta permissão do Slack.",
         "msg_too_long": "Mensagem longa demais para o Slack.",
-        "no_text": "A mensagem está vazia."
+        "no_text": "A mensagem está vazia.",
+        "network": "Não foi possível acessar o Slack. Nada foi enviado.",
+        "credential_save_failed": "Não foi possível salvar o login do Slack neste computador. Nada foi enviado.",
+        "dm_failed": "Não foi possível abrir a mensagem direta. Nada foi enviado.",
+        "restricted": "Esse canal é somente leitura ou restrito.",
+        "generic": "Não funcionou."
       }
     }
   },

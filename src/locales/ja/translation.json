@@ -3848,12 +3848,16 @@
         "channel_not_found": "{{destination}}がSlackで見つからなくなりました。",
         "is_archived": "{{destination}}はアーカイブされています。",
         "reconnect_needed": "設定でSlackを再接続する必要があります。",
-        "token_revoked": "設定でSlackを再接続する必要があります。",
         "connection_changed": "送信前にSlackの接続が変わったため、何も送信されませんでした。",
         "rate_limited": "Slackが混み合っています。しばらくしてからもう一度お試しください。",
         "missing_scope": "OpenWhisprにはそこに投稿する権限がありません。設定でSlackを再接続してください。",
         "msg_too_long": "メッセージがSlackには長すぎます（整形後で最大12,000文字）。",
-        "no_text": "メッセージが空です。"
+        "no_text": "メッセージが空です。",
+        "network": "Slackに接続できませんでした。何も送信されていません。",
+        "credential_save_failed": "このコンピューターにSlackのログイン情報を保存できませんでした。何も送信されていません。もう一度お試しください。",
+        "dm_failed": "{{destination}}とのダイレクトメッセージを開けませんでした。何も送信されていません。",
+        "restricted": "{{destination}}は読み取り専用か、あなたには制限されています。",
+        "generic": "問題が発生しました。何も送信されていません。"
       }
     },
     "policyOff": "組織によってコネクタが無効にされています。",
@@ -3930,7 +3934,6 @@
       "draftOpenedOnlySubjectCopied": "{{destination}} 宛ての下書きを開きました。件名はクリップボードにあります。",
       "needsDetails": "詳細が必要です。",
       "unavailable": "現在コネクタを利用できません。",
-      "failed": "うまくいきませんでした。",
       "unknown": "未確認です。再試行する前に完了したかどうかを確認してください。",
       "draftUnknown": "未確認：{{destination}} 宛ての下書きが開かなかった可能性があります。再試行する前に確認してください。",
       "contactsFound": "見つかった連絡先: {{total}}",
@@ -3948,7 +3951,12 @@
         "rate_limited": "Slackが混み合っています。",
         "missing_scope": "Slackの権限がありません。",
         "msg_too_long": "メッセージがSlackには長すぎます。",
-        "no_text": "メッセージが空です。"
+        "no_text": "メッセージが空です。",
+        "network": "Slackに接続できませんでした。何も送信されていません。",
+        "credential_save_failed": "このコンピューターにSlackのログイン情報を保存できませんでした。何も送信されていません。",
+        "dm_failed": "ダイレクトメッセージを開けませんでした。何も送信されていません。",
+        "restricted": "そのチャンネルは読み取り専用か、制限されています。",
+        "generic": "うまくいきませんでした。"
       }
     }
   },

@@ -152,6 +152,31 @@ test("tool steps show the user plain, localized outcomes instead of codes", asyn
   );
   // A code with no toolStatus.errors translation falls back to the generic text.
   assert.equal(failedResult("mystery_error", "raw provider text").displayText, "That didn't work.");
+  // The tool step maps codes exactly as the card does.
+  assert.equal(failedResult("token_revoked", "raw").displayText, "Slack needs to be reconnected.");
+  assert.equal(failedResult("ratelimited", "raw").displayText, "Slack is busy.");
+  assert.equal(
+    failedResult("ENOTFOUND", "raw").displayText,
+    "Couldn't reach Slack. Nothing was sent."
+  );
+  assert.equal(
+    failedResult("user_not_found", "raw").displayText,
+    "Couldn't open the direct message. Nothing was sent."
+  );
+  assert.equal(
+    failedResult("restricted_action", "raw").displayText,
+    "That channel is read-only or restricted."
+  );
+  assert.equal(
+    failedResult("credential_save_failed", "raw").displayText,
+    "Couldn't save the Slack login on this computer. Nothing was sent."
+  );
+  // The model still gets the connector's own code and message.
+  assert.deepEqual(failedResult("token_revoked", "raw").data, {
+    status: "failed",
+    errorCode: "token_revoked",
+    error: "raw",
+  });
   assert.equal(
     needsClarificationResult("Call find_contact first.").displayText,
     "Needs more details."
