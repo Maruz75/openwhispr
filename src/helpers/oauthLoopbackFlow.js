@@ -65,6 +65,10 @@ function codedError(code, message, extra = {}) {
 //   this server by the port carried in state as v1.<port>.<nonce>. An error
 //   callback then counts only with that state.
 // - timeoutMs — how long the flow waits for the provider's redirect.
+// - signal — an AbortSignal that gives the flow up (a newer attempt replaced
+//   it): the server closes and the flow rejects with code "oauth_cancelled".
+//   Once the provider has answered, the exchange finishes regardless, so a
+//   login it already issued still reaches the caller.
 function runOAuthLoopbackFlow({
   buildAuthUrl,
   handleCallback,
@@ -75,8 +79,12 @@ function runOAuthLoopbackFlow({
   renderResultPage = null,
   publicRedirectUri = null,
   timeoutMs = OAUTH_TIMEOUT_MS,
+  signal = null,
 }) {
   const connectedParam = errorParam.replace(/_error$/, "_connected");
+  if (signal?.aborted) {
+    return Promise.reject(codedError("oauth_cancelled", "OAuth flow cancelled"));
+  }
 
   return new Promise((resolve, reject) => {
     const codeVerifier = crypto.randomBytes(32).toString("base64url").slice(0, 43);
@@ -175,12 +183,26 @@ function runOAuthLoopbackFlow({
 
     const cleanup = () => {
       clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
       if (server.listening) server.close();
     };
+
+    const onAbort = () => {
+      if (callbackClaimed) return;
+      callbackClaimed = true;
+      cleanup();
+      reject(codedError("oauth_cancelled", "OAuth flow cancelled"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
 
     // One "listening" handler for the whole flow: a failed attempt on a busy
     // port must not leave behind a second one that opens another tab.
     server.once("listening", () => {
+      // Given up while binding: close without opening the browser.
+      if (callbackClaimed) {
+        server.close();
+        return;
+      }
       if (listenErrorHandler) server.off("error", listenErrorHandler);
       server.on("error", (err) => {
         cleanup();
@@ -214,7 +236,7 @@ function runOAuthLoopbackFlow({
 
     timeoutId = setTimeout(() => {
       callbackClaimed = true;
-      if (server.listening) server.close();
+      cleanup();
       reject(codedError("oauth_timeout", "OAuth flow timed out"));
     }, timeoutMs);
   });

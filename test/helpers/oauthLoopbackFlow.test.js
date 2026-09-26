@@ -557,6 +557,67 @@ test("timeoutMs bounds how long the flow waits", { timeout: 5000 }, async () => 
   await assert.rejects(started.flow, (error) => error.code === "oauth_timeout");
 });
 
+test("an abort closes the server and rejects oauth_cancelled", async () => {
+  const controller = new AbortController();
+  let callbackCount = 0;
+  const started = startFlow(
+    async () => {
+      callbackCount += 1;
+      return {};
+    },
+    { signal: controller.signal }
+  );
+  const redirectUri = await until(started.getRedirectUri);
+  const outcome = started.flow.catch((error) => error);
+
+  controller.abort();
+
+  assert.equal((await outcome).code, "oauth_cancelled");
+  assert.equal(started.server.listening, false);
+  await assert.rejects(getLocal(`${redirectUri}/?code=late&state=${started.getState()}`));
+  assert.equal(callbackCount, 0);
+});
+
+test("a flow whose signal is already aborted never opens the browser", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const started = startFlow(async () => ({}), { signal: controller.signal });
+
+  await assert.rejects(started.flow, (error) => error.code === "oauth_cancelled");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(started.getAuthUrlCalls(), 0);
+});
+
+test("an abort after the provider answered lets the exchange finish", async () => {
+  const controller = new AbortController();
+  let release;
+  let markStarted;
+  const exchangeStarted = new Promise((resolve) => {
+    markStarted = resolve;
+  });
+  const started = startFlow(
+    async (code) => {
+      markStarted();
+      await new Promise((resolve) => {
+        release = resolve;
+      });
+      return { code };
+    },
+    { signal: controller.signal }
+  );
+  const redirectUri = await until(started.getRedirectUri);
+
+  const response = getLocal(`${redirectUri}/?code=c9&state=${started.getState()}`);
+  await exchangeStarted;
+  controller.abort();
+  release();
+
+  // The caller decides what to do with a login it no longer wants; the flow
+  // never drops one the provider already issued.
+  assert.deepEqual(await started.flow, { code: "c9" });
+  assert.equal((await response).status, 302);
+});
+
 async function stillWaiting(flow) {
   return Promise.race([
     flow.then(
