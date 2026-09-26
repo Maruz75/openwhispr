@@ -139,22 +139,26 @@ function createSlackAuth({
     });
   }
 
-  function markReconnect(binding, credential) {
+  // Flags the login the binding names, and only it, as needing a reconnect:
+  // Slack said that login is gone. A reconnect or disconnect that landed
+  // first wins, and nothing is written to it.
+  function markReconnect(binding) {
+    const entry = credentials.read(binding?.ownerAccountId ?? null, "slack");
+    if (!sameLogin(entry, binding)) return { ok: false, errorCode: "connection_changed" };
     try {
       credentials.save(
         binding.ownerAccountId,
         "slack",
-        { ...credential, needsReconnect: true },
+        { ...entry.credential, needsReconnect: true },
         binding.generation
       );
     } catch (error) {
-      // A reconnect or disconnect landed first: that login, not this stale
-      // one, is the truth now.
       if (error.code === "connection_changed" || error.code === "signed_out") {
         return { ok: false, errorCode: "connection_changed" };
       }
-      // Any other write failure still leaves Slack's own answer true: the
-      // login is gone, even though the local flag could not be recorded.
+      // A real write failure (disk, permission, encryption). Slack's answer
+      // still stands: the login is gone, though the flag wasn't recorded.
+      logger?.warn("slack reconnect flag save failed", describeError(error), "connectors");
     }
     return { ok: false, errorCode: "reconnect_needed" };
   }
@@ -168,7 +172,7 @@ function createSlackAuth({
   }
 
   async function refresh(binding, credential) {
-    if (!credential.refreshToken) return markReconnect(binding, credential);
+    if (!credential.refreshToken) return markReconnect(binding);
     let result = await callRefresh(credential.refreshToken);
     // No clear answer: Slack may have rotated the token anyway. The used
     // refresh token still works for a short grace period, so ask once more.
@@ -184,7 +188,7 @@ function createSlackAuth({
         return { ok: false, errorCode: "connection_changed" };
       }
       return OAUTH_LOGIN_GONE.has(result.errorCode)
-        ? markReconnect(binding, credential)
+        ? markReconnect(binding)
         : { ok: false, errorCode: result.errorCode };
     }
     const tokens = parseUserTokens(result.data, now());
@@ -253,7 +257,7 @@ function createSlackAuth({
     };
   }
 
-  return { authorize, getAccessToken, revoke, statusOf };
+  return { authorize, getAccessToken, markReconnect, revoke, statusOf };
 }
 
 module.exports = {

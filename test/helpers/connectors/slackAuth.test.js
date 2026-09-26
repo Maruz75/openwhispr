@@ -351,6 +351,62 @@ test("a transient refresh failure during a reconnect race reports connection_cha
   assert.equal(credentials.saves.length, 0, "nothing was written to the new login");
 });
 
+test("markReconnect flags only the bound login and reports reconnect_needed", async () => {
+  const { auth, credentials, slot, slack } = await setup();
+
+  assert.deepEqual(auth.markReconnect(BINDING), { ok: false, errorCode: "reconnect_needed" });
+
+  assert.equal(slot().needsReconnect, true);
+  assert.equal(slot().accessToken, CONNECTED.accessToken, "the rest of the login is kept");
+  assert.equal(credentials.generation("acct-1", "slack"), 1, "a flag is not a new login");
+  assert.deepEqual(await auth.getAccessToken(BINDING), {
+    ok: false,
+    errorCode: "reconnect_needed",
+  });
+  assert.deepEqual(slack.calls, []);
+});
+
+test("markReconnect after a reconnect reports connection_changed and writes nothing", async () => {
+  const { auth, credentials, slot } = await setup();
+  credentials.replace(
+    "acct-1",
+    "slack",
+    { ...CONNECTED, userId: "U0OTHER", accessToken: "xoxe.xoxp-other" },
+    1
+  );
+
+  assert.deepEqual(auth.markReconnect(BINDING), { ok: false, errorCode: "connection_changed" });
+  assert.equal(slot().needsReconnect, false);
+  assert.equal(credentials.saves.length, 0);
+});
+
+test("a reconnect flag that can't be saved for a real reason is logged without the token", async () => {
+  const warnings = [];
+  const logger = { warn: (...args) => warnings.push(args) };
+  const credentials = {
+    read: () => ({ credential: EXPIRED, generation: 1 }),
+    save: () => {
+      throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+    },
+  };
+  const { auth } = await setup({
+    credentials,
+    logger,
+    script: { "oauth.v2.access": [slackError("invalid_refresh_token")] },
+  });
+
+  // Slack's answer stands even though the flag couldn't be written.
+  assert.deepEqual(await auth.getAccessToken(BINDING), {
+    ok: false,
+    errorCode: "reconnect_needed",
+  });
+  assert.deepEqual(auth.markReconnect(BINDING), { ok: false, errorCode: "reconnect_needed" });
+  assert.equal(warnings.length, 2);
+  const serialized = JSON.stringify(warnings);
+  assert.match(serialized, /ENOSPC/);
+  assert.doesNotMatch(serialized, /xoxe|no space left/);
+});
+
 test("a save failure that isn't a login race is reported as credential_save_failed and logged without the token", async () => {
   const warnings = [];
   const logger = { warn: (...args) => warnings.push(args) };

@@ -268,6 +268,117 @@ test("a reconnect while refreshing after a token refusal never sends as the new 
   );
 });
 
+const slot = (credentials) => credentials.read("acct-1", "slack").credential;
+
+test("a login Slack revoked at Send flips to Reconnect, with one post", async () => {
+  for (const code of ["token_revoked", "account_inactive", "not_authed"]) {
+    const { connector, slack, credentials } = await setupSlack({
+      ...channelsOnly,
+      "chat.postMessage": [slackError(code)],
+      "oauth.v2.access": [slackError("invalid_refresh_token")],
+    });
+    const prepared = await prepareEng(connector);
+
+    const result = await connector.commit("send_message", prepared.payload, {}, BOUND);
+
+    assert.equal(result.state, "failed", code);
+    assert.equal(result.errorCode, "reconnect_needed", code);
+    assert.equal(slot(credentials).needsReconnect, true, code);
+    assert.equal(posts(slack).length, 1, `${code}: a refused post is never repeated`);
+  }
+});
+
+test("a login Slack revoked while preparing flips to Reconnect", async () => {
+  const { connector, slack, credentials } = await setupSlack({
+    "users.conversations": [slackError("token_revoked")],
+    "oauth.v2.access": [slackError("invalid_refresh_token")],
+  });
+
+  const prepared = await connector.prepare(
+    "send_message",
+    { destination: "#eng", text: "hi" },
+    BOUND
+  );
+
+  assert.equal(prepared.status, "failed");
+  assert.equal(prepared.errorCode, "reconnect_needed");
+  assert.equal(slot(credentials).needsReconnect, true);
+  assert.deepEqual(slack.methods(), ["users.conversations", "oauth.v2.access"]);
+});
+
+test("a lookup refused for its token is asked once more after refreshing the same login", async () => {
+  const { connector, slack, credentials } = await setupSlack({
+    "users.conversations": [slackError("invalid_auth"), ok(FIXTURES.channels)],
+    "oauth.v2.access": [ok(FIXTURES.refresh)],
+  });
+
+  const prepared = await prepareEng(connector);
+
+  assert.equal(prepared.payload.target.id, "C0ENG");
+  assert.deepEqual(
+    slack.calls
+      .filter((call) => call.method === "users.conversations")
+      .map((call) => call.authorization),
+    ["Bearer xoxe.xoxp-1-test-access", "Bearer xoxe.xoxp-1-test-access-2"]
+  );
+  assert.equal(slot(credentials).needsReconnect, false);
+});
+
+test("a token refused again right after a successful refresh needs a reconnect", async () => {
+  const atSend = await setupSlack({
+    ...channelsOnly,
+    "chat.postMessage": [slackError("invalid_auth"), slackError("invalid_auth")],
+    "oauth.v2.access": [ok(FIXTURES.refresh)],
+  });
+  const prepared = await prepareEng(atSend.connector);
+
+  const sent = await atSend.connector.commit("send_message", prepared.payload, {}, BOUND);
+
+  assert.equal(sent.state, "failed");
+  assert.equal(sent.errorCode, "reconnect_needed");
+  assert.equal(slot(atSend.credentials).needsReconnect, true);
+  assert.equal(slot(atSend.credentials).accessToken, "xoxe.xoxp-1-test-access-2");
+  assert.equal(posts(atSend.slack).length, 2);
+
+  const atPrepare = await setupSlack({
+    "users.conversations": [slackError("token_revoked"), slackError("token_revoked")],
+    "oauth.v2.access": [ok(FIXTURES.refresh)],
+  });
+  const refused = await atPrepare.connector.prepare(
+    "send_message",
+    { destination: "#eng", text: "hi" },
+    BOUND
+  );
+  assert.equal(refused.status, "failed");
+  assert.equal(refused.errorCode, "reconnect_needed");
+  assert.equal(slot(atPrepare.credentials).needsReconnect, true);
+});
+
+test("a reconnect racing the reconnect flag reports connection_changed and leaves the new login alone", async () => {
+  let credentials;
+  const setup = await setupSlack({
+    ...channelsOnly,
+    "chat.postMessage": [
+      slackError("invalid_auth"),
+      {
+        ...slackError("invalid_auth"),
+        during: () => credentials.replace("acct-1", "slack", BOB, 1),
+      },
+    ],
+    "oauth.v2.access": [ok(FIXTURES.refresh)],
+  });
+  credentials = setup.credentials;
+  const prepared = await prepareEng(setup.connector);
+
+  const result = await setup.connector.commit("send_message", prepared.payload, {}, BOUND);
+
+  assert.equal(result.state, "failed");
+  assert.equal(result.errorCode, "connection_changed");
+  assert.deepEqual(slot(credentials), BOB, "nothing was written to the new login");
+  assert.equal(credentials.saves.length, 1, "only the old login's refresh was saved");
+  assert.equal(posts(setup.slack).length, 2);
+});
+
 test("a short 429 is retried once and posts once", async () => {
   const { connector, slack } = await setupSlack({
     ...channelsOnly,

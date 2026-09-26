@@ -3,8 +3,16 @@ const { isValidEmailAddress } = require("./emailCompose");
 
 // markdown_text's documented limit, applied to what Slack receives.
 const SLACK_MESSAGE_LIMIT = 12000;
-// Slack refused the token, so it did nothing: refresh and repeat once.
-const RETRY_AFTER_REFRESH = new Set(["token_expired", "invalid_auth", "http_401"]);
+// Slack refused the token, so it did nothing: refresh and repeat once. A
+// revoked login fails that refresh, which flags it for a reconnect.
+const RETRY_AFTER_REFRESH = new Set([
+  "token_expired",
+  "invalid_auth",
+  "http_401",
+  "token_revoked",
+  "account_inactive",
+  "not_authed",
+]);
 // Plan Task 3: whether markdown_text turns <!here>, <@U…> and <url> into
 // mentions and links.
 const SLACK_ESCAPE_SPECIALS = true;
@@ -45,6 +53,7 @@ function failureMessage(errorCode, label = "", fallback = "Slack didn't accept t
     case "token_revoked":
     case "invalid_auth":
     case "account_inactive":
+    case "not_authed":
       return "Slack needs to be reconnected in Settings.";
     case "connection_changed":
       return "The Slack connection changed before sending, so nothing was sent.";
@@ -141,6 +150,11 @@ function createSlackConnector({ api, auth, directory, credentials }) {
     return { clarify: clarify(`Couldn't find ${where} in Slack. Ask the user where to send it.`) };
   }
 
+  // Slack refusing a token it just issued means the login itself is gone.
+  function refusedAgain(binding) {
+    return { ok: false, outcome: "failed", errorCode: auth.markReconnect(binding).errorCode };
+  }
+
   // A write Slack refused for its token did nothing, so it is the one write
   // that may be repeated: once, after refreshing the login the action is
   // bound to. Never whichever login is current.
@@ -151,10 +165,23 @@ function createSlackConnector({ api, auth, directory, credentials }) {
     if (!refreshed.ok) {
       return { result: { ok: false, outcome: "failed", errorCode: refreshed.errorCode }, access };
     }
-    return {
-      result: await api.call(method, params, { token: refreshed.token }),
-      access: refreshed,
-    };
+    const second = await api.call(method, params, { token: refreshed.token });
+    if (!second.ok && RETRY_AFTER_REFRESH.has(second.errorCode)) {
+      return { result: refusedAgain(binding), access: refreshed };
+    }
+    return { result: second, access: refreshed };
+  }
+
+  // Lookups only read, but a refused token gets the same treatment: one
+  // more try after refreshing the bound login, then a reconnect.
+  async function findTargetWithRefresh(parsed, binding, access, cacheKey) {
+    const first = await findTarget(parsed, access.token, cacheKey);
+    if (!RETRY_AFTER_REFRESH.has(first.error)) return first;
+    const refreshed = await auth.getAccessToken(binding, { forceRefresh: true });
+    if (!refreshed.ok) return { error: refreshed.errorCode };
+    const second = await findTarget(parsed, refreshed.token, cacheKey);
+    if (!RETRY_AFTER_REFRESH.has(second.error)) return second;
+    return { error: refusedAgain(binding).errorCode };
   }
 
   return {
@@ -197,9 +224,14 @@ function createSlackConnector({ api, auth, directory, credentials }) {
           failureMessage(access.errorCode, "", "Couldn't reach Slack. Try again.")
         );
       }
-      const { token, credential } = access;
+      const { credential } = access;
       const cacheKey = `${binding.ownerAccountId}:${credential.teamId}:${credential.userId}:${binding.generation}`;
-      const found = await findTarget(parseDestination(destination), token, cacheKey);
+      const found = await findTargetWithRefresh(
+        parseDestination(destination),
+        binding,
+        access,
+        cacheKey
+      );
       if (found.clarify) return found.clarify;
       if (found.error) {
         return prepareFailed(
