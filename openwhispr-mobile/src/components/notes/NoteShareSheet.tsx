@@ -4,19 +4,20 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  PlatformColor,
   ScrollView,
+  TextInput,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { GlassIconButton } from '@/components/ui/GlassIconButton';
-import { Input } from '@/components/ui/Input';
 import { SystemIcon } from '@/components/ui/SystemIcon';
 import { INVALID_EMAIL_ERROR, useNoteSharing } from '@/hooks/useNoteSharing';
 import { useSuperwallGate } from '@/hooks/useSuperwallGate';
 import { SUPERWALL_PLACEMENTS } from '@/lib/superwall';
+import { AppFont } from '@/lib/fonts';
+import { iosColor } from '@/config/colors';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useNotesStore } from '@/store/useNotesStore';
 import { useUsageStore } from '@/store/useUsageStore';
@@ -35,6 +36,8 @@ export interface NoteShareSheetProps {
   onFlushDraft: () => void;
   onExport: (format: 'md' | 'txt') => void;
 }
+
+const PLACEHOLDER_COLOR = iosColor('tertiaryLabel');
 
 const VISIBILITY_REACH: Record<ShareVisibility, number> = {
   private: 0,
@@ -465,12 +468,12 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
                   <View className="gap-2">
                     {sectionLabel('Invite by email')}
                     <View className="flex-row items-center gap-2">
-                      <Input
+                      <TextInput
                         accessibilityLabel="Email address"
-                        containerClassName="min-w-0 flex-1"
-                        className="border-separator bg-secondarySystemGroupedBackground px-3 text-label"
+                        className="h-12 min-w-0 flex-1 rounded-[10px] bg-tertiarySystemFill px-3 text-[15px] text-label"
+                        style={{ fontFamily: AppFont.regular }}
                         placeholder="name@example.com"
-                        placeholderTextColor={PlatformColor('tertiaryLabel') as unknown as string}
+                        placeholderTextColor={PLACEHOLDER_COLOR}
                         autoCapitalize="none"
                         autoCorrect={false}
                         autoComplete="email"
