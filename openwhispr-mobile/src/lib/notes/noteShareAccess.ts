@@ -4,6 +4,11 @@ export function isGroupPrincipal(type: NoteAccessGrant['principal']['type']): bo
   return type === 'team' || type === 'folder' || type === 'workspace';
 }
 
+/** A synthetic row for team-space or workspace membership, which is managed where it comes from. */
+export function isScopeGrant(grant: NoteAccessGrant): boolean {
+  return grant.id.startsWith('scope:');
+}
+
 /**
  * The server marks every stored group grant `inherited`; only synthetic `scope:` rows (space or
  * workspace membership) are read-only. Stored group grants need inherited-access management.
@@ -14,12 +19,12 @@ export function canChangeGrant(
 ): boolean {
   return Boolean(
     access?.can_manage_access &&
-      !grant.id.startsWith('scope:') &&
+      !isScopeGrant(grant) &&
       (!grant.inherited || access.can_manage_inherited_access),
   );
 }
 
 /** Private visibility suspends every stored grant and invitation; scope membership still applies. */
 export function isPausedBySharingOff(grant: NoteAccessGrant): boolean {
-  return !grant.id.startsWith('scope:');
+  return !isScopeGrant(grant);
 }

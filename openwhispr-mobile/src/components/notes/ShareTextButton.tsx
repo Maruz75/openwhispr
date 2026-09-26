@@ -11,7 +11,7 @@ interface ShareTextButtonProps {
   accessibilityLabel?: string;
 }
 
-/** A text action for the share sheet with the 44pt minimum touch height. */
+/** A text action for the share sheet with a 44pt minimum touch target. */
 export function ShareTextButton({
   label,
   onPress,
@@ -33,7 +33,7 @@ export function ShareTextButton({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: inactive, ...(selected === undefined ? {} : { selected }) }}
-      className="min-h-[44px] justify-center"
+      className="min-h-[44px] min-w-[44px] justify-center active:opacity-70"
       disabled={inactive}
       onPress={onPress}
     >

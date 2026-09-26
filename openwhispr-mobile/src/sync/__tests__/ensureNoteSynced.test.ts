@@ -23,6 +23,7 @@ jest.mock('@/data', () => ({
   },
   spacesRepository: { listSpaces: jest.fn(() => []) },
 }));
+jest.mock('expo-network', () => ({ getNetworkStateAsync: jest.fn() }));
 const mockListeners = new Set<(hasQueuedRun: boolean) => void>();
 jest.mock('../syncEngine', () => ({
   requestSync: jest.fn(),
@@ -33,6 +34,7 @@ jest.mock('../syncEngine', () => ({
     };
   },
 }));
+import * as Network from 'expo-network';
 import { notesRepository, spacesRepository } from '@/data';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useNotesStore } from '@/store/useNotesStore';
@@ -50,6 +52,9 @@ beforeEach((): void => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   jest.mocked(notesRepository.getSyncState).mockReturnValue(null);
+  jest
+    .mocked(Network.getNetworkStateAsync)
+    .mockResolvedValue({ isConnected: true } as Network.NetworkState);
   note = {
     id: 1,
     clientNoteId: 'client',
@@ -172,7 +177,45 @@ it('does not apply the personal subscription gate to a synced team note', async 
   complete();
   await expect(pending).resolves.toBe('team-note');
 });
-it('rejects after a bounded offline wait and unsubscribes', async (): Promise<void> => {
+it('rejects promptly once a finished pass leaves the note unsynced while offline', async (): Promise<void> => {
+  jest
+    .mocked(Network.getNetworkStateAsync)
+    .mockResolvedValue({ isConnected: false } as Network.NetworkState);
+  const pending = ensureNoteSynced(1, { signal: controller.signal });
+  // A failed subscription check is how an offline pass looks to the sync store.
+  useSyncStore.getState().set({ subscriptionRequired: true });
+  complete();
+  await expect(pending).rejects.toThrow(/offline/i);
+});
+it('waits for the network answer before judging a finished pass', async (): Promise<void> => {
+  jest
+    .mocked(Network.getNetworkStateAsync)
+    .mockResolvedValue({ isConnected: false } as Network.NetworkState);
+  const pending = ensureNoteSynced(1, { signal: controller.signal });
+  useSyncStore.getState().set({ subscriptionRequired: true });
+  complete();
+  // An unrelated store update lands before the OS answers.
+  useNotesStore.setState({ notes: [] });
+  await expect(pending).rejects.toThrow(/offline/i);
+});
+it('judges a pass as online when the network state is unavailable', async (): Promise<void> => {
+  jest.mocked(Network.getNetworkStateAsync).mockRejectedValue(new Error('unavailable'));
+  const pending = ensureNoteSynced(1, { signal: controller.signal });
+  useSyncStore.getState().set({ subscriptionRequired: true });
+  complete();
+  await expect(pending).rejects.toThrow(/subscription/i);
+});
+it('points personal notes at the Cloud Backup setting when it is off', async (): Promise<void> => {
+  useConfigStore.setState({
+    config: { cloudBackupEnabled: false } as NonNullable<
+      ReturnType<typeof useConfigStore.getState>['config']
+    >,
+  });
+  await expect(ensureNoteSynced(1, { signal: controller.signal })).rejects.toThrow(
+    /Privacy & Data/,
+  );
+});
+it('rejects after a bounded wait and unsubscribes', async (): Promise<void> => {
   const pending = ensureNoteSynced(1, { signal: controller.signal, timeoutMs: 30 });
   jest.advanceTimersByTime(30);
   await expect(pending).rejects.toThrow(/sync.*try again/i);

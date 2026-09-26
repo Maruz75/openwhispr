@@ -11,6 +11,7 @@ import { useNotesStore } from '@/store/useNotesStore';
 import * as api from '@/data/remote/noteSharingApi';
 import type {
   ExternalSharingMode,
+  ShareSettings,
   ShareStateResponse,
   ShareVisibility,
   NoteAccessGrant,
@@ -24,7 +25,7 @@ import {
   saveNoteShareToken,
   removeNoteShareToken,
 } from '@/lib/notes/noteShareTokens';
-import { canChangeGrant, isGroupPrincipal } from '@/lib/notes/noteShareAccess';
+import { canChangeGrant, isGroupPrincipal, isScopeGrant } from '@/lib/notes/noteShareAccess';
 import { ensureNoteSynced } from '@/sync/ensureNoteSynced';
 import { requestSync } from '@/sync/syncEngine';
 
@@ -43,6 +44,7 @@ export interface NoteSharingController {
   note: Note | undefined;
   user: AuthUser | null;
   refresh: () => Promise<void>;
+  dismissError: () => void;
   setVisibility: (visibility: ShareVisibility, domainAllowlist?: string[]) => Promise<void>;
   replaceLink: () => Promise<void>;
   copyLink: () => Promise<void>;
@@ -76,6 +78,9 @@ interface RunOptions {
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const INVALID_EMAIL_ERROR = 'Enter a valid email address.';
+
+const GENERIC_ERROR = 'Unable to update sharing. Please try again.';
 
 const ERROR_MESSAGES: Record<string, string> = {
   POLICY_SHARING_BLOCKED: 'Sharing is restricted by your organization.',
@@ -94,8 +99,21 @@ function sharingError(error: unknown): string {
     if (known) return known;
     if (error.status === 401) return 'Your session has expired. Sign in again to manage sharing.';
     if (error.status === 409) return 'Sharing settings changed. Refresh and try again.';
+    // Validation messages (an invalid email, a personal domain) are written for people.
+    if (error.status === 400 || error.status === 426) return error.message;
+    return GENERIC_ERROR;
   }
-  return error instanceof Error ? error.message : 'Unable to update sharing. Please try again.';
+  // expo/fetch rejects with a FetchError (not exported) when the request never reaches the server.
+  if (error instanceof Error && error.message.startsWith('fetch failed'))
+    return 'Can’t reach OpenWhispr. Check your connection and try again.';
+  return error instanceof Error ? error.message : GENERIC_ERROR;
+}
+
+function sameSettings(left: ShareSettings, right: ShareSettings): boolean {
+  return (
+    left.visibility === right.visibility &&
+    left.domain_allowlist.join(',') === right.domain_allowlist.join(',')
+  );
 }
 
 /** The cloud copy whose settings can load; private notes still load to manage an old link. */
@@ -142,51 +160,62 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
   const generation = useRef(0);
   const previousIdentity = useRef<{ userId: string; remoteId: string } | null>(null);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    if (operation.current) return;
-    loadRequest.current?.abort();
-    const controller = new AbortController();
-    loadRequest.current = controller;
-    const version = generation.current;
-    const local = notesRepository.getNoteById(noteId);
-    const valid = (): boolean =>
-      !controller.signal.aborted &&
-      version === generation.current &&
-      useAuthStore.getState().user?.id === user?.id &&
-      useAuthStore.getState().sessionCookie === cookie &&
-      notesRepository.getNoteById(noteId)?.remoteId === local?.remoteId &&
-      notesRepository.getNoteById(noteId)?.isPrivate === local?.isPrivate;
-    setState(null);
-    setError(null);
-    setHasToken(false);
-    const remoteId = loadableRemoteId(user, local);
-    if (!user || !remoteId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const timer = setTimeout(() => {
-      controller.abort();
-      if (loadRequest.current === controller) {
-        setLoading(false);
-        setError('Sharing settings timed out. Check your connection and retry.');
+  /** A silent refresh keeps the current settings on screen and only replaces them on success. */
+  const refresh = useCallback(
+    async (silent?: boolean): Promise<void> => {
+      // A quiet refresh must not replace a load in flight, which would hide that load's error.
+      if (operation.current || (silent && loadRequest.current)) return;
+      loadRequest.current?.abort();
+      const controller = new AbortController();
+      loadRequest.current = controller;
+      const version = generation.current;
+      const local = notesRepository.getNoteById(noteId);
+      const valid = (): boolean =>
+        !controller.signal.aborted &&
+        version === generation.current &&
+        useAuthStore.getState().user?.id === user?.id &&
+        useAuthStore.getState().sessionCookie === cookie &&
+        notesRepository.getNoteById(noteId)?.remoteId === local?.remoteId &&
+        notesRepository.getNoteById(noteId)?.isPrivate === local?.isPrivate;
+      const remoteId = loadableRemoteId(user, local);
+      if (!silent || !user || !remoteId) {
+        setState(null);
+        setError(null);
+        setHasToken(false);
       }
-    }, 30_000);
-    controller.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
-    try {
-      const current = await api.getNoteShareState(remoteId, { signal: controller.signal });
-      if (!valid()) return;
-      const token = local?.isPrivate === 1 ? null : await loadToken(user.id, remoteId, current);
-      if (!valid()) return;
-      setState(current);
-      setHasToken(Boolean(token));
-    } catch (failure) {
-      if (valid()) setError(sharingError(failure));
-    } finally {
-      clearTimeout(timer);
-      if (loadRequest.current === controller) setLoading(false);
-    }
-  }, [user, cookie, noteId]);
+      if (!user || !remoteId) {
+        setLoading(false);
+        return;
+      }
+      if (!silent) setLoading(true);
+      const timer = setTimeout(() => {
+        controller.abort();
+        if (loadRequest.current === controller) {
+          setLoading(false);
+          if (!silent) setError('Sharing settings timed out. Check your connection and retry.');
+        }
+      }, 30_000);
+      controller.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
+      try {
+        const current = await api.getNoteShareState(remoteId, { signal: controller.signal });
+        if (!valid()) return;
+        const token = local?.isPrivate === 1 ? null : await loadToken(user.id, remoteId, current);
+        if (!valid()) return;
+        setState(current);
+        setError(null);
+        setHasToken(Boolean(token));
+      } catch (failure) {
+        if (valid() && !silent) setError(sharingError(failure));
+      } finally {
+        clearTimeout(timer);
+        if (loadRequest.current === controller) {
+          loadRequest.current = null;
+          setLoading(false);
+        }
+      }
+    },
+    [user, cookie, noteId],
+  );
 
   useEffect(() => {
     generation.current += 1;
@@ -196,8 +225,9 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
     setCancellable(false);
     setMessage(null);
     refresh();
+    // Returning from the share sheet or browser must not blank the sheet or drop a search.
     const subscription = AppState.addEventListener('change', (next) => {
-      if (next === 'active') refresh();
+      if (next === 'active') refresh(true);
     });
     return (): void => {
       generation.current += 1;
@@ -223,12 +253,9 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
 
   useEffect(() => {
     const previous = previousIdentity.current;
-    if (
-      previous &&
-      (previous.userId !== user?.id ||
-        previous.remoteId !== note?.remoteId ||
-        note?.isPrivate === 1)
-    ) {
+    // Stored links survive sign-out and account switches; they are only dropped for this account.
+    if (previous && previous.userId !== user?.id) setHasToken(false);
+    else if (previous && (previous.remoteId !== note?.remoteId || note?.isPrivate === 1)) {
       removeNoteShareToken(previous.userId, previous.remoteId).catch(() => undefined);
       setHasToken(false);
     }
@@ -365,9 +392,8 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
   };
   const sendUrl = async (context: SharingOperation, url: string): Promise<void> => {
     context.release();
-    await Share.share(
-      Platform.OS === 'ios' ? { url, title: note?.title } : { message: url, title: note?.title },
-    );
+    const title = note?.title || 'Untitled';
+    await Share.share(Platform.OS === 'ios' ? { url, title } : { message: url, title });
   };
   const remember = async (context: SharingOperation, token: string): Promise<void> => {
     context.check();
@@ -382,7 +408,7 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
   ): Promise<void> => {
     // Compare-and-set against what the sheet showed, so a restricted share changed elsewhere (or
     // unknown locally) is never widened by a tap that was meant for different settings.
-    const shown = state?.share.visibility ?? 'private';
+    const shown = state?.share;
     await run(
       async (context) => {
         if (visibility === 'private') {
@@ -396,7 +422,11 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
           requestSync('manual');
           return;
         }
-        if (context.current.share.visibility !== shown)
+        if (
+          shown
+            ? !sameSettings(context.current.share, shown)
+            : context.current.share.visibility !== 'private'
+        )
           throw new Error('Sharing settings changed. Review them and try again.');
         const result = await context.mutate(() =>
           api.setNoteShareVisibility(context.remoteId, visibility, domainAllowlist, {
@@ -440,6 +470,27 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
     );
   };
 
+  // The server mints a first invitation's link without returning it, so mint it here to keep the
+  // full link; otherwise switching to a link share later could only replace it, breaking the emails.
+  // Lifting a private note restores paused access, so only do it when there is none to restore:
+  // the server lifts only after validating the invitation, and a rejected one must not reopen it.
+  const ensureFullLink = async (context: SharingOperation): Promise<void> => {
+    const { share, access, invitations } = context.current;
+    if (
+      share.visibility !== 'private' ||
+      access.grants.some((grant) => !isScopeGrant(grant)) ||
+      invitations.some((invite) => !invite.revoked_at && !invite.accepted_at)
+    )
+      return;
+    const result = await context.mutate(() =>
+      api.setNoteShareVisibility(context.remoteId, 'invited', [], { signal: context.signal }),
+    );
+    context.check();
+    setState({ ...context.current, share: result.share });
+    requestSync('manual');
+    if (result.raw_token) await remember(context, result.raw_token);
+  };
+
   const linkFor = async (context: SharingOperation): Promise<string> => {
     const { share } = context.current;
     if (share.visibility === 'invited' && share.token_prefix) {
@@ -473,7 +524,7 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
     const email = input.trim().toLowerCase();
     if (!EMAIL_PATTERN.test(email)) {
       setMessage(null);
-      setError('Enter a valid email address.');
+      setError(INVALID_EMAIL_ERROR);
       return false;
     }
     return run(
@@ -488,6 +539,7 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
         ) {
           throw new Error('This person already has access or an invitation.');
         }
+        await ensureFullLink(context);
         await context.mutate(() =>
           api.createNoteAccessGrant(
             context.remoteId,
@@ -522,6 +574,7 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
         ) {
           throw new Error('You do not have permission to manage group access.');
         }
+        await ensureFullLink(context);
         await context.mutate(() =>
           api.createNoteAccessGrant(
             context.remoteId,
@@ -548,7 +601,7 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
       const fresh = context.current.access.grants.find((item) => item.id === grant.id);
       if (!fresh) throw new Error('Access changed. Refresh and try again.');
       if (!canChangeGrant(context.current.access, fresh)) {
-        if (fresh.id.startsWith('scope:'))
+        if (isScopeGrant(fresh))
           throw new Error('Inherited access is managed in its team or space.');
         throw new Error('You do not have permission to change inherited access.');
       }
@@ -605,7 +658,8 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
     sharingMode,
     note,
     user,
-    refresh,
+    refresh: (): Promise<void> => refresh(),
+    dismissError: (): void => setError(null),
     setVisibility,
     replaceLink,
     copyLink: (): Promise<void> => sendLink('copy'),

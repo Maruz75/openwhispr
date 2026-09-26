@@ -1,11 +1,20 @@
-import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, TextInput, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  PlatformColor,
+  ScrollView,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { GlassIconButton } from '@/components/ui/GlassIconButton';
+import { Input } from '@/components/ui/Input';
 import { SystemIcon } from '@/components/ui/SystemIcon';
-import { useNoteSharing } from '@/hooks/useNoteSharing';
+import { INVALID_EMAIL_ERROR, useNoteSharing } from '@/hooks/useNoteSharing';
 import { useSuperwallGate } from '@/hooks/useSuperwallGate';
 import { SUPERWALL_PLACEMENTS } from '@/lib/superwall';
 import { useConfigStore } from '@/store/useConfigStore';
@@ -41,6 +50,13 @@ const VISIBILITY_LABEL: Record<ShareVisibility, string> = {
   invited: 'Invited people',
 };
 
+/** Announces each new message to VoiceOver. */
+function useAnnouncement(text: string | null): void {
+  useEffect(() => {
+    if (text) AccessibilityInfo.announceForAccessibility(text);
+  }, [text]);
+}
+
 export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: NoteShareSheetProps) {
   const sharing = useNoteSharing(noteId, onFlushDraft);
   const router = useRouter();
@@ -59,8 +75,12 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
   const signedOut = !sharing.user || sharing.user.isAnonymous;
   const privateNote = note?.isPrivate === 1;
   const isTeamNote = spaces.some((space) => space.id === note?.spaceId && space.kind === 'team');
+  // With backup off, an uploaded note's existing sharing stays manageable, but nothing that
+  // needs a fresh upload (new links, invitations, visibility changes) can succeed.
+  const backupOff = !cloudBackupEnabled && !isTeamNote;
+  const localOnly = privateNote || (backupOff && !note?.remoteId);
   const unknown = Boolean(
-    note?.remoteId && !sharing.state && !sharing.loading && !privateNote && !signedOut,
+    note?.remoteId && !sharing.state && !sharing.loading && !localOnly && !signedOut,
   );
   const canManage = sharing.state?.access.can_manage_access !== false;
   const visibility = sharing.state?.share.visibility;
@@ -69,6 +89,10 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
   // Uploading a personal note is what needs Pro; a note already in the cloud stays manageable.
   const upgradeRequired =
     (usage ? !usage.isSubscribed : subscriptionRequired) && !isTeamNote && !note?.remoteId;
+  // New edits to a note already in the cloud still need Pro to sync before they can be shared.
+  const editsNeedPro =
+    (usage ? !usage.isSubscribed : subscriptionRequired) && !isTeamNote && Boolean(note?.remoteId);
+  const managed = !signedOut && !localOnly && !upgradeRequired && !sharing.loading && !unknown;
   const allowed = (target: ShareVisibility): boolean =>
     isShareVisibilityAllowed(sharing.sharingMode, target);
   const offered = (target: ShareVisibility): boolean => visibility === target || allowed(target);
@@ -77,6 +101,13 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
   const closable = !sharing.busy || sharing.cancellable;
   const close = (): void => {
     if (closable) onClose();
+  };
+  useAnnouncement(sharing.error);
+  useAnnouncement(privacyError);
+  useAnnouncement(sharing.message);
+  const openPrivacySettings = (): void => {
+    onClose();
+    router.push('/(account)/privacy');
   };
 
   const changeVisibility = (target: ShareVisibility): void => {
@@ -142,10 +173,8 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
             setPrivacyError(null);
             try {
               await setNotePrivacy(noteId, false);
-            } catch (error) {
-              setPrivacyError(
-                error instanceof Error ? error.message : 'Unable to enable cloud sync.',
-              );
+            } catch {
+              setPrivacyError('Unable to enable cloud sync. Try again.');
             }
           },
         },
@@ -183,6 +212,42 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
     }).catch(() => {});
   };
 
+  // In the sharing view, feedback sits next to the controls that trigger it rather than below the list.
+  const feedback: ReactNode = (
+    <>
+      {sharing.error && !unknown && !(privateNote && note?.remoteId) && (
+        <View className="gap-1">
+          <Text accessibilityRole="alert" className="text-systemRed">
+            {sharing.error}
+          </Text>
+          <View className="flex-row flex-wrap gap-x-6">
+            {managed && editsNeedPro && (
+              <ShareTextButton label="Upgrade to Pro" onPress={upgrade} />
+            )}
+            {managed && note?.remoteId && (
+              <ShareTextButton
+                label="Refresh"
+                accessibilityLabel="Refresh sharing settings"
+                disabled={sharing.busy}
+                onPress={() => sharing.refresh()}
+              />
+            )}
+          </View>
+        </View>
+      )}
+      {privacyError && (
+        <Text accessibilityRole="alert" className="text-systemRed">
+          {privacyError}
+        </Text>
+      )}
+      {sharing.message && (
+        <Text accessibilityRole="alert" className="text-secondaryLabel">
+          {sharing.message}
+        </Text>
+      )}
+    </>
+  );
+
   const sectionLabel = (label: string): ReactNode => (
     <Text className="px-1 text-[13px] uppercase tracking-wider text-secondaryLabel">{label}</Text>
   );
@@ -191,7 +256,9 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
       <View className="flex-1 bg-systemBackground">
         <View className="flex-row items-center justify-between px-6 pb-4 pt-8">
-          <Text className="text-[22px] font-bold text-label">Share note</Text>
+          <Text accessibilityRole="header" className="text-[22px] font-bold text-label">
+            Share note
+          </Text>
           {closable && (
             <GlassIconButton onPress={close} accessibilityLabel="Close share sheet">
               <SystemIcon name="xmark" mdName="X" size={15} color="secondaryLabel" />
@@ -221,11 +288,11 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
                 }}
               />
             </View>
-          ) : privateNote ? (
+          ) : localOnly ? (
             <View className="gap-3">
               <Text className="text-secondaryLabel">
-                {!cloudBackupEnabled && !isTeamNote
-                  ? 'Cloud backup is off. Turn it on in Settings before sharing this note.'
+                {backupOff
+                  ? 'Cloud backup is off. Turn it on in Privacy & Data to share personal notes.'
                   : 'Enable cloud sync for this note before sharing.'}
               </Text>
               {note?.remoteId && !sharing.loading && (
@@ -259,14 +326,11 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
                   onPress={() => changeVisibility('private')}
                 />
               )}
-              {!cloudBackupEnabled && !isTeamNote ? (
+              {backupOff ? (
                 <ShareTextButton
                   label="Open privacy settings"
                   disabled={sharing.busy}
-                  onPress={() => {
-                    onClose();
-                    router.push('/(account)/privacy');
-                  }}
+                  onPress={openPrivacySettings}
                 />
               ) : (
                 <ShareTextButton
@@ -276,19 +340,6 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
                   onPress={enableCloudSync}
                 />
               )}
-            </View>
-          ) : !cloudBackupEnabled && !isTeamNote && !note?.remoteId ? (
-            <View className="gap-3">
-              <Text className="text-secondaryLabel">
-                Cloud backup is off. Turn it on in Settings to share personal notes.
-              </Text>
-              <ShareTextButton
-                label="Open privacy settings"
-                onPress={() => {
-                  onClose();
-                  router.push('/(account)/privacy');
-                }}
-              />
             </View>
           ) : upgradeRequired ? (
             <View className="gap-3">
@@ -311,6 +362,19 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
             </View>
           ) : (
             <>
+              {backupOff && (
+                <View className="gap-1">
+                  <Text className="text-secondaryLabel">
+                    Cloud backup is off. Turn it on in Privacy & Data to change who this note is
+                    shared with.
+                  </Text>
+                  <ShareTextButton
+                    label="Open privacy settings"
+                    disabled={sharing.busy}
+                    onPress={openPrivacySettings}
+                  />
+                </View>
+              )}
               {sectionLabel('General access')}
               <GroupedList dividerInset={16}>
                 <GroupedList.Row>
@@ -326,7 +390,7 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
                   )}
                 </GroupedList.Row>
               </GroupedList>
-              {canManage && (
+              {canManage && !backupOff && (
                 <View className="gap-2">
                   {sharing.sharingMode === 'domain_only' && (
                     <Text className="text-[13px] text-secondaryLabel">
@@ -385,36 +449,51 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
                       The full link is unavailable on this device.
                     </Text>
                   )}
-                  <ShareTextButton
-                    label="Replace link"
-                    disabled={sharing.busy}
-                    onPress={replaceLink}
-                  />
-                </View>
-              )}
-              {canManage && allowed('invited') && (sharing.state || !note?.remoteId) && (
-                <View className="gap-2">
-                  {sectionLabel('Invite by email')}
-                  <View className="flex-row items-center gap-2">
-                    <TextInput
-                      accessibilityLabel="Email address"
-                      className="min-w-0 flex-1 rounded-lg border border-separator bg-secondarySystemGroupedBackground px-3 py-2 text-label"
-                      placeholder="name@example.com"
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                      value={email}
-                      onChangeText={setEmail}
-                      onSubmitEditing={invite}
-                    />
+                  {!backupOff && (
                     <ShareTextButton
-                      label="Invite"
-                      accessibilityLabel="Invite email"
-                      disabled={sharing.busy || !email.trim()}
-                      onPress={invite}
+                      label="Replace link"
+                      disabled={sharing.busy}
+                      onPress={replaceLink}
                     />
-                  </View>
+                  )}
                 </View>
               )}
+              {canManage &&
+                !backupOff &&
+                allowed('invited') &&
+                (sharing.state || !note?.remoteId) && (
+                  <View className="gap-2">
+                    {sectionLabel('Invite by email')}
+                    <View className="flex-row items-center gap-2">
+                      <Input
+                        accessibilityLabel="Email address"
+                        containerClassName="min-w-0 flex-1"
+                        className="border-separator bg-secondarySystemGroupedBackground px-3 text-label"
+                        placeholder="name@example.com"
+                        placeholderTextColor={PlatformColor('tertiaryLabel') as unknown as string}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        autoComplete="email"
+                        textContentType="emailAddress"
+                        keyboardType="email-address"
+                        returnKeyType="send"
+                        value={email}
+                        onChangeText={(value) => {
+                          setEmail(value);
+                          if (sharing.error === INVALID_EMAIL_ERROR) sharing.dismissError();
+                        }}
+                        onSubmitEditing={invite}
+                      />
+                      <ShareTextButton
+                        label="Invite"
+                        accessibilityLabel="Invite email"
+                        disabled={sharing.busy || !email.trim()}
+                        onPress={invite}
+                      />
+                    </View>
+                  </View>
+                )}
+              {feedback}
               {sharing.state && (
                 <NoteShareAccessList
                   key={`${sharing.user?.id}:${note?.remoteId}`}
@@ -424,7 +503,9 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
                   paused={visibility === 'private'}
                   canInvite={allowed('invited')}
                   busy={sharing.busy}
-                  onAddPrincipal={(principal) => sharing.addPrincipal(principal)}
+                  onAddPrincipal={
+                    backupOff ? undefined : (principal) => sharing.addPrincipal(principal)
+                  }
                   onUpdateGrant={(grant, permission) => sharing.updateGrant(grant, permission)}
                   onRemoveGrant={(grant) => sharing.removeGrant(grant)}
                   onRevokeInvitation={(invitation) => sharing.revokeInvitation(invitation)}
@@ -441,21 +522,7 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
               )}
             </>
           )}
-          {sharing.error && !unknown && !(privateNote && note?.remoteId) && (
-            <Text accessibilityRole="alert" className="text-systemRed">
-              {sharing.error}
-            </Text>
-          )}
-          {privacyError && (
-            <Text accessibilityRole="alert" className="text-systemRed">
-              {privacyError}
-            </Text>
-          )}
-          {sharing.message && (
-            <Text accessibilityRole="alert" className="text-secondaryLabel">
-              {sharing.message}
-            </Text>
-          )}
+          {!managed && feedback}
           <View className="gap-2">
             {sectionLabel('Export')}
             <GroupedList dividerInset={16}>

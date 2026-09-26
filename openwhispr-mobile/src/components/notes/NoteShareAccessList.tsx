@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
-import { TextInput, View } from 'react-native';
+import { Alert, View } from 'react-native';
+import { SearchField } from '@/components/ui/SearchField';
 import { Text } from '@/components/ui/Text';
 import { searchNoteAccessPrincipals } from '@/data/remote/noteSharingApi';
+import { confirmDestructive } from '@/lib/alerts';
 import type {
   AccessPrincipalSuggestion,
   NoteAccessGrant,
+  NoteAccessPrincipalType,
   NoteAccessState,
   NoteShareInvitation,
 } from '@/data/remote/noteSharingTypes';
@@ -12,9 +15,37 @@ import {
   canChangeGrant,
   isGroupPrincipal,
   isPausedBySharingOff,
+  isScopeGrant,
 } from '@/lib/notes/noteShareAccess';
 import { GroupedList } from './GroupedList';
 import { ShareTextButton } from './ShareTextButton';
+
+const PRINCIPAL_LABEL: Record<NoteAccessPrincipalType, string> = {
+  user: 'Person',
+  email: 'Email',
+  team: 'Team',
+  space: 'Team space',
+  folder: 'Folder',
+  workspace: 'Workspace',
+};
+
+function grantDetail(grant: NoteAccessGrant): string {
+  if (isScopeGrant(grant) && grant.source !== 'direct')
+    return `Inherited from ${PRINCIPAL_LABEL[grant.source].toLowerCase()}`;
+  // Stored group grants are flagged inherited because their members inherit them.
+  return isGroupPrincipal(grant.principal.type) ? PRINCIPAL_LABEL[grant.principal.type] : 'Direct';
+}
+
+function confirmEditor(name: string, onConfirm: () => void): void {
+  Alert.alert(
+    `Make ${name} an editor?`,
+    'Editors can change this note and manage who it is shared with.',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Make editor', onPress: onConfirm },
+    ],
+  );
+}
 
 interface NoteShareAccessListProps {
   remoteId?: string;
@@ -104,14 +135,14 @@ export function NoteShareAccessList({
       )}
       {access.can_manage_access && canInvite && remoteId && onAddPrincipal && (
         <View className="gap-2">
-          <TextInput
-            accessibilityLabel="Find people or groups"
-            className="rounded-lg border border-separator bg-secondarySystemGroupedBackground px-3 py-2 text-label"
-            placeholder="Find people or groups"
-            autoCapitalize="none"
-            value={query}
-            onChangeText={setQuery}
-          />
+          <View className="flex-row">
+            <SearchField
+              accessibilityLabel="Find people or groups"
+              placeholder="Find people or groups"
+              value={query}
+              onChangeText={setQuery}
+            />
+          </View>
           {searchError && (
             <Text className="text-[12px] text-systemRed">Search unavailable. Try again.</Text>
           )}
@@ -120,14 +151,11 @@ export function NoteShareAccessList({
               {available.map((principal) => (
                 <GroupedList.Row
                   key={`${principal.type}:${principal.id ?? principal.email}`}
-                  onPress={
-                    busy
-                      ? undefined
-                      : () => {
-                          onAddPrincipal(principal);
-                          setQuery('');
-                        }
-                  }
+                  onPress={() => {
+                    onAddPrincipal(principal);
+                    setQuery('');
+                  }}
+                  disabled={busy}
                   accessibilityRole="button"
                   accessibilityLabel={`Grant access to ${principal.name || principal.email}`}
                 >
@@ -136,7 +164,9 @@ export function NoteShareAccessList({
                   >
                     {principal.name || principal.email}
                   </Text>
-                  <Text className="text-[12px] text-secondaryLabel">{principal.type}</Text>
+                  <Text className="text-[12px] text-secondaryLabel">
+                    {PRINCIPAL_LABEL[principal.type]}
+                  </Text>
                 </GroupedList.Row>
               ))}
             </GroupedList>
@@ -160,7 +190,7 @@ export function NoteShareAccessList({
               <Text className="text-[15px] font-medium text-label">{name}</Text>
               <Text className="text-[12px] text-secondaryLabel">
                 {grant.permission === 'editor' ? 'Editor' : 'Viewer'}
-                {grant.inherited ? ` · Inherited from ${grant.source}` : ' · Direct'}
+                {` · ${grantDetail(grant)}`}
                 {grant.pending ? ' · Pending' : ''}
                 {paused && isPausedBySharingOff(grant) ? ' · Paused' : ''}
               </Text>
@@ -172,7 +202,9 @@ export function NoteShareAccessList({
                       accessibilityLabel={`${grant.permission === 'viewer' ? 'Make' : 'Change'} ${name} ${grant.permission === 'viewer' ? 'an editor' : 'a viewer'}`}
                       disabled={busy}
                       onPress={() =>
-                        onUpdateGrant(grant, grant.permission === 'viewer' ? 'editor' : 'viewer')
+                        grant.permission === 'viewer'
+                          ? confirmEditor(name, () => onUpdateGrant(grant, 'editor'))
+                          : onUpdateGrant(grant, 'viewer')
                       }
                     />
                   )}
@@ -181,7 +213,14 @@ export function NoteShareAccessList({
                     accessibilityLabel={`Remove access for ${name}`}
                     destructive
                     disabled={busy}
-                    onPress={() => onRemoveGrant(grant)}
+                    onPress={() =>
+                      confirmDestructive(
+                        'Remove access?',
+                        `${name} will lose the access granted on this note.`,
+                        () => onRemoveGrant(grant),
+                        { destructiveLabel: 'Remove' },
+                      )
+                    }
                   />
                 </View>
               )}
@@ -206,10 +245,11 @@ export function NoteShareAccessList({
                       accessibilityLabel={`Make ${invite.email} ${invite.permission === 'viewer' ? 'an editor' : 'a viewer'}`}
                       disabled={busy}
                       onPress={() =>
-                        onUpdateGrant(
-                          invitationGrant,
-                          invite.permission === 'viewer' ? 'editor' : 'viewer',
-                        )
+                        invite.permission === 'viewer'
+                          ? confirmEditor(invite.email, () =>
+                              onUpdateGrant(invitationGrant, 'editor'),
+                            )
+                          : onUpdateGrant(invitationGrant, 'viewer')
                       }
                     />
                   )}
@@ -226,7 +266,14 @@ export function NoteShareAccessList({
                     accessibilityLabel={`Revoke invitation for ${invite.email}`}
                     destructive
                     disabled={busy}
-                    onPress={() => onRevokeInvitation(invite)}
+                    onPress={() =>
+                      confirmDestructive(
+                        'Revoke invitation?',
+                        `${invite.email} will lose the access this invitation gave them.`,
+                        () => onRevokeInvitation(invite),
+                        { destructiveLabel: 'Revoke' },
+                      )
+                    }
                   />
                 </View>
               )}

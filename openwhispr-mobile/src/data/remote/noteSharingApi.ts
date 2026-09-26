@@ -33,9 +33,10 @@ export async function getNoteShareState(
 export async function getExternalSharingMode(
   options?: NoteSharingRequestOptions,
 ): Promise<ExternalSharingMode> {
+  // The response may be cached per device, not per account; revalidate so a switch shows the new policy.
   const { data } = await api.get<{
     data: { managed: boolean; policy: { sharing: { externalLinkSharing: ExternalSharingMode } } };
-  }>('/api/workspace-policy', options);
+  }>('/api/workspace-policy', { ...options, headers: { 'Cache-Control': 'no-cache' } });
   return data.managed ? data.policy.sharing.externalLinkSharing : 'allowed';
 }
 

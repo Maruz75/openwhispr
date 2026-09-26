@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
-import { Share } from 'react-native';
+import { AppState, Share, type AppStateStatus } from 'react-native';
 import type { Note } from '@/data';
 
 jest.mock('@/store/useAuthStore', () => ({
@@ -119,6 +119,10 @@ beforeEach((): void => {
   });
   jest.mocked(sharing.getNoteShareState).mockResolvedValue({ share, invitations: [], access });
   jest.mocked(sharing.getExternalSharingMode).mockResolvedValue('allowed');
+  jest.mocked(sharing.setNoteShareVisibility).mockResolvedValue({
+    share: { ...share, visibility: 'invited', token_prefix: TOKEN.slice(0, 16) },
+    raw_token: TOKEN,
+  });
   jest.mocked(tokens.readNoteShareToken).mockResolvedValue(null);
   jest.mocked(ensureNoteSynced).mockResolvedValue('remote');
   jest.spyOn(Share, 'share').mockResolvedValue({ action: Share.dismissedAction });
@@ -785,6 +789,13 @@ it.each([
     new ApiError("Cannot rotate a private note's token", 409),
     'Sharing settings changed. Refresh and try again.',
   ],
+  [new ApiError('Note not found', 404), 'Unable to update sharing. Please try again.'],
+  [new ApiError('Invalid email address', 400), 'Invalid email address'],
+  [
+    // The shape of expo/fetch's FetchError when the request never reaches the server.
+    new Error('fetch failed: The Internet connection appears to be offline.'),
+    'Can’t reach OpenWhispr. Check your connection and try again.',
+  ],
 ])('explains %s instead of showing server text', async (failure, message) => {
   jest.mocked(sharing.getNoteShareState).mockRejectedValue(failure);
   const { result } = setup();
@@ -805,4 +816,192 @@ it('stops being cancellable when the note changes identity mid-upload', async ()
   });
   expect(result.current.busy).toBe(false);
   expect(result.current.cancellable).toBe(false);
+});
+
+it('keeps the full link of a first invitation, so a later link share works', async (): Promise<void> => {
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.inviteEmail('friend@example.com');
+  });
+  expect(sharing.setNoteShareVisibility).toHaveBeenCalledWith(
+    'remote',
+    'invited',
+    [],
+    expect.anything(),
+  );
+  expect(jest.mocked(sharing.setNoteShareVisibility).mock.invocationCallOrder[0]).toBeLessThan(
+    jest.mocked(sharing.createNoteAccessGrant).mock.invocationCallOrder[0],
+  );
+  expect(tokens.saveNoteShareToken).toHaveBeenCalledWith('owner', 'remote', TOKEN);
+});
+it('keeps an existing link when inviting or adding people', async (): Promise<void> => {
+  jest.mocked(sharing.getNoteShareState).mockResolvedValue({
+    share: { ...share, visibility: 'invited', token_prefix: TOKEN.slice(0, 16) },
+    invitations: [],
+    access,
+  });
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.inviteEmail('friend@example.com');
+    await result.current.addPrincipal({ ...access.owner, id: 'user-2', existing_grant_id: null });
+  });
+  expect(sharing.createNoteAccessGrant).toHaveBeenCalledTimes(2);
+  expect(sharing.setNoteShareVisibility).not.toHaveBeenCalled();
+});
+it('keeps the full link of a first group grant', async (): Promise<void> => {
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.addPrincipal({
+      ...access.owner,
+      type: 'team',
+      id: 'team-1',
+      existing_grant_id: null,
+    });
+  });
+  expect(sharing.setNoteShareVisibility).toHaveBeenCalledWith(
+    'remote',
+    'invited',
+    [],
+    expect.anything(),
+  );
+  expect(tokens.saveNoteShareToken).toHaveBeenCalledWith('owner', 'remote', TOKEN);
+});
+it('never widens a domain share whose allowed domains changed elsewhere', async (): Promise<void> => {
+  const domainShare = {
+    ...linkShare,
+    visibility: 'domain' as const,
+    domain_allowlist: ['company.com'],
+  };
+  jest
+    .mocked(sharing.getNoteShareState)
+    .mockResolvedValue({ share: domainShare, invitations: [], access });
+  const { result } = setup();
+  await waitFor(() => expect(result.current.state?.share.visibility).toBe('domain'));
+  jest.mocked(sharing.getNoteShareState).mockResolvedValue({
+    share: { ...domainShare, domain_allowlist: ['other.com'] },
+    invitations: [],
+    access,
+  });
+  await act(async (): Promise<void> => {
+    await result.current.setVisibility('link');
+  });
+  expect(sharing.setNoteShareVisibility).not.toHaveBeenCalled();
+  expect(result.current.error).toMatch(/changed/i);
+});
+it('refreshes quietly when the app returns to the foreground', async (): Promise<void> => {
+  let onChange!: (state: AppStateStatus) => void;
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+    onChange = listener;
+    return { remove: jest.fn() };
+  });
+  const { result } = setup();
+  await waitFor(() => expect(result.current.state?.share.visibility).toBe('private'));
+  let finish!: (value: Awaited<ReturnType<typeof sharing.getNoteShareState>>) => void;
+  jest
+    .mocked(sharing.getNoteShareState)
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    )
+    .mockRejectedValueOnce(new Error('fetch failed: offline'));
+  act(() => onChange('active'));
+  expect(result.current.loading).toBe(false);
+  expect(result.current.state?.share.visibility).toBe('private');
+  await act(async (): Promise<void> => {
+    finish({ share: linkShare, invitations: [], access });
+  });
+  expect(result.current.state?.share.visibility).toBe('link');
+  await act(async (): Promise<void> => {
+    onChange('active');
+  });
+  expect(result.current.state?.share.visibility).toBe('link');
+  expect(result.current.error).toBeNull();
+});
+it('keeps stored links when the account changes while the sheet is open', async (): Promise<void> => {
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    useAuthStore.setState({ user: null });
+  });
+  expect(tokens.removeNoteShareToken).not.toHaveBeenCalled();
+  expect(result.current.hasLink).toBe(false);
+});
+it('clears an error once the user corrects their input', async (): Promise<void> => {
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.inviteEmail('bob@');
+  });
+  expect(result.current.error).toMatch(/valid email/i);
+  act(() => result.current.dismissError());
+  expect(result.current.error).toBeNull();
+});
+it('names an untitled note when handing its link to the share sheet', async (): Promise<void> => {
+  note = { ...note, title: '' };
+  useNotesStore.setState({ notes: [note] });
+  jest
+    .mocked(sharing.setNoteShareVisibility)
+    .mockResolvedValue({ share: linkShare, raw_token: TOKEN });
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.setVisibility('link');
+  });
+  expect(Share.share).toHaveBeenCalledWith(expect.objectContaining({ title: 'Untitled' }));
+});
+it('lets the server lift a paused private note only after it accepts the invitation', async (): Promise<void> => {
+  jest.mocked(sharing.getNoteShareState).mockResolvedValue({
+    share,
+    access: {
+      ...access,
+      grants: [
+        {
+          id: 'grant-1',
+          principal: { ...access.owner, id: 'user-2', name: 'Paused' },
+          permission: 'viewer',
+          source: 'direct',
+          inherited: false,
+          pending: false,
+          created_at: '',
+          updated_at: '',
+        },
+      ],
+    },
+    invitations: [],
+  });
+  jest
+    .mocked(sharing.createNoteAccessGrant)
+    .mockRejectedValueOnce(new ApiError('Invalid email address', 400));
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.inviteEmail('friend@example.com');
+  });
+  expect(sharing.setNoteShareVisibility).not.toHaveBeenCalled();
+  expect(result.current.state?.share.visibility).toBe('private');
+  expect(result.current.error).toBe('Invalid email address');
+});
+it('does not let a quiet refresh hide the first load failing', async (): Promise<void> => {
+  let onChange!: (state: AppStateStatus) => void;
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+    onChange = listener;
+    return { remove: jest.fn() };
+  });
+  let fail!: (reason: unknown) => void;
+  jest.mocked(sharing.getNoteShareState).mockReturnValueOnce(
+    new Promise((_resolve, reject) => {
+      fail = reject;
+    }),
+  );
+  const { result } = setup();
+  act(() => onChange('active'));
+  await act(async (): Promise<void> => {
+    fail(new ApiError('Forbidden', 403, 'note_access_denied'));
+  });
+  expect(result.current.error).toMatch(/permission/i);
+  expect(sharing.getNoteShareState).toHaveBeenCalledTimes(1);
 });

@@ -1,6 +1,6 @@
-import { Alert } from 'react-native';
+import { AccessibilityInfo, Alert } from 'react-native';
 import { act, fireEvent, render } from '@testing-library/react-native';
-import type { NoteSharingController } from '@/hooks/useNoteSharing';
+import { INVALID_EMAIL_ERROR, type NoteSharingController } from '@/hooks/useNoteSharing';
 import { NoteShareSheet } from '../NoteShareSheet';
 
 const mockController = {
@@ -15,6 +15,7 @@ const mockController = {
   note: { id: 1, isPrivate: 0, remoteId: 'remote-1' },
   user: { id: 'user-1', email: 'owner@example.com' },
   refresh: jest.fn(),
+  dismissError: jest.fn(),
   setVisibility: jest.fn(),
   replaceLink: jest.fn(),
   copyLink: jest.fn(),
@@ -32,7 +33,10 @@ const mockRegisterGate = jest.fn(() => Promise.resolve(true));
 const mockSpaces: { id: number; kind: string }[] = [];
 let mockUsage: { isSubscribed: boolean } | null = null;
 
-jest.mock('@/hooks/useNoteSharing', () => ({ useNoteSharing: () => mockController }));
+jest.mock('@/hooks/useNoteSharing', () => ({
+  INVALID_EMAIL_ERROR: 'Enter a valid email address.',
+  useNoteSharing: () => mockController,
+}));
 jest.mock('@/data/remote/noteSharingApi', () => ({ searchNoteAccessPrincipals: jest.fn() }));
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/components/ui/SystemIcon', () => ({ SystemIcon: () => null }));
@@ -71,9 +75,10 @@ jest.mock('@/store/useUsageStore', () => ({
     { getState: () => ({ load: () => Promise.resolve() }) },
   ),
 }));
+let mockSubscriptionRequired = false;
 jest.mock('@/sync/useSyncStore', () => ({
   useSyncStore: (selector: (state: { subscriptionRequired: boolean }) => unknown) =>
-    selector({ subscriptionRequired: false }),
+    selector({ subscriptionRequired: mockSubscriptionRequired }),
 }));
 jest.mock('@/sync/syncEngine', () => ({ requestSync: jest.fn() }));
 jest.mock('@/hooks/useSuperwallGate', () => ({
@@ -134,6 +139,7 @@ beforeEach(() => {
   mockSpaces.length = 0;
   mockUsage = null;
   mockCloudBackupEnabled = true;
+  mockSubscriptionRequired = false;
   jest.clearAllMocks();
   jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
 });
@@ -230,7 +236,8 @@ it('shows a failed cloud sync opt-in', async () => {
   await act(async () => {
     await buttons[1].onPress();
   });
-  expect(screen.getByText('Sync unavailable')).toBeTruthy();
+  expect(screen.getByText('Unable to enable cloud sync. Try again.')).toBeTruthy();
+  expect(screen.queryByText('Sync unavailable')).toBeNull();
 });
 
 it('keeps both exports available when sharing settings cannot load', () => {
@@ -504,4 +511,82 @@ it('keeps the sheet open while a previous link is being disabled', () => {
   expect(screen.getByLabelText('Open privacy settings').props.accessibilityState).toMatchObject({
     disabled: true,
   });
+});
+
+it('keeps existing sharing manageable but blocks uploads while cloud backup is off', () => {
+  mockCloudBackupEnabled = false;
+  mockController.hasLink = true;
+  mockController.state = {
+    share: { ...share, visibility: 'link', token_prefix: 'ow_share_abcdefg' },
+    invitations: [pendingInvitation],
+    access,
+  };
+  const screen = render(<NoteShareSheet {...props} />);
+  expect(screen.getByText(/Cloud backup is off\. Turn it on in Privacy & Data/)).toBeTruthy();
+  expect(screen.getByText('Open privacy settings')).toBeTruthy();
+  expect(screen.getByText('pending@example.com')).toBeTruthy();
+  expect(screen.getByLabelText('Revoke invitation for pending@example.com')).toBeTruthy();
+  expect(screen.getByText('Copy link')).toBeTruthy();
+  expect(screen.queryByText('Invite by email')).toBeNull();
+  expect(screen.queryByText('Replace link')).toBeNull();
+  expect(screen.queryByText('Invited only')).toBeNull();
+  expect(screen.queryByLabelText('Find people or groups')).toBeNull();
+  fireEvent.press(screen.getByText('Disable external sharing'));
+  const buttons = (Alert.alert as jest.Mock).mock.calls[0][2];
+  buttons[1].onPress();
+  expect(mockController.setVisibility).toHaveBeenCalledWith('private');
+});
+
+it('points a never-uploaded personal note at privacy settings while cloud backup is off', () => {
+  mockCloudBackupEnabled = false;
+  mockController.note = { ...mockController.note!, remoteId: null };
+  const screen = render(<NoteShareSheet {...props} />);
+  expect(screen.getByText(/Cloud backup is off/)).toBeTruthy();
+  expect(screen.getByText('Open privacy settings')).toBeTruthy();
+  expect(screen.queryByText('Create link')).toBeNull();
+  expect(screen.queryByText('Invite by email')).toBeNull();
+});
+
+it('marks the sheet title as a heading', () => {
+  const screen = render(<NoteShareSheet {...props} />);
+  expect(screen.getByRole('header', { name: 'Share note' })).toBeTruthy();
+});
+
+it('offers Pro when new edits to a synced note cannot sync without it', () => {
+  mockSubscriptionRequired = true;
+  mockController.state = { share, invitations: [], access };
+  mockController.error = 'An active subscription is required to sync this note.';
+  const screen = render(<NoteShareSheet {...props} />);
+  fireEvent.press(screen.getByText('Upgrade to Pro'));
+  expect(mockRegisterGate).toHaveBeenCalled();
+});
+
+it('shows errors beside the controls with a way to refresh', () => {
+  mockController.state = { share, invitations: [], access };
+  mockController.error = 'Sharing settings changed. Refresh and try again.';
+  const spy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  const screen = render(<NoteShareSheet {...props} />);
+  expect(spy).toHaveBeenCalledWith('Sharing settings changed. Refresh and try again.');
+  expect(screen.queryByText('Upgrade to Pro')).toBeNull();
+  fireEvent.press(screen.getByLabelText('Refresh sharing settings'));
+  expect(mockController.refresh).toHaveBeenCalled();
+  fireEvent.changeText(screen.getByLabelText('Email address'), 'friend@');
+  expect(mockController.dismissError).not.toHaveBeenCalled();
+});
+
+it('clears an invalid email error once the address is edited', () => {
+  mockController.state = { share, invitations: [], access };
+  mockController.error = INVALID_EMAIL_ERROR;
+  const screen = render(<NoteShareSheet {...props} />);
+  fireEvent.changeText(screen.getByLabelText('Email address'), 'friend@example.com');
+  expect(mockController.dismissError).toHaveBeenCalled();
+});
+
+it('does not offer Pro to a subscriber whose sync check failed', () => {
+  mockUsage = { isSubscribed: true };
+  mockSubscriptionRequired = true;
+  mockController.state = { share, invitations: [], access };
+  mockController.error = 'Can’t reach OpenWhispr. Check your connection and try again.';
+  const screen = render(<NoteShareSheet {...props} />);
+  expect(screen.queryByText('Upgrade to Pro')).toBeNull();
 });

@@ -1,3 +1,4 @@
+import { Alert, type AlertButton } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { NoteAccessState, NoteShareInvitation } from '@/data/remote/noteSharingTypes';
 import { NoteShareAccessList } from '../NoteShareAccessList';
@@ -9,6 +10,20 @@ jest.mock('@/data/remote/noteSharingApi', () => ({
 
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/components/ui/SystemIcon', () => ({ SystemIcon: () => null }));
+
+beforeEach(() => {
+  jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+/** Presses the named button of the most recent confirmation. */
+function confirmAlert(action: string): void {
+  const buttons = (Alert.alert as jest.Mock).mock.lastCall[2] as AlertButton[];
+  buttons.find((button) => button.text === action)?.onPress?.();
+}
 
 const owner = {
   type: 'user' as const,
@@ -66,8 +81,15 @@ it('shows owner, grants, and pending invitations, and forwards permitted changes
   expect(screen.getByText('Viewer · Direct')).toBeTruthy();
   expect(screen.getByText('pending@example.com')).toBeTruthy();
   fireEvent.press(screen.getByLabelText('Make Person an editor'));
+  expect(updateGrant).not.toHaveBeenCalled();
+  confirmAlert('Make editor');
   expect(updateGrant).toHaveBeenCalledWith(access.grants[0], 'editor');
   fireEvent.press(screen.getByLabelText('Revoke invitation for pending@example.com'));
+  expect(revokeInvitation).not.toHaveBeenCalled();
+  confirmAlert('Cancel');
+  expect(revokeInvitation).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByLabelText('Revoke invitation for pending@example.com'));
+  confirmAlert('Revoke');
   expect(revokeInvitation).toHaveBeenCalledWith(invitation);
 });
 
@@ -209,7 +231,10 @@ it.each([
       />,
     );
     if (editable) {
+      expect(screen.getByText('Viewer · Team')).toBeTruthy();
       fireEvent.press(screen.getByLabelText('Remove access for Design'));
+      expect(removeGrant).not.toHaveBeenCalled();
+      confirmAlert('Remove');
       expect(removeGrant).toHaveBeenCalledWith(teamGrant);
     } else {
       expect(screen.queryByLabelText('Remove access for Design')).toBeNull();
@@ -273,7 +298,7 @@ it('never marks team-space membership as paused', () => {
       onResendInvitation={jest.fn()}
     />,
   );
-  expect(screen.getByText('Viewer · Inherited from space')).toBeTruthy();
+  expect(screen.getByText('Viewer · Inherited from team space')).toBeTruthy();
 });
 
 it('keeps only removals when the organization blocks invitations', () => {

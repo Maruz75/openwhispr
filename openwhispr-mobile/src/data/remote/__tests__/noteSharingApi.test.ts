@@ -53,7 +53,10 @@ it('reads the organization external sharing mode, permissive when unmanaged', as
   });
   mockApi.get.mockResolvedValueOnce(policy(true, 'domain_only'));
   await expect(getExternalSharingMode(options)).resolves.toBe('domain_only');
-  expect(mockApi.get).toHaveBeenCalledWith('/api/workspace-policy', options);
+  expect(mockApi.get).toHaveBeenCalledWith('/api/workspace-policy', {
+    ...options,
+    headers: { 'Cache-Control': 'no-cache' },
+  });
   mockApi.get.mockResolvedValueOnce(policy(false, 'disabled'));
   await expect(getExternalSharingMode()).resolves.toBe('allowed');
 });

@@ -1,3 +1,4 @@
+import * as Network from 'expo-network';
 import { notesRepository, spacesRepository, type Note } from '@/data';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
@@ -40,6 +41,8 @@ export async function ensureNoteSynced(
   return new Promise<string>((resolve, reject) => {
     let settled = false;
     let completedPass = false;
+    let passes = 0;
+    let offline = false;
     const unsubscribe: Array<() => void> = [];
     const finish = (value: string | Error): void => {
       if (settled) return;
@@ -75,7 +78,7 @@ export async function ensureNoteSynced(
         )
           throw new Error('This note’s cloud identity changed. Open sharing again.');
         if (!isTeamNote && useConfigStore.getState().config?.cloudBackupEnabled === false) {
-          throw new Error('Enable cloud backup in Preferences before sharing.');
+          throw new Error('Turn on Cloud Backup in Account → Privacy & Data before sharing.');
         }
         // Acknowledgement is repository state: a push clears pendingSync only when the server
         // accepted this exact snapshot, terminal rejections leave a flag, and conflicts or privacy
@@ -94,6 +97,7 @@ export async function ensureNoteSynced(
         }
         // Sync status only reflects this request once a pass has finished with nothing queued.
         if (!completedPass) return;
+        if (offline) throw new Error('You’re offline. Connect to the internet to share this note.');
         const sync = useSyncStore.getState();
         if (sync.policyBlocked) throw new Error('Your organization does not allow cloud backup.');
         if (!isTeamNote && sync.subscriptionRequired) {
@@ -115,8 +119,25 @@ export async function ensureNoteSynced(
       useNotesStore.subscribe(inspect),
       useConfigStore.subscribe(inspect),
       subscribeSyncCompletion((hasQueuedRun): void => {
-        completedPass = !hasQueuedRun;
-        inspect();
+        const pass = ++passes;
+        completedPass = false;
+        if (hasQueuedRun) {
+          inspect();
+          return;
+        }
+        // Offline passes end quietly or read as a missing subscription, so the pass only counts
+        // once the OS has answered; a newer pass supersedes a slower answer.
+        Network.getNetworkStateAsync()
+          .then(
+            (network) => network.isConnected === false,
+            () => false,
+          )
+          .then((isOffline) => {
+            if (pass !== passes) return;
+            offline = isOffline;
+            completedPass = true;
+            inspect();
+          });
       }),
     );
     inspect();

@@ -668,7 +668,20 @@ describe('LocalNotesRepository.resolveConflictUseServer — dirty transcript (fi
   });
 });
 
-describe('LocalNotesRepository — server tombstones clear a push rejection', () => {
+describe('LocalNotesRepository — server copies clear a push rejection', () => {
+  it('when a pull applies the server copy over a rejected upload', () => {
+    const { repo } = createMemoryRepository();
+    const local = repo.createNote('Title', 'Content');
+    repo.setNoteClientId(local.id, 'client-1');
+    repo.markNotePushed(repo.getNoteById(local.id)!, 'srv-1', '2026-08-24T09:00:00.000Z');
+    repo.markNoteTerminal(local.id);
+
+    repo.applyRemoteNote(remoteNote({ content: 'Server content' }), noFolder);
+
+    expect(repo.getNoteById(local.id)?.content).toBe('Server content');
+    expect(repo.getSyncState(`note.pushRejected.${local.id}`)).toBeNull();
+  });
+
   it('when a pull deletes a note whose last upload was rejected', () => {
     const { repo } = createMemoryRepository();
     const local = repo.createNote('Title', 'Content');
