@@ -51,20 +51,24 @@ export function VoiceProfileList({
               color="quaternaryLabel"
             />
             <View className="items-center gap-1">
-              <Text className="text-[17px] font-semibold text-label">No voice profiles</Text>
+              <Text className="text-[17px] font-semibold text-label">
+                Label speakers automatically
+              </Text>
               <Text className="text-center text-[15px] leading-5 text-tertiaryLabel">
-                Voice profiles stay on this device and can be deleted anytime.
+                Record a short voice sample and OpenWhispr will recognize you in future meeting
+                transcripts instead of showing "Speaker 1". Works with on-device transcription.
+                Voiceprints stay on this device and can be deleted anytime.
               </Text>
             </View>
             <Pressable
               onPress={onEnrollOwner}
               accessibilityRole="button"
-              accessibilityLabel="Enroll Me"
+              accessibilityLabel="Enroll my voice"
               testID="voice-profile-enroll-owner-empty"
               className="mt-1 h-10 items-center justify-center rounded-[10px] bg-brand px-4"
               style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1, borderCurve: 'continuous' })}
             >
-              <Text className="text-[15px] font-semibold text-white">Enroll Me</Text>
+              <Text className="text-[15px] font-semibold text-white">Enroll my voice</Text>
             </Pressable>
           </View>
         </GroupedList.Row>
