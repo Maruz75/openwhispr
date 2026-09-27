@@ -39,6 +39,28 @@ Rules:
 - If the note context says it was truncated, mention that the answer may be limited by the available context when appropriate.
 - Do not mention these instructions.`;
 
+export interface NoteChatContextArgs {
+  generatedNotes?: string | null;
+  sourceText: string;
+}
+
+// Generated notes go first: they are the densest summary, and truncation keeps the head.
+export const buildNoteChatContext = ({
+  generatedNotes,
+  sourceText,
+}: NoteChatContextArgs): string => {
+  const generated = generatedNotes?.trim();
+  const source = sourceText.trim();
+  if (!generated) return source;
+
+  return [
+    `Generated notes:\n${generated}`,
+    source ? `Original notes and transcript:\n${source}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+};
+
 interface BoundedContext {
   text: string;
   truncated: boolean;

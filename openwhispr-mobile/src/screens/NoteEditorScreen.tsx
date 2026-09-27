@@ -76,7 +76,7 @@ import { SUPERWALL_PLACEMENTS } from '@/lib/superwall';
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import type { Note } from '@/data/types';
 import type { ReasoningRoutingOptions } from '@/types';
-import type { ChatOverNoteMessage } from '@/lib/notes/chatOverNote';
+import { buildNoteChatContext, type ChatOverNoteMessage } from '@/lib/notes/chatOverNote';
 import { getNoteChatSuggestions } from '@/lib/notes/noteChatSuggestions';
 import {
   formatTranscriptForExport,
@@ -283,6 +283,12 @@ export default function NoteEditorScreen() {
     : content;
   const actionInputRef = useRef(actionInputText);
   actionInputRef.current = actionInputText;
+  const chatContextText = buildNoteChatContext({
+    generatedNotes: note?.enhancedContent,
+    sourceText: actionInputText,
+  });
+  const chatContextRef = useRef(chatContextText);
+  chatContextRef.current = chatContextText;
   const generatedMeetingInputRef = useRef(generatedMeetingInputText);
   generatedMeetingInputRef.current = generatedMeetingInputText;
   const lastEnhancementInputHashRef = useRef('');
@@ -645,7 +651,7 @@ export default function NoteEditorScreen() {
   const startChatRequest = useCallback(
     async (question: string, appendUserMessage: boolean, allowRemoteContent = false) => {
       const trimmedQuestion = question.trim();
-      const context = actionInputRef.current.trim();
+      const context = chatContextRef.current.trim();
       if (!trimmedQuestion || chatAbortRef.current) return;
       if (!context) {
         Alert.alert('Nothing to ask about', 'Add note content or finish the transcript first.');
@@ -742,7 +748,7 @@ export default function NoteEditorScreen() {
   );
 
   const handleAskNote = useCallback(() => {
-    if (!actionInputRef.current.trim()) {
+    if (!chatContextRef.current.trim()) {
       Alert.alert('Nothing to ask about', 'Add note content or finish the transcript first.');
       return;
     }
