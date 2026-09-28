@@ -478,6 +478,9 @@ function initializeCoreManagers() {
   const { createSlackAuth } = require("./src/helpers/connectors/slackAuth");
   const { createSlackDirectory } = require("./src/helpers/connectors/slackDirectory");
   const { createSlackConnector } = require("./src/helpers/connectors/slackConnector");
+  const { createGmailApi } = require("./src/helpers/connectors/gmailApi");
+  const { createGmailAuth, gmailClientCredentials } = require("./src/helpers/connectors/gmailAuth");
+  const { createGmailConnector } = require("./src/helpers/connectors/gmailConnector");
   const { renderOAuthResultPage } = require("./src/helpers/connectors/oauthResultPage");
   const { runOAuthLoopbackFlow, OAuthFlowError } = require("./src/helpers/oauthLoopbackFlow");
   const { broadcastToWindows } = require("./src/helpers/windowBroadcast");
@@ -523,6 +526,31 @@ function initializeCoreManagers() {
     // refresh token.
     logger: debugLogger,
   });
+  const gmailApi = createGmailApi({
+    fetchImpl: (url, init) => net.fetch(url, { ...init, useSessionCookies: false }),
+  });
+  // One instance for every consumer, like Slack's: sends that race a refresh
+  // share its single-flight map.
+  const gmailAuth = createGmailAuth({
+    api: gmailApi,
+    credentials: connectorCredentials,
+    getClientCredentials: () => gmailClientCredentials(process.env),
+    runOAuthLoopbackFlow,
+    OAuthFlowError,
+    // Always the local page: the hosted callback page reads an unknown
+    // gmail_connected param as a website sign-in (Plan 2).
+    renderResultPage: ({ ok }) =>
+      renderOAuthResultPage({
+        ok,
+        title: i18nMain.t(
+          ok ? "connectors.gmail.browser.connectedTitle" : "connectors.gmail.browser.failedTitle"
+        ),
+        body: i18nMain.t(
+          ok ? "connectors.gmail.browser.connectedBody" : "connectors.gmail.browser.failedBody"
+        ),
+      }),
+    logger: debugLogger,
+  });
   connectorManager = createConnectorManager({
     connectors: [
       require("./src/helpers/connectors/emailConnector").createEmailConnector({
@@ -533,6 +561,11 @@ function initializeCoreManagers() {
         api: slackApi,
         auth: slackAuth,
         directory: createSlackDirectory({ api: slackApi }),
+        credentials: connectorCredentials,
+      }),
+      createGmailConnector({
+        api: gmailApi,
+        auth: gmailAuth,
         credentials: connectorCredentials,
       }),
     ],

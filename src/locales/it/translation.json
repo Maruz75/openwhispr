@@ -3964,6 +3964,14 @@
         "failedBody": "Torna a OpenWhispr per riprovare."
       }
     },
+    "gmail": {
+      "browser": {
+        "connectedTitle": "Gmail è connesso",
+        "connectedBody": "Puoi chiudere questa scheda e tornare a OpenWhispr.",
+        "failedTitle": "Gmail non è stato connesso",
+        "failedBody": "Torna a OpenWhispr per riprovare."
+      }
+    },
     "recent": {
       "title": "Azioni recenti",
       "actions": {

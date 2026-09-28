@@ -40,3 +40,29 @@ test("explicit device cleanup covers models, credentials, caches, and browser se
 
   assert.ok(source.includes('"connectors"'), "device cleanup removes encrypted connector logins");
 });
+
+// cleanup-app can't run outside Electron (it closes the database, clears
+// sessions and relaunches), so this pins the order in its source. The
+// manager finds the account to revoke for through the bearer token and the
+// account binding, and records cancelled receipts in the database. After any
+// of the steps below, disconnectAll() would revoke nothing, silently.
+test("device cleanup revokes connector logins while the account and receipts they need still exist", () => {
+  assert.ok(cleanupHandler, "cleanup-app handler is present");
+  const source = cleanupHandler[1];
+  const revoke = source.indexOf("this.connectorManager?.disconnectAll()");
+  assert.ok(
+    revoke >= 0,
+    "device cleanup revokes connector logins (Slack, Gmail) at their providers"
+  );
+
+  for (const later of [
+    "this.databaseManager?.db?.close()",
+    "tokenStore.clear()",
+    '"account-scope-binding.json"',
+    'for (const directoryName of ["bin", "llama-cpp", "connectors"])',
+  ]) {
+    const at = source.indexOf(later);
+    assert.ok(at >= 0, `device cleanup still contains ${later}`);
+    assert.ok(revoke < at, `connector logins are revoked before ${later}`);
+  }
+});

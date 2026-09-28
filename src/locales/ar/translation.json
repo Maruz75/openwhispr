@@ -826,6 +826,14 @@
         "failedBody": "عد إلى OpenWhispr للمحاولة مرة أخرى."
       }
     },
+    "gmail": {
+      "browser": {
+        "connectedTitle": "تم توصيل Gmail",
+        "connectedBody": "يمكنك إغلاق هذا التبويب والعودة إلى OpenWhispr.",
+        "failedTitle": "لم يتم توصيل Gmail",
+        "failedBody": "عد إلى OpenWhispr للمحاولة مرة أخرى."
+      }
+    },
     "recent": {
       "title": "الإجراءات الأخيرة",
       "actions": {

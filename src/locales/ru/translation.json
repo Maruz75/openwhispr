@@ -4008,6 +4008,14 @@
         "failedBody": "Вернитесь в OpenWhispr, чтобы попробовать снова."
       }
     },
+    "gmail": {
+      "browser": {
+        "connectedTitle": "Gmail подключён",
+        "connectedBody": "Вы можете закрыть эту вкладку и вернуться в OpenWhispr.",
+        "failedTitle": "Gmail не был подключён",
+        "failedBody": "Вернитесь в OpenWhispr, чтобы попробовать снова."
+      }
+    },
     "recent": {
       "title": "Последние действия",
       "actions": {

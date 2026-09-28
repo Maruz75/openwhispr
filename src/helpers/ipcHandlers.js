@@ -3934,6 +3934,20 @@ class IPCHandlers {
         errors.push(`GCal revoke: ${e.message}`);
       }
 
+      // Revoke the signed-in account's connector logins (Slack, Gmail) at
+      // their providers. This must run while the bearer token, the account
+      // binding and the receipts database still exist: without them the
+      // manager sees no account and revokes nothing. Other accounts' logins
+      // are only deleted with the connectors directory below. Best effort:
+      // each revoke has a 5 s deadline and never blocks the reset.
+      try {
+        await this.connectorManager?.disconnectAll();
+      } catch (e) {
+        const { describeError } = require("./connectors/errorSummary");
+        const { errorName, errorCode } = describeError(e);
+        errors.push(`Connector revoke: ${errorCode ?? errorName}`);
+      }
+
       // Close DB connection before deleting the file
       try {
         this.databaseManager?.db?.close();
@@ -4027,7 +4041,8 @@ class IPCHandlers {
       } catch (e) {
         errors.push(`Device setting files: ${e.message}`);
       }
-      // "connectors" holds encrypted connector logins (Slack, …).
+      // "connectors" holds encrypted connector logins (Slack, Gmail); the
+      // signed-in account's were revoked above.
       for (const directoryName of ["bin", "llama-cpp", "connectors"]) {
         try {
           fs.rmSync(path.join(app.getPath("userData"), directoryName), {

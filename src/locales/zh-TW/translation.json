@@ -3964,6 +3964,14 @@
         "failedBody": "請返回 OpenWhispr 重試。"
       }
     },
+    "gmail": {
+      "browser": {
+        "connectedTitle": "Gmail 已連接",
+        "connectedBody": "您可以關閉此分頁並返回 OpenWhispr。",
+        "failedTitle": "Gmail 未連接",
+        "failedBody": "請返回 OpenWhispr 重試。"
+      }
+    },
     "recent": {
       "title": "近期操作",
       "actions": {
