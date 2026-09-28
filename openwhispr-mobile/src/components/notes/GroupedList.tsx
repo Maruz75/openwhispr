@@ -42,6 +42,8 @@ function Row({
 }: GroupedListRowProps) {
   return (
     <Pressable
+      // An accessible row hides nested controls from VoiceOver, so only pressable rows group.
+      accessible={Boolean(onPress || onLongPress)}
       onPress={onPress}
       onLongPress={onLongPress}
       disabled={disabled}

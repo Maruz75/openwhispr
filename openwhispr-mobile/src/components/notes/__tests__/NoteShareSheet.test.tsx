@@ -1,6 +1,7 @@
 import { AccessibilityInfo, Alert } from 'react-native';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { INVALID_EMAIL_ERROR, type NoteSharingController } from '@/hooks/useNoteSharing';
+import { searchNoteAccessPrincipals } from '@/data/remote/noteSharingApi';
 import { NoteShareSheet } from '../NoteShareSheet';
 
 const mockController = {
@@ -589,4 +590,77 @@ it('does not offer Pro to a subscriber whose sync check failed', () => {
   mockController.error = 'Can’t reach OpenWhispr. Check your connection and try again.';
   const screen = render(<NoteShareSheet {...props} />);
   expect(screen.queryByText('Upgrade to Pro')).toBeNull();
+});
+
+const pausedGrant = {
+  id: 'grant-1',
+  principal: { ...access.owner, id: 'user-2', name: 'Jamie', email: 'jamie@example.com' },
+  permission: 'viewer' as const,
+  source: 'direct' as const,
+  inherited: false,
+  pending: false,
+  created_at: '',
+  updated_at: '',
+};
+it('keeps the controls while an operation loads settings after the first upload', () => {
+  Object.assign(mockController, { busy: true, state: null });
+  const screen = render(<NoteShareSheet {...props} />);
+  expect(screen.queryByText('Sharing settings are unavailable.')).toBeNull();
+  expect(screen.queryByText('Retry')).toBeNull();
+  expect(screen.getByLabelText('Email address')).toBeTruthy();
+});
+it('asks before an invitation turns paused sharing back on', () => {
+  mockController.state = { share, invitations: [], access: { ...access, grants: [pausedGrant] } };
+  const screen = render(<NoteShareSheet {...props} />);
+  fireEvent.changeText(screen.getByLabelText('Email address'), 'friend@example.com');
+  fireEvent.press(screen.getByLabelText('Invite email'));
+  expect(mockController.inviteEmail).not.toHaveBeenCalled();
+  const [title, message, buttons] = (Alert.alert as jest.Mock).mock.calls[0];
+  expect(title).toBe('Turn sharing back on?');
+  expect(message).toMatch(/get their access back/i);
+  buttons[1].onPress();
+  expect(mockController.inviteEmail).toHaveBeenCalledWith('friend@example.com');
+});
+it('reports an invalid address on a paused share without asking first', () => {
+  mockController.state = { share, invitations: [], access: { ...access, grants: [pausedGrant] } };
+  const screen = render(<NoteShareSheet {...props} />);
+  fireEvent.changeText(screen.getByLabelText('Email address'), 'not-an-email');
+  fireEvent.press(screen.getByLabelText('Invite email'));
+  expect(Alert.alert).not.toHaveBeenCalled();
+  expect(mockController.inviteEmail).toHaveBeenCalledWith('not-an-email');
+});
+it('invites without asking when no access is paused', () => {
+  const inherited = { ...pausedGrant, id: 'scope:space-1', inherited: true };
+  mockController.state = { share, invitations: [], access: { ...access, grants: [inherited] } };
+  const screen = render(<NoteShareSheet {...props} />);
+  fireEvent.changeText(screen.getByLabelText('Email address'), 'friend@example.com');
+  fireEvent.press(screen.getByLabelText('Invite email'));
+  expect(Alert.alert).not.toHaveBeenCalled();
+  expect(mockController.inviteEmail).toHaveBeenCalledWith('friend@example.com');
+});
+it('asks before adding someone turns paused sharing back on', async () => {
+  jest.mocked(searchNoteAccessPrincipals).mockResolvedValue({
+    suggestions: [
+      {
+        type: 'user',
+        id: 'user-3',
+        name: 'Riley',
+        email: 'riley@example.com',
+        image: null,
+        member_count: null,
+        existing_grant_id: null,
+      },
+    ],
+  });
+  mockController.state = { share, invitations: [], access: { ...access, grants: [pausedGrant] } };
+  const screen = render(<NoteShareSheet {...props} />);
+  fireEvent.changeText(screen.getByLabelText('Find people or groups'), 'ril');
+  await waitFor(() => expect(screen.getByText('Riley')).toBeTruthy());
+  fireEvent.press(screen.getByText('Riley'));
+  expect(mockController.addPrincipal).not.toHaveBeenCalled();
+  expect((Alert.alert as jest.Mock).mock.calls[0][0]).toBe('Turn sharing back on?');
+  (Alert.alert as jest.Mock).mock.calls[0][2][1].onPress();
+  expect(mockController.addPrincipal).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'user-3' }),
+  );
 });

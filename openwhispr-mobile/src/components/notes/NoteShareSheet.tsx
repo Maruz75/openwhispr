@@ -18,6 +18,8 @@ import { INVALID_EMAIL_ERROR, useNoteSharing } from '@/hooks/useNoteSharing';
 import { useSuperwallGate } from '@/hooks/useSuperwallGate';
 import { SUPERWALL_PLACEMENTS } from '@/lib/superwall';
 import { AppFont } from '@/lib/fonts';
+import { confirmDestructive } from '@/lib/alerts';
+import { isValidEmail } from '@/lib/utils';
 import { iosColor } from '@/config/colors';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useNotesStore } from '@/store/useNotesStore';
@@ -26,6 +28,7 @@ import { requestSync } from '@/sync/syncEngine';
 import { useSyncStore } from '@/sync/useSyncStore';
 import { emailDomain, isPersonalEmailDomain } from '@/lib/notes/noteShareDomains';
 import { isShareVisibilityAllowed } from '@/lib/notes/noteSharePolicy';
+import { isScopeGrant } from '@/lib/notes/noteShareAccess';
 import type { ShareVisibility } from '@/data/remote/noteSharingTypes';
 import { GroupedList } from './GroupedList';
 import { NoteShareAccessList } from './NoteShareAccessList';
@@ -84,13 +87,23 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
   // needs a fresh upload (new links, invitations, visibility changes) can succeed.
   const backupOff = !cloudBackupEnabled && !isTeamNote;
   const localOnly = privateNote || (backupOff && !note?.remoteId);
+  // A running operation loads the settings itself, including right after the note's first upload.
   const unknown = Boolean(
-    note?.remoteId && !sharing.state && !sharing.loading && !localOnly && !signedOut,
+    note?.remoteId &&
+      !sharing.state &&
+      !sharing.loading &&
+      !sharing.busy &&
+      !localOnly &&
+      !signedOut,
   );
   const canManage = sharing.state?.access.can_manage_access !== false;
   const visibility = sharing.state?.share.visibility;
   const shared = Boolean(visibility && visibility !== 'private');
   const canDisablePrevious = Boolean(privateNote && note?.remoteId && shared && canManage);
+  // Adding someone to a paused share turns it back on, which restores everyone it paused.
+  const pausedAccess =
+    visibility === 'private' &&
+    Boolean(sharing.state?.access.grants.some((grant) => !isScopeGrant(grant)));
   // Uploading a personal note is what needs Pro; a note already in the cloud stays manageable.
   const upgradeRequired =
     (usage ? !usage.isSubscribed : subscriptionRequired) && !isTeamNote && !note?.remoteId;
@@ -118,17 +131,11 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
   const changeVisibility = (target: ShareVisibility): void => {
     if (sharing.busy || !canManage || target === visibility) return;
     if (target === 'private') {
-      Alert.alert(
+      confirmDestructive(
         'Disable external sharing?',
         'Links stop working, and people you added and invited lose access. Sharing again creates a new link and restores people you added; resend invitations so their emailed links work. Access through a team space or workspace is unaffected.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Disable external sharing',
-            style: 'destructive',
-            onPress: () => sharing.setVisibility('private'),
-          },
-        ],
+        () => sharing.setVisibility('private'),
+        { destructiveLabel: 'Disable external sharing' },
       );
       return;
     }
@@ -188,19 +195,38 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
   };
 
   const replaceLink = (): void => {
-    Alert.alert(
+    confirmDestructive(
       'Replace link?',
       'The previous link will stop working, including links already sent in invitation emails. Share the new link with anyone who still needs access.',
+      () => sharing.replaceLink(),
+      { destructiveLabel: 'Replace link' },
+    );
+  };
+
+  const resumeSharing = (add: () => void): void => {
+    if (!pausedAccess) {
+      add();
+      return;
+    }
+    Alert.alert(
+      'Turn sharing back on?',
+      'Adding someone turns external sharing back on, so people you added or invited before get their access back.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Replace link', style: 'destructive', onPress: () => sharing.replaceLink() },
+        { text: 'Turn on sharing', onPress: add },
       ],
     );
   };
 
-  const invite = async (): Promise<void> => {
-    if (!email.trim() || sharing.busy) return;
-    if (await sharing.inviteEmail(email)) setEmail('');
+  const invite = (): void => {
+    const address = email.trim();
+    if (!address || sharing.busy) return;
+    const send = async (): Promise<void> => {
+      if (await sharing.inviteEmail(email)) setEmail('');
+    };
+    // An invalid address is reported straight away rather than after the confirmation.
+    if (isValidEmail(address)) resumeSharing(send);
+    else send();
   };
 
   const upgrade = (): void => {
@@ -463,41 +489,38 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
                   )}
                 </View>
               )}
-              {canManage &&
-                !backupOff &&
-                allowed('invited') &&
-                (sharing.state || !note?.remoteId) && (
-                  <View className="gap-2">
-                    {sectionLabel('Invite by email')}
-                    <View className="flex-row items-center gap-2">
-                      <TextInput
-                        accessibilityLabel="Email address"
-                        className="h-12 min-w-0 flex-1 rounded-[10px] bg-tertiarySystemFill px-3 text-[15px] text-label"
-                        style={EMAIL_INPUT_STYLE}
-                        placeholder="name@example.com"
-                        placeholderTextColor={PLACEHOLDER_COLOR}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        autoComplete="email"
-                        textContentType="emailAddress"
-                        keyboardType="email-address"
-                        returnKeyType="send"
-                        value={email}
-                        onChangeText={(value) => {
-                          setEmail(value);
-                          if (sharing.error === INVALID_EMAIL_ERROR) sharing.dismissError();
-                        }}
-                        onSubmitEditing={invite}
-                      />
-                      <ShareTextButton
-                        label="Invite"
-                        accessibilityLabel="Invite email"
-                        disabled={sharing.busy || !email.trim()}
-                        onPress={invite}
-                      />
-                    </View>
+              {canManage && !backupOff && allowed('invited') && (
+                <View className="gap-2">
+                  {sectionLabel('Invite by email')}
+                  <View className="flex-row items-center gap-2">
+                    <TextInput
+                      accessibilityLabel="Email address"
+                      className="h-12 min-w-0 flex-1 rounded-[10px] bg-tertiarySystemFill px-3 text-[15px] text-label"
+                      style={EMAIL_INPUT_STYLE}
+                      placeholder="name@example.com"
+                      placeholderTextColor={PLACEHOLDER_COLOR}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="email"
+                      textContentType="emailAddress"
+                      keyboardType="email-address"
+                      returnKeyType="send"
+                      value={email}
+                      onChangeText={(value) => {
+                        setEmail(value);
+                        if (sharing.error === INVALID_EMAIL_ERROR) sharing.dismissError();
+                      }}
+                      onSubmitEditing={invite}
+                    />
+                    <ShareTextButton
+                      label="Invite"
+                      accessibilityLabel="Invite email"
+                      disabled={sharing.busy || !email.trim()}
+                      onPress={invite}
+                    />
                   </View>
-                )}
+                </View>
+              )}
               {feedback}
               {sharing.state && (
                 <NoteShareAccessList
@@ -509,7 +532,9 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
                   canInvite={allowed('invited')}
                   busy={sharing.busy}
                   onAddPrincipal={
-                    backupOff ? undefined : (principal) => sharing.addPrincipal(principal)
+                    backupOff
+                      ? undefined
+                      : (principal) => resumeSharing(() => sharing.addPrincipal(principal))
                   }
                   onUpdateGrant={(grant, permission) => sharing.updateGrant(grant, permission)}
                   onRemoveGrant={(grant) => sharing.removeGrant(grant)}

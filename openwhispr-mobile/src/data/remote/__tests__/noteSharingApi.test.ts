@@ -60,6 +60,12 @@ it('reads the organization external sharing mode, permissive when unmanaged', as
   mockApi.get.mockResolvedValueOnce(policy(false, 'disabled'));
   await expect(getExternalSharingMode()).resolves.toBe('allowed');
 });
+it('leaves a managed workspace whose policy is still pending to the server', async () => {
+  mockApi.get.mockResolvedValueOnce({
+    data: { managed: true, policy: null, policyUpdatedAt: null },
+  });
+  await expect(getExternalSharingMode(options)).resolves.toBeNull();
+});
 
 it('preserves returned raw token and writes expected share endpoints', async () => {
   const response = { share: { ...share, visibility: 'link' as const }, raw_token: null };

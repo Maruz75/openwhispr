@@ -4,6 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import { notesRepository, type Note } from '@/data';
 import { ApiError } from '@/lib/apiClient';
+import { getErrorMessage, isValidEmail } from '@/lib/utils';
 import type { AuthUser } from '@/lib/authClient';
 import { getNoteShareViewerBaseUrl } from '@/config/noteSharing';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -26,7 +27,11 @@ import {
   removeNoteShareToken,
 } from '@/lib/notes/noteShareTokens';
 import { canChangeGrant, isGroupPrincipal, isScopeGrant } from '@/lib/notes/noteShareAccess';
-import { ensureNoteSynced } from '@/sync/ensureNoteSynced';
+import {
+  NOTE_PRIVATE_ERROR,
+  NOTE_UNAVAILABLE_ERROR,
+  ensureNoteSynced,
+} from '@/sync/ensureNoteSynced';
 import { requestSync } from '@/sync/syncEngine';
 
 export interface NoteSharingController {
@@ -77,7 +82,6 @@ interface RunOptions {
   allowPrivate?: boolean;
 }
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const INVALID_EMAIL_ERROR = 'Enter a valid email address.';
 
 const GENERIC_ERROR = 'Unable to update sharing. Please try again.';
@@ -108,7 +112,7 @@ function sharingError(error: unknown): string {
   // expo/fetch rejects with a FetchError (not exported) when the request never reaches the server.
   if (error instanceof Error && error.message.startsWith('fetch failed'))
     return 'Can’t reach OpenWhispr. Check your connection and try again.';
-  return error instanceof Error ? error.message : GENERIC_ERROR;
+  return getErrorMessage(error, GENERIC_ERROR);
 }
 
 function sameSettings(left: ShareSettings, right: ShareSettings): boolean {
@@ -116,6 +120,13 @@ function sameSettings(left: ShareSettings, right: ShareSettings): boolean {
     left.visibility === right.visibility &&
     left.domain_allowlist.join(',') === right.domain_allowlist.join(',')
   );
+}
+
+/** Invited sharing hands out the invitation link, which stays closed if visibility later widens. */
+function invitationLink(share: ShareSettings): string | null {
+  return share.visibility === 'invited' && share.token_prefix
+    ? buildNoteInviteUrl(share.token_prefix)
+    : null;
 }
 
 /** The cloud copy whose settings can load; private notes still load to manage an old link. */
@@ -161,6 +172,7 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
   const loadRequest = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const previousIdentity = useRef<{ userId: string; remoteId: string } | null>(null);
+  const observedRemoteId = useRef(note?.remoteId ?? null);
 
   /** A silent refresh keeps the current settings on screen and only replaces them on success. */
   const refresh = useCallback(
@@ -269,7 +281,12 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
       setBusy(false);
       setCancellable(false);
       refresh();
+    } else if (!observedRemoteId.current && note?.remoteId) {
+      // Background sync uploaded the note while the sheet was open, so it now has settings to load.
+      // A running operation loads them itself, and refresh() leaves it alone.
+      refresh();
     }
+    observedRemoteId.current = note?.remoteId ?? null;
     previousIdentity.current =
       user && note?.remoteId ? { userId: user.id, remoteId: note.remoteId } : null;
   }, [user, note?.remoteId, note?.isPrivate, refresh]);
@@ -323,9 +340,8 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
       }
       if (!auth.user || auth.user.isAnonymous)
         throw new Error('Sign in to an account to share notes.');
-      if (!current || current.deletedAt) throw new Error('This note is no longer available.');
-      if (current.isPrivate === 1 && !allowPrivate)
-        throw new Error('Enable cloud sync for this note before sharing.');
+      if (!current || current.deletedAt) throw new Error(NOTE_UNAVAILABLE_ERROR);
+      if (current.isPrivate === 1 && !allowPrivate) throw new Error(NOTE_PRIVATE_ERROR);
     };
     try {
       check();
@@ -354,6 +370,16 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
               'The sharing change could not be confirmed. Refresh settings before trying again.',
             );
           }
+          // A refused change can still leave sharing different from what the sheet shows: a row
+          // removed elsewhere answers 404, and older servers lift a paused note before the daily
+          // invitation cap.
+          try {
+            const latest = await api.getNoteShareState(remoteId, { signal: controller.signal });
+            check();
+            setState(latest);
+          } catch {
+            // The refusal is the error worth showing.
+          }
           throw failure;
         }
       };
@@ -381,10 +407,13 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
     try {
       current = await api.getNoteShareState(context.remoteId, { signal: context.signal });
       context.check();
-    } catch {
+    } catch (failure) {
       context.check();
       setState(null);
       setMessage(null);
+      // Removing or demoting your own access leaves nothing this account may load.
+      if (failure instanceof ApiError && (failure.status === 403 || failure.status === 404))
+        throw new Error('Sharing changed. You can no longer manage sharing for this note.');
       throw new Error(
         'Sharing changed, but the updated settings could not be loaded. Refresh to continue.',
       );
@@ -463,7 +492,9 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
         setState({ ...context.current, share: result.share });
         requestSync('manual');
         await remember(context, result.raw_token);
-        await Clipboard.setStringAsync(buildNoteShareUrl(result.raw_token));
+        await Clipboard.setStringAsync(
+          invitationLink(result.share) ?? buildNoteShareUrl(result.raw_token),
+        );
         context.check();
         setMessage(
           'New link copied. The previous link, including links in invitation emails, no longer works.',
@@ -477,24 +508,45 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
   // full link; otherwise switching to a link share later could only replace it, breaking the emails.
   // Lifting a private note restores paused grants and invitations (listed as `invite:` grants), so
   // only do it when there are none: a request the server then rejects must not reopen them.
-  const ensureFullLink = async (context: SharingOperation): Promise<void> => {
+  // The grant is checked only after the lift, so a refused grant turns the empty share back off.
+  const grantWithFullLink = async (
+    context: SharingOperation,
+    grant: () => Promise<unknown>,
+  ): Promise<void> => {
     const { share, access } = context.current;
-    if (share.visibility !== 'private' || access.grants.some((grant) => !isScopeGrant(grant)))
+    if (share.visibility !== 'private' || access.grants.some((item) => !isScopeGrant(item))) {
+      await context.mutate(grant);
       return;
-    const result = await context.mutate(() =>
+    }
+    const lifted = await context.mutate(() =>
       api.setNoteShareVisibility(context.remoteId, 'invited', [], { signal: context.signal }),
     );
     context.check();
-    setState({ ...context.current, share: result.share });
+    setState({ ...context.current, share: lifted.share });
     requestSync('manual');
-    if (result.raw_token) await remember(context, result.raw_token);
+    if (lifted.raw_token) await remember(context, lifted.raw_token);
+    try {
+      await context.mutate(grant);
+    } catch (failure) {
+      // Only a refusal leaves the grant unmade; an unconfirmed request may have gone through.
+      if (failure instanceof ApiError) {
+        const restored = await api
+          .disableNoteShare(context.remoteId, { signal: context.signal })
+          .catch(() => null);
+        context.check();
+        if (restored) {
+          setState((shown) => shown && { ...shown, share: restored.share });
+          setHasToken(false);
+          await removeNoteShareToken(context.userId, context.remoteId).catch(() => undefined);
+        }
+      }
+      throw failure;
+    }
   };
 
   const linkFor = async (context: SharingOperation): Promise<string> => {
-    const { share } = context.current;
-    if (share.visibility === 'invited' && share.token_prefix) {
-      return buildNoteInviteUrl(share.token_prefix);
-    }
+    const invitation = invitationLink(context.current.share);
+    if (invitation) return invitation;
     const token = await loadToken(context.userId, context.remoteId, context.current);
     context.check();
     setHasToken(Boolean(token));
@@ -521,7 +573,7 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
 
   const inviteEmail = async (input: string): Promise<boolean> => {
     const email = input.trim().toLowerCase();
-    if (!EMAIL_PATTERN.test(email)) {
+    if (!isValidEmail(email)) {
       setMessage(null);
       setError(INVALID_EMAIL_ERROR);
       return false;
@@ -538,8 +590,7 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
         ) {
           throw new Error('This person already has access or an invitation.');
         }
-        await ensureFullLink(context);
-        await context.mutate(() =>
+        await grantWithFullLink(context, () =>
           api.createNoteAccessGrant(
             context.remoteId,
             { principal_type: 'email', email, permission: 'viewer' },
@@ -573,8 +624,7 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
         ) {
           throw new Error('You do not have permission to manage group access.');
         }
-        await ensureFullLink(context);
-        await context.mutate(() =>
+        await grantWithFullLink(context, () =>
           api.createNoteAccessGrant(
             context.remoteId,
             {
@@ -653,7 +703,7 @@ export function useNoteSharing(noteId: number, onFlushDraft: () => void): NoteSh
     cancellable,
     error,
     message,
-    hasLink: hasToken || Boolean(state?.share.visibility === 'invited' && state.share.token_prefix),
+    hasLink: hasToken || Boolean(state && invitationLink(state.share)),
     sharingMode,
     note,
     user,

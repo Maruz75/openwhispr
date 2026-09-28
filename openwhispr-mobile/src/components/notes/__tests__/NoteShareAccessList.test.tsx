@@ -398,3 +398,33 @@ it('still lets a manager reduce access when the organization blocks invitations'
   expect(updateGrant).toHaveBeenCalledWith(editorGrant, 'viewer');
   expect(screen.getByLabelText('Make pending@example.com a viewer')).toBeTruthy();
 });
+
+/** VoiceOver can't focus an element inside another accessible element, so nested actions vanish. */
+type RenderedElement = ReturnType<ReturnType<typeof render>['getByLabelText']>;
+function insideAccessibleElement(element: RenderedElement): boolean {
+  for (let node = element.parent; node; node = node.parent) {
+    if (typeof node.type === 'string' && node.props.accessible) return true;
+  }
+  return false;
+}
+it('leaves per-person actions reachable by VoiceOver', () => {
+  const screen = render(
+    <NoteShareAccessList
+      access={access}
+      invitations={[invitation]}
+      busy={false}
+      onUpdateGrant={jest.fn()}
+      onRemoveGrant={jest.fn()}
+      onRevokeInvitation={jest.fn()}
+      onResendInvitation={jest.fn()}
+    />,
+  );
+  for (const label of [
+    'Make Person an editor',
+    'Remove access for Person',
+    'Resend invitation to pending@example.com',
+    'Revoke invitation for pending@example.com',
+  ]) {
+    expect(insideAccessibleElement(screen.getByLabelText(label))).toBe(false);
+  }
+});

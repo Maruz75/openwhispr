@@ -964,7 +964,7 @@ it('lets the server lift a paused private note only after it accepts the invitat
           id: 'grant-1',
           principal: { ...access.owner, id: 'user-2', name: 'Paused' },
           permission: 'viewer',
-          source: 'direct',
+          source: 'direct' as const,
           inherited: false,
           pending: false,
           created_at: '',
@@ -1006,7 +1006,7 @@ it('does not let a quiet refresh hide the first load failing', async (): Promise
   expect(result.current.error).toMatch(/permission/i);
   expect(sharing.getNoteShareState).toHaveBeenCalledTimes(1);
 });
-it('refreshes on return once a note opened before its upload has a cloud copy', async (): Promise<void> => {
+it('loads settings once background sync uploads a note opened before its upload', async (): Promise<void> => {
   let onChange!: (state: AppStateStatus) => void;
   jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
     onChange = listener;
@@ -1021,9 +1021,163 @@ it('refreshes on return once a note opened before its upload has a cloud copy', 
   await act(async (): Promise<void> => {
     useNotesStore.setState({ notes: [note] });
   });
+  await waitFor(() => expect(result.current.state?.share.visibility).toBe('private'));
+  expect(sharing.getNoteShareState).toHaveBeenCalledTimes(1);
   await act(async (): Promise<void> => {
     onChange('active');
   });
-  expect(sharing.getNoteShareState).toHaveBeenCalledTimes(1);
+  expect(sharing.getNoteShareState).toHaveBeenCalledTimes(2);
+});
+
+const pausedGrant = {
+  id: 'grant-1',
+  principal: { ...access.owner, id: 'user-2', name: 'Paused' },
+  permission: 'viewer' as const,
+  source: 'direct' as const,
+  inherited: false,
+  pending: false,
+  created_at: '',
+  updated_at: '',
+};
+it('copies the bearer link after replacing the link of a link share', async (): Promise<void> => {
+  jest
+    .mocked(sharing.getNoteShareState)
+    .mockResolvedValue({ share: linkShare, invitations: [], access });
+  jest
+    .mocked(sharing.replaceNoteShareToken)
+    .mockResolvedValue({ share: linkShare, raw_token: TOKEN });
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.replaceLink();
+  });
+  expect(tokens.saveNoteShareToken).toHaveBeenCalledWith('owner', 'remote', TOKEN);
+  expect(Clipboard.setStringAsync).toHaveBeenCalledWith(`https://notes.openwhispr.com/n/${TOKEN}`);
+});
+it('copies the invitation link after replacing the link of invited sharing', async (): Promise<void> => {
+  jest
+    .mocked(sharing.getNoteShareState)
+    .mockResolvedValue({ share: invitedShare, invitations: [], access });
+  jest
+    .mocked(sharing.replaceNoteShareToken)
+    .mockResolvedValue({ share: invitedShare, raw_token: TOKEN });
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.replaceLink();
+  });
+  expect(tokens.saveNoteShareToken).toHaveBeenCalledWith('owner', 'remote', TOKEN);
+  expect(Clipboard.setStringAsync).toHaveBeenCalledWith(
+    `https://notes.openwhispr.com/invite/${invitedShare.token_prefix}`,
+  );
+});
+it('shows the server’s settings after it refuses a change that still reopened sharing', async (): Promise<void> => {
+  const paused = { share, access: { ...access, grants: [pausedGrant] }, invitations: [] };
+  jest
+    .mocked(sharing.getNoteShareState)
+    .mockResolvedValueOnce(paused)
+    .mockResolvedValueOnce(paused)
+    .mockResolvedValue({ ...paused, share: invitedShare });
+  jest
+    .mocked(sharing.createNoteAccessGrant)
+    .mockRejectedValueOnce(
+      new ApiError('Daily invitation limit reached', 429, 'invitations_per_day_exceeded'),
+    );
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.inviteEmail('friend@example.com');
+  });
+  expect(result.current.state?.share.visibility).toBe('invited');
+  expect(result.current.error).toMatch(/invitation limit/i);
+});
+it('turns an empty share back off when the server refuses its first grant', async (): Promise<void> => {
+  jest
+    .mocked(sharing.createNoteAccessGrant)
+    .mockRejectedValueOnce(new ApiError('Verify your email', 403, 'email_verification_required'));
+  jest.mocked(sharing.disableNoteShare).mockResolvedValue({ share });
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.inviteEmail('friend@example.com');
+  });
+  expect(sharing.setNoteShareVisibility).toHaveBeenCalledTimes(1);
+  expect(sharing.disableNoteShare).toHaveBeenCalledTimes(1);
+  expect(tokens.removeNoteShareToken).toHaveBeenCalledWith('owner', 'remote');
   expect(result.current.state?.share.visibility).toBe('private');
+  expect(result.current.hasLink).toBe(false);
+  expect(result.current.error).toMatch(/verify your email/i);
+});
+it('keeps the share of a first grant whose outcome is unknown', async (): Promise<void> => {
+  jest
+    .mocked(sharing.createNoteAccessGrant)
+    .mockRejectedValueOnce(new ApiError('Internal server error', 500));
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.inviteEmail('friend@example.com');
+  });
+  expect(sharing.disableNoteShare).not.toHaveBeenCalled();
+  expect(result.current.error).toMatch(/could not be confirmed/i);
+});
+it('explains losing access after removing your own grant', async (): Promise<void> => {
+  const withGrant = { share, access: { ...access, grants: [pausedGrant] }, invitations: [] };
+  jest
+    .mocked(sharing.getNoteShareState)
+    .mockResolvedValueOnce(withGrant)
+    .mockResolvedValueOnce(withGrant)
+    .mockRejectedValueOnce(new ApiError('Not found', 404));
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.removeGrant(pausedGrant);
+  });
+  expect(sharing.removeNoteAccessGrant).toHaveBeenCalledTimes(1);
+  expect(result.current.state).toBeNull();
+  expect(result.current.error).toMatch(/no longer manage sharing/i);
+});
+it('keeps the full link of a first invitation when the only access is inherited', async (): Promise<void> => {
+  jest.mocked(sharing.getNoteShareState).mockResolvedValue({
+    share,
+    access: {
+      ...access,
+      grants: [{ ...pausedGrant, id: 'scope:space-1', inherited: true }],
+    },
+    invitations: [],
+  });
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async (): Promise<void> => {
+    await result.current.inviteEmail('friend@example.com');
+  });
+  expect(sharing.setNoteShareVisibility).toHaveBeenCalledWith(
+    'remote',
+    'invited',
+    [],
+    expect.anything(),
+  );
+  expect(tokens.saveNoteShareToken).toHaveBeenCalledWith('owner', 'remote', TOKEN);
+});
+it('never widens a share it could not show when the server reports one already', async (): Promise<void> => {
+  jest
+    .mocked(sharing.getNoteShareState)
+    .mockRejectedValueOnce(new Error('Network down'))
+    .mockResolvedValue({ share: invitedShare, invitations: [], access });
+  const { result } = setup();
+  await waitFor(() => expect(result.current.error).not.toBeNull());
+  expect(result.current.state).toBeNull();
+  await act(async (): Promise<void> => {
+    await result.current.setVisibility('link');
+  });
+  expect(sharing.setNoteShareVisibility).not.toHaveBeenCalled();
+  expect(result.current.error).toMatch(/changed/i);
+});
+it('erases the stored link when the note’s cloud copy changes', async (): Promise<void> => {
+  const { result } = setup();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  note = { ...note, remoteId: 'remote-2' };
+  await act(async (): Promise<void> => {
+    useNotesStore.setState({ notes: [note] });
+  });
+  expect(tokens.removeNoteShareToken).toHaveBeenCalledWith('owner', 'remote');
 });

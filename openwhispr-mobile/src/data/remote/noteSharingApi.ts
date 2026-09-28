@@ -29,15 +29,21 @@ export async function getNoteShareState(
   return api.get<ShareStateResponse>(sharePath(remoteId), options);
 }
 
-/** The strictest external-sharing mode across the caller's workspaces; the server still enforces it. */
+/**
+ * The strictest external-sharing mode across the caller's workspaces, or null while a managed
+ * workspace's policy is still pending; the server enforces it either way.
+ */
 export async function getExternalSharingMode(
   options?: NoteSharingRequestOptions,
-): Promise<ExternalSharingMode> {
+): Promise<ExternalSharingMode | null> {
   // The response may be cached per device, not per account; revalidate so a switch shows the new policy.
   const { data } = await api.get<{
-    data: { managed: boolean; policy: { sharing: { externalLinkSharing: ExternalSharingMode } } };
+    data: {
+      managed: boolean;
+      policy: { sharing?: { externalLinkSharing?: ExternalSharingMode } } | null;
+    };
   }>('/api/workspace-policy', { ...options, headers: { 'Cache-Control': 'no-cache' } });
-  return data.managed ? data.policy.sharing.externalLinkSharing : 'allowed';
+  return data.managed ? (data.policy?.sharing?.externalLinkSharing ?? null) : 'allowed';
 }
 
 export async function setNoteShareVisibility(
