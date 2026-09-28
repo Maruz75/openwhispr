@@ -3,7 +3,7 @@ import { getHumanParticipants } from '@/lib/calendar/meetingContext';
 import { formatClockTime } from '@/lib/formatNoteRowTime';
 import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
 
-const isSameDay = (a: Date, b: Date): boolean =>
+export const isSameDay = (a: Date, b: Date): boolean =>
   a.getFullYear() === b.getFullYear() &&
   a.getMonth() === b.getMonth() &&
   a.getDate() === b.getDate();
