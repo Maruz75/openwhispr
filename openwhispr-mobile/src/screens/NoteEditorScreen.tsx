@@ -45,7 +45,12 @@ import { NoteMetaRow } from '@/components/notes/NoteMetaRow';
 import { AttendeesSheet } from '@/components/notes/AttendeesSheet';
 import { MoveToFolderSheet } from '@/components/notes/MoveToFolderSheet';
 import { useMoveNote } from '@/hooks/useMoveNote';
-import { formatAttendeeChipLabel, formatNoteMetaDate, noteTakenAt } from '@/lib/notes/noteMeta';
+import {
+  formatAttendeeChipLabel,
+  formatNoteMetaDate,
+  markViewer,
+  noteTakenAt,
+} from '@/lib/notes/noteMeta';
 import { SpeakerRenameSheet } from '@/components/notes/SpeakerRenameSheet';
 import { SpeakerMergeSheet } from '@/components/notes/SpeakerMergeSheet';
 import { VoiceprintSuggestionSheet } from '@/components/notes/VoiceprintSuggestionSheet';
@@ -343,7 +348,18 @@ export default function NoteEditorScreen() {
   useEffect(() => {
     closeMove();
   }, [closeMove, noteId, isSpaceUnknown]);
-  const attendeeLabel = formatAttendeeChipLabel(calendarParticipants);
+  // The participants' `self` comes from the calendar of whoever created the note; notes are only
+  // someone else's in a team Space, where the owner is known once the note has synced.
+  const attendees = useMemo(
+    () =>
+      markViewer(calendarParticipants, {
+        creatorIsViewer:
+          scopeSpaceId == null || !note?.ownerUserId || note.ownerUserId === user?.id,
+        viewerEmail: user?.email ?? null,
+      }),
+    [calendarParticipants, note?.ownerUserId, scopeSpaceId, user?.email, user?.id],
+  );
+  const attendeeLabel = formatAttendeeChipLabel(attendees);
   const meetingNotesContext = useMemo(
     () =>
       note?.calendarEventId
@@ -1459,7 +1475,7 @@ export default function NoteEditorScreen() {
       />
       <AttendeesSheet
         visible={attendeesVisible}
-        participants={calendarParticipants}
+        participants={attendees}
         onClose={() => setAttendeesVisible(false)}
       />
       {/* Hidden in the render where the Space disappears, before the picker is closed. */}

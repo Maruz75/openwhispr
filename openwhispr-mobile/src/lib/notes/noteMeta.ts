@@ -56,6 +56,22 @@ export function sortAttendees(participants: CalendarParticipant[]): CalendarPart
   ];
 }
 
+/**
+ * `self` comes from the calendar of whoever created the note, so on a teammate's note it marks
+ * them. There, you are whoever has your address.
+ */
+export function markViewer(
+  participants: CalendarParticipant[],
+  { creatorIsViewer, viewerEmail }: { creatorIsViewer: boolean; viewerEmail: string | null },
+): CalendarParticipant[] {
+  if (creatorIsViewer) return participants;
+  const email = viewerEmail?.toLowerCase();
+  return participants.map((participant) => ({
+    ...participant,
+    self: !!email && participant.email?.toLowerCase() === email,
+  }));
+}
+
 export function attendeeName(participant: CalendarParticipant): string {
   if (participant.self) return 'You';
   return participant.displayName?.trim() || participant.email || 'Guest';

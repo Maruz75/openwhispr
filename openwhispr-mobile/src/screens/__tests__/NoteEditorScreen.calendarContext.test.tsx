@@ -1446,6 +1446,72 @@ describe('NoteEditorScreen meta row', () => {
     expect(queryByTestId('move-sheet')).toBeNull();
   });
 
+  describe('on a team note', () => {
+    const teamSpace = { id: 2, kind: 'team', name: 'Engineering', workspaceId: 'w1' } as Space;
+    const participants = JSON.stringify([
+      {
+        email: 'sam@example.com',
+        displayName: 'Sam Lee',
+        responseStatus: 'accepted',
+        organizer: true,
+        resource: false,
+        self: true,
+      },
+      {
+        email: 'user@example.com',
+        displayName: 'Uma User',
+        responseStatus: 'accepted',
+        organizer: false,
+        resource: false,
+        self: false,
+      },
+    ]);
+    beforeEach(() => {
+      mockNotesState.spaces = [teamSpace];
+    });
+
+    it('labels you, not the teammate who created the note, as You', () => {
+      mockNote = note({ spaceId: 2, ownerUserId: 'teammate-9', participants });
+      mockNotesState.notes = [mockNote];
+      const { getByTestId, getByText, queryByText } = render(<NoteEditorScreen />);
+      expect(getByText('Sam +1')).toBeTruthy();
+
+      fireEvent.press(getByTestId('note-meta-attendees'));
+      expect(getByText('Sam Lee')).toBeTruthy();
+      expect(getByText('You')).toBeTruthy();
+      expect(queryByText('Uma User')).toBeNull();
+    });
+
+    it('trusts your calendar’s own row on a team note you created', () => {
+      // Your calendar account needn't share your OpenWhispr address.
+      const ownCalendar = JSON.stringify([
+        {
+          email: 'uma@corp.example',
+          displayName: 'Uma User',
+          responseStatus: 'accepted',
+          organizer: false,
+          resource: false,
+          self: true,
+        },
+        {
+          email: 'sam@example.com',
+          displayName: 'Sam Lee',
+          responseStatus: 'accepted',
+          organizer: false,
+          resource: false,
+          self: false,
+        },
+      ]);
+      mockNote = note({ spaceId: 2, ownerUserId: 'user-1', participants: ownCalendar });
+      mockNotesState.notes = [mockNote];
+      const { getByTestId, getByText, queryByText } = render(<NoteEditorScreen />);
+      expect(getByText('Sam +1')).toBeTruthy();
+      fireEvent.press(getByTestId('note-meta-attendees'));
+      expect(getByText('You')).toBeTruthy();
+      expect(queryByText('Uma User')).toBeNull();
+    });
+  });
+
   it('dates a note pulled before its creation time synced by its last edit, not the pull', () => {
     mockNote = note({ createdAt: '2025-09-27 08:00:00', updatedAt: '2025-06-26T12:00:00.000Z' });
     mockNotesState.notes = [mockNote];

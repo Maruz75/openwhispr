@@ -2,6 +2,7 @@ import {
   attendeeName,
   formatAttendeeChipLabel,
   formatNoteMetaDate,
+  markViewer,
   noteTakenAt,
   sortAttendees,
 } from '@/lib/notes/noteMeta';
@@ -83,6 +84,32 @@ describe('sortAttendees', () => {
     const kim = person({ displayName: 'Kim Park', responseStatus: 'declined' });
     expect(sortAttendees([sam, kim])).toEqual([sam]);
     expect(formatAttendeeChipLabel([sam, kim])).toBe('Sam');
+  });
+});
+
+describe('markViewer', () => {
+  const creator = person({ displayName: 'Sam Lee', email: 'sam@x.com', self: true });
+  const viewer = person({ displayName: 'Ana Ruiz', email: 'ana@x.com' });
+
+  it('keeps the calendar’s own row as you on a note you created', () => {
+    expect(
+      markViewer([creator, viewer], { creatorIsViewer: true, viewerEmail: 'sam@x.com' }),
+    ).toEqual([creator, viewer]);
+  });
+
+  it('marks you, not the creator, on a teammate’s note', () => {
+    const marked = markViewer([creator, viewer], {
+      creatorIsViewer: false,
+      viewerEmail: 'Ana@X.com',
+    });
+    expect(marked.map((participant) => participant.self)).toEqual([false, true]);
+    expect(formatAttendeeChipLabel(marked)).toBe('Sam +1');
+    expect(attendeeName(marked[0])).toBe('Sam Lee');
+  });
+
+  it('marks nobody on a teammate’s note you weren’t invited to', () => {
+    const marked = markViewer([creator, viewer], { creatorIsViewer: false, viewerEmail: null });
+    expect(marked.some((participant) => participant.self)).toBe(false);
   });
 });
 
