@@ -1204,6 +1204,14 @@ describe('NoteEditorScreen meta row', () => {
     const { queryByTestId } = render(<NoteEditorScreen />);
     expect(queryByTestId('note-meta-attendees')).toBeNull();
   });
+
+  it('dates a note pulled before its creation time synced by its last edit, not the pull', () => {
+    mockNote = note({ createdAt: '2025-09-27 08:00:00', updatedAt: '2025-06-26T12:00:00.000Z' });
+    mockNotesState.notes = [mockNote];
+    const { getByText, queryByText } = render(<NoteEditorScreen />);
+    expect(getByText(/^Jun 26, 2025/)).toBeTruthy();
+    expect(queryByText(/^Sep 27, 2025/)).toBeNull();
+  });
 });
 
 describe('NoteEditorScreen clearing generated notes', () => {

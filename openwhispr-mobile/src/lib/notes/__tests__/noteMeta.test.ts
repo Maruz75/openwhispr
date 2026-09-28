@@ -2,6 +2,7 @@ import {
   attendeeName,
   formatAttendeeChipLabel,
   formatNoteMetaDate,
+  noteTakenAt,
   sortAttendees,
 } from '@/lib/notes/noteMeta';
 import type { CalendarParticipant } from '@/data/calendarTypes';
@@ -46,6 +47,28 @@ describe('formatNoteMetaDate', () => {
   it('returns an empty label when the timestamp is missing or unparsable', () => {
     expect(formatNoteMetaDate(null, now)).toBe('');
     expect(formatNoteMetaDate('not a date', now)).toBe('');
+  });
+});
+
+describe('noteTakenAt', () => {
+  it('uses the creation time of a note made or pulled with it', () => {
+    expect(noteTakenAt('2026-06-01 09:00:00', '2026-06-26T10:00:00.000Z')).toEqual(
+      new Date('2026-06-01T09:00:00.000Z'),
+    );
+  });
+
+  it('uses the last edit when the creation time is the later pull time', () => {
+    expect(noteTakenAt('2026-09-27 08:00:00', '2026-06-26T10:00:00.000Z')).toEqual(
+      new Date('2026-06-26T10:00:00.000Z'),
+    );
+  });
+
+  it('uses whichever timestamp is readable', () => {
+    expect(noteTakenAt(null, '2026-06-26T10:00:00.000Z')).toEqual(
+      new Date('2026-06-26T10:00:00.000Z'),
+    );
+    expect(noteTakenAt('2026-06-01 09:00:00', null)).toEqual(new Date('2026-06-01T09:00:00.000Z'));
+    expect(noteTakenAt(null, null)).toBeNull();
   });
 });
 

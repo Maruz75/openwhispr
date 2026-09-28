@@ -831,6 +831,7 @@ export class LocalNotesRepository implements NotesRepository {
           // space, the team pass passes the space it resolved.
           spaceId: options.spaceId ?? this.getPrivateSpaceId(),
           ...this.remoteOwnershipValues(remote, options.applyOwnership),
+          ...(remote.created_at ? { createdAt: remote.created_at } : {}),
           cloudUpdatedAt: remote.updated_at,
           updatedAt: remote.updated_at,
         })
@@ -885,6 +886,8 @@ export class LocalNotesRepository implements NotesRepository {
         // space the row keeps whatever space it already sits in.
         ...(options.spaceId !== undefined ? { spaceId: options.spaceId } : {}),
         ...this.remoteOwnershipValues(remote, options.applyOwnership),
+        // Also repairs rows pulled before created_at synced, which carry their pull time.
+        ...(remote.created_at ? { createdAt: remote.created_at } : {}),
         cloudUpdatedAt: remote.updated_at,
         updatedAt: remote.updated_at,
       })

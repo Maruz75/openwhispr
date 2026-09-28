@@ -45,7 +45,7 @@ import { NoteMetaRow } from '@/components/notes/NoteMetaRow';
 import { AttendeesSheet } from '@/components/notes/AttendeesSheet';
 import { MoveToFolderSheet } from '@/components/notes/MoveToFolderSheet';
 import { useMoveNote } from '@/hooks/useMoveNote';
-import { formatAttendeeChipLabel, formatNoteMetaDate } from '@/lib/notes/noteMeta';
+import { formatAttendeeChipLabel, formatNoteMetaDate, noteTakenAt } from '@/lib/notes/noteMeta';
 import { SpeakerRenameSheet } from '@/components/notes/SpeakerRenameSheet';
 import { SpeakerMergeSheet } from '@/components/notes/SpeakerMergeSheet';
 import { VoiceprintSuggestionSheet } from '@/components/notes/VoiceprintSuggestionSheet';
@@ -1158,7 +1158,10 @@ export default function NoteEditorScreen() {
           />
 
           <NoteMetaRow
-            dateLabel={formatNoteMetaDate(note?.createdAt, new Date())}
+            dateLabel={formatNoteMetaDate(
+              noteTakenAt(note?.createdAt, note?.updatedAt),
+              new Date(),
+            )}
             attendeeLabel={attendeeLabel}
             folderLabel={folderName}
             onPressAttendees={() => setAttendeesVisible(true)}

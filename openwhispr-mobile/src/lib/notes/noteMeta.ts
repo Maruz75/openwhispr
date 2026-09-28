@@ -6,9 +6,23 @@ const isSameDay = (a: Date, b: Date): boolean =>
   a.getMonth() === b.getMonth() &&
   a.getDate() === b.getDate();
 
+/**
+ * When the note was taken. Notes pulled before `created_at` synced were stamped with the pull
+ * time, which is later than their last edit, so the earlier of the two is the closer answer.
+ */
+export function noteTakenAt(
+  createdAt: string | null | undefined,
+  updatedAt: string | null | undefined,
+): Date | null {
+  const created = tryParseNoteTimestamp(createdAt);
+  const updated = tryParseNoteTimestamp(updatedAt);
+  if (!created || !updated) return created ?? updated;
+  return created < updated ? created : updated;
+}
+
 /** "Today 9:27 AM", "Yesterday 2:05 PM", "Sep 21, 9:27 AM", or "Sep 21, 2025, 9:27 AM". */
-export function formatNoteMetaDate(createdAt: string | null | undefined, now: Date): string {
-  const date = tryParseNoteTimestamp(createdAt);
+export function formatNoteMetaDate(timestamp: string | Date | null | undefined, now: Date): string {
+  const date = tryParseNoteTimestamp(timestamp);
   if (!date) return '';
 
   const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });

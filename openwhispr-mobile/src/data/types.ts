@@ -99,6 +99,8 @@ export interface RemoteNote {
   /** Desktop-shape transcript JSON; decomposed into segments/speakers on apply. */
   transcript: string | null;
   deleted_at: string | null;
+  /** Optional: not every server payload that reaches an apply path carries it. */
+  created_at?: string;
   updated_at: string;
   // Scope fields declared for a later task; not yet populated by pull/apply.
   space_id?: string | null;
