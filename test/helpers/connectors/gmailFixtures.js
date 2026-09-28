@@ -21,6 +21,20 @@ const CONNECTED = {
 // What a pending Gmail action carries for CONNECTED in its slot at generation 1.
 const BINDING = { ownerAccountId: "acct-1", accountId: "sub-1", generation: 1 };
 
+// What Google's token endpoint returns for the three requested scopes: full
+// URLs, space separated, in no fixed order ("email" becomes userinfo.email).
+const GRANTED =
+  "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.send";
+
+// A stand-in for the real gmailAuth.js's OAuthFlowError, carrying the
+// redirect code the caller reads.
+class FakeFlowError extends Error {
+  constructor(redirectCode, message) {
+    super(message);
+    this.redirectCode = redirectCode;
+  }
+}
+
 // A scripted Google: each URL path answers with its queued replies in order,
 // and the last reply repeats. Paths: "/gmail/v1/users/me/messages/send",
 // "/token" and "/revoke".
@@ -78,15 +92,38 @@ function idToken(payload) {
   return `${segment({ alg: "RS256", kid: "test-key", typ: "JWT" })}.${segment(payload)}.test-signature`;
 }
 
+// The raw message Gmail received: headers unfolded, body base64-decoded.
+function decodeMessage(raw) {
+  const text = Buffer.from(raw, "base64url").toString("utf8");
+  const split = text.indexOf("\r\n\r\n");
+  return {
+    headers: text
+      .slice(0, split)
+      .replace(/\r\n[ \t]/g, " ")
+      .split("\r\n"),
+    body: Buffer.from(text.slice(split + 4).replace(/\r\n/g, ""), "base64").toString("utf8"),
+  };
+}
+
+function header(message, name) {
+  return (
+    message.headers.find((line) => line.toLowerCase().startsWith(`${name.toLowerCase()}:`)) ?? null
+  );
+}
+
 module.exports = {
   NOW,
   CONNECTED,
   BINDING,
+  GRANTED,
+  FakeFlowError,
   fakeGoogleFetch,
   json,
   httpStatus,
   reset,
   offline,
   idToken,
+  decodeMessage,
+  header,
   memoryCredentials,
 };

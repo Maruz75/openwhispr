@@ -4,6 +4,8 @@ const {
   NOW,
   CONNECTED,
   BINDING,
+  GRANTED,
+  FakeFlowError,
   fakeGoogleFetch,
   idToken,
   offline,
@@ -14,21 +16,10 @@ const {
 const loadAuth = () => import("../../../src/helpers/connectors/gmailAuth.js");
 const loadApi = () => import("../../../src/helpers/connectors/gmailApi.js");
 
-class FakeFlowError extends Error {
-  constructor(redirectCode, message) {
-    super(message);
-    this.redirectCode = redirectCode;
-  }
-}
-
 const TOKEN = "/token";
 const REVOKE = "/revoke";
 const REDIRECT_URI = "http://127.0.0.1:5000";
 const CLIENT = { clientId: "client-1.apps.googleusercontent.com", clientSecret: "secret-1" };
-// What Google's token endpoint returns for the three requested scopes: full
-// URLs, space separated, in no fixed order ("email" becomes userinfo.email).
-const GRANTED =
-  "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.send";
 const EXPIRED = { ...CONNECTED, expiresAt: NOW - 1 };
 const OTHER_LOGIN = {
   ...CONNECTED,
