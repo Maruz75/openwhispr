@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import NoteEditorScreen from '@/screens/NoteEditorScreen';
 import { ReasoningService } from '@/services/reasoning/ReasoningService';
 import { generateNoteTitle } from '@/utils/generateTitle';
@@ -897,14 +897,83 @@ describe('NoteEditorScreen body tabs', () => {
     expect(getByTestId('note-content-input')).toBeTruthy();
   });
 
-  it('shows the processing status, not an editor, while the transcript is still being made', () => {
+  it('shows the processing status on the Transcript tab and keeps My notes reachable', () => {
     mockNote = note({ transcriptionStatus: 'transcribing' });
     mockNotesState.notes = [mockNote];
     mockSegments = [];
-    const { getByText, queryByTestId } = render(<NoteEditorScreen />);
+    const { getByText, getByTestId, queryByTestId, queryByText } = render(<NoteEditorScreen />);
     expect(getByText('Transcribing audio...')).toBeTruthy();
+    expect(queryByTestId('note-content-input')).toBeNull();
+
+    fireEvent.press(getByTestId('note-tab-notes'));
+
+    expect(getByTestId('note-content-input').props.value).toBe('Alice owns the launch checklist.');
+    expect(queryByText('Transcribing audio...')).toBeNull();
+  });
+
+  it('keeps a failed transcript on its own tab beside the generated notes and My notes', () => {
+    mockNote = note({ transcriptionStatus: 'failed', enhancedContent: '## Summary' });
+    mockNotesState.notes = [mockNote];
+    mockSegments = [];
+    const { getByText, getByTestId } = render(<NoteEditorScreen />);
+    expect(getByTestId('note-tab-enhanced')).toBeTruthy();
+    expect(getByTestId('note-tab-notes')).toBeTruthy();
+
+    fireEvent.press(getByTestId('note-tab-transcript'));
+
+    expect(getByText('Transcript failed')).toBeTruthy();
+  });
+
+  it('never shows an uploaded file’s body, the flat copy of its transcript, as My notes', () => {
+    mockNote = note({
+      noteType: 'upload',
+      calendarEventId: null,
+      participants: null,
+      content: 'Alice can take the first pass.',
+    });
+    mockNotesState.notes = [mockNote];
+    const { getByText, queryByTestId } = render(<NoteEditorScreen />);
+    expect(getByText('Alice can take the first pass.')).toBeTruthy();
     expect(queryByTestId('note-tab-notes')).toBeNull();
     expect(queryByTestId('note-content-input')).toBeNull();
+  });
+
+  it('keeps an uploaded file’s transcript as a tab once notes are generated', () => {
+    mockNote = note({
+      noteType: 'upload',
+      calendarEventId: null,
+      participants: null,
+      enhancedContent: '## Summary',
+    });
+    mockNotesState.notes = [mockNote];
+    const { getByText, getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    expect(getByTestId('note-tab-enhanced')).toBeTruthy();
+    expect(queryByTestId('note-tab-notes')).toBeNull();
+
+    fireEvent.press(getByTestId('note-tab-transcript'));
+
+    expect(getByText('Alice can take the first pass.')).toBeTruthy();
+    expect(queryByTestId('note-content-input')).toBeNull();
+  });
+
+  it('shows an uploaded file without segments as its editable transcript text', () => {
+    mockNote = note({
+      noteType: 'upload',
+      calendarEventId: null,
+      participants: null,
+      diarizationEnabled: 0,
+      content: 'Alice can take the first pass.',
+      enhancedContent: '## Summary',
+    });
+    mockNotesState.notes = [mockNote];
+    mockSegments = [];
+    const { getByTestId } = render(<NoteEditorScreen />);
+    const bodyTab = getByTestId('note-tab-notes');
+    expect(within(bodyTab).getByText('Transcript')).toBeTruthy();
+
+    fireEvent.press(bodyTab);
+
+    expect(getByTestId('note-content-input').props.value).toBe('Alice can take the first pass.');
   });
 
   it('saves edits to the typed meeting notes without learning dictionary corrections', () => {

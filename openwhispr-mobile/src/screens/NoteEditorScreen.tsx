@@ -29,8 +29,8 @@ import { useUsageLimitRecovery } from '@/hooks/useUsageLimitRecovery';
 import { EditableMarkdown } from '@/components/notes/EditableMarkdown';
 import {
   defaultNoteBodyView,
+  getNoteBodyTabLabel,
   getNoteBodyTabs,
-  NOTE_BODY_TAB_LABELS,
   resolveNoteBodyView,
   type NoteBodyView,
 } from '@/lib/notes/noteBodyTabs';
@@ -345,6 +345,12 @@ export default function NoteEditorScreen() {
   const lastEnhancementInputHashRef = useRef('');
   const usesSegmentTranscriptRef = useRef(usesSegmentTranscript);
   usesSegmentTranscriptRef.current = usesSegmentTranscript;
+  // Desktop stores an uploaded file's flat transcript as the note body.
+  const contentIsTranscript = note?.noteType === 'upload';
+  // Notes typed beside a recording: never dictated, and never the transcript itself.
+  const hasTypedMeetingNotes = isAudioTranscript && !contentIsTranscript;
+  const hasTypedMeetingNotesRef = useRef(hasTypedMeetingNotes);
+  hasTypedMeetingNotesRef.current = hasTypedMeetingNotes;
   const activeSpeaker =
     activeSpeakerId == null
       ? null
@@ -368,6 +374,7 @@ export default function NoteEditorScreen() {
   const shouldRenderPlainEditor =
     !isAudioTranscript ||
     (!hasTranscriptSegments && (transcriptStatus === 'idle' || transcriptStatus === 'done'));
+  const transcriptPending = shouldShowTranscriptStatus || shouldShowTranscriptFailed;
   const requiresCloudConfirmation = note?.isPrivate === 1 || activeMode === 'private';
 
   const handleKeepMine = useCallback(() => {
@@ -403,7 +410,7 @@ export default function NoteEditorScreen() {
     if (contentChanged) {
       originalContentRef.current = contentRef.current;
       // Meeting notes are typed, not dictated, so their edits aren't transcription corrections.
-      if (!usesSegmentTranscriptRef.current) maybeLearnCorrections(contentRef.current);
+      if (!hasTypedMeetingNotesRef.current) maybeLearnCorrections(contentRef.current);
     }
   }, [noteId, updateNote, maybeLearnCorrections]);
 
@@ -614,6 +621,8 @@ export default function NoteEditorScreen() {
           content: buildNoteShareContent({
             viewMode: resolveNoteBodyView(viewMode, {
               usesSegmentTranscript,
+              transcriptPending,
+              contentIsTranscript,
               hasEnhanced: !!note?.enhancedContent,
             }),
             enhancedContent: note?.enhancedContent ?? null,
@@ -625,7 +634,14 @@ export default function NoteEditorScreen() {
         format,
       ).catch(() => Alert.alert('Export failed', 'Could not export this note. Please try again.'));
     },
-    [note?.enhancedContent, transcriptBlocks, usesSegmentTranscript, viewMode],
+    [
+      contentIsTranscript,
+      note?.enhancedContent,
+      transcriptBlocks,
+      transcriptPending,
+      usesSegmentTranscript,
+      viewMode,
+    ],
   );
 
   const handleViewTranscript = useCallback(() => {
@@ -1019,7 +1035,12 @@ export default function NoteEditorScreen() {
 
   const hasEnhanced = !!note?.enhancedContent;
   // An open editor keeps its tab, so clearing the notes to rewrite them doesn't close it.
-  const bodyTabInput = { usesSegmentTranscript, hasEnhanced: hasEnhanced || enhancedEditing };
+  const bodyTabInput = {
+    usesSegmentTranscript,
+    transcriptPending,
+    contentIsTranscript,
+    hasEnhanced: hasEnhanced || enhancedEditing,
+  };
   const bodyTabs = getNoteBodyTabs(bodyTabInput);
   const bodyView = resolveNoteBodyView(viewMode, bodyTabInput);
   const actionInputHash = makeContentHash(actionInputText);
@@ -1182,7 +1203,7 @@ export default function NoteEditorScreen() {
                         'text-[13px] font-medium ' + (active ? 'text-white' : 'text-secondaryLabel')
                       }
                     >
-                      {NOTE_BODY_TAB_LABELS[tab]}
+                      {getNoteBodyTabLabel(tab, bodyTabInput)}
                     </Text>
                     {tab === 'enhanced' && isStale ? (
                       <View
@@ -1209,6 +1230,21 @@ export default function NoteEditorScreen() {
                 editable={!isEnhancing}
                 onChange={handleEnhancedChange}
                 onEditingChange={handleEnhancedEditingChange}
+              />
+            ) : bodyView === 'notes' ? (
+              <TextInput
+                testID="note-content-input"
+                value={content}
+                onChangeText={handleContentChange}
+                selection={selection}
+                onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+                placeholder={hasTypedMeetingNotes ? 'Add your own notes…' : 'Type or dictate…'}
+                placeholderTextColor="rgba(0,0,0,0.2)"
+                multiline
+                editable={!isEnhancing}
+                textAlignVertical="top"
+                className="min-h-[300px] text-base leading-6 text-label"
+                style={{ fontFamily: AppFont.regular, opacity: isEnhancing ? 0.4 : 1 }}
               />
             ) : shouldShowTranscriptStatus ? (
               <View className="min-h-[180px] flex-row items-center gap-3">
@@ -1251,27 +1287,12 @@ export default function NoteEditorScreen() {
                   </Text>
                 )}
               </View>
-            ) : bodyView === 'transcript' ? (
+            ) : (
               <SpeakerTranscript
                 blocks={transcriptBlocks}
                 selectedSpeakerId={activeSpeakerId}
                 selectable
                 onSpeakerPress={handleSpeakerPress}
-              />
-            ) : (
-              <TextInput
-                testID="note-content-input"
-                value={content}
-                onChangeText={handleContentChange}
-                selection={selection}
-                onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
-                placeholder={usesSegmentTranscript ? 'Add your own notes…' : 'Type or dictate…'}
-                placeholderTextColor="rgba(0,0,0,0.2)"
-                multiline
-                editable={!isEnhancing}
-                textAlignVertical="top"
-                className="min-h-[300px] text-base leading-6 text-label"
-                style={{ fontFamily: AppFont.regular, opacity: isEnhancing ? 0.4 : 1 }}
               />
             )}
 

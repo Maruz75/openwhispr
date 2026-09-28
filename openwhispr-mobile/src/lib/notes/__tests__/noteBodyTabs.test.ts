@@ -1,47 +1,86 @@
 import {
   defaultNoteBodyView,
+  getNoteBodyTabLabel,
   getNoteBodyTabs,
-  NOTE_BODY_TAB_LABELS,
   resolveNoteBodyView,
+  type NoteBodyTabInput,
 } from '@/lib/notes/noteBodyTabs';
+
+const tabInput = (overrides: Partial<NoteBodyTabInput> = {}): NoteBodyTabInput => ({
+  usesSegmentTranscript: false,
+  transcriptPending: false,
+  contentIsTranscript: false,
+  hasEnhanced: false,
+  ...overrides,
+});
 
 describe('getNoteBodyTabs', () => {
   it('offers Transcript and My notes on a transcript note before notes are generated', () => {
-    expect(getNoteBodyTabs({ usesSegmentTranscript: true, hasEnhanced: false })).toEqual([
+    expect(getNoteBodyTabs(tabInput({ usesSegmentTranscript: true }))).toEqual([
       'transcript',
       'notes',
     ]);
   });
 
   it('offers Enhanced and My notes once notes are generated, on any note', () => {
-    expect(getNoteBodyTabs({ usesSegmentTranscript: true, hasEnhanced: true })).toEqual([
+    expect(getNoteBodyTabs(tabInput({ usesSegmentTranscript: true, hasEnhanced: true }))).toEqual([
       'enhanced',
       'notes',
     ]);
-    expect(getNoteBodyTabs({ usesSegmentTranscript: false, hasEnhanced: true })).toEqual([
-      'enhanced',
-      'notes',
-    ]);
+    expect(getNoteBodyTabs(tabInput({ hasEnhanced: true }))).toEqual(['enhanced', 'notes']);
   });
 
   it('offers only My notes on a plain note without generated notes', () => {
-    expect(getNoteBodyTabs({ usesSegmentTranscript: false, hasEnhanced: false })).toEqual([
+    expect(getNoteBodyTabs(tabInput())).toEqual(['notes']);
+  });
+
+  it('keeps a Transcript tab for a transcript still in progress or failed, beside My notes', () => {
+    expect(getNoteBodyTabs(tabInput({ transcriptPending: true }))).toEqual(['transcript', 'notes']);
+    expect(getNoteBodyTabs(tabInput({ transcriptPending: true, hasEnhanced: true }))).toEqual([
+      'enhanced',
+      'transcript',
       'notes',
     ]);
   });
 
+  it('never shows an upload body beside its transcript', () => {
+    const upload = { contentIsTranscript: true };
+    expect(getNoteBodyTabs(tabInput({ ...upload, usesSegmentTranscript: true }))).toEqual([
+      'transcript',
+    ]);
+    expect(
+      getNoteBodyTabs(tabInput({ ...upload, usesSegmentTranscript: true, hasEnhanced: true })),
+    ).toEqual(['enhanced', 'transcript']);
+    expect(getNoteBodyTabs(tabInput({ ...upload, transcriptPending: true }))).toEqual([
+      'transcript',
+    ]);
+  });
+
+  it('shows an upload without segments as its editable body', () => {
+    expect(getNoteBodyTabs(tabInput({ contentIsTranscript: true }))).toEqual(['notes']);
+    expect(getNoteBodyTabs(tabInput({ contentIsTranscript: true, hasEnhanced: true }))).toEqual([
+      'enhanced',
+      'notes',
+    ]);
+  });
+});
+
+describe('getNoteBodyTabLabel', () => {
   it('labels the tabs', () => {
-    expect(NOTE_BODY_TAB_LABELS).toEqual({
-      enhanced: 'Enhanced',
-      transcript: 'Transcript',
-      notes: 'My notes',
-    });
+    const input = { contentIsTranscript: false };
+    expect(getNoteBodyTabLabel('enhanced', input)).toBe('Enhanced');
+    expect(getNoteBodyTabLabel('transcript', input)).toBe('Transcript');
+    expect(getNoteBodyTabLabel('notes', input)).toBe('My notes');
+  });
+
+  it("calls an upload's body its transcript", () => {
+    expect(getNoteBodyTabLabel('notes', { contentIsTranscript: true })).toBe('Transcript');
   });
 });
 
 describe('resolveNoteBodyView', () => {
-  const meeting = { usesSegmentTranscript: true, hasEnhanced: false };
-  const generated = { usesSegmentTranscript: true, hasEnhanced: true };
+  const meeting = tabInput({ usesSegmentTranscript: true });
+  const generated = tabInput({ usesSegmentTranscript: true, hasEnhanced: true });
 
   it('keeps the requested view while its tab exists', () => {
     expect(resolveNoteBodyView('transcript', meeting)).toBe('transcript');
@@ -54,9 +93,7 @@ describe('resolveNoteBodyView', () => {
 
   it('falls back to the first tab when the requested one is gone', () => {
     expect(resolveNoteBodyView('enhanced', meeting)).toBe('transcript');
-    expect(
-      resolveNoteBodyView('enhanced', { usesSegmentTranscript: false, hasEnhanced: false }),
-    ).toBe('notes');
+    expect(resolveNoteBodyView('enhanced', tabInput())).toBe('notes');
   });
 });
 
