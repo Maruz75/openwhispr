@@ -113,6 +113,8 @@ const reloadVoiceProfiles = (): Pick<NotesStore, 'voiceProfiles'> => ({
   voiceProfiles: notesRepository.getSpeakerProfiles(),
 });
 
+let diarizerModelDownload: Promise<void> | null = null;
+
 const DEFAULT_FOLDER_ID = 1;
 const MEETINGS_FOLDER_NAME = 'meetings';
 
@@ -773,7 +775,9 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
 
   isDiarizerAvailable: async () => loadDiarizer().isAvailable(),
 
-  isDiarizerModelReady: async () => loadDiarizer().isModelDownloaded(),
+  // A download in flight has created some model files, which reads as downloaded.
+  isDiarizerModelReady: async () =>
+    diarizerModelDownload === null && loadDiarizer().isModelDownloaded(),
 
   // True only if the local ASR model the meeting path would route to is actually downloaded.
   isLocalAsrModelReady: async () => {
@@ -782,8 +786,14 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
     return LocalTranscriptionService.isReadyForLanguage();
   },
 
-  downloadDiarizerModel: async () => {
-    await loadDiarizer().downloadModel();
+  // Shared, so a second caller can't start another download into the same model folder.
+  downloadDiarizerModel: () => {
+    diarizerModelDownload ??= loadDiarizer()
+      .downloadModel()
+      .finally(() => {
+        diarizerModelDownload = null;
+      });
+    return diarizerModelDownload;
   },
 
   deleteDiarizerModel: async () => {

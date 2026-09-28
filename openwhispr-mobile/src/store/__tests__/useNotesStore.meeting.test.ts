@@ -968,6 +968,26 @@ describe('voice profile enrollment', () => {
     expect(downloadModel).toHaveBeenCalledTimes(1);
   });
 
+  it('shares one model download between callers and is not ready until it finishes', async () => {
+    let finish: () => void = () => {};
+    const downloadModel = jest.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    mockGetDiarizer.mockReturnValue({
+      diarize: jest.fn(),
+      isModelDownloaded: jest.fn(async () => true),
+      downloadModel,
+    });
+
+    const first = useNotesStore.getState().downloadDiarizerModel();
+    const second = useNotesStore.getState().downloadDiarizerModel();
+    await expect(useNotesStore.getState().isDiarizerModelReady()).resolves.toBe(false);
+    finish();
+    await Promise.all([first, second]);
+
+    expect(downloadModel).toHaveBeenCalledTimes(1);
+    await expect(useNotesStore.getState().isDiarizerModelReady()).resolves.toBe(true);
+    mockGetDiarizer.mockReset();
+  });
+
   it('deletes the diarizer model through the explicit delete action', async () => {
     const deleteModel = jest.fn(async () => undefined);
     mockGetDiarizer.mockReturnValueOnce({
