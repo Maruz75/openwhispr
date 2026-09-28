@@ -48,7 +48,7 @@ test("returns the requested model when nothing is downloaded, so the error names
   );
 });
 
-test("config uses Pocket and Smart Turn from the voice models directory", () => {
+test("config uses Supertonic voice F2 and Smart Turn from the voice models directory", () => {
   const modelPaths = getVoiceModelPaths("/m");
   const config = buildVoiceWorkerConfig({ modelPaths });
 
@@ -62,10 +62,10 @@ test("config uses Pocket and Smart Turn from the voice models directory", () => 
     threshold: 0.8,
     numThreads: 4,
   });
-  assert.equal(config.tts.model.pocket.lmMain, modelPaths.pocket.lmMain);
-  assert.equal(config.tts.model.kokoro, undefined);
-  assert.equal(config.pocketVoiceWav, modelPaths.pocket.referenceVoiceWav);
-  assert.equal(config.ttsKind, undefined);
+  assert.deepEqual(config.tts.model.supertonic, modelPaths.supertonic);
+  assert.equal(config.tts.model.numThreads, 2);
+  // F2 at 5 steps: fewer steps sounded distorted.
+  assert.deepEqual(config.ttsGeneration, { sid: 1, numSteps: 5, extra: { lang: "en" } });
 });
 
 test("the worker's endpointer commits a Smart Turn endpoint only above 0.8", () => {

@@ -443,8 +443,8 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
         sessionIdRef.current = sessionId;
         // stop() closes this player if it lands while the mic is opening.
         playerRef.current = createPcmPlayer({
-          // Pocket synthesizes at 24 kHz.
-          sampleRate: info.sampleRate || 24000,
+          // Supertonic synthesizes at 44.1 kHz.
+          sampleRate: info.sampleRate || 44100,
           onStart: () => {
             if (!heldForSpeechRef.current) setState("speaking");
           },

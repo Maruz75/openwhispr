@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Downloads the voice conversation models (Silero VAD, Smart Turn, Pocket TTS)
+// Downloads the voice conversation models (Silero VAD, Smart Turn, Supertonic TTS)
 // into the app's voice-models directory, so the harness runs on any machine.
 // The brain (a GGUF LLM) comes from the app's own model manager.
 //

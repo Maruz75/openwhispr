@@ -3,18 +3,18 @@ const path = require("path");
 const { getModelsDirForService } = require("./modelDirUtils");
 const { isProcessAlive } = require("./sidecarReaper");
 
-const POCKET_DIR = "sherpa-onnx-pocket-tts-int8-2026-01-26";
-// Release gate: the publisher marks this clip test-only; ship a licensed clip.
-const POCKET_REFERENCE_VOICE = path.join("test_wavs", "bria.wav");
-const POCKET_FILES = {
-  lmFlow: "lm_flow.int8.onnx",
-  lmMain: "lm_main.int8.onnx",
-  encoder: "encoder.onnx",
-  decoder: "decoder.int8.onnx",
-  textConditioner: "text_conditioner.onnx",
-  vocabJson: "vocab.json",
-  tokenScoresJson: "token_scores.json",
-  referenceVoiceWav: POCKET_REFERENCE_VOICE,
+// Supertonic 3 (Supertone, OpenRAIL-M weights; licence in src/assets/licenses): fixed
+// voices, so every sentence sounds like the same speaker, and a character-level text
+// front end, so it needs no espeak-ng data.
+const SUPERTONIC_DIR = "sherpa-onnx-supertonic-3-tts-int8-2026-05-11";
+const SUPERTONIC_FILES = {
+  durationPredictor: "duration_predictor.int8.onnx",
+  textEncoder: "text_encoder.int8.onnx",
+  vectorEstimator: "vector_estimator.int8.onnx",
+  vocoder: "vocoder.int8.onnx",
+  ttsJson: "tts.json",
+  unicodeIndexer: "unicode_indexer.bin",
+  voiceStyle: "voice.bin",
 };
 
 // Every download is pinned by hash: the GitHub release tags are rolling and a Hugging
@@ -40,13 +40,13 @@ const VOICE_MODELS = [
     approxBytes: 8_700_000,
   },
   {
-    id: "pocket-tts",
-    url: `https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/${POCKET_DIR}.tar.bz2`,
-    sha256: "2f3b88823cbbb9bf0b2477ec8ae7b3fec417b3a87b6bb5f256dba66f2ad967cb",
+    id: "supertonic-tts",
+    url: `https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/${SUPERTONIC_DIR}.tar.bz2`,
+    sha256: "82fa96f91c4ef8abaae3a14a3f4153facf88bed821d1f7331cec2700f432c427",
     archive: true,
-    target: POCKET_DIR,
-    requiredFiles: Object.values(POCKET_FILES).map((file) => path.join(POCKET_DIR, file)),
-    approxBytes: 98_000_000,
+    target: SUPERTONIC_DIR,
+    requiredFiles: Object.values(SUPERTONIC_FILES).map((file) => path.join(SUPERTONIC_DIR, file)),
+    approxBytes: 128_800_000,
   },
 ];
 
@@ -67,19 +67,19 @@ function getVoiceModelStatus(modelsDir = getVoiceModelsDir(), exists = fs.exists
 }
 
 function getVoiceModelPaths(modelsDir = getVoiceModelsDir()) {
-  const pocketDir = path.join(modelsDir, POCKET_DIR);
-  const pocket = Object.fromEntries(
-    Object.entries(POCKET_FILES).map(([key, file]) => [key, path.join(pocketDir, file)])
+  const supertonicDir = path.join(modelsDir, SUPERTONIC_DIR);
+  const supertonic = Object.fromEntries(
+    Object.entries(SUPERTONIC_FILES).map(([key, file]) => [key, path.join(supertonicDir, file)])
   );
   return {
     vad: path.join(modelsDir, "silero_vad.onnx"),
     smartTurn: path.join(modelsDir, "smart-turn-v3.2-cpu.onnx"),
-    pocket,
+    supertonic,
   };
 }
 
-// An archive is extracted beside its download (Pocket's ~98 MB unpacks to
-// ~200 MB), so reserve three times the download size.
+// An archive is extracted beside its download (Supertonic's ~129 MB unpacks to
+// ~146 MB) and may replace an earlier copy, so reserve three times the download size.
 const DISK_SPACE_FACTOR = 3;
 
 function defaultDeps() {

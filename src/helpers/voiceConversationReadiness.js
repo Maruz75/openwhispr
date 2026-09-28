@@ -1,9 +1,9 @@
-// v1 hears English only: Parakeet EN transcribes and Pocket speaks English.
+// v1 hears English only: Parakeet EN transcribes, and Supertonic speaks with an English voice.
 const VOICE_LANGUAGES = new Set(["en", "auto"]);
 
 /**
  * Pure precondition check for starting a hands-free voice session: language support,
- * the bundled VAD/Smart Turn/Pocket models, a downloaded Parakeet speech model, and a
+ * the bundled VAD/Smart Turn/Supertonic models, a downloaded Parakeet speech model, and a
  * brain that can answer (a downloaded local model, OpenWhispr Cloud while signed in, or
  * a BYOK provider with its API key).
  * Checked in this order so the cheapest, least surprising failure (language) is

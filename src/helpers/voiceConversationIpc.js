@@ -17,7 +17,7 @@ const { createDownloadSignal } = require("./downloadUtils");
 const WORKER_IDLE_STOP_MS = 5 * 60 * 1000;
 
 // Local voice conversation: the renderer streams echo-cancelled 16 kHz mic frames in;
-// the worker's VAD + Smart Turn cut turns, Parakeet transcribes them here, and Pocket
+// the worker's VAD + Smart Turn cut turns, Parakeet transcribes them here, and Supertonic
 // TTS audio streams back out. Gated in the renderer by the voiceConversationEnabled setting.
 function registerVoiceConversationIpc({
   parakeetManager,
@@ -45,7 +45,7 @@ function registerVoiceConversationIpc({
     if (!session) return;
     session = null;
     onSessionActiveChange?.(false);
-    // The worker holds the VAD, Smart Turn and Pocket TTS in memory; like the ONNX
+    // The worker holds the VAD, Smart Turn and Supertonic TTS in memory; like the ONNX
     // worker, it goes once idle, and the next session respawns and reconfigures it.
     clearTimeout(workerIdleTimer);
     workerIdleTimer = setTimeout(() => {

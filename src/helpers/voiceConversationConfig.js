@@ -2,6 +2,11 @@ const VAD_SAMPLE_RATE = 16000;
 const SMART_TURN_PAUSE_MS = 200;
 const SMART_TURN_MAX_SILENCE_MS = 1200;
 const SMART_TURN_MAX_TURN_MS = 30000;
+// Supertonic voice F2 at 5 flow steps. Fewer steps sounded distorted, and each extra
+// step adds ~85 ms per sentence. Two threads were the fastest for this int8 build.
+const SUPERTONIC_VOICE_SID = 1;
+const SUPERTONIC_NUM_STEPS = 5;
+const TTS_NUM_THREADS = 2;
 
 /**
  * Silero cuts at a short pause and Smart Turn decides whether the turn is over;
@@ -9,9 +14,7 @@ const SMART_TURN_MAX_TURN_MS = 30000;
  * speech (a TV, people nearby) can keep every gap under max silence, so max turn
  * commits at the next pause rather than growing one turn without bound.
  */
-function buildVoiceWorkerConfig({ modelPaths, numThreads = 4 }) {
-  const { lmFlow, lmMain, encoder, decoder, textConditioner, vocabJson, tokenScoresJson } =
-    modelPaths.pocket;
+function buildVoiceWorkerConfig({ modelPaths }) {
   return {
     smartTurn: {
       model: modelPaths.smartTurn,
@@ -23,13 +26,17 @@ function buildVoiceWorkerConfig({ modelPaths, numThreads = 4 }) {
     },
     tts: {
       model: {
-        pocket: { lmFlow, lmMain, encoder, decoder, textConditioner, vocabJson, tokenScoresJson },
-        numThreads,
+        supertonic: modelPaths.supertonic,
+        numThreads: TTS_NUM_THREADS,
         provider: "cpu",
       },
       maxNumSentences: 1,
     },
-    pocketVoiceWav: modelPaths.pocket.referenceVoiceWav,
+    ttsGeneration: {
+      sid: SUPERTONIC_VOICE_SID,
+      numSteps: SUPERTONIC_NUM_STEPS,
+      extra: { lang: "en" },
+    },
     vad: {
       sileroVad: {
         model: modelPaths.vad,

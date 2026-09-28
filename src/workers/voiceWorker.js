@@ -90,22 +90,17 @@ function resetTurnState() {
 
 async function configure({
   tts: ttsConfig,
-  pocketVoiceWav,
+  ttsGeneration,
   vad: requestedVadConfig,
   smartTurn: smartTurnConfig,
 }) {
   const lib = loadSherpa();
   const started = Date.now();
   tts = await lib.OfflineTts.createAsync(ttsConfig);
-  ttsRequestExtras = {};
-  if (pocketVoiceWav) {
-    // Electron's V8 sandbox rejects external buffers, so every buffer is copied.
-    const wave = lib.readWave(pocketVoiceWav, false);
-    ttsRequestExtras.generationConfig = new lib.GenerationConfig({
-      referenceAudio: wave.samples,
-      referenceSampleRate: wave.sampleRate,
-    });
-  }
+  ttsRequestExtras = {
+    sid: ttsGeneration.sid,
+    generationConfig: new lib.GenerationConfig(ttsGeneration),
+  };
   const vadConfig = await loadSmartTurn(smartTurnConfig, requestedVadConfig);
   vad = new lib.Vad(vadConfig, 60);
   endpointer = createConfiguredTurnEndpointer({
@@ -138,8 +133,8 @@ function speak({ utteranceId, chunkIndex, text }) {
     let firstAudioMs = null;
     const audio = await tts.generateAsync({
       text,
-      sid: 0,
       speed: 1.0,
+      // Electron's V8 sandbox rejects external buffers, so the audio is copied.
       enableExternalBuffer: false,
       ...ttsRequestExtras,
       onProgress: (info) => {

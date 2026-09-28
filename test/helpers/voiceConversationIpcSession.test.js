@@ -58,7 +58,7 @@ Module._load = function loadVoiceIpcWithStubs(request, parent, isMain) {
       getVoiceModelPaths: () => ({
         vad: "/models/silero_vad.onnx",
         smartTurn: "/models/smart-turn.onnx",
-        pocket: { referenceVoiceWav: "/models/voice.wav" },
+        supertonic: { voiceStyle: "/models/voice.bin" },
       }),
     };
   }

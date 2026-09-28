@@ -142,7 +142,7 @@ test("the report names the machine, the headline numbers and each scenario", () 
   const report = formatHarnessReport({
     results,
     summary: summarizeHarness(results),
-    environment: { machine: "Apple M5 Pro", memoryGb: 48, brain: "qwen3.5-9b", tts: "pocket" },
+    environment: { machine: "Apple M5 Pro", memoryGb: 48, brain: "qwen3.5-9b", tts: "supertonic" },
   });
   assert.match(report, /Apple M5 Pro/);
   assert.match(report, /First audio/);
@@ -168,7 +168,7 @@ test("the report has a Ran column showing executed writes, separate from Called"
   const report = formatHarnessReport({
     results,
     summary: summarizeHarness(results),
-    environment: { machine: "Apple M5 Pro", memoryGb: 48, brain: "qwen3.5-9b", tts: "pocket" },
+    environment: { machine: "Apple M5 Pro", memoryGb: 48, brain: "qwen3.5-9b", tts: "supertonic" },
   });
   assert.match(
     report,

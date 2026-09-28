@@ -32,13 +32,13 @@ test("a non-English language is refused before anything else is checked", () => 
 test("missing voice models report which ones and how much to download", () => {
   const result = checkVoiceConversationReadiness({
     ...READY,
-    modelStatus: { ready: false, missing: ["pocket-tts"], missingBytes: 98_000_000 },
+    modelStatus: { ready: false, missing: ["supertonic-tts"], missingBytes: 128_800_000 },
   });
   assert.deepEqual(result, {
     ready: false,
     reason: "voice-models-missing",
-    missing: ["pocket-tts"],
-    missingBytes: 98_000_000,
+    missing: ["supertonic-tts"],
+    missingBytes: 128_800_000,
   });
 });
 

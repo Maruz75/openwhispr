@@ -26,7 +26,7 @@ function touch(dir, relative) {
 
 const partialDirs = (dir) => fs.readdirSync(dir).filter((name) => name.includes(".partial-"));
 
-const pocket = VOICE_MODELS.find((model) => model.id === "pocket-tts");
+const tts = VOICE_MODELS.find((model) => model.id === "supertonic-tts");
 
 // A PID whose process has already exited.
 const deadPid = () => spawnSync(process.execPath, ["-e", ""]).pid;
@@ -53,7 +53,7 @@ function fakeDeps(dir, { skipFile } = {}) {
       },
       sha256File: async (filePath) => fs.readFileSync(filePath, "utf8"),
       extractTarBz2: async (_archive, destDir) => {
-        for (const file of pocket.requiredFiles) {
+        for (const file of tts.requiredFiles) {
           if (file !== skipFile) touch(destDir, file);
         }
       },
@@ -64,36 +64,36 @@ function fakeDeps(dir, { skipFile } = {}) {
 test("an empty directory needs all three models", (t) => {
   const status = getVoiceModelStatus(tempDir(t));
   assert.equal(status.ready, false);
-  assert.deepEqual(status.missing, ["vad", "smart-turn", "pocket-tts"]);
+  assert.deepEqual(status.missing, ["vad", "smart-turn", "supertonic-tts"]);
   assert.ok(status.missingBytes > 100_000_000);
 });
 
-test("a partly extracted Pocket archive does not count as downloaded", (t) => {
+test("a partly extracted TTS archive does not count as downloaded", (t) => {
   const dir = tempDir(t);
   touch(dir, "silero_vad.onnx");
   touch(dir, "smart-turn-v3.2-cpu.onnx");
-  for (const file of pocket.requiredFiles.slice(0, -1)) touch(dir, file);
+  for (const file of tts.requiredFiles.slice(0, -1)) touch(dir, file);
 
   const status = getVoiceModelStatus(dir);
 
   assert.equal(status.ready, false);
-  assert.deepEqual(status.missing, ["pocket-tts"]);
+  assert.deepEqual(status.missing, ["supertonic-tts"]);
 });
 
-test("resuming a partly extracted Pocket download finishes only that model", async (t) => {
+test("resuming a partly extracted TTS download finishes only that model", async (t) => {
   const dir = tempDir(t);
   touch(dir, "silero_vad.onnx");
   touch(dir, "smart-turn-v3.2-cpu.onnx");
-  for (const file of pocket.requiredFiles.slice(0, -1)) touch(dir, file);
+  for (const file of tts.requiredFiles.slice(0, -1)) touch(dir, file);
   const { deps, downloads } = fakeDeps(dir);
 
   const status = await downloadVoiceModels({ modelsDir: dir, deps });
 
   assert.equal(downloads.length, 1);
-  assert.ok(downloads[0].endsWith(`${pocket.target}.tar.bz2`));
+  assert.ok(downloads[0].endsWith(`${tts.target}.tar.bz2`));
   assert.equal(status.ready, true);
   assert.deepEqual(status.missing, []);
-  for (const file of pocket.requiredFiles) {
+  for (const file of tts.requiredFiles) {
     assert.ok(fs.existsSync(path.join(dir, file)), `expected ${file} to exist`);
   }
   assert.deepEqual(partialDirs(dir), []);
@@ -116,7 +116,7 @@ test("download fetches only what is missing and reports ready", async (t) => {
   assert.ok(!downloads.some((url) => url.endsWith("silero_vad.onnx")));
   assert.deepEqual(progress[0], { model: "smart-turn", downloadedBytes: 5, totalBytes: 10 });
   assert.equal(
-    fs.existsSync(path.join(dir, "sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2")),
+    fs.existsSync(path.join(dir, "sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2")),
     false
   );
 });
@@ -124,10 +124,13 @@ test("download fetches only what is missing and reports ready", async (t) => {
 test("an archive missing a required file fails loudly instead of reporting ready", async (t) => {
   const dir = tempDir(t);
   const { deps } = fakeDeps(dir, {
-    skipFile: path.join("sherpa-onnx-pocket-tts-int8-2026-01-26", "vocab.json"),
+    skipFile: path.join("sherpa-onnx-supertonic-3-tts-int8-2026-05-11", "voice.bin"),
   });
-  await assert.rejects(downloadVoiceModels({ modelsDir: dir, deps }), /pocket-tts.*vocab\.json/);
-  assert.equal(fs.existsSync(path.join(dir, "sherpa-onnx-pocket-tts-int8-2026-01-26")), false);
+  await assert.rejects(downloadVoiceModels({ modelsDir: dir, deps }), /supertonic-tts.*voice\.bin/);
+  assert.equal(
+    fs.existsSync(path.join(dir, "sherpa-onnx-supertonic-3-tts-int8-2026-05-11")),
+    false
+  );
 });
 
 test("an extraction interrupted mid-write leaves nothing that reads as ready", async (t) => {
@@ -135,16 +138,16 @@ test("an extraction interrupted mid-write leaves nothing that reads as ready", a
   const { deps } = fakeDeps(dir);
   deps.extractTarBz2 = async (_archive, destDir) => {
     // Every required file lands, the last one truncated, then extraction dies.
-    for (const file of pocket.requiredFiles) touch(destDir, file);
+    for (const file of tts.requiredFiles) touch(destDir, file);
     throw new Error("tar: unexpected end of archive");
   };
 
   await assert.rejects(downloadVoiceModels({ modelsDir: dir, deps }), /unexpected end of archive/);
 
-  assert.equal(fs.existsSync(path.join(dir, pocket.target)), false);
-  assert.deepEqual(getVoiceModelStatus(dir).missing, ["pocket-tts"]);
+  assert.equal(fs.existsSync(path.join(dir, tts.target)), false);
+  assert.deepEqual(getVoiceModelStatus(dir).missing, ["supertonic-tts"]);
   assert.deepEqual(partialDirs(dir), []);
-  assert.equal(fs.existsSync(path.join(dir, `${pocket.target}.tar.bz2`)), false);
+  assert.equal(fs.existsSync(path.join(dir, `${tts.target}.tar.bz2`)), false);
 });
 
 test("the model is not visible until extraction has finished", async (t) => {
@@ -154,7 +157,7 @@ test("the model is not visible until extraction has finished", async (t) => {
   let readyDuringExtraction = null;
   deps.extractTarBz2 = async (archive, destDir) => {
     await extract(archive, destDir);
-    readyDuringExtraction = fs.existsSync(path.join(dir, pocket.target));
+    readyDuringExtraction = fs.existsSync(path.join(dir, tts.target));
   };
 
   const status = await downloadVoiceModels({ modelsDir: dir, deps });
@@ -166,7 +169,7 @@ test("the model is not visible until extraction has finished", async (t) => {
 
 test("staging left by a crashed earlier run is cleared on the next download", async (t) => {
   const dir = tempDir(t);
-  touch(dir, path.join(`.${pocket.target}.partial-${deadPid()}-1`, pocket.requiredFiles[0]));
+  touch(dir, path.join(`.${tts.target}.partial-${deadPid()}-1`, tts.requiredFiles[0]));
   const { deps } = fakeDeps(dir);
 
   const status = await downloadVoiceModels({ modelsDir: dir, deps });
@@ -178,8 +181,8 @@ test("staging left by a crashed earlier run is cleared on the next download", as
 test("staging owned by another live process is left alone", async (t) => {
   const dir = tempDir(t);
   // The parent (the test runner) stands in for a second instance mid-extraction.
-  const liveStaging = `.${pocket.target}.partial-${process.ppid}-1`;
-  touch(dir, path.join(liveStaging, pocket.requiredFiles[0]));
+  const liveStaging = `.${tts.target}.partial-${process.ppid}-1`;
+  touch(dir, path.join(liveStaging, tts.requiredFiles[0]));
   const { deps } = fakeDeps(dir);
 
   const status = await downloadVoiceModels({ modelsDir: dir, deps });
@@ -200,7 +203,7 @@ test("refuses to start without room for the archive and its extraction", async (
   await assert.rejects(downloadVoiceModels({ modelsDir: dir, deps }), /Not enough disk space/);
 
   assert.equal(downloads.length, 0);
-  assert.ok(requested >= 3 * pocket.approxBytes, `reserved only ${requested} bytes`);
+  assert.ok(requested >= 3 * tts.approxBytes, `reserved only ${requested} bytes`);
 });
 
 test("a cleanup failure after the swap does not fail a finished install", async (t) => {
@@ -238,10 +241,10 @@ test("a cancel during extraction discards it instead of reporting ready", async 
     return true;
   });
 
-  assert.equal(fs.existsSync(path.join(dir, pocket.target)), false);
-  assert.deepEqual(getVoiceModelStatus(dir).missing, ["pocket-tts"]);
+  assert.equal(fs.existsSync(path.join(dir, tts.target)), false);
+  assert.deepEqual(getVoiceModelStatus(dir).missing, ["supertonic-tts"]);
   assert.deepEqual(partialDirs(dir), []);
-  assert.equal(fs.existsSync(path.join(dir, `${pocket.target}.tar.bz2`)), false);
+  assert.equal(fs.existsSync(path.join(dir, `${tts.target}.tar.bz2`)), false);
 });
 
 test("paths point inside the models directory", () => {
@@ -249,8 +252,8 @@ test("paths point inside the models directory", () => {
   assert.equal(paths.vad, path.join("/models", "silero_vad.onnx"));
   assert.equal(paths.smartTurn, path.join("/models", "smart-turn-v3.2-cpu.onnx"));
   assert.equal(
-    paths.pocket.referenceVoiceWav,
-    path.join("/models", "sherpa-onnx-pocket-tts-int8-2026-01-26", "test_wavs", "bria.wav")
+    paths.supertonic.voiceStyle,
+    path.join("/models", "sherpa-onnx-supertonic-3-tts-int8-2026-05-11", "voice.bin")
   );
 });
 
