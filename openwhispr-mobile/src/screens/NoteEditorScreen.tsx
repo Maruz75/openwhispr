@@ -347,10 +347,8 @@ export default function NoteEditorScreen() {
   usesSegmentTranscriptRef.current = usesSegmentTranscript;
   // Desktop stores an uploaded file's flat transcript as the note body.
   const contentIsTranscript = note?.noteType === 'upload';
-  // Notes typed beside a recording: never dictated, and never the transcript itself.
+  // Notes typed beside a recording, never the transcript itself.
   const hasTypedMeetingNotes = isAudioTranscript && !contentIsTranscript;
-  const hasTypedMeetingNotesRef = useRef(hasTypedMeetingNotes);
-  hasTypedMeetingNotesRef.current = hasTypedMeetingNotes;
   const activeSpeaker =
     activeSpeakerId == null
       ? null
@@ -374,6 +372,8 @@ export default function NoteEditorScreen() {
   const shouldRenderPlainEditor =
     !isAudioTranscript ||
     (!hasTranscriptSegments && (transcriptStatus === 'idle' || transcriptStatus === 'done'));
+  const shouldRenderPlainEditorRef = useRef(shouldRenderPlainEditor);
+  shouldRenderPlainEditorRef.current = shouldRenderPlainEditor;
   const transcriptPending = shouldShowTranscriptStatus || shouldShowTranscriptFailed;
   const requiresCloudConfirmation = note?.isPrivate === 1 || activeMode === 'private';
 
@@ -409,8 +409,9 @@ export default function NoteEditorScreen() {
     originalTitleRef.current = titleRef.current;
     if (contentChanged) {
       originalContentRef.current = contentRef.current;
-      // Meeting notes are typed, not dictated, so their edits aren't transcription corrections.
-      if (!hasTypedMeetingNotesRef.current) maybeLearnCorrections(contentRef.current);
+      // Only notes that can be dictated into teach the dictionary; edits to notes typed beside a
+      // transcript aren't transcription corrections.
+      if (shouldRenderPlainEditorRef.current) maybeLearnCorrections(contentRef.current);
     }
   }, [noteId, updateNote, maybeLearnCorrections]);
 
@@ -1244,7 +1245,8 @@ export default function NoteEditorScreen() {
                 placeholder={hasTypedMeetingNotes ? 'Add your own notes…' : 'Type or dictate…'}
                 placeholderTextColor="rgba(0,0,0,0.2)"
                 multiline
-                editable={!isEnhancing}
+                // The recording screen still writes these notes until the recording stops.
+                editable={!isEnhancing && transcriptStatus !== 'recording'}
                 textAlignVertical="top"
                 className="min-h-[300px] text-base leading-6 text-label"
                 style={{ fontFamily: AppFont.regular, opacity: isEnhancing ? 0.4 : 1 }}

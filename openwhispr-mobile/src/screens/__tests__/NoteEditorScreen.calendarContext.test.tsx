@@ -1008,6 +1008,28 @@ describe('NoteEditorScreen body tabs', () => {
     expect(extractCorrections).toHaveBeenCalled();
   });
 
+  it('still learns dictionary corrections from a meeting without a transcript, which can be dictated into', () => {
+    jest.useFakeTimers();
+    mockNote = note({ transcriptionStatus: 'done' });
+    mockNotesState.notes = [mockNote];
+    mockSegments = [];
+    const { getByTestId } = render(<NoteEditorScreen />);
+    fireEvent.changeText(getByTestId('note-content-input'), 'Alice owns the launch checklists.');
+    act(() => {
+      jest.advanceTimersByTime(800);
+    });
+    expect(extractCorrections).toHaveBeenCalled();
+  });
+
+  it('keeps My notes read-only while the meeting is still recording them', () => {
+    mockNote = note({ transcriptionStatus: 'recording' });
+    mockNotesState.notes = [mockNote];
+    mockSegments = [];
+    const { getByTestId } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('note-tab-notes'));
+    expect(getByTestId('note-content-input').props.editable).toBe(false);
+  });
+
   it('switches from Transcript to Enhanced when generated notes arrive', () => {
     const { rerender, getByText, queryByText } = render(<NoteEditorScreen />);
     expect(getByText('Alice can take the first pass.')).toBeTruthy();
