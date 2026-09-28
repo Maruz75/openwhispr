@@ -193,3 +193,155 @@ test("tool steps show the user plain, localized outcomes instead of codes", asyn
     "Call find_contact first."
   );
 });
+
+test("a sent email reports what the user sent, and an unknown one the connector's guidance", async () => {
+  const { approvalOutcomeResult } = await loadOutcome();
+  const final = { to: ["dana@acme.test"], cc: [], subject: "Q3", body: "Hi" };
+
+  assert.deepEqual(
+    approvalOutcomeResult({ state: "sent", url: "u", final }, "dana@acme.test").data,
+    { status: "sent", url: "u", destination: "dana@acme.test", final }
+  );
+  assert.deepEqual(
+    approvalOutcomeResult({ state: "unknown", checkUrl: "c" }, "dana@acme.test", {
+      unknownGuidance: "Tell the user to check their Gmail Sent folder.",
+    }).data,
+    {
+      status: "unknown",
+      destination: "dana@acme.test",
+      checkUrl: "c",
+      guidance:
+        "It may or may not have been sent. Do not retry this action unless the user asks you to. Tell the user to check their Gmail Sent folder.",
+    }
+  );
+});
+
+test("unavailable carries the caller's guidance, or the default no-retry rule", async () => {
+  const { unavailableResult } = await loadOutcome();
+  assert.equal(
+    unavailableResult("reconnect_needed").data.guidance,
+    "Do not retry this action unless the user asks you to."
+  );
+  assert.deepEqual(
+    unavailableResult("reconnect_needed", "Tell the user to reconnect Gmail. Don't retry.").data,
+    {
+      status: "unavailable",
+      reason: "reconnect_needed",
+      guidance: "Tell the user to reconnect Gmail. Don't retry.",
+    }
+  );
+});
+
+test("a Gmail failure is worded for Gmail in the tool step; other connectors keep theirs", async () => {
+  const { failedResult } = await loadOutcome();
+  await (await loadI18n()).changeLanguage("en");
+
+  for (const [errorCode, text] of [
+    ["reconnect_needed", "Gmail needs to be reconnected."],
+    ["ENOTFOUND", "Couldn't reach Gmail. Nothing was sent."],
+    ["timeout", "Couldn't reach Gmail. Nothing was sent."],
+    ["http_503", "Couldn't reach Gmail. Nothing was sent."],
+    ["rate_limited", "Gmail is busy."],
+    ["daily_limit", "Gmail's daily sending limit was reached."],
+    ["domain_policy", "Blocked by your organization's Google admin."],
+    ["too_many_recipients", "Too many recipients. Nothing was sent."],
+    ["connection_changed", "The Gmail connection changed. Nothing was sent."],
+    ["mystery_error", "That didn't work."],
+  ]) {
+    assert.equal(failedResult(errorCode, "raw", "gmail").displayText, text, errorCode);
+  }
+  assert.equal(
+    failedResult("reconnect_needed", "raw", "slack").displayText,
+    "Slack needs to be reconnected."
+  );
+  assert.equal(
+    failedResult("reconnect_needed", "raw").displayText,
+    "Slack needs to be reconnected."
+  );
+  assert.deepEqual(failedResult("daily_limit", "raw", "gmail").data, {
+    status: "failed",
+    errorCode: "daily_limit",
+    error: "raw",
+  });
+});
+
+test("runApprovalAction words a Gmail failure for Gmail and passes its unknown guidance on", async (t) => {
+  let prepared;
+  let committed;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => prepared,
+        connectorCommit: async () => committed,
+        connectorCancel: async () => ({ cancelled: true }),
+      },
+    },
+  });
+  const { runApprovalAction } = await loadRun();
+  const { approvalKey, approveAction, useConnectorApprovalStore } = await loadStore();
+  await (await loadI18n()).changeLanguage("en");
+  useConnectorApprovalStore.setState({ entries: {} });
+  const ctx = (toolCallId) => ({
+    messageId: "m7",
+    toolCallId,
+    signal: new AbortController().signal,
+    onApprovalRequested() {},
+  });
+  const options = { unknownGuidance: "Tell the user to check their Gmail Sent folder." };
+
+  prepared = { status: "failed", errorCode: "too_many_recipients", message: "Too many." };
+  const refused = await runApprovalAction(ctx("call-1"), "gmail", "send", {}, options);
+  assert.equal(refused.data.status, "failed");
+  assert.equal(refused.displayText, "Too many recipients. Nothing was sent.");
+
+  prepared = {
+    status: "ready",
+    actionId: "a7",
+    preview: {
+      verbKey: "email",
+      destinationLabel: "josh@acme.test",
+      accountLabel: "you@example.test",
+      body: "Hi",
+      fields: { to: ["josh@acme.test"], cc: [], subject: "Q3", body: "Hi" },
+    },
+  };
+  const send = async (toolCallId, result) => {
+    committed = result;
+    const pending = runApprovalAction(ctx(toolCallId), "gmail", "send", {}, options);
+    await new Promise((resolve) => setImmediate(resolve));
+    await approveAction(approvalKey("m7", toolCallId));
+    return pending;
+  };
+
+  const failed = await send("call-2", {
+    state: "failed",
+    errorCode: "daily_limit",
+    message: "Gmail's daily sending limit was reached.",
+  });
+  assert.equal(failed.displayText, "Gmail's daily sending limit was reached.");
+
+  const unknown = await send("call-3", {
+    state: "unknown",
+    checkUrl: "https://mail.google.test/#sent",
+  });
+  assert.equal(unknown.data.checkUrl, "https://mail.google.test/#sent");
+  assert.match(unknown.data.guidance, /Do not retry/);
+  assert.match(unknown.data.guidance, /Gmail Sent folder/);
+  assert.doesNotMatch(unknown.data.guidance, /check josh@acme\.test/);
+  // The tool step says where to look, in Gmail's words.
+  assert.equal(
+    unknown.displayText,
+    "Couldn't confirm the email to josh@acme.test was sent. Check your Gmail Sent folder."
+  );
+
+  // A connector without its own wording keeps the generic line.
+  const { approvalOutcomeResult } = await loadOutcome();
+  assert.equal(
+    approvalOutcomeResult({ state: "unknown" }, "#eng", { connectorId: "slack" }).displayText,
+    "Couldn't confirm it was sent. Check #eng."
+  );
+  assert.equal(
+    approvalOutcomeResult({ state: "unknown" }, "#eng").displayText,
+    "Couldn't confirm it was sent. Check #eng."
+  );
+});

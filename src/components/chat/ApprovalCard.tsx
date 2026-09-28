@@ -7,7 +7,8 @@ import {
   updateApprovalDraft,
   type ApprovalEntry,
 } from "../../stores/connectorApprovalStore";
-import { connectorErrorCopyKey } from "../../utils/connectorErrorCopy";
+import { connectorErrorText } from "../../utils/connectorErrorCopy";
+import { EmailApprovalFields, emailFieldProblems, toEmailFields } from "./EmailApprovalFields";
 
 // The draft lives in the store, so edit mode only changes how it is shown:
 // Send always commits exactly what the card displays.
@@ -19,6 +20,14 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
   const destination = preview.destinationLabel;
   // The fields exist only while the card can still change.
   const showEditor = editing && entry.state === "pending";
+  // An email card lays out its fields; a malformed one without them falls
+  // back to the plain layout rather than showing empty fields.
+  const emailFields =
+    preview.verbKey === "email" && draft.fields ? toEmailFields(draft.fields) : null;
+  const problems = emailFields ? emailFieldProblems(emailFields) : null;
+  // Send commits exactly what the card shows, so it waits until every
+  // address on it is one the email can go to.
+  const sendBlocked = Boolean(problems && (problems.missingTo || problems.invalid.length > 0));
 
   // Send and Cancel remove the button that had focus; the card keeps it, so
   // keyboard and screen-reader users land on the result.
@@ -39,6 +48,11 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
   const openLink = (url: string): void => {
     void window.electronAPI?.openExternal?.(url);
   };
+  // A connector with its own label names where the link goes ("Open in
+  // Gmail"); any other keeps "Open".
+  const openLabel = t(`connectors.approval.openIn.${entry.connectorId}`, {
+    defaultValue: t("connectors.approval.open"),
+  });
 
   return (
     <div
@@ -55,15 +69,33 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
         })}
       </p>
       <p className="text-xs text-muted-foreground">
-        {preview.workspaceLabel
-          ? t("connectors.approval.identityWithWorkspace", {
-              account: preview.accountLabel,
-              workspace: preview.workspaceLabel,
-            })
-          : t("connectors.approval.identity", { account: preview.accountLabel })}
+        {emailFields
+          ? t("connectors.approval.email.from", { account: preview.accountLabel })
+          : preview.workspaceLabel
+            ? t("connectors.approval.identityWithWorkspace", {
+                account: preview.accountLabel,
+                workspace: preview.workspaceLabel,
+              })
+            : t("connectors.approval.identity", { account: preview.accountLabel })}
       </p>
 
-      {showEditor ? (
+      {emailFields ? (
+        <div className="mt-2" onKeyDown={showEditor ? onEditorKeyDown : undefined}>
+          <EmailApprovalFields
+            fields={emailFields}
+            editing={showEditor}
+            disabled={entry.state !== "pending"}
+            onChange={(patch) => updateApprovalDraft(entry.key, { fields: patch })}
+          />
+          {entry.state === "pending" && problems && sendBlocked && (
+            <p role="alert" className="mt-2 text-xs text-destructive">
+              {problems.invalid.length > 0
+                ? t("connectors.approval.email.invalidAddress", { address: problems.invalid[0] })
+                : t("connectors.approval.email.missingTo")}
+            </p>
+          )}
+        </div>
+      ) : showEditor ? (
         <div className="mt-2 space-y-2" onKeyDown={onEditorKeyDown}>
           {draft.title !== undefined && (
             <input
@@ -111,7 +143,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
             {t("connectors.approval.sent", { destination })}
             {entry.url && (
               <Button size="sm" variant="link" onClick={() => openLink(entry.url as string)}>
-                {t("connectors.approval.open")}
+                {openLabel}
               </Button>
             )}
           </p>
@@ -121,19 +153,20 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
         {entry.state === "failed" && (
           <p className="mt-2 text-destructive">
             {t("connectors.approval.failed", {
-              message: t(`connectors.approval.errors.${connectorErrorCopyKey(entry.errorCode)}`, {
+              message: connectorErrorText(t, "approval", entry.connectorId, entry.errorCode, {
                 destination,
-                defaultValue: t("connectors.approval.errors.generic"),
               }),
             })}
           </p>
         )}
         {entry.state === "unknown" && (
           <p className="mt-2 text-foreground">
-            {t("connectors.approval.unknown", { destination })}
+            {emailFields
+              ? t("connectors.approval.email.unknown")
+              : t("connectors.approval.unknown", { destination })}
             {entry.url && (
               <Button size="sm" variant="link" onClick={() => openLink(entry.url as string)}>
-                {t("connectors.approval.open")}
+                {openLabel}
               </Button>
             )}
           </p>
@@ -150,6 +183,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
         <div className="mt-2 flex gap-2">
           <Button
             size="sm"
+            disabled={sendBlocked}
             onClick={() => {
               // Leaving the editor also means a frozen textarea never looks
               // editable while the draft sends.

@@ -3853,7 +3853,8 @@
     "approval": {
       "headers": {
         "default": "{{destination}} に送信",
-        "slackPost": "{{destination}}に投稿"
+        "slackPost": "{{destination}}に投稿",
+        "email": "{{destination}} 宛てのメール"
       },
       "identity": "{{account}} として",
       "identityWithWorkspace": "{{workspace}} の {{account}} として",
@@ -3885,7 +3886,36 @@
         "credential_save_failed": "このコンピューターにSlackのログイン情報を保存できませんでした。何も送信されていません。もう一度お試しください。",
         "dm_failed": "{{destination}}とのダイレクトメッセージを開けませんでした。何も送信されていません。",
         "restricted": "{{destination}}は読み取り専用か、あなたには制限されています。",
-        "generic": "問題が発生しました。何も送信されていません。"
+        "generic": "問題が発生しました。何も送信されていません。",
+        "gmail": {
+          "reconnect_needed": "設定でGmailを再接続する必要があります。",
+          "network": "Gmailに接続できませんでした。何も送信されていません。",
+          "rate_limited": "Gmailが混み合っています。しばらくしてからもう一度お試しください。",
+          "daily_limit": "Gmailの1日の送信上限に達しました。何も送信されていません。",
+          "domain_policy": "組織のGoogle管理者がこのアプリをブロックしています。何も送信されていません。",
+          "invalid_recipients": "無効なアドレスが含まれています。何も送信されていません。",
+          "too_many_recipients": "宛先が多すぎます（最大50件）。何も送信されていません。",
+          "too_long": "件名または本文がGmailには長すぎます。何も送信されていません。",
+          "invalid_message": "Gmailがメールの形式を拒否しました。何も送信されていません。",
+          "gmail_unavailable": "現在Gmailで送信できません。何も送信されていません。",
+          "refused": "Gmailが送信を拒否しました。何も送信されていません。",
+          "connection_changed": "送信前にGmailの接続が変わったため、何も送信されませんでした。",
+          "credential_save_failed": "このコンピューターにGmailのログイン情報を保存できませんでした。何も送信されていません。もう一度お試しください。"
+        }
+      },
+      "email": {
+        "from": "差出人: {{account}}",
+        "toLabel": "宛先",
+        "ccLabel": "Cc",
+        "subjectLabel": "件名",
+        "bodyLabel": "本文",
+        "addressHint": "複数のアドレスはカンマで区切ってください。",
+        "invalidAddress": "{{address}} は name@example.com のような完全なメールアドレスではありません。",
+        "missingTo": "宛先にアドレスを1つ以上入力してください。",
+        "unknown": "送信されたか確認できませんでした。送信済みフォルダを確認してください。"
+      },
+      "openIn": {
+        "gmail": "Gmailで開く"
       }
     },
     "policyOff": "組織によってコネクタが無効にされています。",
@@ -3983,7 +4013,25 @@
         "credential_save_failed": "このコンピューターにSlackのログイン情報を保存できませんでした。何も送信されていません。",
         "dm_failed": "ダイレクトメッセージを開けませんでした。何も送信されていません。",
         "restricted": "そのチャンネルは読み取り専用か、制限されています。",
-        "generic": "うまくいきませんでした。"
+        "generic": "うまくいきませんでした。",
+        "gmail": {
+          "reconnect_needed": "Gmailを再接続する必要があります。",
+          "network": "Gmailに接続できませんでした。何も送信されていません。",
+          "rate_limited": "Gmailが混み合っています。",
+          "daily_limit": "Gmailの1日の送信上限に達しました。",
+          "domain_policy": "組織のGoogle管理者によってブロックされています。",
+          "invalid_recipients": "無効なアドレスがあります。何も送信されていません。",
+          "too_many_recipients": "宛先が多すぎます。何も送信されていません。",
+          "too_long": "Gmailには長すぎます。何も送信されていません。",
+          "invalid_message": "Gmailがメールを拒否しました。何も送信されていません。",
+          "gmail_unavailable": "現在Gmailで送信できません。",
+          "refused": "Gmailが送信を拒否しました。",
+          "connection_changed": "Gmailの接続が変わりました。何も送信されていません。",
+          "credential_save_failed": "このコンピューターにGmailのログイン情報を保存できませんでした。何も送信されていません。"
+        }
+      },
+      "unknownSent": {
+        "gmail": "{{destination}} 宛てのメールが送信されたか確認できませんでした。Gmailの送信済みフォルダを確認してください。"
       }
     }
   },

@@ -4022,7 +4022,8 @@
     "approval": {
       "headers": {
         "default": "Send to {{destination}}",
-        "slackPost": "Post to {{destination}}"
+        "slackPost": "Post to {{destination}}",
+        "email": "Email to {{destination}}"
       },
       "identity": "As {{account}}",
       "identityWithWorkspace": "As {{account}} in {{workspace}}",
@@ -4054,7 +4055,36 @@
         "credential_save_failed": "The Slack login couldn't be saved on this computer. Nothing was sent. Try again.",
         "dm_failed": "The direct message to {{destination}} couldn't be opened. Nothing was sent.",
         "restricted": "{{destination}} is read-only or restricted for you.",
-        "generic": "Something went wrong. Nothing was sent."
+        "generic": "Something went wrong. Nothing was sent.",
+        "gmail": {
+          "reconnect_needed": "Gmail needs to be reconnected in Settings.",
+          "network": "Gmail couldn't be reached. Nothing was sent.",
+          "rate_limited": "Gmail is busy. Try again shortly.",
+          "daily_limit": "Gmail's daily sending limit was reached. Nothing was sent.",
+          "domain_policy": "Your organization's Google admin blocked this app. Nothing was sent.",
+          "invalid_recipients": "One of the addresses isn't valid. Nothing was sent.",
+          "too_many_recipients": "Too many recipients: 50 at most. Nothing was sent.",
+          "too_long": "The subject or message is too long for Gmail. Nothing was sent.",
+          "invalid_message": "Gmail refused the email as malformed. Nothing was sent.",
+          "gmail_unavailable": "Sending with Gmail isn't available right now. Nothing was sent.",
+          "refused": "Gmail refused to send it. Nothing was sent.",
+          "connection_changed": "The Gmail connection changed before sending, so nothing was sent.",
+          "credential_save_failed": "The Gmail login couldn't be saved on this computer. Nothing was sent. Try again."
+        }
+      },
+      "email": {
+        "from": "From {{account}}",
+        "toLabel": "To",
+        "ccLabel": "Cc",
+        "subjectLabel": "Subject",
+        "bodyLabel": "Message",
+        "addressHint": "Separate addresses with commas.",
+        "invalidAddress": "{{address}} isn't a full email address like name@example.com.",
+        "missingTo": "Add at least one address to To.",
+        "unknown": "Couldn't confirm it was sent. Check your Sent folder."
+      },
+      "openIn": {
+        "gmail": "Open in Gmail"
       }
     },
     "policyOff": "Connectors are turned off by your organization.",
@@ -4152,7 +4182,25 @@
         "credential_save_failed": "Couldn't save the Slack login on this computer. Nothing was sent.",
         "dm_failed": "Couldn't open the direct message. Nothing was sent.",
         "restricted": "That channel is read-only or restricted.",
-        "generic": "That didn't work."
+        "generic": "That didn't work.",
+        "gmail": {
+          "reconnect_needed": "Gmail needs to be reconnected.",
+          "network": "Couldn't reach Gmail. Nothing was sent.",
+          "rate_limited": "Gmail is busy.",
+          "daily_limit": "Gmail's daily sending limit was reached.",
+          "domain_policy": "Blocked by your organization's Google admin.",
+          "invalid_recipients": "An address isn't valid. Nothing was sent.",
+          "too_many_recipients": "Too many recipients. Nothing was sent.",
+          "too_long": "Too long for Gmail. Nothing was sent.",
+          "invalid_message": "Gmail refused the email. Nothing was sent.",
+          "gmail_unavailable": "Sending with Gmail isn't available right now.",
+          "refused": "Gmail refused to send it.",
+          "connection_changed": "The Gmail connection changed. Nothing was sent.",
+          "credential_save_failed": "Couldn't save the Gmail login on this computer. Nothing was sent."
+        }
+      },
+      "unknownSent": {
+        "gmail": "Couldn't confirm the email to {{destination}} was sent. Check your Gmail Sent folder."
       }
     }
   },

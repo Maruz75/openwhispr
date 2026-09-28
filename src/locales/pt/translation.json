@@ -3853,7 +3853,8 @@
     "approval": {
       "headers": {
         "default": "Enviar para {{destination}}",
-        "slackPost": "Publicar em {{destination}}"
+        "slackPost": "Publicar em {{destination}}",
+        "email": "E-mail para {{destination}}"
       },
       "identity": "Como {{account}}",
       "identityWithWorkspace": "Como {{account}} em {{workspace}}",
@@ -3885,7 +3886,36 @@
         "credential_save_failed": "Não foi possível salvar o login do Slack neste computador. Nada foi enviado. Tente novamente.",
         "dm_failed": "Não foi possível abrir a mensagem direta para {{destination}}. Nada foi enviado.",
         "restricted": "{{destination}} é somente leitura ou restrito para você.",
-        "generic": "Algo deu errado. Nada foi enviado."
+        "generic": "Algo deu errado. Nada foi enviado.",
+        "gmail": {
+          "reconnect_needed": "O Gmail precisa ser reconectado nas Configurações.",
+          "network": "Não foi possível acessar o Gmail. Nada foi enviado.",
+          "rate_limited": "O Gmail está ocupado. Tente novamente em breve.",
+          "daily_limit": "O limite diário de envio do Gmail foi atingido. Nada foi enviado.",
+          "domain_policy": "O administrador do Google da sua organização bloqueou este app. Nada foi enviado.",
+          "invalid_recipients": "Um dos endereços não é válido. Nada foi enviado.",
+          "too_many_recipients": "Destinatários demais: no máximo 50. Nada foi enviado.",
+          "too_long": "O assunto ou a mensagem é longo demais para o Gmail. Nada foi enviado.",
+          "invalid_message": "O Gmail recusou o e-mail por estar malformado. Nada foi enviado.",
+          "gmail_unavailable": "O envio pelo Gmail não está disponível agora. Nada foi enviado.",
+          "refused": "O Gmail se recusou a enviá-lo. Nada foi enviado.",
+          "connection_changed": "A conexão do Gmail mudou antes do envio, então nada foi enviado.",
+          "credential_save_failed": "Não foi possível salvar o login do Gmail neste computador. Nada foi enviado. Tente novamente."
+        }
+      },
+      "email": {
+        "from": "De {{account}}",
+        "toLabel": "Para",
+        "ccLabel": "Cc",
+        "subjectLabel": "Assunto",
+        "bodyLabel": "Mensagem",
+        "addressHint": "Separe os endereços com vírgulas.",
+        "invalidAddress": "{{address}} não é um endereço de e-mail completo como nome@exemplo.com.",
+        "missingTo": "Adicione pelo menos um endereço em Para.",
+        "unknown": "Não foi possível confirmar o envio. Verifique sua pasta de enviados."
+      },
+      "openIn": {
+        "gmail": "Abrir no Gmail"
       }
     },
     "policyOff": "Sua organização desativou os conectores.",
@@ -3983,7 +4013,25 @@
         "credential_save_failed": "Não foi possível salvar o login do Slack neste computador. Nada foi enviado.",
         "dm_failed": "Não foi possível abrir a mensagem direta. Nada foi enviado.",
         "restricted": "Esse canal é somente leitura ou restrito.",
-        "generic": "Não funcionou."
+        "generic": "Não funcionou.",
+        "gmail": {
+          "reconnect_needed": "O Gmail precisa ser reconectado.",
+          "network": "Não foi possível acessar o Gmail. Nada foi enviado.",
+          "rate_limited": "O Gmail está ocupado.",
+          "daily_limit": "Limite diário de envio do Gmail atingido.",
+          "domain_policy": "Bloqueado pelo administrador do Google da sua organização.",
+          "invalid_recipients": "Um endereço não é válido. Nada foi enviado.",
+          "too_many_recipients": "Destinatários demais. Nada foi enviado.",
+          "too_long": "Longo demais para o Gmail. Nada foi enviado.",
+          "invalid_message": "O Gmail recusou o e-mail. Nada foi enviado.",
+          "gmail_unavailable": "O envio pelo Gmail não está disponível agora.",
+          "refused": "O Gmail se recusou a enviá-lo.",
+          "connection_changed": "A conexão do Gmail mudou. Nada foi enviado.",
+          "credential_save_failed": "Não foi possível salvar o login do Gmail neste computador. Nada foi enviado."
+        }
+      },
+      "unknownSent": {
+        "gmail": "Não foi possível confirmar o envio do e-mail para {{destination}}. Verifique a pasta Enviados do Gmail."
       }
     }
   },

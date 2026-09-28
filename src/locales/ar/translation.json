@@ -715,7 +715,8 @@
     "approval": {
       "headers": {
         "default": "إرسال إلى {{destination}}",
-        "slackPost": "نشر في {{destination}}"
+        "slackPost": "نشر في {{destination}}",
+        "email": "بريد إلكتروني إلى {{destination}}"
       },
       "identity": "بصفتك {{account}}",
       "identityWithWorkspace": "بصفتك {{account}} في {{workspace}}",
@@ -747,7 +748,36 @@
         "credential_save_failed": "تعذّر حفظ تسجيل الدخول إلى Slack على هذا الكمبيوتر. لم يُرسل شيء. حاول مرة أخرى.",
         "dm_failed": "تعذّر فتح الرسالة المباشرة إلى {{destination}}. لم يُرسل شيء.",
         "restricted": "{{destination}} للقراءة فقط أو مقيّدة بالنسبة لك.",
-        "generic": "حدث خطأ ما. لم يُرسل شيء."
+        "generic": "حدث خطأ ما. لم يُرسل شيء.",
+        "gmail": {
+          "reconnect_needed": "يلزم إعادة ربط Gmail من الإعدادات.",
+          "network": "تعذّر الوصول إلى Gmail. لم يُرسل شيء.",
+          "rate_limited": "Gmail مشغول حاليًا. حاول مرة أخرى بعد قليل.",
+          "daily_limit": "تم بلوغ الحد اليومي للإرسال في Gmail. لم يُرسل شيء.",
+          "domain_policy": "حظر مسؤول Google في مؤسستك هذا التطبيق. لم يُرسل شيء.",
+          "invalid_recipients": "أحد العناوين غير صالح. لم يُرسل شيء.",
+          "too_many_recipients": "عدد المستلمين كبير جدًا: 50 على الأكثر. لم يُرسل شيء.",
+          "too_long": "الموضوع أو الرسالة أطول مما يسمح به Gmail. لم يُرسل شيء.",
+          "invalid_message": "رفض Gmail الرسالة لأنها غير سليمة. لم يُرسل شيء.",
+          "gmail_unavailable": "الإرسال عبر Gmail غير متاح حاليًا. لم يُرسل شيء.",
+          "refused": "رفض Gmail إرسالها. لم يُرسل شيء.",
+          "connection_changed": "تغيّر اتصال Gmail قبل الإرسال، لذا لم يُرسل شيء.",
+          "credential_save_failed": "تعذّر حفظ تسجيل الدخول إلى Gmail على هذا الكمبيوتر. لم يُرسل شيء. حاول مرة أخرى."
+        }
+      },
+      "email": {
+        "from": "من {{account}}",
+        "toLabel": "إلى",
+        "ccLabel": "نسخة",
+        "subjectLabel": "الموضوع",
+        "bodyLabel": "الرسالة",
+        "addressHint": "افصل بين العناوين بفواصل.",
+        "invalidAddress": "{{address}} ليس عنوان بريد إلكتروني كاملًا مثل name@example.com.",
+        "missingTo": "أضف عنوانًا واحدًا على الأقل في حقل «إلى».",
+        "unknown": "تعذّر تأكيد الإرسال. تحقق من مجلد البريد المُرسل."
+      },
+      "openIn": {
+        "gmail": "فتح في Gmail"
       }
     },
     "policyOff": "أوقفت مؤسستك تشغيل الموصلات.",
@@ -845,7 +875,25 @@
         "credential_save_failed": "تعذّر حفظ تسجيل الدخول إلى Slack على هذا الكمبيوتر. لم يُرسل شيء.",
         "dm_failed": "تعذّر فتح الرسالة المباشرة. لم يُرسل شيء.",
         "restricted": "تلك القناة للقراءة فقط أو مقيّدة.",
-        "generic": "لم ينجح ذلك."
+        "generic": "لم ينجح ذلك.",
+        "gmail": {
+          "reconnect_needed": "يلزم إعادة ربط Gmail.",
+          "network": "تعذّر الوصول إلى Gmail. لم يُرسل شيء.",
+          "rate_limited": "Gmail مشغول حاليًا.",
+          "daily_limit": "تم بلوغ الحد اليومي للإرسال في Gmail.",
+          "domain_policy": "حظره مسؤول Google في مؤسستك.",
+          "invalid_recipients": "أحد العناوين غير صالح. لم يُرسل شيء.",
+          "too_many_recipients": "عدد المستلمين كبير جدًا. لم يُرسل شيء.",
+          "too_long": "أطول مما يسمح به Gmail. لم يُرسل شيء.",
+          "invalid_message": "رفض Gmail الرسالة. لم يُرسل شيء.",
+          "gmail_unavailable": "الإرسال عبر Gmail غير متاح حاليًا.",
+          "refused": "رفض Gmail الإرسال.",
+          "connection_changed": "تغيّر اتصال Gmail. لم يُرسل شيء.",
+          "credential_save_failed": "تعذّر حفظ تسجيل الدخول إلى Gmail على هذا الكمبيوتر. لم يُرسل شيء."
+        }
+      },
+      "unknownSent": {
+        "gmail": "تعذّر تأكيد إرسال البريد الإلكتروني إلى {{destination}}. تحقق من مجلد البريد المُرسل في Gmail."
       }
     }
   },

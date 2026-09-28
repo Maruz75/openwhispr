@@ -4022,7 +4022,8 @@
     "approval": {
       "headers": {
         "default": "An {{destination}} senden",
-        "slackPost": "In {{destination}} posten"
+        "slackPost": "In {{destination}} posten",
+        "email": "E-Mail an {{destination}}"
       },
       "identity": "Als {{account}}",
       "identityWithWorkspace": "Als {{account}} in {{workspace}}",
@@ -4054,7 +4055,36 @@
         "credential_save_failed": "Die Slack-Anmeldung konnte auf diesem Computer nicht gespeichert werden. Es wurde nichts gesendet. Versuche es erneut.",
         "dm_failed": "Die Direktnachricht an {{destination}} konnte nicht geöffnet werden. Es wurde nichts gesendet.",
         "restricted": "{{destination}} ist für dich schreibgeschützt oder eingeschränkt.",
-        "generic": "Etwas ist schiefgelaufen. Es wurde nichts gesendet."
+        "generic": "Etwas ist schiefgelaufen. Es wurde nichts gesendet.",
+        "gmail": {
+          "reconnect_needed": "Gmail muss in den Einstellungen erneut verbunden werden.",
+          "network": "Gmail war nicht erreichbar. Es wurde nichts gesendet.",
+          "rate_limited": "Gmail ist gerade ausgelastet. Versuche es in Kürze erneut.",
+          "daily_limit": "Das tägliche Sendelimit von Gmail wurde erreicht. Es wurde nichts gesendet.",
+          "domain_policy": "Der Google-Administrator deiner Organisation hat diese App blockiert. Es wurde nichts gesendet.",
+          "invalid_recipients": "Eine der Adressen ist ungültig. Es wurde nichts gesendet.",
+          "too_many_recipients": "Zu viele Empfänger: höchstens 50. Es wurde nichts gesendet.",
+          "too_long": "Betreff oder Nachricht sind zu lang für Gmail. Es wurde nichts gesendet.",
+          "invalid_message": "Gmail hat die E-Mail als fehlerhaft abgelehnt. Es wurde nichts gesendet.",
+          "gmail_unavailable": "Senden über Gmail ist gerade nicht verfügbar. Es wurde nichts gesendet.",
+          "refused": "Gmail hat das Senden abgelehnt. Es wurde nichts gesendet.",
+          "connection_changed": "Die Gmail-Verbindung hat sich vor dem Senden geändert, daher wurde nichts gesendet.",
+          "credential_save_failed": "Die Gmail-Anmeldung konnte auf diesem Computer nicht gespeichert werden. Es wurde nichts gesendet. Versuche es erneut."
+        }
+      },
+      "email": {
+        "from": "Von {{account}}",
+        "toLabel": "An",
+        "ccLabel": "Cc",
+        "subjectLabel": "Betreff",
+        "bodyLabel": "Nachricht",
+        "addressHint": "Adressen mit Kommas trennen.",
+        "invalidAddress": "{{address}} ist keine vollständige E-Mail-Adresse wie name@example.com.",
+        "missingTo": "Füge unter „An“ mindestens eine Adresse hinzu.",
+        "unknown": "Konnte nicht bestätigt werden. Bitte den Ordner „Gesendet“ prüfen."
+      },
+      "openIn": {
+        "gmail": "In Gmail öffnen"
       }
     },
     "policyOff": "Konnektoren wurden von deiner Organisation deaktiviert.",
@@ -4152,7 +4182,25 @@
         "credential_save_failed": "Slack-Anmeldung konnte auf diesem Computer nicht gespeichert werden. Nichts wurde gesendet.",
         "dm_failed": "Direktnachricht konnte nicht geöffnet werden. Nichts wurde gesendet.",
         "restricted": "Dieser Kanal ist schreibgeschützt oder eingeschränkt.",
-        "generic": "Das hat nicht funktioniert."
+        "generic": "Das hat nicht funktioniert.",
+        "gmail": {
+          "reconnect_needed": "Gmail muss erneut verbunden werden.",
+          "network": "Gmail nicht erreichbar. Nichts wurde gesendet.",
+          "rate_limited": "Gmail ist gerade ausgelastet.",
+          "daily_limit": "Tägliches Gmail-Sendelimit erreicht.",
+          "domain_policy": "Vom Google-Administrator deiner Organisation blockiert.",
+          "invalid_recipients": "Eine Adresse ist ungültig. Nichts wurde gesendet.",
+          "too_many_recipients": "Zu viele Empfänger. Nichts wurde gesendet.",
+          "too_long": "Zu lang für Gmail. Nichts wurde gesendet.",
+          "invalid_message": "Gmail hat die E-Mail abgelehnt. Nichts wurde gesendet.",
+          "gmail_unavailable": "Senden über Gmail ist gerade nicht verfügbar.",
+          "refused": "Gmail hat das Senden abgelehnt.",
+          "connection_changed": "Die Gmail-Verbindung hat sich geändert. Nichts wurde gesendet.",
+          "credential_save_failed": "Gmail-Anmeldung konnte auf diesem Computer nicht gespeichert werden. Nichts wurde gesendet."
+        }
+      },
+      "unknownSent": {
+        "gmail": "Konnte nicht bestätigen, dass die E-Mail an {{destination}} gesendet wurde. Prüfe den Gmail-Ordner „Gesendet“."
       }
     }
   },

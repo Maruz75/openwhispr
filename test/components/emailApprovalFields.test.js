@@ -1,0 +1,161 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const React = require("react");
+const { renderToStaticMarkup } = require("react-dom/server");
+const { createRendererServer, installBrowserGlobals } = require("../lib/rendererTestHarness");
+const { installInteractiveDom, findElement } = require("../lib/interactiveDom");
+
+// A right-to-left override, which can make one domain read as another.
+const RLO = String.fromCodePoint(0x202e);
+
+const FIELDS = {
+  to: ["josh@acme.test", "dana@acme.test"],
+  cc: [],
+  subject: "Q3 numbers",
+  body: "Line one\nLine two",
+};
+
+async function loadFields(t) {
+  const vite = await createRendererServer(t, { cachePrefix: "openwhispr-email-fields-test-" });
+  return vite.ssrLoadModule("/components/chat/EmailApprovalFields.tsx");
+}
+
+// React's change event reads the new value from the element, then an input event.
+function type(element, value) {
+  element.value = value;
+  element.dispatchEvent({
+    type: "input",
+    bubbles: true,
+    defaultPrevented: false,
+    cancelBubble: false,
+    preventDefault() {},
+    stopPropagation() {
+      this.cancelBubble = true;
+    },
+  });
+}
+
+// No i18next instance is initialized, so labels render as their keys.
+const field = (root, labelKey) =>
+  findElement(
+    root,
+    (element) => element.getAttribute?.("aria-label") === `connectors.approval.email.${labelKey}`
+  );
+
+test("To and Cc are read as the comma-separated addresses the user typed, empty entries dropped", async (t) => {
+  const { parseAddressList } = await loadFields(t);
+  assert.deepEqual(parseAddressList(" josh@acme.test, ,dana@acme.test ,"), [
+    "josh@acme.test",
+    "dana@acme.test",
+  ]);
+  assert.deepEqual(parseAddressList("   "), []);
+  // Kept as typed, so the card can name it.
+  assert.deepEqual(parseAddressList("Josh <josh@acme.test>, sam"), [
+    "Josh <josh@acme.test>",
+    "sam",
+  ]);
+});
+
+test("Send is blocked by an empty To and by any address that isn't bare and valid", async (t) => {
+  const { emailFieldProblems } = await loadFields(t);
+  assert.deepEqual(emailFieldProblems(FIELDS), { invalid: [], missingTo: false });
+  assert.deepEqual(emailFieldProblems({ ...FIELDS, to: [] }), { invalid: [], missingTo: true });
+  assert.deepEqual(
+    emailFieldProblems({
+      ...FIELDS,
+      to: ["Josh <josh@acme.test>", "josh@acme.test"],
+      cc: ["sam", `evil@acme.test${RLO}`, "dana@acme"],
+    }),
+    {
+      invalid: ["Josh <josh@acme.test>", "sam", `evil@acme.test${RLO}`, "dana@acme"],
+      missingTo: false,
+    }
+  );
+});
+
+test("a draft's fields map is read as an email, with anything missing left empty", async (t) => {
+  const { toEmailFields } = await loadFields(t);
+  assert.deepEqual(toEmailFields(FIELDS), FIELDS);
+  assert.deepEqual(toEmailFields({ to: "josh@acme.test", subject: ["x"] }), {
+    to: [],
+    cc: [],
+    subject: "",
+    body: "",
+  });
+});
+
+test("outside edit mode the fields are shown, Cc only when it has addresses", async (t) => {
+  installBrowserGlobals(t);
+  const { EmailApprovalFields } = await loadFields(t);
+  const render = (fields) =>
+    renderToStaticMarkup(
+      React.createElement(EmailApprovalFields, {
+        fields,
+        editing: false,
+        disabled: false,
+        onChange() {},
+      })
+    );
+
+  const markup = render(FIELDS);
+  assert.match(markup, /josh@acme\.test, dana@acme\.test/);
+  assert.match(markup, /Q3 numbers/);
+  assert.match(markup, /Line one\nLine two/);
+  assert.doesNotMatch(markup, /connectors\.approval\.email\.ccLabel/);
+  assert.doesNotMatch(markup, /<input|<textarea/);
+  assert.match(render({ ...FIELDS, cc: ["sam@acme.test"] }), /sam@acme\.test/);
+});
+
+async function mountEditor(t, initial = FIELDS) {
+  let root = null;
+  // Registered before installBrowserGlobals's cleanup, which removes window.
+  t.after(async () => {
+    if (root) await React.act(async () => root.unmount());
+  });
+  installBrowserGlobals(t);
+  const container = installInteractiveDom(t);
+  const { EmailApprovalFields } = await loadFields(t);
+  const patches = [];
+  function Harness() {
+    const [fields, setFields] = React.useState(initial);
+    return React.createElement(EmailApprovalFields, {
+      fields,
+      editing: true,
+      disabled: false,
+      onChange: (patch) => {
+        patches.push(patch);
+        setFields((current) => ({ ...current, ...patch }));
+      },
+    });
+  }
+  const { createRoot } = require("react-dom/client");
+  root = createRoot(container);
+  await React.act(async () => root.render(React.createElement(Harness)));
+  return { container, patches };
+}
+
+test("typing in To reports the parsed list and keeps the comma the user just typed", async (t) => {
+  const { container, patches } = await mountEditor(t);
+  const to = field(container, "toLabel");
+  assert.equal(to.value, "josh@acme.test, dana@acme.test");
+
+  await React.act(async () => type(to, "josh@acme.test,"));
+  assert.deepEqual(patches.at(-1), { to: ["josh@acme.test"] });
+  assert.equal(field(container, "toLabel").value, "josh@acme.test,");
+
+  await React.act(async () => type(field(container, "ccLabel"), "sam@acme.test, Sam <s@x.test>"));
+  assert.deepEqual(patches.at(-1), { cc: ["sam@acme.test", "Sam <s@x.test>"] });
+});
+
+test("a line break typed or pasted into Subject becomes a space; Body keeps its lines", async (t) => {
+  const { container, patches } = await mountEditor(t);
+
+  await React.act(async () =>
+    type(field(container, "subjectLabel"), "Q3\r\nBcc: evil@attacker.test")
+  );
+  assert.deepEqual(patches.at(-1), { subject: "Q3 Bcc: evil@attacker.test" });
+  assert.equal(field(container, "subjectLabel").value, "Q3 Bcc: evil@attacker.test");
+
+  await React.act(async () => type(field(container, "bodyLabel"), "Hi\n\nThanks"));
+  assert.deepEqual(patches.at(-1), { body: "Hi\n\nThanks" });
+});

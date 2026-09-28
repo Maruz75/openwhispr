@@ -56,7 +56,14 @@ export type ConnectorDirectResult =
   | { state: "not_sent"; reason: string };
 
 export type ApprovalOutcome =
-  | { state: "sent"; url?: string; finalText?: string }
+  | {
+      state: "sent";
+      url?: string;
+      /** The edited text of a card without fields, when the user changed it. */
+      finalText?: string;
+      /** A fields card's fields as sent, when the user changed any. */
+      final?: Record<string, string | string[]>;
+    }
   | { state: "failed"; errorCode: string; message: string }
   | { state: "unknown"; checkUrl?: string }
   | { state: "cancelled" }

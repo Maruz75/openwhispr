@@ -12,10 +12,14 @@ export const APPROVAL_TTL_MS = 10 * 60 * 1000;
 export type ApprovalState =
   "pending" | "committing" | "sent" | "failed" | "unknown" | "cancelled" | "not_sent";
 
+type DraftFields = Record<string, string | string[]>;
+
 /** What the card shows and what Send commits; starts as the preview. */
 export interface ApprovalDraft {
   title?: string;
   body: string;
+  /** A fields preview's fields (an email's to, cc, subject, body); Send commits these. */
+  fields?: DraftFields;
 }
 
 export interface ApprovalEntry {
@@ -76,6 +80,37 @@ function isConnectorCommitResult(value: unknown): value is ConnectorCommitResult
     typeof (value as { state: unknown }).state === "string" &&
     COMMIT_RESULT_STATES.has((value as { state: string }).state)
   );
+}
+
+// The draft owns its lists, so an edit can never reach back into the preview.
+function copyFields(fields: DraftFields): DraftFields {
+  return Object.fromEntries(
+    Object.entries(fields).map(([name, value]) => [name, Array.isArray(value) ? [...value] : value])
+  );
+}
+
+function sameValue(a: string | string[] | undefined, b: string | string[] | undefined): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, index) => item === b[index]);
+  }
+  return a === b;
+}
+
+function fieldsDiffer(a: DraftFields, b: DraftFields): boolean {
+  const names = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...names].some((name) => !sameValue(a[name], b[name]));
+}
+
+// An edit changes only a field the card lays out, and keeps its shape (a
+// list stays a list), so the card always shows everything Send commits.
+function mergeFields(current: DraftFields, patch: Partial<DraftFields>): DraftFields {
+  const next = { ...current };
+  for (const [name, value] of Object.entries(patch)) {
+    if (value === undefined || !Object.hasOwn(current, name)) continue;
+    if (Array.isArray(value) !== Array.isArray(current[name])) continue;
+    next[name] = Array.isArray(value) ? [...value] : value;
+  }
+  return next;
 }
 
 function entryFor(key: string): ApprovalEntry | undefined {
@@ -156,6 +191,9 @@ export function requestApproval(
     const draft: ApprovalDraft = {
       ...(request.preview.title !== undefined ? { title: request.preview.title } : {}),
       body: request.preview.body,
+      ...(request.preview.fields !== undefined
+        ? { fields: copyFields(request.preview.fields) }
+        : {}),
     };
     useConnectorApprovalStore.setState((state) => ({
       entries: {
@@ -167,15 +205,22 @@ export function requestApproval(
   });
 }
 
-export function updateApprovalDraft(key: string, patch: Partial<ApprovalDraft>): void {
+export function updateApprovalDraft(
+  key: string,
+  patch: { title?: string; body?: string; fields?: Partial<DraftFields> }
+): void {
   const entry = entryFor(key);
   if (!entry || entry.state !== "pending") return;
+  const { fields } = entry.draft;
   patchEntry(key, {
     draft: {
       ...entry.draft,
       ...(patch.body !== undefined ? { body: patch.body } : {}),
       ...(patch.title !== undefined && entry.preview.title !== undefined
         ? { title: patch.title }
+        : {}),
+      ...(patch.fields !== undefined && fields !== undefined
+        ? { fields: mergeFields(fields, patch.fields) }
         : {}),
     },
   });
@@ -193,7 +238,11 @@ export function cancelApproval(key: string): void {
 export async function approveAction(key: string): Promise<void> {
   const entry = entryFor(key);
   if (!entry || entry.state !== "pending") return;
-  const edits: ConnectorEdits = { ...entry.draft };
+  const { title, body, fields } = entry.draft;
+  // A fields card commits its fields; main keeps only those the action declares.
+  const edits: ConnectorEdits = fields
+    ? copyFields(fields)
+    : { ...(title !== undefined ? { title } : {}), body };
   // The expiry timer and abort listener stay armed while sending. They only
   // withdraw a pending card, and a Send that comes back retryable returns
   // the card to pending; settle() disarms them for every final outcome.
@@ -215,12 +264,20 @@ export async function approveAction(key: string): Promise<void> {
     return;
   }
 
-  const finalText = entry.draft.body !== entry.preview.body ? entry.draft.body : undefined;
+  const final =
+    fields && fieldsDiffer(fields, entry.preview.fields ?? {}) ? copyFields(fields) : undefined;
+  const finalText =
+    !fields && entry.draft.body !== entry.preview.body ? entry.draft.body : undefined;
   switch (result.state) {
     case "sent":
       settle(
         key,
-        { state: "sent", url: result.url, ...(finalText !== undefined ? { finalText } : {}) },
+        {
+          state: "sent",
+          url: result.url,
+          ...(finalText !== undefined ? { finalText } : {}),
+          ...(final !== undefined ? { final } : {}),
+        },
         "sent",
         { url: result.url }
       );

@@ -3853,7 +3853,8 @@
     "approval": {
       "headers": {
         "default": "发送到 {{destination}}",
-        "slackPost": "发布到 {{destination}}"
+        "slackPost": "发布到 {{destination}}",
+        "email": "发送邮件给 {{destination}}"
       },
       "identity": "以 {{account}} 身份",
       "identityWithWorkspace": "以 {{account}}（{{workspace}}）身份",
@@ -3885,7 +3886,36 @@
         "credential_save_failed": "无法在此电脑上保存 Slack 登录信息，未发送任何内容。请重试。",
         "dm_failed": "无法打开与 {{destination}} 的私信，未发送任何内容。",
         "restricted": "{{destination}} 对您是只读或受限的。",
-        "generic": "出了点问题，未发送任何内容。"
+        "generic": "出了点问题，未发送任何内容。",
+        "gmail": {
+          "reconnect_needed": "需要在设置中重新连接 Gmail。",
+          "network": "无法连接到 Gmail，未发送任何内容。",
+          "rate_limited": "Gmail 正忙，请稍后重试。",
+          "daily_limit": "已达到 Gmail 每日发送上限，未发送任何内容。",
+          "domain_policy": "你所在组织的 Google 管理员已阻止此应用，未发送任何内容。",
+          "invalid_recipients": "其中一个地址无效，未发送任何内容。",
+          "too_many_recipients": "收件人过多（最多 50 个），未发送任何内容。",
+          "too_long": "主题或正文对 Gmail 来说太长，未发送任何内容。",
+          "invalid_message": "Gmail 因格式错误拒绝了这封邮件，未发送任何内容。",
+          "gmail_unavailable": "目前无法通过 Gmail 发送，未发送任何内容。",
+          "refused": "Gmail 拒绝发送，未发送任何内容。",
+          "connection_changed": "发送前 Gmail 连接发生了变化，因此未发送任何内容。",
+          "credential_save_failed": "无法在此电脑上保存 Gmail 登录信息，未发送任何内容。请重试。"
+        }
+      },
+      "email": {
+        "from": "发件人：{{account}}",
+        "toLabel": "收件人",
+        "ccLabel": "抄送",
+        "subjectLabel": "主题",
+        "bodyLabel": "正文",
+        "addressHint": "多个地址请用逗号分隔。",
+        "invalidAddress": "{{address}} 不是完整的电子邮件地址（例如 name@example.com）。",
+        "missingTo": "请在收件人中至少添加一个地址。",
+        "unknown": "无法确认是否已发送，请检查“已发送”文件夹。"
+      },
+      "openIn": {
+        "gmail": "在 Gmail 中打开"
       }
     },
     "policyOff": "您的组织已关闭连接器。",
@@ -3983,7 +4013,25 @@
         "credential_save_failed": "无法在此电脑上保存 Slack 登录信息。未发送任何内容。",
         "dm_failed": "无法打开私信。未发送任何内容。",
         "restricted": "该频道为只读或受限。",
-        "generic": "操作未成功。"
+        "generic": "操作未成功。",
+        "gmail": {
+          "reconnect_needed": "需要重新连接 Gmail。",
+          "network": "无法连接到 Gmail。未发送任何内容。",
+          "rate_limited": "Gmail 正忙。",
+          "daily_limit": "已达到 Gmail 每日发送上限。",
+          "domain_policy": "已被你所在组织的 Google 管理员阻止。",
+          "invalid_recipients": "有地址无效。未发送任何内容。",
+          "too_many_recipients": "收件人过多。未发送任何内容。",
+          "too_long": "对 Gmail 来说太长。未发送任何内容。",
+          "invalid_message": "Gmail 拒绝了这封邮件。未发送任何内容。",
+          "gmail_unavailable": "目前无法通过 Gmail 发送。",
+          "refused": "Gmail 拒绝发送。",
+          "connection_changed": "Gmail 连接已更改。未发送任何内容。",
+          "credential_save_failed": "无法在此电脑上保存 Gmail 登录信息。未发送任何内容。"
+        }
+      },
+      "unknownSent": {
+        "gmail": "无法确认发给 {{destination}} 的邮件是否已发送，请检查 Gmail 的“已发送”文件夹。"
       }
     }
   },

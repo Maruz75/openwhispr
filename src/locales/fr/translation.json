@@ -4022,7 +4022,8 @@
     "approval": {
       "headers": {
         "default": "Envoyer à {{destination}}",
-        "slackPost": "Publier dans {{destination}}"
+        "slackPost": "Publier dans {{destination}}",
+        "email": "E-mail à {{destination}}"
       },
       "identity": "En tant que {{account}}",
       "identityWithWorkspace": "En tant que {{account}} dans {{workspace}}",
@@ -4054,7 +4055,36 @@
         "credential_save_failed": "La connexion Slack n'a pas pu être enregistrée sur cet ordinateur. Rien n'a été envoyé. Réessayez.",
         "dm_failed": "Le message direct à {{destination}} n'a pas pu être ouvert. Rien n'a été envoyé.",
         "restricted": "{{destination}} est en lecture seule ou restreint pour vous.",
-        "generic": "Un problème est survenu. Rien n'a été envoyé."
+        "generic": "Un problème est survenu. Rien n'a été envoyé.",
+        "gmail": {
+          "reconnect_needed": "Gmail doit être reconnecté dans les Paramètres.",
+          "network": "Gmail est injoignable. Rien n'a été envoyé.",
+          "rate_limited": "Gmail est occupé. Réessayez sous peu.",
+          "daily_limit": "La limite d'envoi quotidienne de Gmail est atteinte. Rien n'a été envoyé.",
+          "domain_policy": "L'administrateur Google de votre organisation a bloqué cette application. Rien n'a été envoyé.",
+          "invalid_recipients": "L'une des adresses n'est pas valide. Rien n'a été envoyé.",
+          "too_many_recipients": "Trop de destinataires : 50 au maximum. Rien n'a été envoyé.",
+          "too_long": "L'objet ou le message est trop long pour Gmail. Rien n'a été envoyé.",
+          "invalid_message": "Gmail a refusé l'e-mail, mal formé. Rien n'a été envoyé.",
+          "gmail_unavailable": "L'envoi avec Gmail n'est pas disponible pour le moment. Rien n'a été envoyé.",
+          "refused": "Gmail a refusé de l'envoyer. Rien n'a été envoyé.",
+          "connection_changed": "La connexion Gmail a changé avant l'envoi, donc rien n'a été envoyé.",
+          "credential_save_failed": "La connexion Gmail n'a pas pu être enregistrée sur cet ordinateur. Rien n'a été envoyé. Réessayez."
+        }
+      },
+      "email": {
+        "from": "De {{account}}",
+        "toLabel": "À",
+        "ccLabel": "Cc",
+        "subjectLabel": "Objet",
+        "bodyLabel": "Message",
+        "addressHint": "Séparez les adresses par des virgules.",
+        "invalidAddress": "{{address}} n'est pas une adresse e-mail complète comme nom@exemple.com.",
+        "missingTo": "Ajoutez au moins une adresse dans À.",
+        "unknown": "Impossible de confirmer l'envoi. Vérifiez votre dossier Messages envoyés."
+      },
+      "openIn": {
+        "gmail": "Ouvrir dans Gmail"
       }
     },
     "policyOff": "Votre organisation a désactivé les connecteurs.",
@@ -4152,7 +4182,25 @@
         "credential_save_failed": "Impossible d'enregistrer la connexion Slack sur cet ordinateur. Rien n'a été envoyé.",
         "dm_failed": "Impossible d'ouvrir le message direct. Rien n'a été envoyé.",
         "restricted": "Ce canal est en lecture seule ou restreint.",
-        "generic": "Cela n'a pas fonctionné."
+        "generic": "Cela n'a pas fonctionné.",
+        "gmail": {
+          "reconnect_needed": "Gmail doit être reconnecté.",
+          "network": "Impossible de joindre Gmail. Rien n'a été envoyé.",
+          "rate_limited": "Gmail est occupé.",
+          "daily_limit": "Limite d'envoi quotidienne de Gmail atteinte.",
+          "domain_policy": "Bloqué par l'administrateur Google de votre organisation.",
+          "invalid_recipients": "Une adresse n'est pas valide. Rien n'a été envoyé.",
+          "too_many_recipients": "Trop de destinataires. Rien n'a été envoyé.",
+          "too_long": "Trop long pour Gmail. Rien n'a été envoyé.",
+          "invalid_message": "Gmail a refusé l'e-mail. Rien n'a été envoyé.",
+          "gmail_unavailable": "L'envoi avec Gmail n'est pas disponible pour le moment.",
+          "refused": "Gmail a refusé de l'envoyer.",
+          "connection_changed": "La connexion Gmail a changé. Rien n'a été envoyé.",
+          "credential_save_failed": "Impossible d'enregistrer la connexion Gmail sur cet ordinateur. Rien n'a été envoyé."
+        }
+      },
+      "unknownSent": {
+        "gmail": "Impossible de confirmer l'envoi de l'e-mail à {{destination}}. Vérifiez le dossier Messages envoyés de Gmail."
       }
     }
   },

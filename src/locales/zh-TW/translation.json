@@ -3853,7 +3853,8 @@
     "approval": {
       "headers": {
         "default": "傳送至 {{destination}}",
-        "slackPost": "發佈到 {{destination}}"
+        "slackPost": "發佈到 {{destination}}",
+        "email": "寄送郵件給 {{destination}}"
       },
       "identity": "以 {{account}} 身分",
       "identityWithWorkspace": "以 {{account}}（{{workspace}}）身分",
@@ -3885,7 +3886,36 @@
         "credential_save_failed": "無法在這台電腦上儲存 Slack 登入資訊，未傳送任何內容。請再試一次。",
         "dm_failed": "無法開啟與 {{destination}} 的私訊，未傳送任何內容。",
         "restricted": "{{destination}} 對您是唯讀或受限的。",
-        "generic": "發生問題，未傳送任何內容。"
+        "generic": "發生問題，未傳送任何內容。",
+        "gmail": {
+          "reconnect_needed": "需要在設定中重新連接 Gmail。",
+          "network": "無法連線到 Gmail，未傳送任何內容。",
+          "rate_limited": "Gmail 忙碌中，請稍後再試。",
+          "daily_limit": "已達 Gmail 每日傳送上限，未傳送任何內容。",
+          "domain_policy": "你的機構的 Google 管理員已封鎖此應用程式，未傳送任何內容。",
+          "invalid_recipients": "其中一個地址無效，未傳送任何內容。",
+          "too_many_recipients": "收件者過多（最多 50 位），未傳送任何內容。",
+          "too_long": "主旨或內文對 Gmail 來說太長，未傳送任何內容。",
+          "invalid_message": "Gmail 因格式錯誤拒絕了這封郵件，未傳送任何內容。",
+          "gmail_unavailable": "目前無法透過 Gmail 傳送，未傳送任何內容。",
+          "refused": "Gmail 拒絕傳送，未傳送任何內容。",
+          "connection_changed": "傳送前 Gmail 連線發生了變化，因此未傳送任何內容。",
+          "credential_save_failed": "無法在這台電腦上儲存 Gmail 登入資訊，未傳送任何內容。請再試一次。"
+        }
+      },
+      "email": {
+        "from": "寄件者：{{account}}",
+        "toLabel": "收件者",
+        "ccLabel": "副本",
+        "subjectLabel": "主旨",
+        "bodyLabel": "內文",
+        "addressHint": "多個地址請以逗號分隔。",
+        "invalidAddress": "{{address}} 不是完整的電子郵件地址（例如 name@example.com）。",
+        "missingTo": "請在收件者中至少新增一個地址。",
+        "unknown": "無法確認是否已傳送，請檢查「寄件備份」資料夾。"
+      },
+      "openIn": {
+        "gmail": "在 Gmail 中開啟"
       }
     },
     "policyOff": "您的組織已關閉連接器。",
@@ -3983,7 +4013,25 @@
         "credential_save_failed": "無法在這台電腦上儲存 Slack 登入資訊。未傳送任何內容。",
         "dm_failed": "無法開啟私訊。未傳送任何內容。",
         "restricted": "該頻道為唯讀或受限。",
-        "generic": "操作未成功。"
+        "generic": "操作未成功。",
+        "gmail": {
+          "reconnect_needed": "需要重新連接 Gmail。",
+          "network": "無法連線到 Gmail。未傳送任何內容。",
+          "rate_limited": "Gmail 忙碌中。",
+          "daily_limit": "已達 Gmail 每日傳送上限。",
+          "domain_policy": "已被你的機構的 Google 管理員封鎖。",
+          "invalid_recipients": "有地址無效。未傳送任何內容。",
+          "too_many_recipients": "收件者過多。未傳送任何內容。",
+          "too_long": "對 Gmail 來說太長。未傳送任何內容。",
+          "invalid_message": "Gmail 拒絕了這封郵件。未傳送任何內容。",
+          "gmail_unavailable": "目前無法透過 Gmail 傳送。",
+          "refused": "Gmail 拒絕傳送。",
+          "connection_changed": "Gmail 連線已變更。未傳送任何內容。",
+          "credential_save_failed": "無法在這台電腦上儲存 Gmail 登入資訊。未傳送任何內容。"
+        }
+      },
+      "unknownSent": {
+        "gmail": "無法確認寄給 {{destination}} 的郵件是否已傳送，請檢查 Gmail 的「寄件備份」資料夾。"
       }
     }
   },

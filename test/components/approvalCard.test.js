@@ -85,7 +85,10 @@ test("a pending card after a failed policy check says why nothing was sent", asy
     state: "pending",
     notice: "policy_retry",
   });
-  assert.match(markup, /aria-live="polite"[^>]*>(?:(?!<\/div>).)*connectors\.approval\.policyRetry/);
+  assert.match(
+    markup,
+    /aria-live="polite"[^>]*>(?:(?!<\/div>).)*connectors\.approval\.policyRetry/
+  );
   assert.match(markup, /connectors\.approval\.send/);
 });
 
@@ -117,4 +120,70 @@ test("every outcome is announced from one live region", async (t) => {
       state
     );
   }
+});
+
+const EMAIL_PREVIEW = {
+  verbKey: "email",
+  destinationLabel: "josh@acme.test +1",
+  accountLabel: "you@example.test",
+  body: "Numbers attached.",
+  fields: {
+    to: ["josh@acme.test", "dana@acme.test"],
+    cc: ["sam@acme.test"],
+    subject: "Q3 numbers",
+    body: "Numbers attached.",
+  },
+};
+
+const emailEntry = (fields = EMAIL_PREVIEW.fields, state = "pending") => ({
+  key: "m1::call-1",
+  messageId: "m1",
+  toolCallId: "call-1",
+  actionId: "a1",
+  connectorId: "gmail",
+  preview: EMAIL_PREVIEW,
+  draft: { body: EMAIL_PREVIEW.body, fields },
+  state,
+});
+
+test("an email card shows who it's from, To, Cc, Subject and Body, with Send enabled", async (t) => {
+  const markup = await renderCard(t, emailEntry());
+  assert.match(markup, /connectors\.approval\.email\.from/);
+  assert.doesNotMatch(markup, /connectors\.approval\.identity/);
+  assert.match(markup, /josh@acme\.test, dana@acme\.test/);
+  assert.match(markup, /sam@acme\.test/);
+  assert.match(markup, /Q3 numbers/);
+  assert.match(markup, /Numbers attached\./);
+  assert.doesNotMatch(markup, /role="alert"/);
+  assert.doesNotMatch(markup, /<button[^>]*disabled/);
+});
+
+test("an email card with a bad or missing recipient disables Send and says why", async (t) => {
+  for (const [to, cc, problem] of [
+    [["Josh <josh@acme.test>"], [], "invalidAddress"],
+    [["josh"], [], "invalidAddress"],
+    [["josh@acme.test"], ["sam@acme"], "invalidAddress"],
+    [[], ["sam@acme.test"], "missingTo"],
+  ]) {
+    const markup = await renderCard(t, emailEntry({ ...EMAIL_PREVIEW.fields, to, cc }));
+    assert.match(
+      markup,
+      new RegExp(`role="alert"[^>]*>connectors\\.approval\\.email\\.${problem}<`),
+      JSON.stringify({ to, cc })
+    );
+    assert.match(markup, /<button[^>]*disabled=""[^>]*>connectors\.approval\.send</);
+  }
+});
+
+test("an email preview without fields falls back to the plain card", async (t) => {
+  const { fields, ...plain } = EMAIL_PREVIEW;
+  assert.ok(fields);
+  const markup = await renderCard(t, {
+    ...emailEntry(),
+    preview: plain,
+    draft: { body: plain.body },
+  });
+  assert.match(markup, /Numbers attached\./);
+  assert.doesNotMatch(markup, /connectors\.approval\.email\./);
+  assert.doesNotMatch(markup, /<button[^>]*disabled/);
 });

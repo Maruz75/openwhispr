@@ -3853,7 +3853,8 @@
     "approval": {
       "headers": {
         "default": "Invia a {{destination}}",
-        "slackPost": "Pubblica su {{destination}}"
+        "slackPost": "Pubblica su {{destination}}",
+        "email": "Email a {{destination}}"
       },
       "identity": "Come {{account}}",
       "identityWithWorkspace": "Come {{account}} in {{workspace}}",
@@ -3885,7 +3886,36 @@
         "credential_save_failed": "Impossibile salvare l'accesso a Slack su questo computer. Non è stato inviato nulla. Riprova.",
         "dm_failed": "Impossibile aprire il messaggio diretto a {{destination}}. Non è stato inviato nulla.",
         "restricted": "{{destination}} è di sola lettura o limitato per te.",
-        "generic": "Qualcosa è andato storto. Non è stato inviato nulla."
+        "generic": "Qualcosa è andato storto. Non è stato inviato nulla.",
+        "gmail": {
+          "reconnect_needed": "Gmail deve essere ricollegato nelle Impostazioni.",
+          "network": "Impossibile raggiungere Gmail. Non è stato inviato nulla.",
+          "rate_limited": "Gmail è occupato. Riprova a breve.",
+          "daily_limit": "È stato raggiunto il limite di invio giornaliero di Gmail. Non è stato inviato nulla.",
+          "domain_policy": "L'amministratore Google della tua organizzazione ha bloccato questa app. Non è stato inviato nulla.",
+          "invalid_recipients": "Uno degli indirizzi non è valido. Non è stato inviato nulla.",
+          "too_many_recipients": "Troppi destinatari: al massimo 50. Non è stato inviato nulla.",
+          "too_long": "L'oggetto o il messaggio è troppo lungo per Gmail. Non è stato inviato nulla.",
+          "invalid_message": "Gmail ha rifiutato l'email perché non valida. Non è stato inviato nulla.",
+          "gmail_unavailable": "L'invio con Gmail non è disponibile al momento. Non è stato inviato nulla.",
+          "refused": "Gmail si è rifiutato di inviarla. Non è stato inviato nulla.",
+          "connection_changed": "La connessione Gmail è cambiata prima dell'invio, quindi non è stato inviato nulla.",
+          "credential_save_failed": "Impossibile salvare l'accesso a Gmail su questo computer. Non è stato inviato nulla. Riprova."
+        }
+      },
+      "email": {
+        "from": "Da {{account}}",
+        "toLabel": "A",
+        "ccLabel": "Cc",
+        "subjectLabel": "Oggetto",
+        "bodyLabel": "Messaggio",
+        "addressHint": "Separa gli indirizzi con una virgola.",
+        "invalidAddress": "{{address}} non è un indirizzo email completo come nome@esempio.com.",
+        "missingTo": "Aggiungi almeno un indirizzo in A.",
+        "unknown": "Impossibile confermare l'invio. Controlla la cartella Posta inviata."
+      },
+      "openIn": {
+        "gmail": "Apri in Gmail"
       }
     },
     "policyOff": "La tua organizzazione ha disattivato i connettori.",
@@ -3983,7 +4013,25 @@
         "credential_save_failed": "Impossibile salvare l'accesso a Slack su questo computer. Non è stato inviato nulla.",
         "dm_failed": "Impossibile aprire il messaggio diretto. Non è stato inviato nulla.",
         "restricted": "Quel canale è di sola lettura o limitato.",
-        "generic": "Non ha funzionato."
+        "generic": "Non ha funzionato.",
+        "gmail": {
+          "reconnect_needed": "Gmail deve essere ricollegato.",
+          "network": "Impossibile raggiungere Gmail. Non è stato inviato nulla.",
+          "rate_limited": "Gmail è occupato.",
+          "daily_limit": "Raggiunto il limite di invio giornaliero di Gmail.",
+          "domain_policy": "Bloccato dall'amministratore Google della tua organizzazione.",
+          "invalid_recipients": "Un indirizzo non è valido. Non è stato inviato nulla.",
+          "too_many_recipients": "Troppi destinatari. Non è stato inviato nulla.",
+          "too_long": "Troppo lungo per Gmail. Non è stato inviato nulla.",
+          "invalid_message": "Gmail ha rifiutato l'email. Non è stato inviato nulla.",
+          "gmail_unavailable": "L'invio con Gmail non è disponibile al momento.",
+          "refused": "Gmail si è rifiutato di inviarla.",
+          "connection_changed": "La connessione Gmail è cambiata. Non è stato inviato nulla.",
+          "credential_save_failed": "Impossibile salvare l'accesso a Gmail su questo computer. Non è stato inviato nulla."
+        }
+      },
+      "unknownSent": {
+        "gmail": "Impossibile confermare l'invio dell'email a {{destination}}. Controlla la cartella Posta inviata di Gmail."
       }
     }
   },
