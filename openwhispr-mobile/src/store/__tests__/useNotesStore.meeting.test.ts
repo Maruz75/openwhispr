@@ -1125,6 +1125,61 @@ describe('speaker mutations', () => {
 
     expect(notesRepository.updateSpeaker).not.toHaveBeenCalled();
   });
+
+  describe('claimSpeakerAsMe', () => {
+    beforeEach(() => {
+      useNotesStore.setState({
+        meetingSpeakerEmbeddingsByNoteId: { 7: { SPEAKER_01: [0.1, 0.2] } },
+      });
+      (notesRepository.getSpeakers as jest.Mock).mockReturnValue([
+        speaker({ id: 10, speakerLabel: 'SPEAKER_01' }),
+      ]);
+      (notesRepository.createSpeakerProfile as jest.Mock).mockReturnValue({
+        id: 3,
+        displayName: 'Me',
+        isOwner: 1,
+      });
+    });
+
+    it('creates your profile from the meeting sample and labels the speaker Me', () => {
+      useNotesStore.getState().claimSpeakerAsMe(7, 10);
+
+      expect(notesRepository.createSpeakerProfile).toHaveBeenCalledWith({
+        displayName: 'Me',
+        isOwner: 1,
+        embedding: [0.1, 0.2],
+        sampleCount: 1,
+        consentAt: expect.any(String),
+      });
+      expect(notesRepository.updateSpeaker).toHaveBeenCalledWith(10, {
+        displayName: 'Me',
+        speakerStatus: 'locked',
+        speakerLocked: 1,
+        speakerLockSource: 'user',
+        profileId: 3,
+      });
+    });
+
+    it('refuses without writing when you already have a profile', () => {
+      (notesRepository.getSpeakerProfiles as jest.Mock).mockReturnValue([{ id: 1, isOwner: 1 }]);
+
+      expect(() => useNotesStore.getState().claimSpeakerAsMe(7, 10)).toThrow();
+      expect(notesRepository.createSpeakerProfile).not.toHaveBeenCalled();
+      expect(notesRepository.updateSpeaker).not.toHaveBeenCalled();
+    });
+
+    it('refuses without writing when the meeting sample is gone', () => {
+      useNotesStore.setState({ meetingSpeakerEmbeddingsByNoteId: {} });
+
+      expect(() => useNotesStore.getState().claimSpeakerAsMe(7, 10)).toThrow();
+      expect(notesRepository.createSpeakerProfile).not.toHaveBeenCalled();
+    });
+
+    it('refuses when the speaker is not on the note', () => {
+      expect(() => useNotesStore.getState().claimSpeakerAsMe(7, 99)).toThrow();
+      expect(notesRepository.createSpeakerProfile).not.toHaveBeenCalled();
+    });
+  });
 });
 
 it('does not open a synced source_file that is not the recording owned by this note', async () => {

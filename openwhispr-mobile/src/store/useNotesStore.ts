@@ -412,6 +412,8 @@ interface NotesStore {
   ) => void;
   rejectSpeakerSuggestion: (noteId: number, speakerId: number) => void;
   renameSpeaker: (noteId: number, speakerId: number, displayName: string) => void;
+  /** Makes a speaker from a meeting just processed on this device your voice profile. */
+  claimSpeakerAsMe: (noteId: number, speakerId: number) => void;
   mergeSpeakers: (noteId: number, sourceSpeakerId: number, targetSpeakerId: number) => void;
 }
 
@@ -898,6 +900,32 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
     if (Object.keys(patch).length === 0) return;
     notesRepository.updateSpeaker(speaker.id, patch);
     set((state) => ({ transcriptRevision: state.transcriptRevision + 1 }));
+  },
+  claimSpeakerAsMe: (noteId, speakerId) => {
+    if (notesRepository.getSpeakerProfiles().some((profile) => profile.isOwner === 1)) {
+      throw new Error('You already have a voice profile.');
+    }
+    const speaker = notesRepository.getSpeakers(noteId).find((row) => row.id === speakerId);
+    if (!speaker) throw new Error('Speaker not found');
+    // Only held in memory for meetings processed since the app started.
+    const embedding = get().meetingSpeakerEmbeddingsByNoteId[noteId]?.[speaker.speakerLabel];
+    if (!embedding?.length) throw new Error("This meeting's voice sample is no longer available.");
+
+    const profile = notesRepository.createSpeakerProfile({
+      displayName: 'Me',
+      isOwner: 1,
+      embedding,
+      sampleCount: 1,
+      consentAt: new Date().toISOString(),
+    });
+    notesRepository.updateSpeaker(speaker.id, {
+      ...buildRenameSpeakerPatch(speaker, profile.displayName),
+      profileId: profile.id,
+    });
+    set((state) => ({
+      ...reloadVoiceProfiles(),
+      transcriptRevision: state.transcriptRevision + 1,
+    }));
   },
   mergeSpeakers: (noteId, sourceSpeakerId, targetSpeakerId) => {
     if (sourceSpeakerId === targetSpeakerId) {
