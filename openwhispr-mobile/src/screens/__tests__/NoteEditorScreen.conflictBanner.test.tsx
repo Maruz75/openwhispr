@@ -540,3 +540,21 @@ it('publishes an unfinished edit to the generated notes when sharing', () => {
   fireEvent.press(screen.getByText('Create test link'));
   expect(mockUpdateNote).toHaveBeenCalledWith(7, { enhancedContent: '## Summary\n- Shared' });
 });
+
+it('exports an unfinished edit to the generated notes', () => {
+  mockNote = note({ enhancedContent: '## Summary' });
+  mockNotesState.notes = [mockNote];
+  // The store re-reads the saved note, as the repository does.
+  mockUpdateNote.mockImplementationOnce((_id: number, updates: Partial<Note>) => {
+    mockNote = { ...mockNote, ...updates };
+  });
+  const screen = render(<NoteEditorScreen />);
+  fireEvent.press(screen.getByTestId('enhanced-edit'));
+  fireEvent.changeText(screen.getByTestId('enhanced-editor'), '## Summary\n- Exported');
+  fireEvent.press(screen.getByText('Share note'));
+  fireEvent.press(screen.getByText('Export Markdown'));
+  expect(exportNote).toHaveBeenCalledWith(
+    expect.objectContaining({ content: '## Summary\n- Exported' }),
+    'md',
+  );
+});

@@ -5,19 +5,22 @@ import type { NoteBodyView } from '@/lib/notes/noteBodyTabs';
 export interface NoteShareContentInput {
   viewMode: NoteBodyView;
   enhancedContent: string | null;
-  usesSegmentTranscript: boolean;
   transcript: string;
   content: string;
 }
 
-// What the Share menu exports: whatever the active tab shows — the enhanced notes, the
-// formatted transcript, or the user's own notes. Never the LLM prompt input.
+// What the Share menu exports: exactly what the active tab shows — the generated notes, the
+// formatted transcript (empty while it is still being made), or the note body. Never the LLM
+// prompt input.
 export function buildNoteShareContent(input: NoteShareContentInput): string {
-  if (input.viewMode === 'enhanced' && input.enhancedContent) {
-    return input.enhancedContent;
+  switch (input.viewMode) {
+    case 'enhanced':
+      return input.enhancedContent ?? '';
+    case 'transcript':
+      return input.transcript;
+    case 'notes':
+      return input.content;
   }
-  if (input.viewMode === 'notes') return input.content;
-  return input.usesSegmentTranscript ? input.transcript : input.content;
 }
 
 function sanitizeFilename(title: string): string {

@@ -375,6 +375,18 @@ export default function NoteEditorScreen() {
   const shouldRenderPlainEditorRef = useRef(shouldRenderPlainEditor);
   shouldRenderPlainEditorRef.current = shouldRenderPlainEditor;
   const transcriptPending = shouldShowTranscriptStatus || shouldShowTranscriptFailed;
+  const hasEnhanced = !!note?.enhancedContent;
+  // An open editor keeps its tab, so clearing the notes to rewrite them doesn't close it.
+  const hasEnhancedTab = hasEnhanced || enhancedEditing;
+  const bodyTabInput = useMemo(
+    () => ({
+      usesSegmentTranscript,
+      transcriptPending,
+      contentIsTranscript,
+      hasEnhanced: hasEnhancedTab,
+    }),
+    [contentIsTranscript, hasEnhancedTab, transcriptPending, usesSegmentTranscript],
+  );
   const requiresCloudConfirmation = note?.isPrivate === 1 || activeMode === 'private';
 
   const handleKeepMine = useCallback(() => {
@@ -616,18 +628,14 @@ export default function NoteEditorScreen() {
   const handleExport = useCallback(
     (format: 'md' | 'txt'): void => {
       safeHaptics('light');
+      // Export the generated notes as edited, not as last saved.
+      flushEnhancedSave();
       exportNote(
         {
           title: titleRef.current || 'Untitled',
           content: buildNoteShareContent({
-            viewMode: resolveNoteBodyView(viewMode, {
-              usesSegmentTranscript,
-              transcriptPending,
-              contentIsTranscript,
-              hasEnhanced: !!note?.enhancedContent,
-            }),
-            enhancedContent: note?.enhancedContent ?? null,
-            usesSegmentTranscript,
+            viewMode: resolveNoteBodyView(viewMode, bodyTabInput),
+            enhancedContent: getNoteById(noteId)?.enhancedContent ?? null,
             transcript: formatTranscriptForExport({ blocks: transcriptBlocks }),
             content: contentRef.current,
           }),
@@ -635,14 +643,7 @@ export default function NoteEditorScreen() {
         format,
       ).catch(() => Alert.alert('Export failed', 'Could not export this note. Please try again.'));
     },
-    [
-      contentIsTranscript,
-      note?.enhancedContent,
-      transcriptBlocks,
-      transcriptPending,
-      usesSegmentTranscript,
-      viewMode,
-    ],
+    [bodyTabInput, flushEnhancedSave, getNoteById, noteId, transcriptBlocks, viewMode],
   );
 
   const handleViewTranscript = useCallback(() => {
@@ -1034,14 +1035,6 @@ export default function NoteEditorScreen() {
     );
   }
 
-  const hasEnhanced = !!note?.enhancedContent;
-  // An open editor keeps its tab, so clearing the notes to rewrite them doesn't close it.
-  const bodyTabInput = {
-    usesSegmentTranscript,
-    transcriptPending,
-    contentIsTranscript,
-    hasEnhanced: hasEnhanced || enhancedEditing,
-  };
   const bodyTabs = getNoteBodyTabs(bodyTabInput);
   const bodyView = resolveNoteBodyView(viewMode, bodyTabInput);
   const actionInputHash = makeContentHash(actionInputText);
