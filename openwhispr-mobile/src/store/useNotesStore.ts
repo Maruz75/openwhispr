@@ -144,21 +144,21 @@ const resolveMeetingFolderId = (folders: Folder[]): number => {
  * team space, since a private note can't be shared.
  */
 const createMeetingNoteRow = (title: string, context: CreateMeetingNoteContext): Note => {
-  const privateFolders = notesRepository.getPrivateFolders();
+  const privateSpaceId = spacesRepository.getPrivateSpace().id;
   const keepsPersonal = useProcessingModeStore.getState().activeMode === 'private';
   if (context.folderId != null) {
     const folder = notesRepository.getFolders().find(({ id }) => id === context.folderId);
-    if (folder && (!keepsPersonal || privateFolders.some(({ id }) => id === folder.id))) {
+    if (folder && (!keepsPersonal || folder.spaceId === privateSpaceId)) {
       return notesRepository.createNote(title, '', folder.id);
     }
-  } else if (
-    context.spaceId != null &&
-    !keepsPersonal &&
-    context.spaceId !== spacesRepository.getPrivateSpace().id
-  ) {
+  } else if (context.spaceId != null && !keepsPersonal && context.spaceId !== privateSpaceId) {
     return notesRepository.createNote(title, '', undefined, context.spaceId);
   }
-  return notesRepository.createNote(title, '', resolveMeetingFolderId(privateFolders));
+  return notesRepository.createNote(
+    title,
+    '',
+    resolveMeetingFolderId(notesRepository.getPrivateFolders()),
+  );
 };
 
 const assertDiarizerModelReadyForEnrollment = async (

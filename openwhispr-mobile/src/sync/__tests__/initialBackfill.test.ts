@@ -97,13 +97,29 @@ beforeEach(() => {
 });
 
 describe('runInitialBackfillIfNeeded — once-per-account guard', () => {
-  it('does nothing when the flag is already set for this userId', async () => {
+  it('does not run again when the flag is already set for this userId', async () => {
     mockNotesRepository.getSyncState.mockReturnValue('1');
 
     await runInitialBackfillIfNeeded('user-1');
 
     expect(mockFetchFolders).not.toHaveBeenCalled();
-    expect(mockNotesRepository.getFoldersMissingClientId).not.toHaveBeenCalled();
+    expect(mockNotesRepository.getNotesMissingClientId).not.toHaveBeenCalled();
+    expect(mockNotesRepository.markFolderPushed).not.toHaveBeenCalled();
+    expect(mockNotesRepository.setSyncState).not.toHaveBeenCalled();
+  });
+
+  it('still gives a default folder re-seeded after it ran a client id, so it can upload', async () => {
+    mockNotesRepository.getSyncState.mockReturnValue('1');
+    mockNotesRepository.getFoldersMissingClientId.mockReturnValue([
+      folder({ id: 1, name: 'Personal' }),
+      folder({ id: 2, name: 'Meetings', sortOrder: 1 }),
+    ]);
+
+    await runInitialBackfillIfNeeded('user-1');
+
+    expect(mockNotesRepository.setFolderClientId).toHaveBeenCalledWith(1, expect.any(String));
+    expect(mockNotesRepository.setFolderClientId).toHaveBeenCalledWith(2, expect.any(String));
+    expect(mockFetchFolders).not.toHaveBeenCalled();
     expect(mockNotesRepository.setSyncState).not.toHaveBeenCalled();
   });
 

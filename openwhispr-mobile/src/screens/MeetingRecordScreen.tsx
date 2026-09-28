@@ -65,12 +65,6 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
   const googleCalendarAccounts = useGoogleCalendarStore((s) => s.accounts);
   const loadGoogleCalendars = useGoogleCalendarStore((s) => s.load);
   const createMeetingNote = useNotesStore((s) => s.createMeetingNote);
-  // Where the meeting was started from; the note is filed there.
-  const params = useLocalSearchParams<{ folderId?: string; spaceId?: string }>();
-  const startedIn = {
-    folderId: params.folderId ? Number(params.folderId) : undefined,
-    spaceId: params.spaceId ? Number(params.spaceId) : undefined,
-  };
   const updateNote = useNotesStore((s) => s.updateNote);
   const transitionStatus = useNotesStore((s) => s.transitionStatus);
   const runMeetingPipeline = useNotesStore((s) => s.runMeetingPipeline);
@@ -80,6 +74,12 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
   const isLocalAsrModelReady = useNotesStore((s) => s.isLocalAsrModelReady);
   const downloadDiarizerModel = useNotesStore((s) => s.downloadDiarizerModel);
   const { register: registerSuperwallGate } = useSuperwallGate();
+  // Where the meeting was started from; createMeetingNote files it there when it still can.
+  const params = useLocalSearchParams<{ folderId?: string; spaceId?: string }>();
+  const startedIn = {
+    folderId: params.folderId ? Number(params.folderId) : undefined,
+    spaceId: params.spaceId ? Number(params.spaceId) : undefined,
+  };
 
   const recording = useAudioRecording({
     allowsBackgroundRecording: true,

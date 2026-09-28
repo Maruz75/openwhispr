@@ -113,6 +113,10 @@ export async function ensureNoteSynced(
         if (!createPushScopeResolver()(note.spaceId)) {
           throw new Error('This note’s space is not available to sync yet. Try again later.');
         }
+        // Likewise for a folder that hasn't reached the server yet.
+        if (notesRepository.isFolderAwaitingUpload(note.folderId)) {
+          throw new Error('This note’s folder has not synced yet. Try again later.');
+        }
       } catch (error) {
         finish(error instanceof Error ? error : new Error('Unable to sync this note.'));
       }

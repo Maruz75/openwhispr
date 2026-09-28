@@ -135,6 +135,11 @@ const NOTE_PUSH_ACK_FIELDS: ReadonlyArray<keyof Note> = [
 
 const pushRejectedKey = (localId: number): string => `note.pushRejected.${localId}`;
 
+// pushFolders only uploads a folder that is queued and has a client id, so only then does
+// the folder get a cloud id a note could be filed under.
+const isAwaitingUpload = (folder: Folder | null): boolean =>
+  folder?.pendingSync === 1 && folder.clientFolderId != null;
+
 export class LocalNotesRepository implements NotesRepository {
   private readonly database: NotesDb;
 
@@ -864,17 +869,17 @@ export class LocalNotesRepository implements NotesRepository {
     localFolderId: number | null,
     options: ApplyRemoteNoteOptions & { forceTranscript?: boolean } = {},
   ): void {
+    // A note filed in a folder the server has never seen reaches it unfiled, so a null
+    // coming back keeps the note in that folder. While the folder is still on its way up,
+    // the note is queued again, and pushNotes sends it once the folder has a cloud id.
+    const unsyncedFolder =
+      remote.folder_id == null ? this.getFolderUnknownToServer(local.folderId) : null;
     this.database
       .update(notes)
       .set({
         title: remote.title ?? 'Untitled',
         content: remote.content,
-        // A note filed in a folder the server has never seen reaches it unfiled, so a null
-        // coming back must not take the note out of that folder here.
-        folderId:
-          remote.folder_id == null && this.isFolderUnknownToServer(local.folderId)
-            ? local.folderId
-            : localFolderId,
+        folderId: unsyncedFolder ? unsyncedFolder.id : localFolderId,
         noteType: remote.note_type,
         sourceFile: remote.source_file,
         audioDurationSeconds: remote.audio_duration_seconds,
@@ -885,7 +890,7 @@ export class LocalNotesRepository implements NotesRepository {
         clientNoteId: remote.client_note_id ?? local.clientNoteId,
         remoteId: remote.id,
         deletedAt: null,
-        pendingSync: 0,
+        pendingSync: isAwaitingUpload(unsyncedFolder) ? 1 : 0,
         conflictServerNote: null,
         // Only the team pass relocates an existing note; without an explicit
         // space the row keeps whatever space it already sits in.
@@ -951,14 +956,18 @@ export class LocalNotesRepository implements NotesRepository {
     return this.database.select().from(folders).where(eq(folders.remoteId, remoteId)).get() ?? null;
   }
 
-  private isFolderUnknownToServer(folderId: number | null): boolean {
-    if (folderId == null) return false;
+  private getFolderUnknownToServer(folderId: number | null): Folder | null {
+    if (folderId == null) return null;
     const folder = this.database
-      .select({ remoteId: folders.remoteId })
+      .select()
       .from(folders)
-      .where(eq(folders.id, folderId))
+      .where(and(eq(folders.id, folderId), isNull(folders.deletedAt)))
       .get();
-    return !!folder && !folder.remoteId;
+    return folder && !folder.remoteId ? folder : null;
+  }
+
+  isFolderAwaitingUpload(folderId: number | null): boolean {
+    return isAwaitingUpload(this.getFolderUnknownToServer(folderId));
   }
 
   private resolveFolderByRemoteId(serverFolderId: string | null): number | null {

@@ -11,7 +11,17 @@ export async function runInitialBackfillIfNeeded(
 ): Promise<void> {
   checkpoint();
   const flagKey = `${FLAG_PREFIX}${userId}`;
-  if (notesRepository.getSyncState(flagKey) === '1') return;
+  if (notesRepository.getSyncState(flagKey) === '1') {
+    // migrate.ts re-seeds the default folders on every launch, so one can come back after
+    // this ran: once an account switch has wiped the folders, or another device deleted
+    // one. Without a client id it never uploads and its notes never get a folder on the
+    // server. pushFolders adopts it into a synced same-named default rather than creating
+    // a second one.
+    for (const folder of notesRepository.getFoldersMissingClientId()) {
+      notesRepository.setFolderClientId(folder.id, randomUUID());
+    }
+    return;
+  }
 
   // fetchFolders(null) carries no scope param, so this is already a
   // private-scope-only snapshot — see fetchFolders' scope doc.

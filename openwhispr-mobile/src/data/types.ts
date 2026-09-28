@@ -317,6 +317,8 @@ export interface NotesRepository {
   dropNotePushAttempt(localId: number): void;
   /** True while the note's latest push was refused (terminal or dropped) and no later push, pull or delete has settled it. */
   isNotePushRejected(localId: number): boolean;
+  /** True while the folder has no cloud id yet but pushFolders will upload it: queued, with a client id, not deleted. */
+  isFolderAwaitingUpload(folderId: number | null): boolean;
   /**
    * Records a push-time 409 note_version_conflict: stores the server's current
    * copy in conflict_server_note and leaves pendingSync untouched (local edits

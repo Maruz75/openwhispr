@@ -205,12 +205,6 @@ function serverFolderId(localFolderId: number | null): string | null {
   return folder?.remoteId ?? null;
 }
 
-function isFolderAwaitingServer(localFolderId: number | null): boolean {
-  if (localFolderId == null) return false;
-  const folder = notesRepository.getFolders().find((f) => f.id === localFolderId);
-  return !!folder && !folder.remoteId;
-}
-
 function calendarContextPayload(
   n: Note,
 ): Pick<NotePushInput, 'participants' | 'calendar_event_id'> {
@@ -303,8 +297,10 @@ export async function pushNotes(
 
     // Pushed now, a note in a folder with no cloud id would reach the server unfiled,
     // and so land in no folder anywhere else. It waits for the folder like it would for
-    // a space; pushFolders runs first, so normally that's just this pass.
-    if (isFolderAwaitingServer(n.folderId)) {
+    // a space; pushFolders runs first, so normally that's just this pass. A folder
+    // pushFolders will never upload (refused, or never queued) holds nothing: the note
+    // goes up unfiled rather than not at all.
+    if (notesRepository.isFolderAwaitingUpload(n.folderId)) {
       skippedPendingFolder += 1;
       continue;
     }

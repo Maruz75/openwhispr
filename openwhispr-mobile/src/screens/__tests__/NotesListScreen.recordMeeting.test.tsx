@@ -102,4 +102,20 @@ describe('NotesListScreen Record meeting', () => {
       params: { spaceId: '3' },
     });
   });
+
+  it("records into a space's folder rather than the space around it", () => {
+    recordMeeting({ folderId: '9', spaceId: '3' });
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/(tabs)/(notes)/meeting-record',
+      params: { folderId: '9' },
+    });
+  });
+
+  it('passes nothing when neither a folder nor a space is being viewed', () => {
+    recordMeeting({});
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/(tabs)/(notes)/meeting-record',
+      params: {},
+    });
+  });
 });

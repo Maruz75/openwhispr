@@ -36,6 +36,7 @@ jest.mock('@/data', () => ({
     markTranscriptPushed: jest.fn(),
     forkNoteToPrivate: jest.fn(),
     dropNotePushAttempt: jest.fn(),
+    isFolderAwaitingUpload: jest.fn(),
     getSyncState: jest.fn(),
     setSyncState: jest.fn(),
     clearSyncState: jest.fn(),
@@ -100,6 +101,7 @@ const note = (overrides: Partial<Note> = {}): Note =>
   }) as Note;
 
 beforeEach(() => {
+  mockNotesRepository.isFolderAwaitingUpload.mockReturnValue(false);
   mockNotesRepository.getNoteById.mockImplementation((id) => {
     const pending = mockNotesRepository.getPendingNotes.mock.results.at(-1)?.value as
       | Note[]
@@ -175,34 +177,39 @@ describe('pushNotes calendar context', () => {
   });
 
   it("holds a note whose folder hasn't reached the server yet, instead of filing it nowhere", async () => {
-    mockNotesRepository.getFolders.mockReturnValue([
-      {
-        id: 2,
-        name: 'Meetings',
-        isDefault: 1,
-        sortOrder: 0,
-        clientFolderId: 'client-folder-2',
-        remoteId: null,
-        deletedAt: null,
-        pendingSync: 1,
-        spaceId: null,
-        createdAt: null,
-        updatedAt: null,
-      },
-    ] as unknown as ReturnType<typeof notesRepository.getFolders>);
+    const UNSYNCED_FOLDER_ID = 3;
+    mockNotesRepository.isFolderAwaitingUpload.mockImplementation(
+      (folderId) => folderId === UNSYNCED_FOLDER_ID,
+    );
     mockNotesRepository.getPendingNotes.mockReturnValue([
-      note({ id: 1, remoteId: null }),
-      note({ id: 2, remoteId: 'remote-note-2', clientNoteId: 'client-note-2' }),
+      note({ id: 1, remoteId: null, folderId: UNSYNCED_FOLDER_ID }),
+      note({
+        id: 2,
+        remoteId: 'remote-note-2',
+        clientNoteId: 'client-note-2',
+        folderId: UNSYNCED_FOLDER_ID,
+      }),
+      note({ id: 3, remoteId: null, clientNoteId: 'client-note-3', folderId: 2 }),
+    ]);
+    mockBatchCreateNotes.mockResolvedValue([
+      { id: 'remote-note-3', client_note_id: 'client-note-3' },
     ]);
 
     await expect(pushNotes()).resolves.toBeUndefined();
 
-    expect(mockBatchCreateNotes).not.toHaveBeenCalled();
+    // Only the note whose folder is on the server goes up, filed in it.
+    expect(mockBatchCreateNotes).toHaveBeenCalledWith([
+      expect.objectContaining({ client_note_id: 'client-note-3', folder_id: 'remote-folder-2' }),
+    ]);
     expect(mockUpdateNoteRemote).not.toHaveBeenCalled();
-    expect(mockNotesRepository.markNotePushed).not.toHaveBeenCalled();
+    expect(mockNotesRepository.markNotePushed).toHaveBeenCalledTimes(1);
     expect(mockNotesRepository.markNoteTerminal).not.toHaveBeenCalled();
     expect(mockAddBreadcrumb).toHaveBeenCalledWith(
-      expect.objectContaining({ category: 'sync', level: 'info' }),
+      expect.objectContaining({
+        category: 'sync',
+        level: 'info',
+        message: expect.stringContaining('skipped 2 row(s) whose folder has no cloud id yet'),
+      }),
     );
   });
 

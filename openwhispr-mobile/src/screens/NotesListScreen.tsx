@@ -215,21 +215,17 @@ export default function NotesListScreen() {
       if (id === 'note') {
         handleCompose();
       } else if (id === 'meeting') {
-        router.push({
-          pathname: '/(tabs)/(notes)/meeting-record',
-          params:
-            folderId != null
-              ? { folderId: String(folderId) }
-              : spaceId != null
-                ? { spaceId: String(spaceId) }
-                : {},
-        });
+        // The meeting is filed where it was started: this folder, or this space.
+        const startedIn: { folderId?: string; spaceId?: string } = {};
+        if (params.folderId) startedIn.folderId = params.folderId;
+        else if (params.spaceId) startedIn.spaceId = params.spaceId;
+        router.push({ pathname: '/(tabs)/(notes)/meeting-record', params: startedIn });
       } else if (id === 'folder') {
         safeHaptics('light');
         setNewFolderVisible(true);
       }
     },
-    [folderId, handleCompose, spaceId],
+    [handleCompose, params.folderId, params.spaceId],
   );
 
   const hasOwnerProfile = voiceProfiles.some((profile) => profile.isOwner === 1);

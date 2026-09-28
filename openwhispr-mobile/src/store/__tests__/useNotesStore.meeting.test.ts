@@ -243,13 +243,23 @@ describe('createMeetingNote', () => {
   describe('started from a folder or space', () => {
     const PERSONAL_FOLDER = { id: 5, name: 'Clients', spaceId: 1, deletedAt: null };
     const TEAM_FOLDER = { id: 9, name: 'Team', spaceId: 3, deletedAt: null };
+    const getFolders = notesRepository.getFolders as jest.Mock;
+    const getPrivateFolders = notesRepository.getPrivateFolders as jest.Mock;
+    const defaultGetFolders = getFolders.getMockImplementation();
+    const defaultGetPrivateFolders = getPrivateFolders.getMockImplementation();
 
     beforeEach(() => {
-      (notesRepository.getFolders as jest.Mock).mockReturnValue([PERSONAL_FOLDER, TEAM_FOLDER]);
-      (notesRepository.getPrivateFolders as jest.Mock).mockReturnValue([
+      getFolders.mockReturnValue([PERSONAL_FOLDER, TEAM_FOLDER]);
+      getPrivateFolders.mockReturnValue([
         { id: 2, name: 'Meetings', isDefault: 1, sortOrder: 1, spaceId: 1, deletedAt: null },
         PERSONAL_FOLDER,
       ]);
+    });
+
+    // clearAllMocks keeps implementations, so the folders above would leak into later tests.
+    afterEach(() => {
+      getFolders.mockImplementation(defaultGetFolders);
+      getPrivateFolders.mockImplementation(defaultGetPrivateFolders);
     });
 
     it('files the meeting in the folder it was started from', () => {

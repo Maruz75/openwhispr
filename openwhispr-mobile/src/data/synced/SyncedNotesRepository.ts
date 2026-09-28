@@ -230,6 +230,9 @@ export class SyncedNotesRepository implements NotesRepository {
   isNotePushRejected(localId: number): boolean {
     return this.local.isNotePushRejected(localId);
   }
+  isFolderAwaitingUpload(folderId: number | null): boolean {
+    return this.local.isFolderAwaitingUpload(folderId);
+  }
   parkNoteConflict(localId: number, serverNote: RemoteNote): void {
     this.local.parkNoteConflict(localId, serverNote);
   }
