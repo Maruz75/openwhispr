@@ -3,12 +3,40 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import type { TranscriptBlock } from '@/lib/diarization/transcriptDisplay';
 import { TranscriptSheet } from '../TranscriptSheet';
 
+jest.mock('@react-native-menu/menu', () => ({
+  MenuView: ({
+    actions,
+    onPressAction,
+    children,
+  }: {
+    actions: { id: string; title: string }[];
+    onPressAction: (event: { nativeEvent: { event: string } }) => void;
+    children?: React.ReactNode;
+  }) => {
+    const { Pressable, Text: MockText, View } = require('react-native');
+    return (
+      <View>
+        {children}
+        {actions.map((action) => (
+          <Pressable
+            key={action.id}
+            testID={`menu-${action.id}`}
+            onPress={() => onPressAction({ nativeEvent: { event: action.id } })}
+          >
+            <MockText>{action.title}</MockText>
+          </Pressable>
+        ))}
+      </View>
+    );
+  },
+}));
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/components/ui/SystemIcon', () => ({ SystemIcon: () => null }));
 jest.mock('@/components/ui/GlassIconButton', () => ({
+  GlassCapsule: ({ children }: { children?: React.ReactNode }) => children,
   GlassIconButton: ({
     children,
     onPress,
@@ -49,6 +77,7 @@ const renderSheet = (overrides: Partial<React.ComponentProps<typeof TranscriptSh
       selectedSpeakerId={null}
       shareText="[0:00] Speaker 1: Hello there"
       onSpeakerPress={jest.fn()}
+      onExport={jest.fn()}
       onClose={jest.fn()}
       {...overrides}
     />,
@@ -58,7 +87,7 @@ describe('TranscriptSheet', () => {
   it('shows the title, subtitle and transcript', () => {
     const { getByText } = renderSheet();
     expect(getByText('Transcript')).toBeTruthy();
-    expect(getByText('Review or share the full meeting transcript.')).toBeTruthy();
+    expect(getByText('Review, share or export the full transcript.')).toBeTruthy();
     expect(getByText('Hello there')).toBeTruthy();
   });
 
@@ -69,11 +98,11 @@ describe('TranscriptSheet', () => {
     expect(onSpeakerPress).toHaveBeenCalledWith(block);
   });
 
-  it('opens the share sheet with the transcript text', async () => {
+  it('shares the transcript text', async () => {
     const shareSpy = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' });
-    const { getByLabelText } = renderSheet();
+    const { getByTestId } = renderSheet();
     await act(async () => {
-      fireEvent.press(getByLabelText('Share transcript'));
+      fireEvent.press(getByTestId('menu-share'));
     });
     expect(shareSpy).toHaveBeenCalledWith({ message: '[0:00] Speaker 1: Hello there' });
     shareSpy.mockRestore();
@@ -82,13 +111,25 @@ describe('TranscriptSheet', () => {
   it('explains when sharing fails', async () => {
     const shareSpy = jest.spyOn(Share, 'share').mockRejectedValue(new Error('nope'));
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-    const { getByLabelText } = renderSheet();
+    const { getByTestId } = renderSheet();
     await act(async () => {
-      fireEvent.press(getByLabelText('Share transcript'));
+      fireEvent.press(getByTestId('menu-share'));
     });
     expect(alertSpy).toHaveBeenCalledWith('Error', 'Unable to share transcript');
     shareSpy.mockRestore();
     alertSpy.mockRestore();
+  });
+
+  it('exports the transcript as a Markdown or text file', () => {
+    const onExport = jest.fn();
+    const { getByTestId, getByText } = renderSheet({ onExport });
+    expect(getByText('Export Markdown')).toBeTruthy();
+    expect(getByText('Export Plain Text')).toBeTruthy();
+
+    fireEvent.press(getByTestId('menu-export-md'));
+    fireEvent.press(getByTestId('menu-export-txt'));
+
+    expect(onExport.mock.calls).toEqual([['md'], ['txt']]);
   });
 
   it('closes from the close button', () => {

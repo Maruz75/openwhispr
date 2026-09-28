@@ -698,6 +698,22 @@ export default function NoteEditorScreen() {
     });
   }, [flushEnhancedSave, getNoteById, noteId]);
 
+  const handleExportTranscript = useCallback(
+    (format: 'md' | 'txt'): void => {
+      safeHaptics('light');
+      exportNote(
+        {
+          title: `${titleRef.current || 'Untitled'} Transcript`,
+          content: formatTranscriptForExport({ blocks: transcriptBlocks }),
+        },
+        format,
+      ).catch(() =>
+        Alert.alert('Export failed', 'Could not export this transcript. Please try again.'),
+      );
+    },
+    [transcriptBlocks],
+  );
+
   const runSelectedAction = useCallback(
     (action: Parameters<typeof runAction>[0], routing?: ReasoningRoutingOptions) => {
       if (processingState === 'processing') return;
@@ -1454,6 +1470,7 @@ export default function NoteEditorScreen() {
         selectedSpeakerId={activeSpeakerId}
         shareText={transcriptText}
         onSpeakerPress={handleSpeakerPress}
+        onExport={handleExportTranscript}
         onClose={() => setTranscriptSheetVisible(false)}
       >
         {transcriptSheetVisible ? speakerSheets : null}

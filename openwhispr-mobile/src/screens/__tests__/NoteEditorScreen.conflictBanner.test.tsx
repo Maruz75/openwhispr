@@ -248,6 +248,23 @@ jest.mock('@/components/notes/NoteActionsMenu', () => ({
   },
 }));
 
+jest.mock('@/components/notes/TranscriptSheet', () => ({
+  TranscriptSheet: ({
+    visible,
+    onExport,
+  }: {
+    visible: boolean;
+    onExport: (format: 'md' | 'txt') => void;
+  }) => {
+    const { Pressable, Text } = require('react-native');
+    return visible ? (
+      <Pressable onPress={() => onExport('txt')}>
+        <Text>Export transcript</Text>
+      </Pressable>
+    ) : null;
+  },
+}));
+
 jest.mock('@/components/notes/MarkdownRenderer', () => ({
   MarkdownRenderer: ({ content }: { content: string }) =>
     (() => {
@@ -603,6 +620,32 @@ it('copies an unfinished edit to the generated notes', () => {
   fireEvent.press(screen.getByText('Copy Notes'));
   expect(mockUpdateNote).toHaveBeenCalledWith(7, { enhancedContent: '## Summary\n- Copied' });
   expect(Clipboard.setStringAsync).toHaveBeenCalledWith('## Summary\n- Copied');
+});
+
+it('exports the transcript as a file once notes are generated', () => {
+  mockNote = note({ noteType: 'meeting', diarizationEnabled: 1, enhancedContent: '## Summary' });
+  mockNotesState.notes = [mockNote];
+  mockSegments = [
+    {
+      id: 1,
+      noteId: 7,
+      text: 'Spoken words',
+      startMs: 0,
+      endMs: 1000,
+      speakerLabel: null,
+      sortOrder: 0,
+    } as unknown as Segment,
+  ];
+  const screen = render(<NoteEditorScreen />);
+  fireEvent.press(screen.getByText('View Transcript'));
+  fireEvent.press(screen.getByText('Export transcript'));
+  expect(exportNote).toHaveBeenCalledWith(
+    {
+      title: 'Customer Planning Transcript',
+      content: expect.stringContaining('Spoken words'),
+    },
+    'txt',
+  );
 });
 
 describe('NoteEditorScreen — changes pulled while the note is open', () => {

@@ -1,9 +1,10 @@
 import type React from 'react';
-import { Alert, Modal, ScrollView, Share, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, Share, View } from 'react-native';
+import { MenuView } from '@react-native-menu/menu';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { SystemIcon } from '@/components/ui/SystemIcon';
-import { GlassIconButton } from '@/components/ui/GlassIconButton';
+import { GlassCapsule, GlassIconButton } from '@/components/ui/GlassIconButton';
 import { displayFontFamily } from '@/lib/fonts';
 import type { TranscriptBlock } from '@/lib/diarization/transcriptDisplay';
 import { SpeakerTranscript } from './SpeakerTranscript';
@@ -14,6 +15,7 @@ interface TranscriptSheetProps {
   selectedSpeakerId: number | null;
   shareText: string;
   onSpeakerPress: (block: TranscriptBlock) => void;
+  onExport: (format: 'md' | 'txt') => void;
   onClose: () => void;
   /** Sheets opened from a speaker (rename, merge, voiceprint). iOS only presents a modal above
    * this one when it is rendered inside it. */
@@ -26,6 +28,7 @@ export function TranscriptSheet({
   selectedSpeakerId,
   shareText,
   onSpeakerPress,
+  onExport,
   onClose,
   children,
 }: TranscriptSheetProps): React.JSX.Element {
@@ -57,18 +60,34 @@ export function TranscriptSheet({
               Transcript
             </Text>
             <Text className="mt-1 text-[15px] leading-5 text-secondaryLabel">
-              Review or share the full meeting transcript.
+              Review, share or export the full transcript.
             </Text>
           </View>
           <View className="flex-row gap-3">
-            <GlassIconButton
-              onPress={() => {
-                handleShare().catch(() => {});
+            <MenuView
+              actions={[
+                { id: 'share', title: 'Share', image: 'square.and.arrow.up' },
+                { id: 'export-md', title: 'Export Markdown', image: 'doc.text' },
+                { id: 'export-txt', title: 'Export Plain Text', image: 'doc.plaintext' },
+              ]}
+              onPressAction={({ nativeEvent }) => {
+                if (nativeEvent.event === 'share') handleShare().catch(() => {});
+                else if (nativeEvent.event === 'export-md') onExport('md');
+                else if (nativeEvent.event === 'export-txt') onExport('txt');
               }}
-              accessibilityLabel="Share transcript"
+              shouldOpenOnLongPress={false}
             >
-              <SystemIcon name="square.and.arrow.up" mdName="Share2" size={15} color="label" />
-            </GlassIconButton>
+              <Pressable
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Share or export transcript"
+                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+              >
+                <GlassCapsule>
+                  <SystemIcon name="square.and.arrow.up" mdName="Share2" size={15} color="label" />
+                </GlassCapsule>
+              </Pressable>
+            </MenuView>
             <GlassIconButton onPress={onClose} accessibilityLabel="Close">
               <SystemIcon name="xmark" mdName="X" size={15} color="secondaryLabel" />
             </GlassIconButton>
@@ -76,7 +95,8 @@ export function TranscriptSheet({
         </View>
 
         <ScrollView
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 24 }}
+          contentContainerClassName="px-6"
+          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         >
           <SpeakerTranscript
             blocks={blocks}
