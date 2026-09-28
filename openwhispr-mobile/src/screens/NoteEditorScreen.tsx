@@ -667,13 +667,15 @@ export default function NoteEditorScreen() {
   }, []);
 
   const handleCopyGeneratedNote = useCallback(() => {
-    const generatedContent = note?.enhancedContent;
+    // Copy the generated notes as edited, not as last saved.
+    flushEnhancedSave();
+    const generatedContent = getNoteById(noteId)?.enhancedContent;
     if (!generatedContent?.trim()) return;
     safeHaptics('light');
     Clipboard.setStringAsync(generatedContent).catch(() => {
       Alert.alert('Copy failed', 'Could not copy the generated notes.');
     });
-  }, [note?.enhancedContent]);
+  }, [flushEnhancedSave, getNoteById, noteId]);
 
   const runSelectedAction = useCallback(
     (action: Parameters<typeof runAction>[0], routing?: ReasoningRoutingOptions) => {

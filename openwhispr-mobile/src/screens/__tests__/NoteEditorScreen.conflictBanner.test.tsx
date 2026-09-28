@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import NoteEditorScreen from '@/screens/NoteEditorScreen';
+import * as Clipboard from 'expo-clipboard';
 import { exportNote } from '@/lib/noteExport';
 import type { Action, ConflictedNote, Note, RemoteNote, Segment, Speaker } from '@/data/types';
 import type { Folder, Space } from '@/data';
@@ -217,12 +218,32 @@ jest.mock('@/components/ui/SystemIcon', () => ({
 }));
 
 jest.mock('@/components/notes/NoteActionsMenu', () => ({
-  NoteActionsMenu: ({ onShare }: { onShare: () => void }) => {
-    const { Pressable, Text } = require('react-native');
+  NoteActionsMenu: ({
+    onShare,
+    onCopyGeneratedNote,
+    onViewTranscript,
+  }: {
+    onShare: () => void;
+    onCopyGeneratedNote?: () => void;
+    onViewTranscript?: () => void;
+  }) => {
+    const { Pressable, Text, View } = require('react-native');
     return (
-      <Pressable onPress={onShare}>
-        <Text>Share note</Text>
-      </Pressable>
+      <View>
+        <Pressable onPress={onShare}>
+          <Text>Share note</Text>
+        </Pressable>
+        {onCopyGeneratedNote ? (
+          <Pressable onPress={onCopyGeneratedNote}>
+            <Text>Copy Notes</Text>
+          </Pressable>
+        ) : null}
+        {onViewTranscript ? (
+          <Pressable onPress={onViewTranscript}>
+            <Text>View Transcript</Text>
+          </Pressable>
+        ) : null}
+      </View>
     );
   },
 }));
@@ -568,4 +589,18 @@ it('exports only the title from a transcript that is still being made', () => {
   fireEvent.press(screen.getByText('Share note'));
   fireEvent.press(screen.getByText('Export Markdown'));
   expect(exportNote).toHaveBeenCalledWith(expect.objectContaining({ content: '' }), 'md');
+});
+
+it('copies an unfinished edit to the generated notes', () => {
+  mockNote = note({ enhancedContent: '## Summary' });
+  mockNotesState.notes = [mockNote];
+  mockUpdateNote.mockImplementationOnce((_id: number, updates: Partial<Note>) => {
+    mockNote = { ...mockNote, ...updates };
+  });
+  const screen = render(<NoteEditorScreen />);
+  fireEvent.press(screen.getByTestId('enhanced-edit'));
+  fireEvent.changeText(screen.getByTestId('enhanced-editor'), '## Summary\n- Copied');
+  fireEvent.press(screen.getByText('Copy Notes'));
+  expect(mockUpdateNote).toHaveBeenCalledWith(7, { enhancedContent: '## Summary\n- Copied' });
+  expect(Clipboard.setStringAsync).toHaveBeenCalledWith('## Summary\n- Copied');
 });
