@@ -132,6 +132,8 @@ export type EnrollmentQualityResult =
       code: EnrollmentQualityFailureCode;
       reason: string;
       speakerDurationsMs?: Record<number, number>;
+      /** Kept on level-based rejections so the message can tell a quiet voice from pauses. */
+      speechActivity?: SpeechActivityAnalysis;
     };
 
 export interface EnrollmentQualityInput {
@@ -159,6 +161,7 @@ export type SpeechActivityQualityResult =
       ok: false;
       code: EnrollmentQualityFailureCode;
       reason: string;
+      speechActivity?: SpeechActivityAnalysis;
     };
 
 export interface EnrollmentAudioTools {
@@ -280,11 +283,14 @@ export const evaluateEnrollmentQuality = (
   const acceptedSpeakerMs = speakerDurationsMs[speakerId] ?? 0;
   const usableSpeechMs = Math.max(speechQuality.speechActivity.speechActivityMs, acceptedSpeakerMs);
   if (usableSpeechMs < minSpeechActivityMs) {
-    return failQuality(
-      VOICE_ENROLLMENT_SHORT_SPEECH,
-      `Detected ${Math.round(usableSpeechMs)}ms of usable speech; at least ${minSpeechActivityMs}ms is required.`,
-      speakerDurationsMs,
-    );
+    return {
+      ...failQuality(
+        VOICE_ENROLLMENT_SHORT_SPEECH,
+        `Detected ${Math.round(usableSpeechMs)}ms of usable speech; at least ${minSpeechActivityMs}ms is required.`,
+        speakerDurationsMs,
+      ),
+      speechActivity: speechQuality.speechActivity,
+    };
   }
 
   const embedding = diarization.embeddings[speakerId];
@@ -336,19 +342,25 @@ export const evaluateSpeechActivityQuality = (
     );
   }
   if (speechActivity.speechActivityMs < minSpeechActivityMs) {
-    return failQuality(
-      VOICE_ENROLLMENT_SHORT_SPEECH,
-      `Speech activity is below ${minSpeechActivityMs}ms.`,
-    );
+    return {
+      ...failQuality(
+        VOICE_ENROLLMENT_SHORT_SPEECH,
+        `Speech activity is below ${minSpeechActivityMs}ms.`,
+      ),
+      speechActivity,
+    };
   }
   if (speechActivity.speechRatio < minSpeechRatio) {
-    return failQuality(
-      VOICE_ENROLLMENT_LOW_SPEECH_RATIO,
-      `Speech ratio is below ${minSpeechRatio}.`,
-    );
+    return {
+      ...failQuality(VOICE_ENROLLMENT_LOW_SPEECH_RATIO, `Speech ratio is below ${minSpeechRatio}.`),
+      speechActivity,
+    };
   }
   if (speechActivity.peakDb - speechActivity.noiseFloorDb < minSnrDb) {
-    return failQuality(VOICE_ENROLLMENT_LOW_SNR, `SNR proxy is below ${minSnrDb}dB.`);
+    return {
+      ...failQuality(VOICE_ENROLLMENT_LOW_SNR, `SNR proxy is below ${minSnrDb}dB.`),
+      speechActivity,
+    };
   }
 
   return { ok: true, speechActivity };

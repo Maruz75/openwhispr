@@ -187,6 +187,28 @@ describe('evaluateEnrollmentQuality', () => {
     );
   });
 
+  it.each([
+    ['low speech ratio', { speechRatio: 0.2 }, VOICE_ENROLLMENT_LOW_SPEECH_RATIO],
+    ['low SNR', { peakDb: -20, noiseFloorDb: -28 }, VOICE_ENROLLMENT_LOW_SNR],
+  ])('keeps the level analysis on a %s rejection', (_name, overrides, code) => {
+    const speechActivity = { ...passingAnalysis, ...overrides };
+
+    expect(evaluateEnrollmentQuality({ speechActivity, diarization: diarization() })).toMatchObject(
+      { ok: false, code, speechActivity },
+    );
+  });
+
+  it('keeps the level analysis on a short-speech rejection', () => {
+    const speechActivity = { ...passingAnalysis, speechActivityMs: 5_000 };
+
+    expect(
+      evaluateEnrollmentQuality({
+        speechActivity,
+        diarization: diarization({ segments: [{ start: 0, end: 5, speakerId: 0 }] }),
+      }),
+    ).toMatchObject({ ok: false, code: VOICE_ENROLLMENT_SHORT_SPEECH, speechActivity });
+  });
+
   it('accepts VAD-short analysis when diarization attributes enough single-speaker speech', () => {
     expect(
       evaluateEnrollmentQuality({
@@ -285,6 +307,7 @@ describe('enrollVoiceProfile', () => {
 
     await expect(enrollVoiceProfile(enrollInput, deps)).rejects.toMatchObject({
       code: VOICE_ENROLLMENT_LOW_SPEECH_RATIO,
+      quality: { speechActivity: { speechRatio: 0.1 } },
     });
     expect(calls.diarize).toEqual([]);
   });
