@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { notes, speakers, transcriptSegments } from '@/db/schema';
+import { folders, notes, speakers, transcriptSegments } from '@/db/schema';
 import { serializeSegmentsForSync } from '@/lib/notes/remoteTranscript';
 import { buildMergeTargetPatch, buildRenameSpeakerPatch } from '@/lib/diarization/speakerEdits';
 import type { RemoteNote } from '@/data/types';
@@ -312,6 +312,32 @@ describe('applyRemoteNote transcript integration', () => {
     const seg = repo.getSegments(note.id);
     expect(seg).toHaveLength(1);
     expect(seg[0].text).toBe('Only one line now.');
+  });
+
+  it("keeps the note's folder when the server has never seen that folder", () => {
+    const { repo, db } = createMemoryRepository();
+    repo.applyRemoteNote(remoteNote(), noFolder);
+    const [note] = repo.getAllNotes();
+    const folder = repo.createFolder('Meetings');
+    db.update(notes).set({ folderId: folder.id }).where(eq(notes.id, note.id)).run();
+
+    // The folder has no server id, so the note reached the server unfiled.
+    repo.applyRemoteNote(remoteNote({ updated_at: '2026-07-09T11:00:00.000Z' }), noFolder);
+
+    expect(repo.getNoteById(note.id)?.folderId).toBe(folder.id);
+  });
+
+  it('follows the server when it takes a note out of a folder it knows', () => {
+    const { repo, db } = createMemoryRepository();
+    repo.applyRemoteNote(remoteNote(), noFolder);
+    const [note] = repo.getAllNotes();
+    const folder = repo.createFolder('Clients');
+    db.update(folders).set({ remoteId: 'srv-folder-1' }).where(eq(folders.id, folder.id)).run();
+    db.update(notes).set({ folderId: folder.id }).where(eq(notes.id, note.id)).run();
+
+    repo.applyRemoteNote(remoteNote({ updated_at: '2026-07-09T11:00:00.000Z' }), noFolder);
+
+    expect(repo.getNoteById(note.id)?.folderId).toBeNull();
   });
 
   it('does not rebuild when the transcript is unchanged (segment ids stable)', () => {

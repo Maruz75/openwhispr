@@ -174,6 +174,38 @@ describe('pushNotes calendar context', () => {
     );
   });
 
+  it("holds a note whose folder hasn't reached the server yet, instead of filing it nowhere", async () => {
+    mockNotesRepository.getFolders.mockReturnValue([
+      {
+        id: 2,
+        name: 'Meetings',
+        isDefault: 1,
+        sortOrder: 0,
+        clientFolderId: 'client-folder-2',
+        remoteId: null,
+        deletedAt: null,
+        pendingSync: 1,
+        spaceId: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+    ] as unknown as ReturnType<typeof notesRepository.getFolders>);
+    mockNotesRepository.getPendingNotes.mockReturnValue([
+      note({ id: 1, remoteId: null }),
+      note({ id: 2, remoteId: 'remote-note-2', clientNoteId: 'client-note-2' }),
+    ]);
+
+    await expect(pushNotes()).resolves.toBeUndefined();
+
+    expect(mockBatchCreateNotes).not.toHaveBeenCalled();
+    expect(mockUpdateNoteRemote).not.toHaveBeenCalled();
+    expect(mockNotesRepository.markNotePushed).not.toHaveBeenCalled();
+    expect(mockNotesRepository.markNoteTerminal).not.toHaveBeenCalled();
+    expect(mockAddBreadcrumb).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'sync', level: 'info' }),
+    );
+  });
+
   it('pushes public update calendar context', async () => {
     mockNotesRepository.getPendingNotes.mockReturnValue([
       note({

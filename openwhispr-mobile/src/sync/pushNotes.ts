@@ -205,6 +205,12 @@ function serverFolderId(localFolderId: number | null): string | null {
   return folder?.remoteId ?? null;
 }
 
+function isFolderAwaitingServer(localFolderId: number | null): boolean {
+  if (localFolderId == null) return false;
+  const folder = notesRepository.getFolders().find((f) => f.id === localFolderId);
+  return !!folder && !folder.remoteId;
+}
+
 function calendarContextPayload(
   n: Note,
 ): Pick<NotePushInput, 'participants' | 'calendar_event_id'> {
@@ -269,6 +275,7 @@ export async function pushNotes(
   const deletes: { localId: number; remoteId: string }[] = [];
   let failed = 0;
   let skippedPendingSpace = 0;
+  let skippedPendingFolder = 0;
 
   // Read once per pass: the capability flag and the space rows can't change
   // mid-push. Rows queued for deletion never reach it — DELETE carries no
@@ -291,6 +298,14 @@ export async function pushNotes(
       // again once the space resolves (or the team pull forks the row); this is
       // not a failure.
       skippedPendingSpace += 1;
+      continue;
+    }
+
+    // Pushed now, a note in a folder with no cloud id would reach the server unfiled,
+    // and so land in no folder anywhere else. It waits for the folder like it would for
+    // a space; pushFolders runs first, so normally that's just this pass.
+    if (isFolderAwaitingServer(n.folderId)) {
+      skippedPendingFolder += 1;
       continue;
     }
 
@@ -373,6 +388,13 @@ export async function pushNotes(
     Sentry.addBreadcrumb({
       category: 'sync',
       message: `pushNotes: skipped ${skippedPendingSpace} row(s) whose space is not pushable (no cloud id yet, or no longer resolvable)`,
+      level: 'info',
+    });
+  }
+  if (skippedPendingFolder > 0) {
+    Sentry.addBreadcrumb({
+      category: 'sync',
+      message: `pushNotes: skipped ${skippedPendingFolder} row(s) whose folder has no cloud id yet`,
       level: 'info',
     });
   }

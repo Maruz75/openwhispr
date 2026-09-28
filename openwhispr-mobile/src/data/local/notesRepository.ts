@@ -869,7 +869,12 @@ export class LocalNotesRepository implements NotesRepository {
       .set({
         title: remote.title ?? 'Untitled',
         content: remote.content,
-        folderId: localFolderId,
+        // A note filed in a folder the server has never seen reaches it unfiled, so a null
+        // coming back must not take the note out of that folder here.
+        folderId:
+          remote.folder_id == null && this.isFolderUnknownToServer(local.folderId)
+            ? local.folderId
+            : localFolderId,
         noteType: remote.note_type,
         sourceFile: remote.source_file,
         audioDurationSeconds: remote.audio_duration_seconds,
@@ -944,6 +949,16 @@ export class LocalNotesRepository implements NotesRepository {
 
   getFolderByRemoteId(remoteId: string): Folder | null {
     return this.database.select().from(folders).where(eq(folders.remoteId, remoteId)).get() ?? null;
+  }
+
+  private isFolderUnknownToServer(folderId: number | null): boolean {
+    if (folderId == null) return false;
+    const folder = this.database
+      .select({ remoteId: folders.remoteId })
+      .from(folders)
+      .where(eq(folders.id, folderId))
+      .get();
+    return !!folder && !folder.remoteId;
   }
 
   private resolveFolderByRemoteId(serverFolderId: string | null): number | null {
