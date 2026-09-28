@@ -941,3 +941,67 @@ describe('NoteEditorScreen body tabs', () => {
     expect(mockUpdateNote).toHaveBeenCalledWith(7, { enhancedContent: '## Summary\n- Draft' });
   });
 });
+
+describe('NoteEditorScreen replacing generated notes', () => {
+  let alertSpy: jest.SpyInstance;
+  beforeEach(() => {
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    mockNote = note({ enhancedContent: '## Summary' });
+    mockNotesState.notes = [mockNote];
+  });
+  afterEach(() => alertSpy.mockRestore());
+
+  const pressReplace = async (): Promise<void> => {
+    const buttons = (alertSpy.mock.calls[0][2] ?? []) as { text: string; onPress?: () => void }[];
+    await act(async () => {
+      buttons.find((button) => button.text === 'Replace')?.onPress?.();
+    });
+  };
+
+  it('asks before an action replaces the generated notes', async () => {
+    const { getByTestId } = render(<NoteEditorScreen />);
+    await act(async () => {
+      fireEvent.press(getByTestId('run-action-1'));
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Replace enhanced notes?',
+      'Running this action replaces the current enhanced notes, including any edits.',
+      expect.any(Array),
+    );
+    expect(ReasoningService.processText).not.toHaveBeenCalled();
+
+    await pressReplace();
+    await waitFor(() => expect(ReasoningService.processText).toHaveBeenCalledTimes(1));
+  });
+
+  it('leaves the notes alone when the replacement is cancelled', async () => {
+    const { getByTestId } = render(<NoteEditorScreen />);
+    await act(async () => {
+      fireEvent.press(getByTestId('run-action-1'));
+    });
+    const buttons = (alertSpy.mock.calls[0][2] ?? []) as { text: string; style?: string }[];
+    expect(buttons.map((button) => button.text)).toEqual(['Cancel', 'Replace']);
+    expect(buttons[0].style).toBe('cancel');
+    expect(ReasoningService.processText).not.toHaveBeenCalled();
+  });
+
+  it('drops an unsaved edit so it cannot overwrite the new notes', async () => {
+    const { getByTestId } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('enhanced-edit'));
+    fireEvent.changeText(getByTestId('enhanced-editor'), '## Edited');
+
+    await act(async () => {
+      fireEvent.press(getByTestId('run-action-1'));
+    });
+    await pressReplace();
+    await waitFor(() => expect(ReasoningService.processText).toHaveBeenCalledTimes(1));
+    // Outlast the 800 ms save debounce.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    });
+
+    const savedEnhanced = mockUpdateNote.mock.calls.map(([, updates]) => updates.enhancedContent);
+    expect(savedEnhanced).not.toContain('## Edited');
+  });
+});

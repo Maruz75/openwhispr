@@ -611,6 +611,8 @@ export default function NoteEditorScreen() {
   const runSelectedAction = useCallback(
     (action: Parameters<typeof runAction>[0], routing?: ReasoningRoutingOptions) => {
       if (processingState === 'processing') return;
+      // The action replaces the generated notes; a queued edit saving later would overwrite them.
+      discardEnhancedSave();
       const inputText =
         usesSegmentTranscriptRef.current && isDefaultGenerateNotesAction(action)
           ? generatedMeetingInputRef.current
@@ -625,10 +627,10 @@ export default function NoteEditorScreen() {
         },
       });
     },
-    [note?.isPrivate, processingState, runAction],
+    [discardEnhancedSave, note?.isPrivate, processingState, runAction],
   );
 
-  const handleRunAction = useCallback(
+  const runActionWithRouting = useCallback(
     async (action: Parameters<typeof runAction>[0]) => {
       const routing = { isPrivateNote: note?.isPrivate === 1 };
       // On-Device never leaves this phone: no account, paywall, or fallback to another service.
@@ -707,6 +709,30 @@ export default function NoteEditorScreen() {
       runSelectedAction,
       user,
     ],
+  );
+
+  const handleRunAction = useCallback(
+    (action: Parameters<typeof runAction>[0]) => {
+      if (!note?.enhancedContent?.trim()) {
+        runActionWithRouting(action).catch(() => {});
+        return;
+      }
+      Alert.alert(
+        'Replace enhanced notes?',
+        'Running this action replaces the current enhanced notes, including any edits.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Replace',
+            style: 'destructive',
+            onPress: () => {
+              runActionWithRouting(action).catch(() => {});
+            },
+          },
+        ],
+      );
+    },
+    [note?.enhancedContent, runActionWithRouting],
   );
 
   const startChatRequest = useCallback(
