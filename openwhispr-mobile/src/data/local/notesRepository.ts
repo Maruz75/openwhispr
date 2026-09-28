@@ -1610,15 +1610,19 @@ export class LocalNotesRepository implements NotesRepository {
           .returning()
           .get();
         const mapped = this.mapSpeakerProfile(row);
-        tx.update(speakers)
+        const linked = tx
+          .update(speakers)
           .set({
             ...speakerPatch,
             profileId: mapped.id,
             pendingSync: 1,
             updatedAt: sql`datetime('now')`,
           })
-          .where(eq(speakers.id, speakerId))
-          .run();
+          .where(and(eq(speakers.id, speakerId), isNull(speakers.deletedAt)))
+          .returning({ id: speakers.id })
+          .all();
+        // Throwing rolls back the insert, so no owner profile is saved without its speaker.
+        if (linked.length !== 1) throw new Error(`Speaker ${speakerId} not found`);
         return mapped;
       });
     } catch (error) {
@@ -1628,7 +1632,7 @@ export class LocalNotesRepository implements NotesRepository {
     const row = this.database
       .select({ noteId: speakers.noteId })
       .from(speakers)
-      .where(eq(speakers.id, speakerId))
+      .where(and(eq(speakers.id, speakerId), isNull(speakers.deletedAt)))
       .get();
     if (row) this.markNoteTranscriptDirty(row.noteId);
 

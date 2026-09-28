@@ -346,6 +346,47 @@ describe('LocalNotesRepository speaker profiles', () => {
     expect(speakerRow).toEqual(expect.objectContaining({ profileId: null, displayName: null }));
   });
 
+  it.each([
+    ['does not exist', () => 9999],
+    [
+      'was deleted',
+      (db: TestDb, noteId: number) => {
+        const spkr = createSpeaker(db, { noteId, speakerLabel: 'SPEAKER_00' });
+        db.update(speakers)
+          .set({ deletedAt: '2026-06-19T00:00:00.000Z' })
+          .where(eq(speakers.id, spkr.id))
+          .run();
+        return spkr.id;
+      },
+    ],
+  ])('saves no owner profile when the speaker %s', (_label, speakerIdFor) => {
+    const { repo, db } = createMemoryRepository();
+    const note = createMeeting(db);
+    const speakerId = speakerIdFor(db, note.id);
+
+    expect(() =>
+      repo.createOwnerProfileForSpeaker(
+        speakerId,
+        {
+          displayName: 'Me',
+          isOwner: 1,
+          embedding: [0.1, 0.2],
+          sampleCount: 1,
+          consentAt: '2026-06-19T00:00:00.000Z',
+        },
+        { displayName: 'Me' },
+      ),
+    ).toThrow();
+
+    expect(db.select().from(speakerProfiles).all()).toEqual([]);
+    const claimedRows = db
+      .select()
+      .from(speakers)
+      .all()
+      .filter((row) => row.profileId !== null || row.displayName !== null);
+    expect(claimedRows).toEqual([]);
+  });
+
   it('hard-deletes voice profiles during account-switch data wipe', () => {
     const { repo, db } = createMemoryRepository();
     repo.createSpeakerProfile({
