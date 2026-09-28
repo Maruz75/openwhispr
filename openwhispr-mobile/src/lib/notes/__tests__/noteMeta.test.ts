@@ -24,14 +24,12 @@ const toSqlite = (date: Date): string => date.toISOString().replace('T', ' ').sl
 describe('formatNoteMetaDate', () => {
   const now = new Date(2026, 8, 27, 15, 0);
 
-  it('labels a note created today with its time', () => {
-    expect(formatNoteMetaDate(toSqlite(new Date(2026, 8, 27, 9, 27)), now)).toMatch(/^Today .*27/);
+  it('labels a note created today with its time, as the notes list shows it', () => {
+    expect(formatNoteMetaDate(toSqlite(new Date(2026, 8, 27, 9, 27)), now)).toBe('Today 09:27');
   });
 
   it('labels a note created yesterday', () => {
-    expect(formatNoteMetaDate(toSqlite(new Date(2026, 8, 26, 14, 5)), now)).toMatch(
-      /^Yesterday .*05/,
-    );
+    expect(formatNoteMetaDate(toSqlite(new Date(2026, 8, 26, 14, 5)), now)).toBe('Yesterday 14:05');
   });
 
   it('shows month and day for an earlier date this year', () => {
@@ -78,6 +76,13 @@ describe('sortAttendees', () => {
     const room = person({ displayName: 'Board Room', resource: true });
     const ana = person({ displayName: 'Ana Ruiz', organizer: true });
     expect(sortAttendees([sam, room, ana])).toEqual([ana, sam]);
+  });
+
+  it('drops people who declined', () => {
+    const sam = person({ displayName: 'Sam Lee' });
+    const kim = person({ displayName: 'Kim Park', responseStatus: 'declined' });
+    expect(sortAttendees([sam, kim])).toEqual([sam]);
+    expect(formatAttendeeChipLabel([sam, kim])).toBe('Sam');
   });
 });
 

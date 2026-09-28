@@ -1,4 +1,5 @@
 import type { CalendarParticipant } from '@/data/calendarTypes';
+import { formatClockTime } from '@/lib/formatNoteRowTime';
 import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
 
 const isSameDay = (a: Date, b: Date): boolean =>
@@ -20,12 +21,12 @@ export function noteTakenAt(
   return created < updated ? created : updated;
 }
 
-/** "Today 9:27 AM", "Yesterday 2:05 PM", "Sep 21, 9:27 AM", or "Sep 21, 2025, 9:27 AM". */
+/** "Today 09:27", "Yesterday 14:05", "Sep 21, 09:27", or "Sep 21, 2025, 09:27", timed like the notes list. */
 export function formatNoteMetaDate(timestamp: string | Date | null | undefined, now: Date): string {
   const date = tryParseNoteTimestamp(timestamp);
   if (!date) return '';
 
-  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const time = formatClockTime(date);
   if (isSameDay(date, now)) return `Today ${time}`;
 
   const yesterday = new Date(now);
@@ -41,9 +42,11 @@ export function formatNoteMetaDate(timestamp: string | Date | null | undefined, 
   return `${day}, ${time}`;
 }
 
-/** People only (rooms dropped), organizer first, otherwise in calendar order. */
+/** People who haven't declined (rooms dropped), organizer first, otherwise in calendar order. */
 export function sortAttendees(participants: CalendarParticipant[]): CalendarParticipant[] {
-  const people = participants.filter((participant) => !participant.resource);
+  const people = participants.filter(
+    (participant) => !participant.resource && participant.responseStatus !== 'declined',
+  );
   return [
     ...people.filter((participant) => participant.organizer),
     ...people.filter((participant) => !participant.organizer),

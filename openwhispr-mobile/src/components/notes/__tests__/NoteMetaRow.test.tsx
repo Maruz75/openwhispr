@@ -72,6 +72,18 @@ describe('NoteMetaRow', () => {
     expect(getByText('Today 9:27 AM')).toBeTruthy();
   });
 
+  it('keeps long names to one line', () => {
+    const { getByText } = render(
+      <NoteMetaRow
+        {...props}
+        attendeeLabel="Bartholomew-Alexander +12"
+        folderLabel="Quarterly planning and roadmap reviews"
+      />,
+    );
+    expect(getByText('Bartholomew-Alexander +12').props.numberOfLines).toBe(1);
+    expect(getByText('Quarterly planning and roadmap reviews').props.numberOfLines).toBe(1);
+  });
+
   it('hides the folder chip for a note that cannot be moved', () => {
     const { queryByTestId } = render(<NoteMetaRow {...props} onPressFolder={undefined} />);
     expect(queryByTestId('note-meta-folder')).toBeNull();

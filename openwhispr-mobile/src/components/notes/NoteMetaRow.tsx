@@ -12,7 +12,7 @@ interface NoteMetaRowProps {
   onPressFolder?: () => void;
 }
 
-const CHIP = 'h-9 flex-row items-center gap-1.5 rounded-full bg-tertiarySystemFill px-3';
+const CHIP = 'h-9 max-w-full flex-row items-center gap-1.5 rounded-full bg-tertiarySystemFill px-3';
 
 /** The row under a note's title: when it was taken, who attended, and where it lives. */
 export function NoteMetaRow({
@@ -36,11 +36,16 @@ export function NoteMetaRow({
               accessibilityLabel={`Attendees: ${attendeeLabel}`}
               hitSlop={6}
               onPress={onPressAttendees}
-              className="flex-row items-center gap-1.5"
+              className="shrink flex-row items-center gap-1.5"
             >
               {dateLabel ? <Text className="text-[14px] text-tertiaryLabel">·</Text> : null}
               <SystemIcon name="person.2" mdName="Users" size={14} color="secondaryLabel" />
-              <Text className="text-[14px] font-medium text-secondaryLabel">{attendeeLabel}</Text>
+              <Text
+                numberOfLines={1}
+                className="shrink text-[14px] font-medium text-secondaryLabel"
+              >
+                {attendeeLabel}
+              </Text>
             </Pressable>
           ) : null}
         </View>
@@ -60,7 +65,7 @@ export function NoteMetaRow({
             size={14}
             color="secondaryLabel"
           />
-          <Text className="text-[14px] font-medium text-secondaryLabel">
+          <Text numberOfLines={1} className="shrink text-[14px] font-medium text-secondaryLabel">
             {folderLabel ?? 'Add to folder'}
           </Text>
         </Pressable>
