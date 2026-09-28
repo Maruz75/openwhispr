@@ -309,6 +309,8 @@ export interface NotesRepository {
    * that pull could otherwise be followed by a stale-base 409.
    */
   dropNotePushAttempt(localId: number): void;
+  /** True while the note's latest push was refused (terminal or dropped) and no later push, pull or delete has settled it. */
+  isNotePushRejected(localId: number): boolean;
   /**
    * Records a push-time 409 note_version_conflict: stores the server's current
    * copy in conflict_server_note and leaves pendingSync untouched (local edits

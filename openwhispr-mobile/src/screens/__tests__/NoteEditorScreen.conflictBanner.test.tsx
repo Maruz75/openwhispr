@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import NoteEditorScreen from '@/screens/NoteEditorScreen';
+import { exportNote } from '@/lib/noteExport';
 import type { Action, ConflictedNote, Note, RemoteNote, Segment, Speaker } from '@/data/types';
 import type { Folder, Space } from '@/data';
 
@@ -135,14 +136,19 @@ jest.mock('@/store/useUsageStore', () => {
   return { useUsageStore };
 });
 
+let mockOnDictationComplete: ((text: string) => void) | null = null;
+
 jest.mock('@/hooks/useAudioRecording', () => ({
-  useAudioRecording: () => ({
-    isRecording: false,
-    isProcessing: false,
-    currentText: '',
-    startRecording: jest.fn(),
-    stopRecording: jest.fn(),
-  }),
+  useAudioRecording: ({ onComplete }: { onComplete: (text: string) => void }) => {
+    mockOnDictationComplete = onComplete;
+    return {
+      isRecording: false,
+      isProcessing: false,
+      currentText: '',
+      startRecording: jest.fn(),
+      stopRecording: jest.fn(),
+    };
+  },
 }));
 
 jest.mock('@/hooks/useKeyboardHeight', () => ({
@@ -211,7 +217,14 @@ jest.mock('@/components/ui/SystemIcon', () => ({
 }));
 
 jest.mock('@/components/notes/NoteActionsMenu', () => ({
-  NoteActionsMenu: () => null,
+  NoteActionsMenu: ({ onShare }: { onShare: () => void }) => {
+    const { Pressable, Text } = require('react-native');
+    return (
+      <Pressable onPress={onShare}>
+        <Text>Share note</Text>
+      </Pressable>
+    );
+  },
 }));
 
 jest.mock('@/components/notes/MarkdownRenderer', () => ({
@@ -381,6 +394,110 @@ describe('NoteEditorScreen — conflict banner', () => {
   });
 });
 
+jest.mock('@/components/notes/NoteShareSheet', () => ({
+  NoteShareSheet: ({
+    onFlushDraft,
+    onExport,
+  }: {
+    onFlushDraft: () => void;
+    onExport: (format: 'md' | 'txt') => void;
+  }) => {
+    const { Pressable, Text, View } = require('react-native');
+    return (
+      <View>
+        <Pressable onPress={onFlushDraft}>
+          <Text>Create test link</Text>
+        </Pressable>
+        <Pressable onPress={() => onExport('md')}>
+          <Text>Export Markdown</Text>
+        </Pressable>
+      </View>
+    );
+  },
+}));
+
+jest.mock('@/lib/noteExport', () => ({
+  ...jest.requireActual('@/lib/noteExport'),
+  exportNote: jest.fn(async () => undefined),
+}));
+
+describe('NoteEditorScreen — sharing drafts', () => {
+  it('flushes title and body before publishing and does not resave on exit', () => {
+    jest.useFakeTimers();
+    const screen = render(<NoteEditorScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText('Title'), 'Latest title');
+    fireEvent.changeText(screen.getByPlaceholderText('Type or dictate…'), 'Latest body');
+    fireEvent.press(screen.getByText('Share note'));
+    expect(mockUpdateNote).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByText('Create test link'));
+    expect(mockUpdateNote).toHaveBeenCalledWith(7, {
+      title: 'Latest title',
+      content: 'Latest body',
+    });
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+    screen.unmount();
+    expect(mockUpdateNote).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  it('saves dictation that completes after the editor has closed', () => {
+    jest.useFakeTimers();
+    const screen = render(<NoteEditorScreen />);
+    screen.unmount();
+    act(() => {
+      mockOnDictationComplete?.(' dictated words');
+      jest.advanceTimersByTime(1000);
+    });
+    expect(mockUpdateNote).toHaveBeenCalledWith(7, {
+      content: 'Alice owns the launch checklist. dictated words',
+    });
+    jest.useRealTimers();
+  });
+
+  it('exports an untitled note under the untitled label', () => {
+    mockNote = note({ title: '' });
+    mockNotesState.notes = [mockNote];
+    const screen = render(<NoteEditorScreen />);
+    fireEvent.press(screen.getByText('Share note'));
+    fireEvent.press(screen.getByText('Export Markdown'));
+    expect(exportNote).toHaveBeenCalledWith(expect.objectContaining({ title: 'Untitled' }), 'md');
+  });
+
+  it('does not dirty an unchanged note when opening or publishing', () => {
+    const screen = render(<NoteEditorScreen />);
+    fireEvent.press(screen.getByText('Share note'));
+    fireEvent.press(screen.getByText('Create test link'));
+    screen.unmount();
+    expect(mockUpdateNote).not.toHaveBeenCalled();
+  });
+});
+
+it('flushes a meeting title without replacing its structured transcript with body text', () => {
+  mockNote = note({ noteType: 'meeting', content: 'Stored body' });
+  mockNotesState.notes = [mockNote];
+  mockSegments = [
+    {
+      id: 1,
+      noteId: 7,
+      text: 'Spoken words',
+      startMs: 0,
+      endMs: 1000,
+      speakerId: null,
+      segmentIndex: 0,
+      source: 'local',
+    } as unknown as Segment,
+  ];
+  const screen = render(<NoteEditorScreen />);
+  fireEvent.changeText(screen.getByPlaceholderText('Title'), 'Meeting title');
+  fireEvent.press(screen.getByText('Share note'));
+  fireEvent.press(screen.getByText('Create test link'));
+  expect(mockUpdateNote).toHaveBeenCalledWith(7, { title: 'Meeting title' });
+  screen.unmount();
+  expect(mockUpdateNote).toHaveBeenCalledTimes(1);
+});
+
 describe('NoteEditorScreen — using the server copy mid-edit', () => {
   it('drops the unsaved edit to the generated notes and shows the server version', async () => {
     mockNote = note({ enhancedContent: '## Local notes' });
@@ -411,4 +528,15 @@ describe('NoteEditorScreen — using the server copy mid-edit', () => {
     expect(queryByTestId('enhanced-editor')).toBeNull();
     expect(getByText('## Server notes')).toBeTruthy();
   });
+});
+
+it('publishes an unfinished edit to the generated notes when sharing', () => {
+  mockNote = note({ enhancedContent: '## Summary' });
+  mockNotesState.notes = [mockNote];
+  const screen = render(<NoteEditorScreen />);
+  fireEvent.press(screen.getByTestId('enhanced-edit'));
+  fireEvent.changeText(screen.getByTestId('enhanced-editor'), '## Summary\n- Shared');
+  fireEvent.press(screen.getByText('Share note'));
+  fireEvent.press(screen.getByText('Create test link'));
+  expect(mockUpdateNote).toHaveBeenCalledWith(7, { enhancedContent: '## Summary\n- Shared' });
 });

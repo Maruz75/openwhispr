@@ -6,7 +6,6 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
-  ActionSheetIOS,
   ActivityIndicator,
   Alert,
 } from 'react-native';
@@ -35,6 +34,7 @@ import {
   resolveNoteBodyView,
   type NoteBodyView,
 } from '@/lib/notes/noteBodyTabs';
+import { NoteShareSheet } from '@/components/notes/NoteShareSheet';
 import { NoteActionsMenu } from '@/components/notes/NoteActionsMenu';
 import { ConflictBanner } from '@/components/notes/ConflictBanner';
 import { NoteChatSheet } from '@/components/notes/NoteChatSheet';
@@ -191,6 +191,7 @@ export default function NoteEditorScreen() {
   const [enhancedEditing, setEnhancedEditing] = useState(false);
   // Bumped to remount the generated-notes editor when its draft must be thrown away.
   const [enhancedEditorRevision, setEnhancedEditorRevision] = useState(0);
+  const [shareVisible, setShareVisible] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatOverNoteMessage[]>([]);
   const [chatDraft, setChatDraft] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
@@ -246,6 +247,7 @@ export default function NoteEditorScreen() {
     setTranscriptSheetVisible(false);
     setAttendeesVisible(false);
     setEnhancedEditing(false);
+    setShareVisible(false);
     setChatMessages([]);
     setChatDraft('');
     setChatError(null);
@@ -387,19 +389,30 @@ export default function NoteEditorScreen() {
     [addLearnedWords],
   );
 
-  const debouncedSave = useCallback(
-    (updates: { title?: string; content?: string }) => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = setTimeout(() => {
-        updateNote(noteId, updates);
-        // Meeting notes are typed, not dictated, so their edits aren't transcription corrections.
-        if (typeof updates.content === 'string' && !usesSegmentTranscriptRef.current) {
-          maybeLearnCorrections(updates.content);
-        }
-      }, 800);
-    },
-    [noteId, updateNote, maybeLearnCorrections],
-  );
+  const flushDraft = useCallback((): void => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = null;
+    const titleChanged = titleRef.current !== originalTitleRef.current;
+    const contentChanged = contentRef.current !== originalContentRef.current;
+    if (!titleChanged && !contentChanged) return;
+    updateNote(noteId, {
+      ...(titleChanged ? { title: titleRef.current } : {}),
+      ...(contentChanged ? { content: contentRef.current } : {}),
+    });
+    originalTitleRef.current = titleRef.current;
+    if (contentChanged) {
+      originalContentRef.current = contentRef.current;
+      // Meeting notes are typed, not dictated, so their edits aren't transcription corrections.
+      if (!usesSegmentTranscriptRef.current) maybeLearnCorrections(contentRef.current);
+    }
+  }, [noteId, updateNote, maybeLearnCorrections]);
+
+  const debouncedSave = useCallback((): void => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(flushDraft, 800);
+  }, [flushDraft]);
+
+  useEffect(() => flushDraft, [flushDraft]);
 
   // Edits to the generated notes save on their own debounce. The pending edit carries its note
   // id, so a flush that runs after switching notes still writes to the note that was edited.
@@ -468,26 +481,14 @@ export default function NoteEditorScreen() {
     }
   }, [discardEnhancedSave, noteId, resolveConflictUseServer, getNoteById]);
 
-  useEffect(
-    () => () => {
-      flushEnhancedSaveRef.current();
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      const titleChanged = titleRef.current !== originalTitleRef.current;
-      const contentChanged = contentRef.current !== originalContentRef.current;
-      if (!titleChanged && !contentChanged) return;
-      updateNote(noteId, {
-        ...(titleChanged ? { title: titleRef.current } : {}),
-        ...(contentChanged ? { content: contentRef.current } : {}),
-      });
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [noteId],
-  );
+  // Leaving the note flushes an unfinished edit to the generated notes; it carries its own id.
+  useEffect(() => () => flushEnhancedSaveRef.current(), [noteId]);
 
   const handleTitleChange = useCallback(
     (text: string) => {
       setTitle(text);
-      debouncedSave({ title: text, content: contentRef.current });
+      titleRef.current = text;
+      debouncedSave();
     },
     [debouncedSave],
   );
@@ -495,7 +496,8 @@ export default function NoteEditorScreen() {
   const handleContentChange = useCallback(
     (text: string) => {
       setContent(text);
-      debouncedSave({ title: titleRef.current, content: text });
+      contentRef.current = text;
+      debouncedSave();
     },
     [debouncedSave],
   );
@@ -544,7 +546,9 @@ export default function NoteEditorScreen() {
       // Re-root the learner baseline to the freshly-dictated text so we only
       // learn from user edits performed after this dictation.
       learnedBaselineRef.current = newContent;
-      debouncedSave({ title: titleRef.current, content: newContent });
+      // The save reads the ref, and an unmounted editor never re-renders to update it.
+      contentRef.current = newContent;
+      debouncedSave();
       safeHaptics('success');
       if (useProcessingModeStore.getState().activeMode === 'cloud') {
         useUsageStore.getState().load(true);
@@ -601,16 +605,12 @@ export default function NoteEditorScreen() {
     }
   }, [activeMode, isRecording, registerSuperwallGate, startRecording, stopRecording, user]);
 
-  const handleExport = useCallback(() => {
-    safeHaptics('light');
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options: ['Export as Markdown', 'Export as Plain Text', 'Cancel'],
-        cancelButtonIndex: 2,
-      },
-      (buttonIndex) => {
-        const payload = {
-          title: titleRef.current,
+  const handleExport = useCallback(
+    (format: 'md' | 'txt'): void => {
+      safeHaptics('light');
+      exportNote(
+        {
+          title: titleRef.current || 'Untitled',
           content: buildNoteShareContent({
             viewMode: resolveNoteBodyView(viewMode, {
               usesSegmentTranscript,
@@ -618,16 +618,15 @@ export default function NoteEditorScreen() {
             }),
             enhancedContent: note?.enhancedContent ?? null,
             usesSegmentTranscript,
-            // Title-free: exportNote already leads the file with the title.
             transcript: formatTranscriptForExport({ blocks: transcriptBlocks }),
             content: contentRef.current,
           }),
-        };
-        if (buttonIndex === 0) exportNote(payload, 'md');
-        if (buttonIndex === 1) exportNote(payload, 'txt');
-      },
-    );
-  }, [note?.enhancedContent, transcriptBlocks, usesSegmentTranscript, viewMode]);
+        },
+        format,
+      ).catch(() => Alert.alert('Export failed', 'Could not export this note. Please try again.'));
+    },
+    [note?.enhancedContent, transcriptBlocks, usesSegmentTranscript, viewMode],
+  );
 
   const handleViewTranscript = useCallback(() => {
     safeHaptics('light');
@@ -1075,6 +1074,17 @@ export default function NoteEditorScreen() {
 
   return (
     <View className="flex-1 bg-systemBackground">
+      {shareVisible ? (
+        <NoteShareSheet
+          noteId={noteId}
+          onClose={() => setShareVisible(false)}
+          onFlushDraft={() => {
+            flushDraft();
+            flushEnhancedSave();
+          }}
+          onExport={handleExport}
+        />
+      ) : null}
       <TabScreenHeader
         title={title || 'Untitled'}
         left={<GlassBackButton fallbackRoute="/(tabs)/(notes)" />}
@@ -1091,7 +1101,7 @@ export default function NoteEditorScreen() {
             askNoteDisabled={isChatProcessing}
             onCopyGeneratedNote={note?.enhancedContent ? handleCopyGeneratedNote : undefined}
             onViewTranscript={usesSegmentTranscript ? handleViewTranscript : undefined}
-            onShare={handleExport}
+            onShare={() => setShareVisible(true)}
             onDelete={handleDelete}
           />
         }

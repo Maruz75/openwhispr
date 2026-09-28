@@ -737,6 +737,8 @@ describe('NoteEditorScreen generated titles', () => {
   });
 });
 
+jest.mock('@/components/notes/NoteShareSheet', () => ({ NoteShareSheet: () => null }));
+
 it('runs signed-out note formatting through Providers without requiring a Cloud account', async () => {
   mockAuthState.user = null;
   mockConfigState.config.inference = {
@@ -917,8 +919,8 @@ describe('NoteEditorScreen body tabs', () => {
       jest.advanceTimersByTime(800);
     });
 
+    // Only changed fields are saved.
     expect(mockUpdateNote).toHaveBeenCalledWith(7, {
-      title: 'Customer Planning',
       content: 'Alice owns the launch checklist and the demo.',
     });
     expect(extractCorrections).not.toHaveBeenCalled();
