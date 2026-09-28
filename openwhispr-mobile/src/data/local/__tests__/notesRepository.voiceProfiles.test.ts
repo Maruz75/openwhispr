@@ -425,6 +425,25 @@ describe('LocalNotesRepository speaker profiles', () => {
     expect(claimedRows).toEqual([]);
   });
 
+  it('numbers speakers added by a re-diarization after the ones the note has', () => {
+    const { repo, db } = createMemoryRepository();
+    const note = createMeeting(db);
+    createSpeaker(db, { noteId: note.id, speakerLabel: 'SPEAKER_00', sortOrder: 0 });
+    createSpeaker(db, { noteId: note.id, speakerLabel: 'SPEAKER_01', sortOrder: 1 });
+
+    repo.upsertSpeakers(note.id, [
+      {
+        noteId: note.id,
+        speakerLabel: 'SPEAKER_02',
+        speakerStatus: 'provisional',
+        speakerLocked: 0,
+      },
+    ]);
+
+    const added = repo.getSpeakers(note.id).find((row) => row.speakerLabel === 'SPEAKER_02');
+    expect(added?.sortOrder).toBe(2);
+  });
+
   it('hard-deletes voice profiles during account-switch data wipe', () => {
     const { repo, db } = createMemoryRepository();
     repo.createSpeakerProfile({

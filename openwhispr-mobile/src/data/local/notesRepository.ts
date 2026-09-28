@@ -1463,9 +1463,22 @@ export class LocalNotesRepository implements NotesRepository {
 
   upsertSpeakers(noteId: number, rows: NewSpeaker[]): void {
     this.database.transaction((tx) => {
+      // Numbered after the note's existing speakers, so a re-diarization that adds one
+      // never shows a second "Speaker 1".
+      const nextSortOrder = tx
+        .select({ sortOrder: speakers.sortOrder })
+        .from(speakers)
+        .where(and(eq(speakers.noteId, noteId), isNull(speakers.deletedAt)))
+        .all()
+        .reduce((next, row) => Math.max(next, row.sortOrder + 1), 0);
       rows.forEach((row, index) => {
         tx.insert(speakers)
-          .values({ ...row, noteId, sortOrder: row.sortOrder ?? index, pendingSync: 1 })
+          .values({
+            ...row,
+            noteId,
+            sortOrder: row.sortOrder ?? nextSortOrder + index,
+            pendingSync: 1,
+          })
           .run();
       });
     });
