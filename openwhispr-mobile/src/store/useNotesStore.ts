@@ -123,6 +123,10 @@ export type CreateMeetingNoteContext = {
   participants?: CalendarParticipant[] | null;
   /** Defaults to true (on-device path). Cloud realtime meetings have no diarization. */
   diarizationEnabled?: boolean;
+  /** The folder the meeting was started from. */
+  folderId?: number;
+  /** The team space the meeting was started from, when no folder was open. */
+  spaceId?: number;
 };
 
 const resolveMeetingFolderId = (folders: Folder[]): number => {
@@ -132,6 +136,29 @@ const resolveMeetingFolderId = (folders: Folder[]): number => {
   const fallbackFolder = folders.find((folder) => folder.isDefault) ?? folders[0];
 
   return meetingsFolder?.id ?? fallbackFolder?.id ?? DEFAULT_FOLDER_ID;
+};
+
+/**
+ * A meeting goes where it was started: that folder, or that team space. Anywhere else it
+ * goes to the personal Meetings folder, and so does a Private-mode meeting started in a
+ * team space, since a private note can't be shared.
+ */
+const createMeetingNoteRow = (title: string, context: CreateMeetingNoteContext): Note => {
+  const privateFolders = notesRepository.getPrivateFolders();
+  const keepsPersonal = useProcessingModeStore.getState().activeMode === 'private';
+  if (context.folderId != null) {
+    const folder = notesRepository.getFolders().find(({ id }) => id === context.folderId);
+    if (folder && (!keepsPersonal || privateFolders.some(({ id }) => id === folder.id))) {
+      return notesRepository.createNote(title, '', folder.id);
+    }
+  } else if (
+    context.spaceId != null &&
+    !keepsPersonal &&
+    context.spaceId !== spacesRepository.getPrivateSpace().id
+  ) {
+    return notesRepository.createNote(title, '', undefined, context.spaceId);
+  }
+  return notesRepository.createNote(title, '', resolveMeetingFolderId(privateFolders));
 };
 
 const assertDiarizerModelReadyForEnrollment = async (
@@ -658,11 +685,7 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
       context.participants === undefined || context.participants === null
         ? null
         : JSON.stringify(context.participants);
-    const note = notesRepository.createNote(
-      title,
-      '',
-      resolveMeetingFolderId(notesRepository.getPrivateFolders()),
-    );
+    const note = createMeetingNoteRow(title, context);
     notesRepository.updateNoteMeta(note.id, {
       noteType: 'meeting',
       diarizationEnabled: context.diarizationEnabled === false ? 0 : 1,

@@ -215,13 +215,21 @@ export default function NotesListScreen() {
       if (id === 'note') {
         handleCompose();
       } else if (id === 'meeting') {
-        router.push('/(tabs)/(notes)/meeting-record');
+        router.push({
+          pathname: '/(tabs)/(notes)/meeting-record',
+          params:
+            folderId != null
+              ? { folderId: String(folderId) }
+              : spaceId != null
+                ? { spaceId: String(spaceId) }
+                : {},
+        });
       } else if (id === 'folder') {
         safeHaptics('light');
         setNewFolderVisible(true);
       }
     },
-    [handleCompose],
+    [folderId, handleCompose, spaceId],
   );
 
   const hasOwnerProfile = voiceProfiles.some((profile) => profile.isOwner === 1);

@@ -39,6 +39,7 @@ jest.mock('@/data', () => ({
       { id: 2, name: 'Meetings', isDefault: 1, sortOrder: 1, deletedAt: null },
       { id: 1, name: 'Personal', isDefault: 1, sortOrder: 0, deletedAt: null },
     ]),
+    getFolders: jest.fn(() => []),
     createNote: jest.fn(() => ({ id: 7, title: 'Untitled meeting', noteType: 'meeting' })),
     getNoteById: jest.fn(() => null),
     updateNote: jest.fn(),
@@ -64,6 +65,9 @@ jest.mock('@/data', () => ({
     updateSpeakerProfile: jest.fn(),
     deleteSpeakerProfile: jest.fn(),
     deleteAllSpeakerProfiles: jest.fn(),
+  },
+  spacesRepository: {
+    getPrivateSpace: jest.fn(() => ({ id: 1, kind: 'private' })),
   },
 }));
 jest.mock('@/store/useProcessingModeStore', () => ({
@@ -234,6 +238,55 @@ describe('createMeetingNote', () => {
     useNotesStore.getState().createMeetingNote();
 
     expect(notesRepository.createNote).toHaveBeenCalledWith('Untitled meeting', '', 1);
+  });
+
+  describe('started from a folder or space', () => {
+    const PERSONAL_FOLDER = { id: 5, name: 'Clients', spaceId: 1, deletedAt: null };
+    const TEAM_FOLDER = { id: 9, name: 'Team', spaceId: 3, deletedAt: null };
+
+    beforeEach(() => {
+      (notesRepository.getFolders as jest.Mock).mockReturnValue([PERSONAL_FOLDER, TEAM_FOLDER]);
+      (notesRepository.getPrivateFolders as jest.Mock).mockReturnValue([
+        { id: 2, name: 'Meetings', isDefault: 1, sortOrder: 1, spaceId: 1, deletedAt: null },
+        PERSONAL_FOLDER,
+      ]);
+    });
+
+    it('files the meeting in the folder it was started from', () => {
+      useNotesStore.getState().createMeetingNote({ folderId: 5 });
+      expect(notesRepository.createNote).toHaveBeenCalledWith('Untitled meeting', '', 5);
+    });
+
+    it("files it in a team space's folder, or in the space itself with no folder open", () => {
+      useNotesStore.getState().createMeetingNote({ folderId: 9 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 9);
+
+      useNotesStore.getState().createMeetingNote({ spaceId: 3 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith(
+        'Untitled meeting',
+        '',
+        undefined,
+        3,
+      );
+    });
+
+    it('keeps a Private-mode meeting out of team spaces, in Meetings', () => {
+      mockProcessingModeState.activeMode = 'private';
+
+      useNotesStore.getState().createMeetingNote({ folderId: 9 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+      useNotesStore.getState().createMeetingNote({ spaceId: 3 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+      useNotesStore.getState().createMeetingNote({ folderId: 5 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 5);
+    });
+
+    it('uses Meetings when the folder is gone, or the space is the personal one', () => {
+      useNotesStore.getState().createMeetingNote({ folderId: 404 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+      useNotesStore.getState().createMeetingNote({ spaceId: 1 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+    });
   });
 
   it('persists selected calendar context locally', () => {
