@@ -16,11 +16,18 @@ export interface ConnectorPreview {
   title?: string;
   body: string;
   notes?: ConnectorPreviewNote[];
+  /**
+   * A card layout's fields, e.g. an email's to, cc, subject and body. The
+   * connector sets `body` to the same text as `fields.body`.
+   */
+  fields?: Record<string, string | string[]>;
 }
 
+/** What Send commits: a fields preview's fields, otherwise title and body. */
 export interface ConnectorEdits {
   title?: string;
   body?: string;
+  [field: string]: string | string[] | undefined;
 }
 
 export type ConnectorPrepareResult =
@@ -58,6 +65,8 @@ export type ApprovalOutcome =
 export interface ConnectorStatus {
   id: string;
   connected: boolean;
+  /** False when the build can't connect this connector at all (Gmail without a Google OAuth client). */
+  configured: boolean;
   accountLabel: string | null;
   workspaceLabel: string | null;
   needsReconnect: boolean;

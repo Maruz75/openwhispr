@@ -186,7 +186,8 @@ function createSlackConnector({ api, auth, directory, credentials }) {
 
   return {
     id: "slack",
-    actions: { send_message: { kind: "approval" } },
+    // The card edits only the message text; the destination stays as prepared.
+    actions: { send_message: { kind: "approval", editable: { body: "text" } } },
 
     async getStatus() {
       const entry = credentials.read(credentials.activeAccountId(), "slack");

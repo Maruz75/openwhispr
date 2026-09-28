@@ -116,12 +116,26 @@ function normalizePreviewNote(note) {
     : { key: note.key };
 }
 
+// A card layout's fields (an email's to, cc, subject and body): each value a
+// string or a list of strings, so a connector can't hand the renderer
+// anything it would have to guess how to show.
+function normalizePreviewFields(fields) {
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) return null;
+  const clean = {};
+  for (const [name, value] of Object.entries(fields)) {
+    if (isString(value)) clean[name] = value;
+    else if (Array.isArray(value)) clean[name] = value.filter(isString);
+  }
+  return Object.keys(clean).length > 0 ? clean : null;
+}
+
 // The card renders exactly this, so a preview missing a field it needs is
 // malformed rather than shown half empty.
 function normalizePreview(preview) {
   if (!preview || typeof preview !== "object") return null;
   const { verbKey, destinationLabel, accountLabel, body } = preview;
   if (![verbKey, destinationLabel, accountLabel, body].every(isString)) return null;
+  const fields = normalizePreviewFields(preview.fields);
   return {
     verbKey,
     destinationLabel,
@@ -131,6 +145,7 @@ function normalizePreview(preview) {
     ...(Array.isArray(preview.notes)
       ? { notes: preview.notes.map(normalizePreviewNote).filter(Boolean) }
       : {}),
+    ...(fields ? { fields } : {}),
   };
 }
 
@@ -170,6 +185,9 @@ function normalizeStatus(status) {
   const value = status && typeof status === "object" ? status : {};
   return {
     connected: value.connected === true,
+    // Only a connector that says so is unconfigured (Gmail without a Google
+    // OAuth client); its Settings row is hidden.
+    configured: value.configured !== false,
     accountLabel: isString(value.accountLabel) ? value.accountLabel : null,
     workspaceLabel: isString(value.workspaceLabel) ? value.workspaceLabel : null,
     needsReconnect: value.needsReconnect === true,
@@ -183,10 +201,28 @@ function normalizeBinding(binding) {
   return binding;
 }
 
-function sanitizeEdits(edits) {
+// What each declared editable type accepts. A "line" goes into a header
+// (an email's subject), so CR or LF would let it add headers such as Bcc.
+const EDIT_TYPES = {
+  addresses: (value) => (Array.isArray(value) ? value.filter(isString) : undefined),
+  line: (value) => (isString(value) && !/[\r\n]/.test(value) ? value : undefined),
+  text: (value) => (isString(value) ? value : undefined),
+};
+
+// The card's edits reach the connector only as the action declares them:
+// exactly the declared fields, each of its declared type. An action with no
+// declaration keeps the original title and body.
+function sanitizeEdits(edits, editable) {
+  const source = edits && typeof edits === "object" ? edits : {};
+  if (!editable || typeof editable !== "object") {
+    return stringFields({ title: source.title, body: source.body });
+  }
   const clean = {};
-  if (edits && typeof edits.title === "string") clean.title = edits.title;
-  if (edits && typeof edits.body === "string") clean.body = edits.body;
+  for (const [field, type] of Object.entries(editable)) {
+    const accept = Object.hasOwn(EDIT_TYPES, type) ? EDIT_TYPES[type] : null;
+    const value = accept && Object.hasOwn(source, field) ? accept(source[field]) : undefined;
+    if (value !== undefined) clean[field] = value;
+  }
   return clean;
 }
 
@@ -198,6 +234,10 @@ const CONNECT_ERROR_CODES = new Set([
   "oauth_state_mismatch",
   "ports_busy",
   "token_exchange_failed",
+  // Gmail: the user unticked "send email" at Google's consent screen, or
+  // Google says the account's address isn't verified.
+  "permission_not_granted",
+  "email_not_verified",
 ]);
 
 // A revoke is best effort: nothing may hang on an unreachable provider.
@@ -554,9 +594,12 @@ function createConnectorManager({
     let result;
     try {
       result = normalizeCommitResult(
-        await connector.commit(entry.action, entry.payload, sanitizeEdits(edits), {
-          binding: entry.binding,
-        })
+        await connector.commit(
+          entry.action,
+          entry.payload,
+          sanitizeEdits(edits, connector.actions[entry.action]?.editable),
+          { binding: entry.binding }
+        )
       );
     } catch (error) {
       logger.warn(

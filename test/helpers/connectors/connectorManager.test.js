@@ -453,6 +453,7 @@ test("a connector lookup that throws never hands its error to the renderer", asy
     {
       id: "fake",
       connected: false,
+      configured: true,
       accountLabel: null,
       workspaceLabel: null,
       needsReconnect: false,
@@ -541,6 +542,131 @@ test("edits are reduced to string title and body", async () => {
   const { actionId } = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
   await manager.commit(actionId, { body: "b", title: 5, channel: "C999" }, ALLOWED);
   assert.deepEqual(fake.calls.commit[0].edits, { body: "b" });
+});
+
+// Gmail's send action declares its card fields; the manager passes on only
+// those, each with the type it declares.
+const EMAIL_EDITABLE = { to: "addresses", cc: "addresses", subject: "line", body: "text" };
+
+async function commitEdits(editable, edits) {
+  const { manager, fake } = await setup({
+    actions: { post: { kind: "approval", ...(editable ? { editable } : {}) } },
+  });
+  const { actionId } = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
+  await manager.commit(actionId, edits, ALLOWED);
+  return fake.calls.commit[0].edits;
+}
+
+test("a declared action receives exactly its declared fields, each of its declared type", async () => {
+  assert.deepEqual(
+    await commitEdits(EMAIL_EDITABLE, {
+      to: ["josh@acme.test", 7, null, "dana@acme.test"],
+      cc: "sam@acme.test",
+      subject: "Q3 numbers",
+      body: "Numbers attached.",
+      title: "Not declared",
+      bcc: ["evil@attacker.test"],
+    }),
+    {
+      to: ["josh@acme.test", "dana@acme.test"],
+      subject: "Q3 numbers",
+      body: "Numbers attached.",
+    }
+  );
+});
+
+test("a line field containing CR or LF is dropped, so it can't add a header", async () => {
+  for (const subject of ["Q3\r\nBcc: evil@attacker.test", "Q3\nBcc: x", "Q3\rx"]) {
+    assert.deepEqual(
+      await commitEdits(EMAIL_EDITABLE, { to: ["josh@acme.test"], subject, body: "Hi" }),
+      { to: ["josh@acme.test"], body: "Hi" },
+      JSON.stringify(subject)
+    );
+  }
+  // An empty line is still a line; the connector decides whether it may be empty.
+  assert.deepEqual(await commitEdits(EMAIL_EDITABLE, { subject: "" }), { subject: "" });
+});
+
+test("address lists must be arrays, and an unknown declared type keeps nothing", async () => {
+  assert.deepEqual(
+    await commitEdits(EMAIL_EDITABLE, { to: "josh@acme.test", cc: { 0: "a@b.test" } }),
+    {}
+  );
+  assert.deepEqual(await commitEdits({ body: "html" }, { body: "<b>hi</b>" }), {});
+  assert.deepEqual(await commitEdits(EMAIL_EDITABLE, "not an object"), {});
+});
+
+test("a body-only declaration (Slack's) drops the title; no declaration keeps title and body", async () => {
+  assert.deepEqual(await commitEdits({ body: "text" }, { title: "T", body: "B", to: ["x"] }), {
+    body: "B",
+  });
+  assert.deepEqual(await commitEdits(null, { title: "T", body: "B", to: ["x"] }), {
+    title: "T",
+    body: "B",
+  });
+});
+
+test("a preview keeps its fields map of strings and string lists, and body stays required", async () => {
+  const preview = {
+    verbKey: "email",
+    destinationLabel: "josh@acme.test +1",
+    accountLabel: "you@example.test",
+    body: "Numbers attached.",
+    fields: {
+      to: ["josh@acme.test", 7, "dana@acme.test"],
+      cc: [],
+      subject: "Q3 numbers",
+      body: "Numbers attached.",
+      count: 2,
+      nested: { raw: "LEAK" },
+    },
+  };
+  const { manager } = await setup({
+    prepare: async () => ({ status: "ready", payload: {}, preview }),
+  });
+  const prepared = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
+  assert.deepEqual(prepared.preview, {
+    verbKey: "email",
+    destinationLabel: "josh@acme.test +1",
+    accountLabel: "you@example.test",
+    body: "Numbers attached.",
+    fields: {
+      to: ["josh@acme.test", "dana@acme.test"],
+      cc: [],
+      subject: "Q3 numbers",
+      body: "Numbers attached.",
+    },
+  });
+
+  for (const fields of [{ count: 2 }, {}, ["to"], "to", null]) {
+    const odd = await setup({
+      prepare: async () => ({ status: "ready", payload: {}, preview: { ...preview, fields } }),
+    });
+    const result = await odd.manager.prepare("fake", "post", { text: "x" }, ALLOWED);
+    assert.equal(result.status, "ready", JSON.stringify(fields));
+    assert.equal("fields" in result.preview, false, JSON.stringify(fields));
+  }
+
+  const { body, ...withoutBody } = preview;
+  assert.equal(body, "Numbers attached.");
+  const bodiless = await setup({
+    prepare: async () => ({ status: "ready", payload: {}, preview: withoutBody }),
+  });
+  const refused = await bodiless.manager.prepare("fake", "post", { text: "x" }, ALLOWED);
+  assert.equal(refused.errorCode, "invalid_result");
+  assert.equal(bodiless.log.rows.size, 0);
+});
+
+test("a status says whether the connector is configured; only an explicit false hides it", async () => {
+  for (const [reported, configured] of [
+    [{ connected: false, configured: false }, false],
+    [{ connected: false }, true],
+    [{ connected: true, accountLabel: "chad", configured: true }, true],
+    [{ connected: false, configured: "no" }, true],
+  ]) {
+    const { manager } = await setup({ getStatus: async () => reported });
+    assert.equal((await manager.status())[0].configured, configured, JSON.stringify(reported));
+  }
 });
 
 test("invalidate cancels pending actions for that connector", async () => {
@@ -748,6 +874,7 @@ const VALID_PREVIEW = {
 };
 const NOT_CONNECTED = {
   connected: false,
+  configured: true,
   accountLabel: null,
   workspaceLabel: null,
   needsReconnect: false,
@@ -1131,6 +1258,27 @@ test("connect refuses on policy or no account, and reports flow errors by code",
     assert.deepEqual(await failing.manager.connect("fake", "allowed"), {
       status: "failed",
       errorCode,
+    });
+  }
+  assert.equal(credentials.read("acct-1", "fake"), null);
+});
+
+test("connect reports a missing Gmail permission and an unverified email by code", async () => {
+  const credentials = memoryCredentials();
+  for (const code of ["permission_not_granted", "email_not_verified"]) {
+    const failing = await setup(
+      connectable({
+        async authorize() {
+          // oauthLoopbackFlow's OAuthFlowError carries its code as redirectCode.
+          throw Object.assign(new Error("flow failed"), { redirectCode: code });
+        },
+      }),
+      undefined,
+      { credentials }
+    );
+    assert.deepEqual(await failing.manager.connect("fake", "allowed"), {
+      status: "failed",
+      errorCode: code,
     });
   }
   assert.equal(credentials.read("acct-1", "fake"), null);
