@@ -1,6 +1,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { fakeGoogleFetch, json, httpStatus, reset, offline } = require("./gmailFixtures");
+const {
+  fakeGoogleFetch,
+  json,
+  httpStatus,
+  reset,
+  offline,
+  GOOGLE_REVOKE_OK,
+} = require("./gmailFixtures");
 
 const load = () => import("../../../src/helpers/connectors/gmailApi.js");
 
@@ -317,10 +324,10 @@ test("token endpoint failures are distinguishable: login gone, bad client, busy,
   assert.equal(seen.size, cases.length, "every failure must be told apart");
 });
 
-test("revokeToken posts the token as a form; Google's empty 200 is success", async () => {
+test("revokeToken posts the token as a form; Google's 200 is success", async () => {
   const { GOOGLE_REVOKE_URL } = await load();
   assert.equal(GOOGLE_REVOKE_URL, "https://oauth2.googleapis.com/revoke");
-  const { client, google } = await api({ [REVOKE]: [{ status: 200, rawBody: "" }] });
+  const { client, google } = await api({ [REVOKE]: [GOOGLE_REVOKE_OK] });
 
   assert.deepEqual(await client.revokeToken("refresh-1"), { ok: true });
   assert.deepEqual(google.calls[0].form, { token: "refresh-1" });
@@ -336,7 +343,7 @@ test("revokeToken reports a refusal or a network error as not ok, and never thro
   const serverError = await api({ [REVOKE]: [httpStatus(503)] });
   assert.deepEqual(await serverError.client.revokeToken("refresh-1"), { ok: false });
 
-  const none = await api({ [REVOKE]: [{ status: 200, rawBody: "" }] });
+  const none = await api({ [REVOKE]: [GOOGLE_REVOKE_OK] });
   assert.deepEqual(await none.client.revokeToken(""), { ok: false });
   assert.deepEqual(await none.client.revokeToken(null), { ok: false });
   assert.equal(none.google.calls.length, 0);

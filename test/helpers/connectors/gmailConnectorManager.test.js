@@ -10,6 +10,7 @@ const {
   decodeMessage,
   header,
   memoryCredentials,
+  GOOGLE_REVOKE_OK,
 } = require("./gmailFixtures");
 
 const SEND = "/gmail/v1/users/me/messages/send";
@@ -78,7 +79,7 @@ async function setup({ script = {}, credential = null, configured = true, flow =
     import("../../../src/helpers/connectors/gmailAuth.js"),
     import("../../../src/helpers/connectors/gmailConnector.js"),
   ]);
-  const google = fakeGoogleFetch({ [REVOKE]: [{ rawBody: "" }], ...script });
+  const google = fakeGoogleFetch({ [REVOKE]: [GOOGLE_REVOKE_OK], ...script });
   const credentials = memoryCredentials(credential, { connectorId: "gmail" });
   const api = createGmailApi({ fetchImpl: google.fetchImpl, sleep: async () => {} });
   const auth = createGmailAuth({

@@ -11,6 +11,7 @@ const {
   offline,
   reset,
   memoryCredentials,
+  GOOGLE_REVOKE_OK,
 } = require("./gmailFixtures");
 
 const loadAuth = () => import("../../../src/helpers/connectors/gmailAuth.js");
@@ -28,7 +29,7 @@ const OTHER_LOGIN = {
   accessToken: "access-other",
   refreshToken: "refresh-other",
 };
-const REVOKED_OK = { rawBody: "" };
+const REVOKED_OK = GOOGLE_REVOKE_OK;
 const REFRESHED = {
   body: { access_token: "access-2", expires_in: 3599, scope: GRANTED, token_type: "Bearer" },
 };

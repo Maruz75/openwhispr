@@ -84,6 +84,9 @@ const offline = () => ({
   }),
 });
 
+// Google's recorded reply to a successful revoke: 200 with "{\n}".
+const GOOGLE_REVOKE_OK = { status: 200, rawBody: "{\n}" };
+
 // An unsigned id_token as the token endpoint returns it (header.payload.sig).
 // gmailAuth reads the payload only; it trusts the token because it came
 // straight from Google's token endpoint over TLS.
@@ -126,4 +129,5 @@ module.exports = {
   decodeMessage,
   header,
   memoryCredentials,
+  GOOGLE_REVOKE_OK,
 };
