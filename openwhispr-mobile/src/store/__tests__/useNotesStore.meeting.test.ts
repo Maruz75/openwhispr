@@ -672,6 +672,61 @@ describe('runMeetingPipeline', () => {
     );
   });
 
+  describe('with generated notes already on the note', () => {
+    const meetingNote = (enhancedContent: string | null) => ({
+      id: 7,
+      title: 'Planning Sync',
+      content: 'Prioritize onboarding.',
+      noteType: 'meeting',
+      isPrivate: 0,
+      deletedAt: null,
+      enhancedContent,
+      enhancedAtContentHash: null,
+    });
+
+    beforeEach(() => {
+      mockAuthState.user = signedInUser;
+      (notesRepository.getActions as jest.Mock).mockReturnValue([
+        { id: 1, name: 'Generate Notes', prompt: 'Transform this meeting.', isDefault: 1 },
+      ]);
+      (notesRepository.getSegments as jest.Mock).mockReturnValue([segment('Ship the fix.')]);
+      (ReasoningService.processText as jest.Mock).mockResolvedValue({
+        text: 'Fresh notes',
+        model: 'test',
+      });
+    });
+
+    const wroteGeneratedNotes = (): boolean =>
+      (notesRepository.updateNote as jest.Mock).mock.calls.some(
+        ([, updates]) => updates.enhancedContent !== undefined,
+      );
+
+    it('keeps notes the user already has instead of generating over them', async () => {
+      (notesRepository.getNoteById as jest.Mock).mockReturnValue(meetingNote('## My edited notes'));
+
+      await useNotesStore.getState().runMeetingPipeline(7, 'file://meeting.wav', 2);
+
+      expect(ReasoningService.processText).not.toHaveBeenCalledWith(
+        expect.objectContaining({ temperature: 0.3 }),
+      );
+      expect(wroteGeneratedNotes()).toBe(false);
+    });
+
+    it('drops the generated notes when the user wrote some while they were being made', async () => {
+      let current = meetingNote(null);
+      (notesRepository.getNoteById as jest.Mock).mockImplementation(() => current);
+      (ReasoningService.processText as jest.Mock).mockImplementation(async () => {
+        current = meetingNote('## Written meanwhile');
+        return { text: 'Fresh notes', model: 'test' };
+      });
+
+      await useNotesStore.getState().runMeetingPipeline(7, 'file://meeting.wav', 2);
+
+      expect(ReasoningService.processText).toHaveBeenCalled();
+      expect(wroteGeneratedNotes()).toBe(false);
+    });
+  });
+
   it('writes On-Device meeting notes through the chunked local path when signed in', async () => {
     mockAuthState.user = signedInUser;
     mockConfigState.config.inference = { notes: { mode: 'local' } };

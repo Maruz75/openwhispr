@@ -158,6 +158,9 @@ const canUseCloudForMeetingNote = (note: Note | null | undefined): note is Note 
 const autoGenerateMeetingNotes = async (noteId: number): Promise<void> => {
   const note = notesRepository.getNoteById(noteId);
   if (!note || note.deletedAt || note.noteType !== 'meeting') return;
+  // Generated notes the user already has (edited, or from an action they ran) are never replaced
+  // automatically, e.g. by retrying a transcript; the Enhanced tab marks them stale instead.
+  if (note.enhancedContent?.trim()) return;
 
   const action = notesRepository.getActions().find(isDefaultGenerateNotesAction);
   if (!action) return;
@@ -200,7 +203,10 @@ const autoGenerateMeetingNotes = async (noteId: number): Promise<void> => {
   });
 
   const writeGeneratedText = (generatedText: string) => {
-    if (!generatedText.trim()) return;
+    // The user may have run an action or written notes while these were generated.
+    if (!generatedText.trim() || notesRepository.getNoteById(noteId)?.enhancedContent?.trim()) {
+      return;
+    }
     notesRepository.updateNote(noteId, {
       enhancedContent: generatedText,
       enhancementPrompt: action.prompt,
