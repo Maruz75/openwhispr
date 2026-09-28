@@ -27,6 +27,7 @@ const mockUpdateConfig = jest.fn(async (updates: Record<string, unknown>) => {
 });
 
 let mockNote: Note;
+let mockRouteNoteId = '7';
 let mockSegments: Segment[];
 let mockSpeakers: Speaker[];
 let mockActions: Action[];
@@ -85,7 +86,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ id: '7' }),
+  useLocalSearchParams: () => ({ id: mockRouteNoteId }),
   useRouter: () => ({
     push: jest.fn(),
     canGoBack: () => true,
@@ -288,13 +289,21 @@ jest.mock('@/components/notes/MarkdownRenderer', () => ({
 }));
 
 jest.mock('@/components/notes/SpeakerTranscript', () => ({
-  SpeakerTranscript: ({ blocks }: { blocks: { text: string }[] }) =>
+  SpeakerTranscript: ({
+    blocks,
+    onSpeakerPress,
+  }: {
+    blocks: { text: string }[];
+    onSpeakerPress?: (block: { text: string }) => void;
+  }) =>
     (() => {
       const { Text: MockText, View: MockView } = require('react-native');
       return (
         <MockView>
           {blocks.map((block, index) => (
-            <MockText key={index}>{block.text}</MockText>
+            <MockText key={index} onPress={() => onSpeakerPress?.(block)}>
+              {block.text}
+            </MockText>
           ))}
         </MockView>
       );
@@ -302,7 +311,11 @@ jest.mock('@/components/notes/SpeakerTranscript', () => ({
 }));
 
 jest.mock('@/components/notes/SpeakerRenameSheet', () => ({
-  SpeakerRenameSheet: () => null,
+  SpeakerRenameSheet: ({ visible }: { visible: boolean }) =>
+    (() => {
+      const { View: MockView } = require('react-native');
+      return visible ? <MockView testID="speaker-rename-sheet" /> : null;
+    })(),
 }));
 
 jest.mock('@/components/notes/SpeakerMergeSheet', () => ({
@@ -488,6 +501,7 @@ const calendarContextInputForCurrentNote = (): string =>
 beforeEach(() => {
   jest.clearAllMocks();
   clearLocalReasoningReadinessCache();
+  mockRouteNoteId = '7';
   mockAppleAvailability = 'available';
   mockAuthState.user = { id: 'user-1', email: 'user@example.com', emailVerified: true };
   mockConfigState.config.inference = undefined;
@@ -1223,6 +1237,27 @@ describe('NoteEditorScreen replacing generated notes', () => {
     await runActionOverEdit();
 
     expect(savedEnhanced()).toEqual(['## Edited']);
+  });
+});
+
+describe('NoteEditorScreen switching notes', () => {
+  it('closes an open speaker sheet when another note opens', () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const { getByText, queryByTestId, rerender } = render(<NoteEditorScreen />);
+    fireEvent.press(getByText('Alice can take the first pass.'));
+    const buttons = (alertSpy.mock.calls[0][2] ?? []) as { text: string; onPress?: () => void }[];
+    act(() => {
+      buttons.find((button) => button.text === 'Rename')?.onPress?.();
+    });
+    expect(queryByTestId('speaker-rename-sheet')).toBeTruthy();
+
+    mockRouteNoteId = '8';
+    mockNote = note({ id: 8 });
+    mockNotesState.notes = [mockNote];
+    rerender(<NoteEditorScreen />);
+
+    expect(queryByTestId('speaker-rename-sheet')).toBeNull();
+    alertSpy.mockRestore();
   });
 });
 

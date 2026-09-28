@@ -246,6 +246,10 @@ export default function NoteEditorScreen() {
     chatAbortRef.current = null;
     setChatVisible(false);
     setTranscriptSheetVisible(false);
+    setRenameSheetVisible(false);
+    setMergeSheetVisible(false);
+    setSuggestionSheetVisible(false);
+    setActiveSpeakerId(null);
     setAttendeesVisible(false);
     setEnhancedEditing(false);
     setShareVisible(false);
