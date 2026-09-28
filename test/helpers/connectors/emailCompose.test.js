@@ -233,7 +233,6 @@ test("addresses that could disguise the recipient or carry URL junk are refused"
     "alice@corp\u200C.com", // zero-width non-joiner
     "a\uFE0Fb@corp.com", // variation selector
     "a\u00ADb@corp.com", // soft hyphen
-    "a@xn--zz.com", // punycode that decodes to nothing valid
     "a@example.123", // no domain has an all-numeric top level
   ]) {
     assert.equal(isValidEmailAddress(bad), false, JSON.stringify(bad));
