@@ -25,7 +25,9 @@ export const useHandoffStore = create<HandoffState>((set) => ({
   returnState: 'returning',
   returnHostName: null,
   setActive: (v) =>
-    set(v ? { isActive: true, returnState: 'returning', returnHostName: null } : { isActive: false }),
+    set(
+      v ? { isActive: true, returnState: 'returning', returnHostName: null } : { isActive: false },
+    ),
   setCheckingInitialUrl: (v) => set({ isCheckingInitialUrl: v }),
   setNoSpeechDetected: (v) => set({ noSpeechDetected: v }),
   setTranscribing: (v) => set({ isTranscribing: v }),

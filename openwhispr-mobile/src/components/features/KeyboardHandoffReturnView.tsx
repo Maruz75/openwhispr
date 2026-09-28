@@ -53,7 +53,9 @@ export function KeyboardHandoffReturnView({
             </Pressable>
           </>
         ) : (
-          <Text className="text-[15px] text-secondaryLabel text-center">Returning to your app…</Text>
+          <Text className="text-[15px] text-secondaryLabel text-center">
+            Returning to your app…
+          </Text>
         )}
       </View>
     </View>
