@@ -101,6 +101,44 @@ describe('EditableMarkdown', () => {
     expect(getByTestId('rendered-markdown').props.children).toBe('## New');
   });
 
+  it('follows new saved notes while an open edit is untouched', () => {
+    const { getByTestId, rerender } = render(
+      <EditableMarkdown content="## Old" onChange={jest.fn()} />,
+    );
+    fireEvent.press(getByTestId('enhanced-edit'));
+    rerender(<EditableMarkdown content="## New" onChange={jest.fn()} />);
+    expect(getByTestId('enhanced-editor').props.value).toBe('## New');
+
+    fireEvent.press(getByTestId('enhanced-done'));
+
+    expect(getByTestId('rendered-markdown').props.children).toBe('## New');
+  });
+
+  it('keeps what the user typed when new saved notes arrive mid-edit', () => {
+    const { getByTestId, rerender } = render(
+      <EditableMarkdown content="## Old" onChange={jest.fn()} />,
+    );
+    fireEvent.press(getByTestId('enhanced-edit'));
+    fireEvent.changeText(getByTestId('enhanced-editor'), '## Mine');
+    rerender(<EditableMarkdown content="## New" onChange={jest.fn()} />);
+    expect(getByTestId('enhanced-editor').props.value).toBe('## Mine');
+  });
+
+  it('follows saved notes again once a new edit starts', () => {
+    const { getByTestId, rerender } = render(
+      <EditableMarkdown content="## Old" onChange={jest.fn()} />,
+    );
+    fireEvent.press(getByTestId('enhanced-edit'));
+    fireEvent.changeText(getByTestId('enhanced-editor'), '## Mine');
+    fireEvent.press(getByTestId('enhanced-done'));
+    rerender(<EditableMarkdown content="## Mine" onChange={jest.fn()} />);
+
+    fireEvent.press(getByTestId('enhanced-edit'));
+    rerender(<EditableMarkdown content="## New" onChange={jest.fn()} />);
+
+    expect(getByTestId('enhanced-editor').props.value).toBe('## New');
+  });
+
   it('leaves the rendered notes to screen readers instead of reading them as one block', () => {
     const { getByTestId } = render(<EditableMarkdown content="## Summary" onChange={jest.fn()} />);
     expect(getByTestId('enhanced-read').props.accessible).toBe(false);

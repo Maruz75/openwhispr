@@ -23,18 +23,22 @@ export function EditableMarkdown({
   const [draft, setDraft] = useState(content);
   const editingRef = useRef(editing);
   editingRef.current = editing;
+  // Whether the open edit has changed the draft. Until it has, the draft follows the saved notes.
+  const draftEditedRef = useRef(false);
   const onEditingChangeRef = useRef(onEditingChange);
   onEditingChangeRef.current = onEditingChange;
 
   const setEditingState = (next: boolean): void => {
+    if (next) draftEditedRef.current = false;
     setEditing(next);
     onEditingChangeRef.current?.(next);
   };
 
-  // New saved notes (regenerated or synced) replace the draft while reading. Only a change to
-  // `content` does this: leaving editing keeps the draft until the caller's save comes back.
+  // New saved notes (regenerated or synced) replace the draft unless the user has typed into it.
+  // Only a change to `content` does this: leaving editing keeps the draft until the caller's save
+  // comes back.
   useEffect(() => {
-    if (!editingRef.current) setDraft(content);
+    if (!editingRef.current || !draftEditedRef.current) setDraft(content);
   }, [content]);
 
   // An AI action taking over the notes ends the edit.
@@ -68,6 +72,7 @@ export function EditableMarkdown({
           testID="enhanced-editor"
           value={draft}
           onChangeText={(text) => {
+            draftEditedRef.current = true;
             setDraft(text);
             onChange(text);
           }}
