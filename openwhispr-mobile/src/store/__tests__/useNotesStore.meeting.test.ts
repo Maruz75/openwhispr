@@ -114,6 +114,7 @@ import { ReasoningService } from '@/services/reasoning/ReasoningService';
 import { generateLocalMeetingNotes } from '@/lib/notes/localMeetingNotes';
 import * as localReasoning from '@/lib/localReasoning';
 import type { Speaker } from '@/data/types';
+import { SpeakerProfileOwnerAlreadyExistsError } from '@/data/local/notesRepository';
 
 const speaker = (overrides: Partial<Speaker>): Speaker =>
   ({
@@ -1148,25 +1149,39 @@ describe('speaker mutations', () => {
   });
 
   describe('claimSpeakerAsMe', () => {
+    let profiles: Array<Record<string, unknown>>;
+    let rows: Speaker[];
+    const ownerProfile = {
+      id: 3,
+      displayName: 'Me',
+      isOwner: 1,
+      email: null,
+      embedding: [0.6, 0.8],
+      sampleCount: 1,
+    };
+
     beforeEach(() => {
+      profiles = [];
       useNotesStore.setState({
-        meetingSpeakerEmbeddingsByNoteId: { 7: { SPEAKER_01: [0.1, 0.2] } },
+        meetingSpeakerEmbeddingsByNoteId: { 7: { SPEAKER_01: [3, 4] } },
       });
-      (notesRepository.getSpeakers as jest.Mock).mockReturnValue([
-        speaker({ id: 10, speakerLabel: 'SPEAKER_01' }),
-      ]);
-      (notesRepository.createOwnerProfileForSpeaker as jest.Mock).mockReturnValue({
-        id: 3,
-        displayName: 'Me',
-        isOwner: 1,
-      });
+      (notesRepository.getTranscriptionStatus as jest.Mock).mockReturnValue('done');
+      (notesRepository.getSpeakerProfiles as jest.Mock).mockImplementation(() => profiles);
+      rows = [speaker({ id: 10, speakerLabel: 'SPEAKER_01' })];
+      (notesRepository.getSpeakers as jest.Mock).mockImplementation(() => rows);
+      // Like the repository: the claimed speaker comes back locked to the new profile.
+      (notesRepository.createOwnerProfileForSpeaker as jest.Mock).mockImplementation(
+        (speakerId: number, _input: unknown, patch: Partial<Speaker>) => {
+          profiles = [ownerProfile];
+          rows = rows.map((row) =>
+            row.id === speakerId ? { ...row, ...patch, profileId: ownerProfile.id } : row,
+          );
+          return ownerProfile;
+        },
+      );
     });
 
     it('creates your profile and links the speaker in a single atomic write', () => {
-      (notesRepository.getSpeakerProfiles as jest.Mock)
-        .mockReturnValueOnce([]) // owner-exists check
-        .mockReturnValueOnce([{ id: 3, displayName: 'Me', isOwner: 1 }]); // post-write reload
-
       useNotesStore.getState().claimSpeakerAsMe(7, 10);
 
       expect(notesRepository.createOwnerProfileForSpeaker).toHaveBeenCalledWith(
@@ -1174,7 +1189,8 @@ describe('speaker mutations', () => {
         {
           displayName: 'Me',
           isOwner: 1,
-          embedding: [0.1, 0.2],
+          // Stored normalized, like a guided-read sample.
+          embedding: [0.6, 0.8],
           sampleCount: 1,
           consentAt: expect.any(String),
         },
@@ -1186,21 +1202,49 @@ describe('speaker mutations', () => {
         },
       );
       expect(notesRepository.updateSpeaker).not.toHaveBeenCalled();
-      expect(useNotesStore.getState().voiceProfiles).toEqual([
-        { id: 3, displayName: 'Me', isOwner: 1 },
-      ]);
+      expect(useNotesStore.getState().voiceProfiles).toEqual([ownerProfile]);
       expect(useNotesStore.getState().transcriptRevision).toBe(1);
     });
 
+    it('labels another speaker in the same meeting who has your voice', () => {
+      useNotesStore.setState({
+        meetingSpeakerEmbeddingsByNoteId: { 7: { SPEAKER_01: [3, 4], SPEAKER_02: [3, 4] } },
+      });
+      rows = [
+        speaker({ id: 10, speakerLabel: 'SPEAKER_01' }),
+        speaker({ id: 11, speakerLabel: 'SPEAKER_02', sortOrder: 1 }),
+      ];
+
+      useNotesStore.getState().claimSpeakerAsMe(7, 10);
+
+      expect(notesRepository.updateSpeaker).toHaveBeenCalledTimes(1);
+      expect(notesRepository.updateSpeaker).toHaveBeenCalledWith(
+        11,
+        expect.objectContaining({ displayName: 'Me', profileId: 3 }),
+      );
+    });
+
     it('refuses without writing when you already have a profile', () => {
-      (notesRepository.getSpeakerProfiles as jest.Mock).mockReturnValue([{ id: 1, isOwner: 1 }]);
+      profiles = [{ id: 1, isOwner: 1 }];
+
+      expect(() => useNotesStore.getState().claimSpeakerAsMe(7, 10)).toThrow(
+        SpeakerProfileOwnerAlreadyExistsError,
+      );
+      expect(notesRepository.createOwnerProfileForSpeaker).not.toHaveBeenCalled();
+    });
+
+    it('refuses without writing while the meeting is being processed again', () => {
+      (notesRepository.getTranscriptionStatus as jest.Mock).mockReturnValue('diarizing');
 
       expect(() => useNotesStore.getState().claimSpeakerAsMe(7, 10)).toThrow();
       expect(notesRepository.createOwnerProfileForSpeaker).not.toHaveBeenCalled();
     });
 
-    it('refuses without writing when the meeting sample is gone', () => {
-      useNotesStore.setState({ meetingSpeakerEmbeddingsByNoteId: {} });
+    it.each([
+      ['gone', {}],
+      ['unusable', { 7: { SPEAKER_01: [0, 0] } }],
+    ])('refuses without writing when the meeting sample is %s', (_label, embeddings) => {
+      useNotesStore.setState({ meetingSpeakerEmbeddingsByNoteId: embeddings });
 
       expect(() => useNotesStore.getState().claimSpeakerAsMe(7, 10)).toThrow();
       expect(notesRepository.createOwnerProfileForSpeaker).not.toHaveBeenCalled();
@@ -1209,6 +1253,38 @@ describe('speaker mutations', () => {
     it('refuses when the speaker is not on the note', () => {
       expect(() => useNotesStore.getState().claimSpeakerAsMe(7, 99)).toThrow();
       expect(notesRepository.createOwnerProfileForSpeaker).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('relabelMeetingSpeakers', () => {
+    beforeEach(() => {
+      (notesRepository.getSpeakerProfiles as jest.Mock).mockReturnValue([
+        { id: 3, displayName: 'Me', isOwner: 1, email: null, embedding: [0.6, 0.8] },
+      ]);
+      (notesRepository.getSpeakers as jest.Mock).mockReturnValue([
+        speaker({ id: 10, speakerLabel: 'SPEAKER_01' }),
+      ]);
+    });
+
+    it('labels a meeting still held in memory with a newly added voice', () => {
+      useNotesStore.setState({ meetingSpeakerEmbeddingsByNoteId: { 7: { SPEAKER_01: [3, 4] } } });
+
+      useNotesStore.getState().relabelMeetingSpeakers(7);
+
+      expect(notesRepository.updateSpeaker).toHaveBeenCalledWith(
+        10,
+        expect.objectContaining({ displayName: 'Me', profileId: 3 }),
+      );
+      expect(useNotesStore.getState().transcriptRevision).toBe(1);
+    });
+
+    it('does nothing for a meeting whose samples are gone', () => {
+      useNotesStore.setState({ meetingSpeakerEmbeddingsByNoteId: {} });
+
+      useNotesStore.getState().relabelMeetingSpeakers(7);
+
+      expect(notesRepository.updateSpeaker).not.toHaveBeenCalled();
+      expect(useNotesStore.getState().transcriptRevision).toBe(0);
     });
   });
 });

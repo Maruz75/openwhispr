@@ -1598,9 +1598,9 @@ export class LocalNotesRepository implements NotesRepository {
     validateSpeakerProfileOwnerFlag(profileInput.isOwner);
     this.validateSpeakerProfileEmbedding(profileInput.embedding);
 
-    let profile: SpeakerProfile;
+    let result: { profile: SpeakerProfile; noteId: number };
     try {
-      profile = this.database.transaction((tx) => {
+      result = this.database.transaction((tx) => {
         const row = tx
           .insert(speakerProfiles)
           .values({
@@ -1609,34 +1609,28 @@ export class LocalNotesRepository implements NotesRepository {
           })
           .returning()
           .get();
-        const mapped = this.mapSpeakerProfile(row);
+        const profile = this.mapSpeakerProfile(row);
         const linked = tx
           .update(speakers)
           .set({
             ...speakerPatch,
-            profileId: mapped.id,
+            profileId: profile.id,
             pendingSync: 1,
             updatedAt: sql`datetime('now')`,
           })
           .where(and(eq(speakers.id, speakerId), isNull(speakers.deletedAt)))
-          .returning({ id: speakers.id })
+          .returning({ noteId: speakers.noteId })
           .all();
         // Throwing rolls back the insert, so no owner profile is saved without its speaker.
         if (linked.length !== 1) throw new Error(`Speaker ${speakerId} not found`);
-        return mapped;
+        return { profile, noteId: linked[0].noteId };
       });
     } catch (error) {
       mapSpeakerProfileOwnerConstraint(error);
     }
 
-    const row = this.database
-      .select({ noteId: speakers.noteId })
-      .from(speakers)
-      .where(and(eq(speakers.id, speakerId), isNull(speakers.deletedAt)))
-      .get();
-    if (row) this.markNoteTranscriptDirty(row.noteId);
-
-    return profile;
+    this.markNoteTranscriptDirty(result.noteId);
+    return result.profile;
   }
 
   updateSpeakerProfile(id: number, updates: Partial<SpeakerProfile>): void {

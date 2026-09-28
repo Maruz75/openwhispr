@@ -316,6 +316,44 @@ describe('LocalNotesRepository speaker profiles', () => {
     expect(repo.getSpeakerProfiles()).toHaveLength(1);
   });
 
+  const claimInput = {
+    displayName: 'Me',
+    isOwner: 1 as const,
+    embedding: [0.6, 0.8],
+    sampleCount: 1,
+    consentAt: '2026-06-19T00:00:00.000Z',
+  };
+
+  it('refuses with the owner error, and links nothing, when an owner profile already exists', () => {
+    const { repo, db } = createMemoryRepository();
+    const note = createMeeting(db);
+    const spkr = createSpeaker(db, { noteId: note.id, speakerLabel: 'SPEAKER_00' });
+    repo.createSpeakerProfile({ ...claimInput, email: null });
+
+    expect(() =>
+      repo.createOwnerProfileForSpeaker(spkr.id, claimInput, { displayName: 'Me' }),
+    ).toThrow(SpeakerProfileOwnerAlreadyExistsError);
+
+    expect(repo.getSpeakerProfiles()).toHaveLength(1);
+    const speakerRow = db.select().from(speakers).where(eq(speakers.id, spkr.id)).get();
+    expect(speakerRow).toEqual(expect.objectContaining({ profileId: null, displayName: null }));
+  });
+
+  it.each([
+    ['queues a shared note for sync', 0, 1],
+    ['leaves a private note out of sync', 1, 0],
+  ])('%s', (_label, isPrivate, expectedPendingSync) => {
+    const { repo, db } = createMemoryRepository();
+    const note = createMeeting(db);
+    db.update(notes).set({ isPrivate, pendingSync: 0 }).where(eq(notes.id, note.id)).run();
+    const spkr = createSpeaker(db, { noteId: note.id, speakerLabel: 'SPEAKER_00' });
+
+    repo.createOwnerProfileForSpeaker(spkr.id, claimInput, { displayName: 'Me' });
+
+    const noteRow = db.select().from(notes).where(eq(notes.id, note.id)).get();
+    expect(noteRow?.pendingSync).toBe(expectedPendingSync);
+  });
+
   it('rolls back the new owner profile when the same-transaction speaker write fails', () => {
     const { repo, db } = createMemoryRepository();
     const note = createMeeting(db);

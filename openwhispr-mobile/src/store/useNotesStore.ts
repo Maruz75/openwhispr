@@ -19,8 +19,11 @@ import { buildMergeTargetPatch, buildRenameSpeakerPatch } from '@/lib/diarizatio
 import {
   buildConfirmedSpeakerPatch,
   buildRejectedSuggestionPatch,
+  hasFiniteNonZeroNorm,
+  l2Normalize,
   runningMeanEmbedding,
 } from '@/lib/diarization/voiceprints';
+import { SpeakerProfileOwnerAlreadyExistsError } from '@/data/local/notesRepository';
 import {
   buildActionSystemPrompt,
   isDefaultGenerateNotesAction,
@@ -112,6 +115,24 @@ const loadLocalTranscriptionService = () => {
 const reloadVoiceProfiles = (): Pick<NotesStore, 'voiceProfiles'> => ({
   voiceProfiles: notesRepository.getSpeakerProfiles(),
 });
+
+/** Labels a meeting's speakers from the saved voice profiles; true when any label changed. */
+const identifyMeetingSpeakers = (
+  noteId: number,
+  speakerEmbeddingsByLabel: Record<string, number[]>,
+): boolean => {
+  const note = notesRepository.getNoteById(noteId);
+  const preferredProfileEmails = getCalendarParticipantEmails(
+    parseCalendarParticipants(note?.participants ?? null) ?? [],
+  );
+  const identification = identifyNoteSpeakers(
+    noteId,
+    speakerEmbeddingsByLabel,
+    { repo: notesRepository },
+    { preferredProfileEmails },
+  );
+  return identification.updatedSpeakerIds.length > 0;
+};
 
 let diarizerModelDownload: Promise<void> | null = null;
 
@@ -416,6 +437,8 @@ interface NotesStore {
   renameSpeaker: (noteId: number, speakerId: number, displayName: string) => void;
   /** Makes a speaker from a meeting just processed on this device your voice profile. */
   claimSpeakerAsMe: (noteId: number, speakerId: number) => void;
+  /** Relabels a meeting processed since launch after a voice profile is added. */
+  relabelMeetingSpeakers: (noteId: number) => void;
   mergeSpeakers: (noteId: number, sourceSpeakerId: number, targetSpeakerId: number) => void;
 }
 
@@ -721,21 +744,7 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
           [noteId]: result.speakerEmbeddingsByLabel,
         },
       }));
-      const note = notesRepository.getNoteById(noteId);
-      const preferredProfileEmails = getCalendarParticipantEmails(
-        parseCalendarParticipants(note?.participants ?? null) ?? [],
-      );
-      const identification = identifyNoteSpeakers(
-        noteId,
-        result.speakerEmbeddingsByLabel,
-        {
-          repo: notesRepository,
-        },
-        {
-          preferredProfileEmails,
-        },
-      );
-      if (identification.updatedSpeakerIds.length > 0) {
+      if (identifyMeetingSpeakers(noteId, result.speakerEmbeddingsByLabel)) {
         set((state) => ({ transcriptRevision: state.transcriptRevision + 1 }));
       }
       await finalizeMeetingNoteContent(noteId);
@@ -913,32 +922,43 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
   },
   claimSpeakerAsMe: (noteId, speakerId) => {
     if (notesRepository.getSpeakerProfiles().some((profile) => profile.isOwner === 1)) {
-      throw new Error('You already have a voice profile.');
+      throw new SpeakerProfileOwnerAlreadyExistsError();
+    }
+    // A retry rewrites the speakers under new labels before it replaces the samples.
+    if (notesRepository.getTranscriptionStatus(noteId) !== 'done') {
+      throw new Error('This meeting is still being processed.');
     }
     const speaker = notesRepository.getSpeakers(noteId).find((row) => row.id === speakerId);
     if (!speaker) throw new Error('Speaker not found');
     // Only held in memory for meetings processed since the app started.
-    const embedding = get().meetingSpeakerEmbeddingsByNoteId[noteId]?.[speaker.speakerLabel];
-    if (!embedding?.length) throw new Error("This meeting's voice sample is no longer available.");
+    const embeddings = get().meetingSpeakerEmbeddingsByNoteId[noteId] ?? {};
+    const embedding = embeddings[speaker.speakerLabel];
+    if (!hasFiniteNonZeroNorm(embedding)) {
+      throw new Error("This meeting's voice sample is no longer available.");
+    }
 
-    // Both writes happen inside one repository transaction: a partial failure here would
-    // otherwise leave an orphaned owner profile (the single-owner constraint then blocks
-    // every future claim) with no speaker linked to it.
     notesRepository.createOwnerProfileForSpeaker(
       speaker.id,
       {
         displayName: 'Me',
         isOwner: 1,
-        embedding,
+        embedding: l2Normalize(embedding),
         sampleCount: 1,
         consentAt: new Date().toISOString(),
       },
       buildRenameSpeakerPatch(speaker, 'Me'),
     );
+    // Other clusters of your voice in this meeting pick up the new profile too.
+    identifyMeetingSpeakers(noteId, embeddings);
     set((state) => ({
       ...reloadVoiceProfiles(),
       transcriptRevision: state.transcriptRevision + 1,
     }));
+  },
+  relabelMeetingSpeakers: (noteId) => {
+    const embeddings = get().meetingSpeakerEmbeddingsByNoteId[noteId];
+    if (!embeddings || !identifyMeetingSpeakers(noteId, embeddings)) return;
+    set((state) => ({ transcriptRevision: state.transcriptRevision + 1 }));
   },
   mergeSpeakers: (noteId, sourceSpeakerId, targetSpeakerId) => {
     if (sourceSpeakerId === targetSpeakerId) {
