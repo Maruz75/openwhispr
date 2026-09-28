@@ -95,8 +95,8 @@ export function ThatsMeSheet({
           >
             {candidates.length === 0 ? (
               <Text className="text-[15px] leading-5 text-secondaryLabel">
-                OpenWhispr doesn't have a voice sample from this meeting any more. Read a short
-                script instead; it takes about 20 seconds.
+                No speaker in this meeting has a long enough voice sample. Read a short script
+                instead; it takes about 20 seconds.
               </Text>
             ) : (
               candidates.map((candidate) => (

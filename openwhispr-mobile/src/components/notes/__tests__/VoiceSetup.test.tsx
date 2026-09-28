@@ -100,7 +100,11 @@ describe('ThatsMeSheet', () => {
     );
 
     expect(queryByTestId('thats-me-11')).toBeNull();
-    expect(getByText(/doesn't have a voice sample from this meeting/)).toBeTruthy();
+    expect(
+      getByText(
+        'No speaker in this meeting has a long enough voice sample. Read a short script instead; it takes about 20 seconds.',
+      ),
+    ).toBeTruthy();
     fireEvent.press(getByTestId('thats-me-read-script'));
     expect(baseProps.onReadScript).toHaveBeenCalled();
   });
