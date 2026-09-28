@@ -41,6 +41,11 @@ import { NoteChatSheet } from '@/components/notes/NoteChatSheet';
 import { isDictationAgentEnabled } from '@/lib/dictationAgent';
 import { SpeakerTranscript } from '@/components/notes/SpeakerTranscript';
 import { TranscriptSheet } from '@/components/notes/TranscriptSheet';
+import { NoteMetaRow } from '@/components/notes/NoteMetaRow';
+import { AttendeesSheet } from '@/components/notes/AttendeesSheet';
+import { MoveToFolderSheet } from '@/components/notes/MoveToFolderSheet';
+import { useMoveNote } from '@/hooks/useMoveNote';
+import { formatAttendeeChipLabel, formatNoteMetaDate } from '@/lib/notes/noteMeta';
 import { SpeakerRenameSheet } from '@/components/notes/SpeakerRenameSheet';
 import { SpeakerMergeSheet } from '@/components/notes/SpeakerMergeSheet';
 import { VoiceprintSuggestionSheet } from '@/components/notes/VoiceprintSuggestionSheet';
@@ -53,7 +58,6 @@ import { TabScreenHeader } from '@/components/ui/TabScreenHeader';
 import { buildNoteShareContent, exportNote } from '@/lib/noteExport';
 import { AppFont } from '@/lib/fonts';
 import { makeContentHash, safeHaptics } from '@/lib/utils';
-import { parseNoteTimestamp } from '@/lib/parseNoteTimestamp';
 import { isManagedMeetingAudioUri } from '@/lib/transcriptAudio';
 import { BRAND } from '@/config/colors';
 import {
@@ -129,6 +133,10 @@ export default function NoteEditorScreen() {
   const getConflictedNote = useNotesStore((s) => s.getConflictedNote);
   const resolveConflictKeepMine = useNotesStore((s) => s.resolveConflictKeepMine);
   const resolveConflictUseServer = useNotesStore((s) => s.resolveConflictUseServer);
+  const privateFolders = useNotesStore((s) => s.folders);
+  const spaceFolders = useNotesStore((s) => s.spaceFolders);
+  const spaces = useNotesStore((s) => s.spaces);
+  const getSpaceFolders = useNotesStore((s) => s.getSpaceFolders);
   const note = useMemo<Note | null>(() => {
     if (Number.isNaN(noteId)) return null;
     return notes.find((n) => n.id === noteId) ?? getNoteById(noteId);
@@ -179,6 +187,7 @@ export default function NoteEditorScreen() {
   const [suggestionSheetVisible, setSuggestionSheetVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
   const [transcriptSheetVisible, setTranscriptSheetVisible] = useState(false);
+  const [attendeesVisible, setAttendeesVisible] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatOverNoteMessage[]>([]);
   const [chatDraft, setChatDraft] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
@@ -232,6 +241,7 @@ export default function NoteEditorScreen() {
     chatAbortRef.current = null;
     setChatVisible(false);
     setTranscriptSheetVisible(false);
+    setAttendeesVisible(false);
     setChatMessages([]);
     setChatDraft('');
     setChatError(null);
@@ -277,6 +287,21 @@ export default function NoteEditorScreen() {
     () => parseCalendarParticipants(note?.participants ?? null) ?? [],
     [note?.participants],
   );
+  const noteSpace = spaces.find((space) => space.id === note?.spaceId);
+  const scopeSpaceId = noteSpace?.kind === 'team' ? noteSpace.id : null;
+  const targetFolders = useMemo(
+    () => (scopeSpaceId != null ? getSpaceFolders(scopeSpaceId) : privateFolders),
+    // spaceFolders re-reads a team space's folders after one is created from the move sheet.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [getSpaceFolders, privateFolders, scopeSpaceId, spaceFolders],
+  );
+  const folderName = targetFolders.find((folder) => folder.id === note?.folderId)?.name ?? null;
+  const move = useMoveNote({
+    scopeSpaceId,
+    targetFolders,
+    excludeFolderId: note?.folderId ?? null,
+  });
+  const attendeeLabel = formatAttendeeChipLabel(calendarParticipants);
   const meetingNotesContext = useMemo(
     () =>
       note?.calendarEventId
@@ -983,14 +1008,6 @@ export default function NoteEditorScreen() {
     );
   }
 
-  const updatedAtDisplay = note?.updatedAt
-    ? parseNoteTimestamp(note.updatedAt).toLocaleDateString(undefined, {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      })
-    : '';
-
   const hasEnhanced = !!note?.enhancedContent;
   const bodyTabInput = { usesSegmentTranscript, hasEnhanced };
   const bodyTabs = getNoteBodyTabs(bodyTabInput);
@@ -1098,9 +1115,15 @@ export default function NoteEditorScreen() {
             style={{ fontFamily: AppFont.bold }}
           />
 
-          {updatedAtDisplay ? (
-            <Text className="mb-3 text-[13px] text-tertiaryLabel">{updatedAtDisplay}</Text>
-          ) : null}
+          <NoteMetaRow
+            dateLabel={formatNoteMetaDate(note?.createdAt, new Date())}
+            attendeeLabel={attendeeLabel}
+            folderLabel={folderName}
+            onPressAttendees={() => setAttendeesVisible(true)}
+            onPressFolder={() => {
+              if (note) move.open(note.id);
+            }}
+          />
 
           {conflict ? (
             <ConflictBanner
@@ -1330,6 +1353,12 @@ export default function NoteEditorScreen() {
         onClear={handleClearChat}
         onClose={handleCloseChat}
       />
+      <AttendeesSheet
+        visible={attendeesVisible}
+        participants={calendarParticipants}
+        onClose={() => setAttendeesVisible(false)}
+      />
+      <MoveToFolderSheet {...move.sheetProps} />
       <TranscriptSheet
         visible={transcriptSheetVisible}
         blocks={transcriptBlocks}

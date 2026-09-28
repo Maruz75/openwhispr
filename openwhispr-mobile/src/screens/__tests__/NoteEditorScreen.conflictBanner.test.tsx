@@ -2,6 +2,7 @@ import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import NoteEditorScreen from '@/screens/NoteEditorScreen';
 import type { Action, ConflictedNote, Note, RemoteNote, Segment, Speaker } from '@/data/types';
+import type { Folder, Space } from '@/data';
 
 const mockUpdateNote = jest.fn();
 const mockDeleteNote = jest.fn();
@@ -37,6 +38,14 @@ const mockNotesState = {
   resolveConflictKeepMine: mockResolveConflictKeepMine,
   resolveConflictUseServer: mockResolveConflictUseServer,
   transcriptRevision: 0,
+  folders: [] as Folder[],
+  spaceFolders: [] as Folder[],
+  spaces: [] as Space[],
+  folderCounts: {} as Record<number, number>,
+  moveNoteToFolder: jest.fn(),
+  moveNoteToSpace: jest.fn(),
+  createFolder: jest.fn(),
+  getSpaceFolders: jest.fn(() => [] as Folder[]),
 };
 
 const mockActionsState = {
@@ -227,6 +236,14 @@ jest.mock('@/components/notes/SpeakerMergeSheet', () => ({
 
 jest.mock('@/components/notes/VoiceprintSuggestionSheet', () => ({
   VoiceprintSuggestionSheet: () => null,
+}));
+
+jest.mock('@/components/notes/MoveToFolderSheet', () => ({
+  MoveToFolderSheet: ({ visible }: { visible: boolean }) =>
+    (() => {
+      const { Text: MockText } = require('react-native');
+      return visible ? <MockText testID="move-sheet">move-sheet</MockText> : null;
+    })(),
 }));
 
 jest.mock('@/components/notes/NoteChatSheet', () => ({

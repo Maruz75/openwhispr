@@ -10,6 +10,7 @@ import { makeContentHash } from '@/lib/utils';
 import { clearLocalReasoningReadinessCache } from '@/lib/localReasoning';
 import { extractCorrections } from '@/lib/correctionLearner';
 import type { Action, Note, Segment, Speaker } from '@/data/types';
+import type { Folder, Space } from '@/data';
 import type { UserConfig } from '@/types';
 
 const mockUpdateNote = jest.fn();
@@ -46,6 +47,14 @@ const mockNotesState = {
   resolveConflictKeepMine: jest.fn(),
   resolveConflictUseServer: jest.fn(),
   transcriptRevision: 0,
+  folders: [] as Folder[],
+  spaceFolders: [] as Folder[],
+  spaces: [] as Space[],
+  folderCounts: {} as Record<number, number>,
+  moveNoteToFolder: jest.fn(),
+  moveNoteToSpace: jest.fn(),
+  createFolder: jest.fn(),
+  getSpaceFolders: jest.fn(() => [] as Folder[]),
 };
 
 const mockActionsState = {
@@ -316,6 +325,14 @@ jest.mock('@/components/notes/TranscriptSheet', () => ({
           {children}
         </MockView>
       ) : null;
+    })(),
+}));
+
+jest.mock('@/components/notes/MoveToFolderSheet', () => ({
+  MoveToFolderSheet: ({ visible }: { visible: boolean }) =>
+    (() => {
+      const { Text: MockText } = require('react-native');
+      return visible ? <MockText testID="move-sheet">move-sheet</MockText> : null;
     })(),
 }));
 
@@ -1064,5 +1081,56 @@ describe('NoteEditorScreen transcript sheet', () => {
     mockSegments = [];
     const { queryByTestId } = render(<NoteEditorScreen />);
     expect(queryByTestId('menu-view-transcript')).toBeNull();
+  });
+});
+
+describe('NoteEditorScreen meta row', () => {
+  beforeEach(() => {
+    mockNotesState.folders = [
+      {
+        id: 1,
+        name: 'Meetings',
+        isDefault: 0,
+        sortOrder: 0,
+        spaceId: 1,
+        clientFolderId: null,
+        remoteId: null,
+        deletedAt: null,
+        pendingSync: 0,
+        createdAt: null,
+        updatedAt: null,
+      } as Folder,
+    ];
+  });
+  afterEach(() => {
+    mockNotesState.folders = [];
+  });
+
+  it('shows the attendees and folder of a calendar meeting', () => {
+    const { getByTestId, getByText } = render(<NoteEditorScreen />);
+    expect(getByTestId('note-meta-attendees')).toBeTruthy();
+    expect(getByText('Alice')).toBeTruthy();
+    expect(getByText('Meetings')).toBeTruthy();
+  });
+
+  it('opens the folder picker from the folder chip', () => {
+    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    expect(queryByTestId('move-sheet')).toBeNull();
+    fireEvent.press(getByTestId('note-meta-folder'));
+    expect(getByTestId('move-sheet')).toBeTruthy();
+  });
+
+  it('lists the attendees from the attendees chip', () => {
+    const { getByTestId, getByText } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('note-meta-attendees'));
+    expect(getByText('Attendees')).toBeTruthy();
+    expect(getByText('Alice Adams')).toBeTruthy();
+  });
+
+  it('hides the attendees chip on a note without attendees', () => {
+    mockNote = note({ calendarEventId: null, participants: null });
+    mockNotesState.notes = [mockNote];
+    const { queryByTestId } = render(<NoteEditorScreen />);
+    expect(queryByTestId('note-meta-attendees')).toBeNull();
   });
 });
