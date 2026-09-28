@@ -358,16 +358,20 @@ jest.mock('@/components/notes/MoveToFolderSheet', () => ({
 jest.mock('@/components/notes/NoteChatSheet', () => ({
   NoteChatSheet: ({
     draft,
+    canSend,
     suggestions,
     onDraftChange,
     onSend,
     onSuggestion,
+    onClose,
   }: {
     draft: string;
+    canSend: boolean;
     suggestions: readonly { label: string; prompt: string }[];
     onDraftChange: (text: string) => void;
     onSend: () => void;
     onSuggestion: (prompt: string) => void;
+    onClose: () => void;
   }) =>
     (() => {
       const {
@@ -378,7 +382,12 @@ jest.mock('@/components/notes/NoteChatSheet', () => ({
       return (
         <MockView>
           <MockTextInput testID="chat-draft" value={draft} onChangeText={onDraftChange} />
-          <MockPressable testID="chat-send" onPress={onSend} />
+          <MockPressable
+            testID="chat-send"
+            accessibilityState={{ disabled: !canSend }}
+            onPress={onSend}
+          />
+          <MockPressable testID="chat-close" onPress={onClose} />
           {suggestions.map((suggestion) => (
             <MockPressable
               key={suggestion.label}
@@ -765,6 +774,59 @@ describe('NoteEditorScreen note chat', () => {
     const retry = (ReasoningService.chatOverNote as jest.Mock).mock.calls[1][0];
     expect(retry.context).toContain('Alice owns the launch checklist.');
     expect(retry.context).not.toContain('Launch Friday');
+  });
+
+  it('does not ask again once the chat is closed', async () => {
+    mockNote = note({ enhancedContent: '## Summary\n- Launch Friday' });
+    mockNotesState.notes = [mockNote];
+    let failFirstAsk: (error: Error) => void = () => undefined;
+    (ReasoningService.chatOverNote as jest.Mock).mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        failFirstAsk = reject;
+      }),
+    );
+    const { getByTestId } = render(<NoteEditorScreen />);
+    await act(async () => {
+      fireEvent.press(getByTestId('chat-suggestion-List action items'));
+    });
+    await waitFor(() => expect(ReasoningService.chatOverNote).toHaveBeenCalledTimes(1));
+
+    fireEvent.press(getByTestId('chat-close'));
+    await act(async () => {
+      failFirstAsk(new LocalReasoningError('LOCAL_CONTEXT_LIMIT', 'Too large'));
+    });
+
+    expect(ReasoningService.chatOverNote).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets you send a question about a note that only has generated notes', () => {
+    mockNote = note({
+      noteType: 'personal',
+      diarizationEnabled: 0,
+      calendarEventId: null,
+      participants: null,
+      content: '',
+      enhancedContent: '## Summary',
+    });
+    mockNotesState.notes = [mockNote];
+    mockSegments = [];
+    const { getByTestId } = render(<NoteEditorScreen />);
+    expect(getByTestId('chat-send').props.accessibilityState.disabled).toBe(false);
+  });
+
+  it('asks only once when chat fails for another reason', async () => {
+    mockNote = note({ enhancedContent: '## Summary\n- Launch Friday' });
+    mockNotesState.notes = [mockNote];
+    (ReasoningService.chatOverNote as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    const { getByTestId } = render(<NoteEditorScreen />);
+    await act(async () => {
+      fireEvent.press(getByTestId('chat-suggestion-List action items'));
+    });
+    await waitFor(() => expect(ReasoningService.chatOverNote).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(ReasoningService.chatOverNote).toHaveBeenCalledTimes(1);
   });
 });
 

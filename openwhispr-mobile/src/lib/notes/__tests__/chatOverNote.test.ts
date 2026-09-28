@@ -36,12 +36,21 @@ describe('buildNoteChatContext', () => {
     expect(text).toContain('Decision: launch Friday');
   });
 
-  it('keeps the typed notes when the generated notes alone are long', () => {
+  it('keeps the typed notes and the start of long generated notes', () => {
     const context = buildNoteChatContext({
-      generatedNotes: 'y'.repeat(20_000),
+      generatedNotes: `## Summary\nLaunch Friday\n\n${'y'.repeat(20_000)}`,
       sourceText: `Raw notes captured during the meeting:\nCall the vendor\n\n${'x'.repeat(20_000)}`,
     });
 
-    expect(boundChatContext(context).text).toContain('Call the vendor');
+    const { text } = boundChatContext(context);
+    expect(text).toContain('Call the vendor');
+    expect(text).toContain('## Summary\nLaunch Friday');
+  });
+
+  it('leaves long generated notes whole when everything fits', () => {
+    const generated = 'y'.repeat(10_000);
+    expect(buildNoteChatContext({ generatedNotes: generated, sourceText: 'Short note' })).toContain(
+      generated,
+    );
   });
 });

@@ -27,6 +27,9 @@ const MAX_CONTEXT_CHARS = 24_000;
 const CONTEXT_EDGE_CHARS = 12_000;
 const MAX_HISTORY_MESSAGES = 6;
 const TRUNCATION_MARKER = '\n\n[...middle omitted for chat context...]\n\n';
+// Generated notes lead with their summary and action items, so a long one keeps its start.
+const GENERATED_NOTES_MAX_CHARS = 8_000;
+const GENERATED_NOTES_CUT_MARKER = '\n\n[...rest of the generated notes omitted...]';
 
 const CHAT_OVER_NOTE_SYSTEM_PROMPT = `You are a note Q&A assistant. Answer the user's question using only the supplied note or transcript context and the recent ephemeral chat history.
 
@@ -44,8 +47,9 @@ export interface NoteChatContextArgs {
   sourceText: string;
 }
 
-// The note goes first and the generated notes last. A long context keeps its head and tail, so it
-// loses the middle of the transcript, never the typed notes that lead the note or the summary.
+// The note goes first and the generated notes last, capped when the whole is too long. Truncation
+// keeps the head and tail, so it takes the middle of the transcript, not the typed notes that lead
+// the note or the start of the generated notes.
 export const buildNoteChatContext = ({
   generatedNotes,
   sourceText,
@@ -54,7 +58,13 @@ export const buildNoteChatContext = ({
   const source = sourceText.trim();
   if (!generated) return source;
 
-  return [source ? `Note content:\n${source}` : '', `Generated notes:\n${generated}`]
+  const cutGenerated =
+    source.length + generated.length > MAX_CONTEXT_CHARS &&
+    generated.length > GENERATED_NOTES_MAX_CHARS;
+  const notes = cutGenerated
+    ? `${generated.slice(0, GENERATED_NOTES_MAX_CHARS).trimEnd()}${GENERATED_NOTES_CUT_MARKER}`
+    : generated;
+  return [source ? `Note content:\n${source}` : '', `Generated notes:\n${notes}`]
     .filter(Boolean)
     .join('\n\n');
 };

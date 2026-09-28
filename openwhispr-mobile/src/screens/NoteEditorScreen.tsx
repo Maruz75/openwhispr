@@ -839,7 +839,12 @@ export default function NoteEditorScreen() {
         } catch (error) {
           // The generated notes can push an on-device request past its limit; the note alone
           // still fits wherever it did before they were added.
-          if (!isLocalContextLimitError(error) || !sourceContext || sourceContext === context) {
+          if (
+            controller.signal.aborted ||
+            !isLocalContextLimitError(error) ||
+            !sourceContext ||
+            sourceContext === context
+          ) {
             throw error;
           }
           response = await askAbout(sourceContext);
