@@ -269,6 +269,27 @@ export default function NoteEditorScreen() {
     [],
   );
 
+  // Until you type, the title and My notes follow the saved note, so a change pulled while the note
+  // is open (an edit on desktop) isn't saved over by the text it replaced.
+  useEffect(() => {
+    if (!note) return;
+    // The refs are set here too: a save that runs before the next render reads them.
+    if (titleRef.current === originalTitleRef.current && note.title !== titleRef.current) {
+      setTitle(note.title);
+      titleRef.current = note.title;
+      originalTitleRef.current = note.title;
+    }
+    if (contentRef.current === originalContentRef.current && note.content !== contentRef.current) {
+      setContent(note.content);
+      const end = note.content.length;
+      setSelection({ start: end, end });
+      contentRef.current = note.content;
+      originalContentRef.current = note.content;
+      learnedBaselineRef.current = note.content;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note?.title, note?.content]);
+
   const isAudioTranscript = isAudioTranscriptNote(note);
   const transcriptStatus = note?.transcriptionStatus ?? 'idle';
   // transcriptRevision is an intentional cache-bust dep: it bumps on local speaker/segment writes

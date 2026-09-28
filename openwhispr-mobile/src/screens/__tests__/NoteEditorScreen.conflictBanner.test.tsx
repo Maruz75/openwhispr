@@ -604,3 +604,41 @@ it('copies an unfinished edit to the generated notes', () => {
   expect(mockUpdateNote).toHaveBeenCalledWith(7, { enhancedContent: '## Summary\n- Copied' });
   expect(Clipboard.setStringAsync).toHaveBeenCalledWith('## Summary\n- Copied');
 });
+
+describe('NoteEditorScreen — changes pulled while the note is open', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('shows a pulled edit instead of saving the old text over it', () => {
+    jest.useFakeTimers();
+    const screen = render(<NoteEditorScreen />);
+
+    mockNote = note({ title: 'Renamed on desktop', content: 'Edited on desktop.' });
+    mockNotesState.notes = [mockNote];
+    screen.rerender(<NoteEditorScreen />);
+
+    const input = screen.getByPlaceholderText('Type or dictate…');
+    expect(input.props.value).toBe('Edited on desktop.');
+    expect(screen.getByPlaceholderText('Title').props.value).toBe('Renamed on desktop');
+
+    fireEvent.changeText(input, 'Edited on desktop. And here.');
+    act(() => {
+      jest.advanceTimersByTime(800);
+    });
+    expect(mockUpdateNote).toHaveBeenCalledTimes(1);
+    expect(mockUpdateNote).toHaveBeenCalledWith(7, { content: 'Edited on desktop. And here.' });
+  });
+
+  it('keeps what you are typing when a pull lands before it saves', () => {
+    jest.useFakeTimers();
+    const screen = render(<NoteEditorScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText('Type or dictate…'), 'Typed here.');
+
+    mockNote = note({ content: 'Edited on desktop.' });
+    mockNotesState.notes = [mockNote];
+    screen.rerender(<NoteEditorScreen />);
+
+    expect(screen.getByPlaceholderText('Type or dictate…').props.value).toBe('Typed here.');
+  });
+});
