@@ -1,7 +1,11 @@
 import i18n from "../../../i18n";
 import { connectorErrorText } from "../../../utils/connectorErrorCopy";
 import type { ToolResult } from "../ToolRegistry";
-import type { ApprovalOutcome, ConnectorPrepareResult } from "../../../types/connectors";
+import type {
+  ApprovalEdits,
+  ApprovalOutcome,
+  ConnectorPrepareResult,
+} from "../../../types/connectors";
 
 const NO_RETRY = "Do not retry this action unless the user asks you to.";
 
@@ -41,10 +45,15 @@ export function notSentResult(
 
 // connectorId picks that connector's own wording for the tool step, when it
 // has any (Gmail's "Gmail needs to be reconnected").
-export function failedResult(errorCode: string, message: string, connectorId?: string): ToolResult {
+export function failedResult(
+  errorCode: string,
+  message: string,
+  connectorId?: string,
+  edits: ApprovalEdits = {}
+): ToolResult {
   return {
     success: true,
-    data: { status: "failed", errorCode, error: message },
+    data: { status: "failed", errorCode, error: message, ...edits },
     displayText: connectorErrorText(i18n.t, "toolStatus", connectorId ?? "", errorCode),
   };
 }
@@ -95,6 +104,15 @@ function unknownDisplayText(destination: string, connectorId?: string): string {
     : generic;
 }
 
+// What the user changed on the card, so the model describes (or proposes
+// again) the email the user settled on, not the one it drafted.
+function userEdits({ finalText, final }: ApprovalEdits): ApprovalEdits {
+  return {
+    ...(finalText !== undefined ? { finalText } : {}),
+    ...(final !== undefined ? { final } : {}),
+  };
+}
+
 export function approvalOutcomeResult(
   outcome: ApprovalOutcome,
   destination: string,
@@ -108,10 +126,7 @@ export function approvalOutcomeResult(
           status: "sent",
           url: outcome.url,
           destination,
-          ...(outcome.finalText !== undefined ? { finalText: outcome.finalText } : {}),
-          // What the user actually sent, so the model doesn't describe the
-          // email it proposed instead.
-          ...(outcome.final !== undefined ? { final: outcome.final } : {}),
+          ...userEdits(outcome),
         },
         displayText: i18n.t("connectors.approval.sent", { destination }),
       };
@@ -127,7 +142,12 @@ export function approvalOutcomeResult(
     case "not_sent":
       return notSentResult(outcome.reason);
     case "failed":
-      return failedResult(outcome.errorCode, outcome.message, options.connectorId);
+      return failedResult(
+        outcome.errorCode,
+        outcome.message,
+        options.connectorId,
+        userEdits(outcome)
+      );
     case "unknown":
       return {
         success: true,
@@ -135,6 +155,7 @@ export function approvalOutcomeResult(
           status: "unknown",
           destination,
           checkUrl: outcome.checkUrl,
+          ...userEdits(outcome),
           guidance: `It may or may not have been sent. ${NO_RETRY} ${
             options.unknownGuidance ?? `Tell the user to check ${destination}.`
           }`,

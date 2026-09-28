@@ -269,11 +269,15 @@ const CONNECT_ERROR_CODES = new Set([
   "domain_policy",
 ]);
 
-// A revoke is best effort: nothing may hang on an unreachable provider.
+// A revoke is best effort: nothing may hang on an unreachable provider. The
+// promise's value, or null when the deadline came first.
 async function withinDeadline(promise, ms) {
   let timer;
   try {
-    await Promise.race([promise, new Promise((resolve) => (timer = setTimeout(resolve, ms)))]);
+    return await Promise.race([
+      promise,
+      new Promise((resolve) => (timer = setTimeout(() => resolve(null), ms))),
+    ]);
   } finally {
     clearTimeout(timer);
   }
@@ -394,15 +398,18 @@ function createConnectorManager({
     }
   }
 
+  // The connector's answer (Gmail: { kept: true } for a grant it left in
+  // place), or null when the revoke failed or ran out of time.
   async function revokeQuietly(connector, credential, options) {
     try {
-      await withinDeadline(connector.revoke(credential, options), REVOKE_TIMEOUT_MS);
+      return await withinDeadline(connector.revoke(credential, options), REVOKE_TIMEOUT_MS);
     } catch (error) {
       logger.warn(
         "connector revoke failed",
         { connectorId: connector.id, ...describeError(error) },
         "connectors"
       );
+      return null;
     }
   }
 
@@ -478,7 +485,9 @@ function createConnectorManager({
   }
 
   // Removing access is always allowed: no policy or plan check.
-  async function disconnect(connectorId) {
+  // `erasingDevice` (Delete account with device erase) revokes a grant the
+  // connector would otherwise keep because another login shares it.
+  async function disconnect(connectorId, { erasingDevice = false } = {}) {
     const connector = byId.get(connectorId);
     if (!connector?.revoke || !credentials) {
       return { status: "unavailable", reason: "unknown_connector" };
@@ -486,8 +495,10 @@ function createConnectorManager({
     const accountId = getAccountId();
     if (!accountId) return { status: "unavailable", reason: "signed_out" };
     const entry = credentials.read(accountId, connectorId);
+    let grantKept = false;
     if (entry) {
-      await revokeQuietly(connector, entry.credential);
+      const revoked = await revokeQuietly(connector, entry.credential, { erasingDevice });
+      grantKept = revoked?.kept === true;
       try {
         credentials.clear(accountId, connectorId, entry.generation);
       } catch (error) {
@@ -508,12 +519,14 @@ function createConnectorManager({
     }
     invalidate(connectorId);
     await notifyStatusChanged();
-    return { status: "disconnected" };
+    // Google still lists the app for that account until the other login
+    // (the calendar) is disconnected too; Settings says so.
+    return grantKept ? { status: "disconnected", grantKept: true } : { status: "disconnected" };
   }
 
-  async function disconnectAll() {
+  async function disconnectAll(options) {
     for (const connector of byId.values()) {
-      if (connector.revoke) await disconnect(connector.id);
+      if (connector.revoke) await disconnect(connector.id, options);
     }
   }
 

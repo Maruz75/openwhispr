@@ -349,9 +349,26 @@ test("Disconnect with a calendar on the same grant clears the login without revo
     sharesGrant: () => true,
   });
 
-  assert.deepEqual(await manager.disconnect("gmail"), { status: "disconnected" });
+  assert.deepEqual(await manager.disconnect("gmail"), {
+    status: "disconnected",
+    grantKept: true,
+  });
 
   assert.deepEqual(revoked(google), [], "the calendar's grant stays live");
+  assert.equal(credentials.read("acct-1", "gmail"), null);
+});
+
+test("Delete account with device erase revokes Gmail even on a shared grant", async () => {
+  const { manager, google, credentials } = await setup({
+    credential: CONNECTED,
+    sharesGrant: () => true,
+  });
+
+  // cleanup-app runs next and finds no Gmail login left, so this is the one
+  // chance to end the grant; the calendar is being erased too.
+  await manager.disconnectAll({ erasingDevice: true });
+
+  assert.deepEqual(revoked(google), [{ token: "refresh-1" }]);
   assert.equal(credentials.read("acct-1", "gmail"), null);
 });
 

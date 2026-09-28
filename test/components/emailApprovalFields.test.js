@@ -121,8 +121,11 @@ test("typing in To reports the parsed list and keeps the comma the user just typ
   assert.deepEqual(patches.at(-1), { to: ["josh@acme.test"] });
   assert.equal(field(container, "toLabel").value, "josh@acme.test,");
 
+  // A pasted "Name <address>" reaches the draft as the address Send uses,
+  // while the input keeps what the user pasted.
   await React.act(async () => type(field(container, "ccLabel"), "sam@acme.test, Sam <s@x.test>"));
-  assert.deepEqual(patches.at(-1), { cc: ["sam@acme.test", "Sam <s@x.test>"] });
+  assert.deepEqual(patches.at(-1), { cc: ["sam@acme.test", "s@x.test"] });
+  assert.equal(field(container, "ccLabel").value, "sam@acme.test, Sam <s@x.test>");
 });
 
 test("a line break typed or pasted into Subject becomes a space; Body keeps its lines", async (t) => {

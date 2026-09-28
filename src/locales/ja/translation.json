@@ -3976,6 +3976,7 @@
       "connecting": "ブラウザで接続を完了してください… Googleでアクセスがブロックされたと表示された場合は、組織のGoogle管理者がOpenWhisprを許可する必要があります。",
       "connectedAs": "{{account}} として接続済み",
       "needsReconnect": "Gmailを再接続する必要があります。",
+      "grantKept": "接続を解除しました。Google カレンダーが同じ Google の権限を使用しているため、Google カレンダーの接続も解除するまで、OpenWhispr は Google アカウントに表示されたままになります。",
       "proRequired": "アシスタントにGmailからメールを送信させるには、有料プランへのアップグレードが必要です。",
       "errors": {
         "connect_failed": "Gmailを接続できませんでした。もう一度お試しください。",

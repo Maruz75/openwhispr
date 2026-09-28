@@ -3976,6 +3976,7 @@
       "connecting": "Completa la connessione nel tuo browser… Se Google indica che l'accesso è bloccato, l'amministratore Google della tua organizzazione deve consentire OpenWhispr.",
       "connectedAs": "Connesso come {{account}}",
       "needsReconnect": "Gmail deve essere ricollegato.",
+      "grantKept": "Disconnesso. Google Calendar usa la stessa autorizzazione Google, quindi OpenWhispr resta elencato nel tuo account Google finché non disconnetti anche Google Calendar.",
       "proRequired": "Passa a un piano a pagamento per far inviare all'assistente le email da Gmail per te.",
       "errors": {
         "connect_failed": "Impossibile connettere Gmail. Riprova.",

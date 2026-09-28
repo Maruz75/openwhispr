@@ -546,6 +546,31 @@ test("the recipients main reports after Send reach the card and the outcome", as
   assert.deepEqual(await blank, SENT, "an empty label is ignored");
 });
 
+test("a failed or unknown Send still reports what the user changed on the card", async (t) => {
+  let reply;
+  const { store, request, key } = await emailCards(t, () => reply);
+
+  reply = { state: "failed", errorCode: "network", message: "offline" };
+  const failed = request("call-29");
+  store.updateApprovalDraft(key("call-29"), { fields: { cc: [], subject: "Q3 (final)" } });
+  await store.approveAction(key("call-29"));
+  assert.deepEqual(await failed, {
+    ...reply,
+    final: { ...EMAIL_FIELDS, cc: [], subject: "Q3 (final)" },
+  });
+
+  const unedited = request("call-2a");
+  await store.approveAction(key("call-2a"));
+  assert.deepEqual(await unedited, reply, "nothing changed, nothing reported");
+
+  // A card without fields reports its edited text the same way.
+  reply = { state: "unknown" };
+  const slack = request("call-2b", PREVIEW);
+  store.updateApprovalDraft(key("call-2b"), { body: "Hello team, updated" });
+  await store.approveAction(key("call-2b"));
+  assert.deepEqual(await slack, { state: "unknown", finalText: "Hello team, updated" });
+});
+
 test("a malformed commit result settles an email card as unknown, never sent", async (t) => {
   let reply;
   const { store, request, key } = await emailCards(t, () => reply);
@@ -560,7 +585,12 @@ test("a malformed commit result settles an email card as unknown, never sent", a
     const outcome = request(toolCallId);
     store.updateApprovalDraft(key(toolCallId), { fields: { subject: "Edited" } });
     await store.approveAction(key(toolCallId));
-    assert.deepEqual(await outcome, { state: "unknown" }, JSON.stringify(raw));
+    // The user's edit still reaches the model, since it may have gone out.
+    assert.deepEqual(
+      await outcome,
+      { state: "unknown", final: { ...EMAIL_FIELDS, subject: "Edited" } },
+      JSON.stringify(raw)
+    );
     assert.equal(
       store.useConnectorApprovalStore.getState().entries[key(toolCallId)].state,
       "unknown"

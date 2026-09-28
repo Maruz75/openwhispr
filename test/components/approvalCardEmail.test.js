@@ -145,16 +145,24 @@ async function mountEmailCard(
   return { container, calls, draftFields, toolResult: () => toolResult };
 }
 
-test("a bad or display-name address, or an empty To, blocks Send with the reason on the card", async (t) => {
+// One more than main accepts, To and Cc together.
+const FIFTY_ONE = Array.from({ length: 51 }, (_, index) => `p${index}@acme.test`).join(", ");
+
+test("a bad address, an empty To or Gmail's limits block Send with the reason on the card", async (t) => {
   const { container, calls } = await mountEmailCard(t);
   await React.act(async () => click(button(container, "connectors.approval.edit")));
 
   for (const [labelKey, value, reason] of [
-    ["toLabel", "Josh <josh@acme.test>", "invalidAddress"],
     ["toLabel", "josh@acme.test, dana", "invalidAddress"],
     ["toLabel", "", "missingTo"],
+    // Pasted from a mail app: sent to the bare address.
+    ["toLabel", "Josh <josh@acme.test>", null],
+    ["toLabel", FIFTY_ONE, "tooManyRecipients"],
     ["toLabel", "josh@acme.test", null],
     ["ccLabel", "sam@acme", "invalidAddress"],
+    ["ccLabel", "", null],
+    ["subjectLabel", "x".repeat(251), "subjectTooLong"],
+    ["subjectLabel", "x".repeat(250), null],
   ]) {
     await React.act(async () => type(field(container, labelKey), value));
     const send = button(container, "connectors.approval.send");

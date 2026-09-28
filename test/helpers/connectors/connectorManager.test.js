@@ -1501,11 +1501,41 @@ test("main files connector logins under the credential's account scope, not the 
   assert.doesNotMatch(wiring[1], /databaseManager\.activeAccountId/);
 });
 
-test("disconnectAll disconnects every connector that can revoke", async () => {
+test("a disconnect that kept a shared grant says so; the IPC can't ask to erase", async () => {
   const credentials = memoryCredentials({ accessToken: "t" }, { connectorId: "fake" });
-  const { manager } = await setup(connectable(), undefined, { credentials });
-  await manager.disconnectAll();
+  const options = [];
+  const { manager } = await setup(
+    connectable({
+      async revoke(_credential, revokeOptions) {
+        options.push(revokeOptions);
+        return { kept: true };
+      },
+    }),
+    undefined,
+    { credentials }
+  );
+
+  assert.deepEqual(await manager.disconnect("fake"), { status: "disconnected", grantKept: true });
+  assert.deepEqual(options, [{ erasingDevice: false }]);
+  assert.equal(credentials.read("acct-1", "fake"), null, "the local login is gone either way");
+});
+
+test("disconnectAll disconnects every connector that can revoke, erasing when asked", async () => {
+  const credentials = memoryCredentials({ accessToken: "t" }, { connectorId: "fake" });
+  const options = [];
+  const { manager } = await setup(
+    connectable({
+      async revoke(_credential, revokeOptions) {
+        options.push(revokeOptions);
+      },
+    }),
+    undefined,
+    { credentials }
+  );
+  // Delete account with device erase: a grant shared with a calendar goes too.
+  await manager.disconnectAll({ erasingDevice: true });
   assert.equal(credentials.read("acct-1", "fake"), null);
+  assert.deepEqual(options, [{ erasingDevice: true }]);
 });
 
 test("revokeAllStored (Reset app data) revokes every account's login with no one signed in", async () => {

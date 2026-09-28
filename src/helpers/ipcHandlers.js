@@ -38,7 +38,7 @@ const {
   createConnectorPolicyResolver,
   createConnectorAuthLookup,
 } = require("./connectors/connectorIpc");
-const { personAttendees, searchContacts } = require("./connectors/contactSearch");
+const { createNoteAttendeesLookup, searchContacts } = require("./connectors/contactSearch");
 // The renderer's ModelRegistry is not main-loadable; the raw registry data is
 // packaged, and the route resolver only needs {id, baseUrl} per provider.
 const transcriptionProviderBaseUrls = () =>
@@ -2227,33 +2227,41 @@ class IPCHandlers {
       })
     );
 
-    ipcMain.handle("delete-account-data", async (_event, accountId, expectedGeneration) => {
-      const state = tokenStore.getState();
-      if (
-        typeof accountId !== "string" ||
-        accountId.trim().length === 0 ||
-        !state.token ||
-        state.generation !== expectedGeneration
-      ) {
-        return {
-          success: false,
-          code: "AUTH_CONTEXT_CHANGED",
-          error: "Authentication context changed before local account cleanup",
-        };
-      }
-      try {
-        // Best effort; each revoke has a 5s deadline (connectorManager.js).
-        await this.connectorManager?.disconnectAll();
-        const result = this.databaseManager.deleteAccountData(accountId);
-        this.notifyVectorChanges();
-        for (const noteId of result.deletedNoteIds) {
-          this._asyncMirrorDelete(noteId);
+    ipcMain.handle(
+      "delete-account-data",
+      async (_event, accountId, expectedGeneration, options) => {
+        const state = tokenStore.getState();
+        if (
+          typeof accountId !== "string" ||
+          accountId.trim().length === 0 ||
+          !state.token ||
+          state.generation !== expectedGeneration
+        ) {
+          return {
+            success: false,
+            code: "AUTH_CONTEXT_CHANGED",
+            error: "Authentication context changed before local account cleanup",
+          };
         }
-        return { success: true, ...result };
-      } catch (error) {
-        return { success: false, code: "LOCAL_ACCOUNT_CLEANUP_FAILED", error: error.message };
+        try {
+          // Best effort; each revoke has a 5s deadline (connectorManager.js).
+          // Erasing the device takes the calendar logins with it, so a grant
+          // Gmail shares with a calendar is revoked too: cleanup-app runs
+          // after this and finds no Gmail login left to revoke.
+          await this.connectorManager?.disconnectAll({
+            erasingDevice: options?.erasingDevice === true,
+          });
+          const result = this.databaseManager.deleteAccountData(accountId);
+          this.notifyVectorChanges();
+          for (const noteId of result.deletedNoteIds) {
+            this._asyncMirrorDelete(noteId);
+          }
+          return { success: true, ...result };
+        } catch (error) {
+          return { success: false, code: "LOCAL_ACCOUNT_CLEANUP_FAILED", error: error.message };
+        }
       }
-    });
+    );
 
     ipcMain.handle("db-update-space", async (event, id, updates) => {
       const result = this.databaseManager.updateSpace(id, updates);
@@ -6097,26 +6105,13 @@ class IPCHandlers {
           }),
         findContacts: (query) =>
           searchContacts(this.databaseManager.getContactLookupSources(), query),
-        // The Gmail login sends as the user, so its address is theirs too,
-        // even when it isn't one of their calendar accounts.
-        noteAttendees: async (participants, calendarEventId) => {
-          const sources = this.databaseManager.getContactLookupSources();
-          const gmail = (await this.connectorManager.status()).find(({ id }) => id === "gmail");
-          const calendarEvent = calendarEventId
-            ? this.databaseManager.getCalendarEventById(calendarEventId)
-            : null;
-          return personAttendees(
-            {
-              ...sources,
-              excludedEmails: [
-                ...(sources.excludedEmails ?? []),
-                ...(gmail?.accountLabel ? [gmail.accountLabel] : []),
-              ],
-            },
-            participants,
-            { organizerEmail: calendarEvent?.organizer_email ?? null }
-          );
-        },
+        noteAttendees: createNoteAttendeesLookup({
+          getContactLookupSources: () => this.databaseManager.getContactLookupSources(),
+          getCalendarEventById: (id) => this.databaseManager.getCalendarEventById(id),
+          getGmailAddress: async () =>
+            (await this.connectorManager.status()).find(({ id }) => id === "gmail")?.accountLabel ??
+            null,
+        }),
       });
     }
     this.enterpriseIdentityManager = createEnterpriseIdentityManager({

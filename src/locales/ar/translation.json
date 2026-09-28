@@ -838,6 +838,7 @@
       "connecting": "أكمل الربط في متصفحك… إذا أظهرت Google أن الوصول محظور، فيجب على مسؤول Google في مؤسستك السماح بـ OpenWhispr.",
       "connectedAs": "متصل بصفتك {{account}}",
       "needsReconnect": "يلزم إعادة ربط Gmail.",
+      "grantKept": "تم قطع الاتصال. يستخدم تقويم Google إذن Google نفسه، لذا سيظل OpenWhispr مدرجًا في حسابك على Google حتى تقطع اتصال تقويم Google أيضًا.",
       "proRequired": "قم بالترقية إلى خطة مدفوعة ليتمكن المساعد من إرسال الرسائل الإلكترونية من Gmail نيابةً عنك.",
       "errors": {
         "connect_failed": "تعذّر ربط Gmail. حاول مرة أخرى.",

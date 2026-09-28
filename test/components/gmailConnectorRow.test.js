@@ -181,6 +181,43 @@ test("a login that needs reconnecting offers Reconnect and Disconnect", async (t
   assert.equal(hasButton(container, "connectors.gmail.disconnect"), true);
 });
 
+test("Reconnect shows the browser hint while it waits, like Connect", async (t) => {
+  let finish;
+  const container = await renderGmailRow(t, {
+    status: { ...GMAIL, needsReconnect: true },
+    electronAPI: {
+      connectorConnect: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    },
+  });
+
+  await React.act(async () => click(button(container, "connectors.gmail.reconnect")));
+  // An admin block never redirects back, so the hint is the only guidance.
+  assert.match(container.textContent, /connectors\.gmail\.connecting/);
+  assert.doesNotMatch(container.textContent, /connectors\.gmail\.needsReconnect/);
+
+  await React.act(async () => finish({ status: "failed", errorCode: "oauth_timeout" }));
+  assert.match(container.textContent, /connectors\.gmail\.needsReconnect/);
+  assert.match(container.textContent, /connectors\.gmail\.errors\.oauth_timeout/);
+});
+
+test("a disconnect that kept a grant the calendar shares says Google still lists the app", async (t) => {
+  let reply = { status: "disconnected", grantKept: true };
+  const container = await renderGmailRow(t, {
+    status: GMAIL,
+    electronAPI: { connectorDisconnect: async () => reply },
+  });
+
+  await React.act(async () => click(button(container, "connectors.gmail.disconnect")));
+  assert.match(container.textContent, /connectors\.gmail\.grantKept/);
+
+  reply = { status: "disconnected" };
+  await React.act(async () => click(button(container, "connectors.gmail.disconnect")));
+  assert.doesNotMatch(container.textContent, /connectors\.gmail\.grantKept/);
+});
+
 test("a free plan can still disconnect a Gmail login it has", async (t) => {
   const container = await renderGmailRow(t, { status: GMAIL, isPaid: false });
   assert.equal(hasButton(container, "connectors.gmail.disconnect"), true);

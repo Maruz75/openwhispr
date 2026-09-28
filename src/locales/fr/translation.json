@@ -4145,6 +4145,7 @@
       "connecting": "Terminez la connexion dans votre navigateur… Si Google indique que l'accès est bloqué, l'administrateur Google de votre organisation doit autoriser OpenWhispr.",
       "connectedAs": "Connecté en tant que {{account}}",
       "needsReconnect": "Gmail doit être reconnecté.",
+      "grantKept": "Déconnecté. Google Agenda utilise la même autorisation Google : OpenWhispr reste donc listé dans votre compte Google jusqu'à ce que vous déconnectiez aussi Google Agenda.",
       "proRequired": "Passez à un plan payant pour que l'assistant envoie des e-mails depuis Gmail pour vous.",
       "errors": {
         "connect_failed": "Impossible de connecter Gmail. Réessayez.",

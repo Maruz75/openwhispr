@@ -26,11 +26,24 @@ test("To and Cc are read as the addresses the user typed, empty entries dropped"
     "dana@acme.test",
   ]);
   assert.deepEqual(parseAddressList("   "), []);
-  // Kept as typed, so the card can name it.
-  assert.deepEqual(parseAddressList("Josh <josh@acme.test>, sam"), [
-    "Josh <josh@acme.test>",
-    "sam",
+  // A bad entry is kept as typed, so the card can name it.
+  assert.deepEqual(parseAddressList("josh@acme.test, sam"), ["josh@acme.test", "sam"]);
+});
+
+test("a list pasted from a mail app becomes the bare addresses Send uses", async () => {
+  const { parseAddressList } = await load();
+  assert.deepEqual(parseAddressList("Bob Smith <bob@acme.test>; Ann <ann@acme.test>"), [
+    "bob@acme.test",
+    "ann@acme.test",
   ]);
+  // Outlook's "Last, First <address>": the comma belongs to the name.
+  assert.deepEqual(parseAddressList("Smith, Bob <bob@acme.test>, dana@acme.test"), [
+    "bob@acme.test",
+    "dana@acme.test",
+  ]);
+  assert.deepEqual(parseAddressList('"Smith, Bob" <bob@acme.test>'), ["bob@acme.test"]);
+  // A name without an address of its own is never folded into a bare one.
+  assert.deepEqual(parseAddressList("Smith, bob@acme.test"), ["Smith", "bob@acme.test"]);
 });
 
 test("the commas of every locale, and semicolons, separate addresses", async () => {

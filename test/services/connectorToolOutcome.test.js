@@ -216,6 +216,31 @@ test("a sent email reports what the user sent, and an unknown one the connector'
   );
 });
 
+test("a failed or unknown email still tells the model what the user changed", async () => {
+  const { approvalOutcomeResult } = await loadOutcome();
+  const final = { to: ["dana@acme.test"], cc: [], subject: "Q3 (final)", body: "Hi" };
+
+  assert.deepEqual(
+    approvalOutcomeResult(
+      { state: "failed", errorCode: "network", message: "offline", final },
+      "dana@acme.test",
+      { connectorId: "gmail" }
+    ).data,
+    { status: "failed", errorCode: "network", error: "offline", final }
+  );
+  const unknown = approvalOutcomeResult(
+    { state: "unknown", checkUrl: "c", finalText: "edited" },
+    "#eng"
+  ).data;
+  assert.equal(unknown.finalText, "edited");
+  assert.equal(unknown.status, "unknown");
+  assert.equal(
+    "final" in approvalOutcomeResult({ state: "failed", errorCode: "x", message: "m" }, "#eng").data,
+    false,
+    "an unedited card adds nothing"
+  );
+});
+
 test("unavailable carries the caller's guidance, or the default no-retry rule", async () => {
   const { unavailableResult } = await loadOutcome();
   assert.equal(

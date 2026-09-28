@@ -244,8 +244,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     "active-account-scope-changed",
     (callback) => (_event, scope) => callback(scope)
   ),
-  deleteAccountData: (accountId, expectedAuthGeneration) =>
-    ipcRenderer.invoke("delete-account-data", accountId, expectedAuthGeneration),
+  deleteAccountData: (accountId, expectedAuthGeneration, options) =>
+    ipcRenderer.invoke("delete-account-data", accountId, expectedAuthGeneration, options),
   updateSpace: (id, updates) => ipcRenderer.invoke("db-update-space", id, updates),
   purgeSpace: (id, options) => ipcRenderer.invoke("db-purge-space", id, options),
   upsertSpaceFromCloud: (space) => ipcRenderer.invoke("db-upsert-space-from-cloud", space),
@@ -1273,8 +1273,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   connectorRecentActions: (connectorId, limit) =>
     ipcRenderer.invoke("connector-recent-actions", connectorId, limit),
   connectorFindContacts: (query) => ipcRenderer.invoke("connector-find-contacts", query),
-  connectorNoteAttendees: (participants, calendarEventId) =>
-    ipcRenderer.invoke("connector-note-attendees", participants, calendarEventId),
+  connectorNoteAttendees: (participants, calendarEventId, selfEmail) =>
+    ipcRenderer.invoke("connector-note-attendees", participants, calendarEventId, selfEmail),
   connectorConnect: (connectorId) => ipcRenderer.invoke("connector-connect", connectorId),
   connectorDisconnect: (connectorId) => ipcRenderer.invoke("connector-disconnect", connectorId),
   onConnectorStatusChanged: (callback) => {

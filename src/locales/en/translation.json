@@ -4145,6 +4145,7 @@
       "connecting": "Finish connecting in your browser… If Google says access is blocked, your organization's Google admin needs to allow OpenWhispr.",
       "connectedAs": "Connected as {{account}}",
       "needsReconnect": "Gmail needs to be reconnected.",
+      "grantKept": "Disconnected. Google Calendar uses the same Google permission, so OpenWhispr stays listed in your Google Account until you disconnect Google Calendar too.",
       "proRequired": "Upgrade to a paid plan to let the assistant send emails from Gmail for you.",
       "errors": {
         "connect_failed": "Couldn't connect Gmail. Try again.",

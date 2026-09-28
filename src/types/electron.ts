@@ -1554,7 +1554,8 @@ declare global {
       ) => () => void;
       deleteAccountData?: (
         accountId: string,
-        expectedAuthGeneration: number
+        expectedAuthGeneration: number,
+        options?: { erasingDevice?: boolean }
       ) => Promise<{
         success: boolean;
         code?: string;
@@ -2949,7 +2950,8 @@ declare global {
        */
       connectorNoteAttendees?: (
         participants: CalendarAttendee[],
-        calendarEventId?: string | null
+        calendarEventId?: string | null,
+        selfEmail?: string | null
       ) => Promise<{ attendees: NoteAttendee[]; unavailableReason?: string }>;
       connectorConnect?: (connectorId: string) => Promise<ConnectorConnectResult>;
       connectorDisconnect?: (connectorId: string) => Promise<ConnectorDisconnectResult>;

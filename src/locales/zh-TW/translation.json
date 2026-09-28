@@ -3976,6 +3976,7 @@
       "connecting": "請在瀏覽器中完成連接… 如果 Google 顯示存取已遭封鎖，需要您機構的 Google 管理員允許 OpenWhispr。",
       "connectedAs": "已以 {{account}} 身分連接",
       "needsReconnect": "需要重新連接 Gmail。",
+      "grantKept": "已中斷連線。Google 日曆使用相同的 Google 權限，因此在您也中斷 Google 日曆的連線之前，OpenWhispr 仍會顯示在您的 Google 帳戶中。",
       "proRequired": "升級到付費方案，讓助理透過 Gmail 為您傳送郵件。",
       "errors": {
         "connect_failed": "無法連接 Gmail，請重試。",

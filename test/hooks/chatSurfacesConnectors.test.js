@@ -15,7 +15,9 @@ const MOCKS = {
         toolStatus: "",
         activeToolName: "",
         sendToAI: async () => {},
-        cancelStream() {},
+        cancelStream() {
+          globalThis.__surfaceCancels = (globalThis.__surfaceCancels ?? 0) + 1;
+        },
       };
     }
   `,
@@ -35,9 +37,12 @@ const MOCKS = {
   `,
 };
 
-async function streamingOptionsOf(t, hookPath, exportName, hookOptions) {
+// Renders the hook once; returns the options it gave the streaming hook and
+// what it returned.
+async function renderSurface(t, hookPath, exportName, hookOptions) {
   t.after(() => {
     delete globalThis.__surfaceStreamingOptions;
+    delete globalThis.__surfaceCancels;
   });
   installBrowserGlobals(t);
   const vite = await createRendererServer(t, {
@@ -45,12 +50,17 @@ async function streamingOptionsOf(t, hookPath, exportName, hookOptions) {
     mockModules: MOCKS,
   });
   const useHook = (await vite.ssrLoadModule(hookPath))[exportName];
+  let returned;
   function Harness() {
-    useHook(hookOptions);
+    returned = useHook(hookOptions);
     return null;
   }
   renderToStaticMarkup(React.createElement(Harness));
-  return globalThis.__surfaceStreamingOptions;
+  return { options: globalThis.__surfaceStreamingOptions, returned };
+}
+
+async function streamingOptionsOf(t, hookPath, exportName, hookOptions) {
+  return (await renderSurface(t, hookPath, exportName, hookOptions)).options;
 }
 
 const PARTICIPANTS = JSON.stringify([
@@ -72,7 +82,7 @@ test("a note's chat offers the connector tools, with the note's attendees", asyn
   assert.deepEqual(options.noteAttendees, JSON.parse(PARTICIPANTS));
 });
 
-test("a team note someone else recorded passes its recorder as an attendee, never the viewer", async (t) => {
+test("a team note someone else recorded passes its recorder as an attendee, and main the viewer's address", async (t) => {
   const options = await streamingOptionsOf(t, "/hooks/useEmbeddedChat.ts", "useEmbeddedChat", {
     noteId: 7,
     folderId: null,
@@ -88,7 +98,10 @@ test("a team note someone else recorded passes its recorder as an attendee, neve
 
   assert.deepEqual(options.noteAttendees, [
     { email: "alice@example.com", displayName: "Alice", responseStatus: null, self: false },
+    { email: "chad@example.com", displayName: "Chad", responseStatus: null, self: false },
   ]);
+  // Main drops the viewer, as participant and as organizer alike.
+  assert.equal(options.noteSelfEmail, "chad@example.com");
 });
 
 test("a note whose participants are missing or malformed passes no attendees", async (t) => {
@@ -112,4 +125,18 @@ test("a folder or space chat never offers the connector tools", async (t) => {
 
   assert.notEqual(options.allowConnectors, true);
   assert.equal(options.noteAttendees, undefined);
+});
+
+test("leaving a note chat's conversation cancels its turn, so a waiting card can't hold the next send", async (t) => {
+  const { returned } = await renderSurface(t, "/hooks/useEmbeddedChat.ts", "useEmbeddedChat", {
+    noteId: 7,
+    folderId: null,
+    noteTitle: "Kickoff",
+    noteContent: "",
+  });
+
+  returned.startNewChat();
+  assert.equal(globalThis.__surfaceCancels, 1, "New chat cancels");
+  await returned.switchConversation(2);
+  assert.equal(globalThis.__surfaceCancels, 2, "switching conversations cancels");
 });

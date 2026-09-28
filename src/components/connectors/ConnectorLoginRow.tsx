@@ -55,6 +55,8 @@ export function ConnectorLoginRow({
   const status = useConnectorStatusStore((state) => state.statuses[connectorId]);
   const [phase, setPhase] = useState<RowPhase>("idle");
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  // Gmail's disconnect kept a Google grant the calendar shares.
+  const [grantKept, setGrantKept] = useState(false);
   const latestAttempt = useRef(0);
 
   // Loaded for every plan: a lapsed plan must still see, and remove, its login.
@@ -76,6 +78,7 @@ export function ConnectorLoginRow({
     const isLatest = (): boolean => attempt === latestAttempt.current;
     setPhase("connecting");
     setErrorCode(null);
+    setGrantKept(false);
     try {
       const result = await window.electronAPI?.connectorConnect?.(connectorId);
       if (!isLatest()) return;
@@ -93,9 +96,11 @@ export function ConnectorLoginRow({
   const disconnect = async (): Promise<void> => {
     setPhase("disconnecting");
     setErrorCode(null);
+    setGrantKept(false);
     try {
       const result = await window.electronAPI?.connectorDisconnect?.(connectorId);
       if (!result) setErrorCode("disconnect_failed");
+      else if (result.status === "disconnected") setGrantKept(result.grantKept === true);
       else if (result.status === "failed") setErrorCode(result.errorCode);
       else if (result.status === "unavailable") setErrorCode(result.reason);
     } catch {
@@ -112,10 +117,13 @@ export function ConnectorLoginRow({
 
   const copy = (key: string, values?: Record<string, string>): string =>
     t(`connectors.${connectorId}.${key}`, values);
+  // A Reconnect opens the same browser sign-in as Connect, and its hint
+  // (Gmail: an admin block never redirects back) matters there too. A
+  // working login shows as connected as soon as main's broadcast lands.
   let summary = copy("description");
-  if (needsReconnect) summary = copy("needsReconnect");
+  if (phase === "connecting" && (!connected || needsReconnect)) summary = copy("connecting");
+  else if (needsReconnect) summary = copy("needsReconnect");
   else if (connected && status) summary = copy("connectedAs", accountSummary(status));
-  else if (phase === "connecting") summary = copy("connecting");
   else if (!isPaid) summary = copy("proRequired");
 
   return (
@@ -129,6 +137,11 @@ export function ConnectorLoginRow({
           <p className="text-xs text-muted-foreground/70 mt-0.5 leading-relaxed" dir="auto">
             {summary}
           </p>
+          {grantKept && (
+            <p role="status" className="text-xs text-muted-foreground mt-1" dir="auto">
+              {copy("grantKept")}
+            </p>
+          )}
           {errorCode && (
             <p role="alert" className="text-xs text-destructive mt-1">
               {copy(`errors.${ROW_ERRORS.has(errorCode) ? errorCode : "connect_failed"}`)}

@@ -128,9 +128,10 @@ function createGmailAuth({
   runOAuthLoopbackFlow,
   OAuthFlowError,
   renderResultPage = null,
-  // (email) => true when revoking that Google login would also end a
-  // connected calendar's grant (sharesCalendarGrant). Gmail then drops only
-  // its own tokens, the way disconnecting the calendar never revokes.
+  // (email, clientId) => true when revoking that Google login, issued to
+  // that OAuth client, would also end a connected calendar's grant
+  // (sharesCalendarGrant). Gmail then drops only its own tokens, the way
+  // disconnecting the calendar never revokes.
   sharesGrant = () => false,
   // Optional: told about failures worth a log line via
   // logger.warn(message, { errorName, errorCode }, area). Never a token, an
@@ -151,9 +152,9 @@ function createGmailAuth({
 
   // A check that can't run (the calendar database unreadable) keeps the
   // calendar safe: the grant is treated as shared.
-  function grantIsShared(email) {
+  function grantIsShared(email, clientId) {
     try {
-      return sharesGrant(email) === true;
+      return sharesGrant(email, clientId) === true;
     } catch {
       return true;
     }
@@ -161,21 +162,25 @@ function createGmailAuth({
 
   // Best effort: the local login goes whatever Google answers. Erasing the
   // device revokes even a shared grant, since the calendar goes with it.
-  async function revokeToken(token, email, { erasingDevice = false } = {}) {
-    if (!nonEmptyString(token)) return;
-    if (!erasingDevice && grantIsShared(email)) {
+  // `clientId` is the client the login was issued to (a login saved before
+  // it was recorded counts as the current one). Returns { kept: true } when
+  // a shared grant was left in place.
+  async function revokeToken(token, email, { erasingDevice = false, clientId = null } = {}) {
+    if (!nonEmptyString(token)) return null;
+    if (!erasingDevice && grantIsShared(email, clientId ?? oauthClient()?.clientId ?? null)) {
       logger?.info?.(
         "gmail revoke skipped: grant shared with a connected calendar",
         {},
         "connectors"
       );
-      return;
+      return { kept: true };
     }
     try {
       await api.revokeToken(token);
     } catch (error) {
       logger?.warn("gmail revoke failed", describeError(error), "connectors");
     }
+    return null;
   }
 
   // `signal` gives the sign-in up when a newer Connect replaces it.
@@ -243,6 +248,7 @@ function createGmailAuth({
         return {
           email: claims.email,
           sub: claims.sub,
+          clientId: client.clientId,
           refreshToken: tokens.refreshToken,
           accessToken: tokens.accessToken,
           expiresAt: tokens.expiresAt,
@@ -282,8 +288,20 @@ function createGmailAuth({
     return tokens ? { ok: true, tokens } : { ok: false, errorCode: "bad_response" };
   }
 
+  // A refresh token only works with the client it was issued to. A build
+  // that moved Gmail to another client (a GMAIL_* pair added or changed)
+  // needs a new sign-in, not an "unavailable" that never clears.
+  function issuedToAnotherClient(credential) {
+    const current = oauthClient()?.clientId;
+    return (
+      nonEmptyString(credential.clientId) && Boolean(current) && credential.clientId !== current
+    );
+  }
+
   async function refresh(binding, credential) {
-    if (!credential.refreshToken) return login.markReconnect(binding);
+    if (!credential.refreshToken || issuedToAnotherClient(credential)) {
+      return login.markReconnect(binding);
+    }
     let result = await requestRefresh(credential.refreshToken);
     // Network errors, 5xx, temporarily_unavailable and unreadable answers
     // may pass. Google refresh tokens aren't single-use, so asking again is
@@ -343,10 +361,10 @@ function createGmailAuth({
   // An expired access token can't be revoked (400 invalid_token), so it is
   // only the fallback.
   async function revoke(credential, options) {
-    await revokeToken(
+    return revokeToken(
       nonEmptyString(credential?.refreshToken) ? credential.refreshToken : credential?.accessToken,
       credential?.email,
-      options
+      { ...options, clientId: credential?.clientId ?? null }
     );
   }
 

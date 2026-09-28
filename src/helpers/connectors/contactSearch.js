@@ -48,11 +48,18 @@ function isPersonAddress(email) {
   return typeof email === "string" && email.includes("@") && !NON_PERSON_ADDRESS.test(email);
 }
 
-// A display name is one line for the model's attendee list, and never holds
-// angle brackets, so it can't pass itself off as another "Name <address>".
+// A display name is one line of plain text for the model's attendee list.
+// Invisible format characters (bidi overrides, zero-width joiners) go, and
+// so do angle brackets, their look-alikes and anything shaped like an
+// address, so a name can't pass itself off as another "Name <address>".
+const NAME_BREAKERS = /[\p{Cc}\s<>＜＞‹›«»〈〉《》⟨⟩]+/gu;
 function attendeeName(value) {
   if (typeof value !== "string") return null;
-  const name = value.replace(/[\p{Cc}\s<>]+/gu, " ").trim();
+  const name = value
+    .replace(/\p{Cf}/gu, "")
+    .replace(/\S*@\S*/g, " ")
+    .replace(NAME_BREAKERS, " ")
+    .trim();
   return name || null;
 }
 
@@ -81,6 +88,35 @@ function personAttendees(sources, attendees, { organizerEmail = null } = {}) {
     people.push({ name: attendeeName(attendee.displayName), email });
   }
   return people;
+}
+
+/**
+ * The note chat's attendee lookup (connector-note-attendees). Besides the
+ * stored exclusions, the user's OpenWhispr address and their Gmail login's
+ * address are theirs too, even when neither is one of their calendar
+ * accounts; both apply to the organizer as much as to the participants.
+ */
+function createNoteAttendeesLookup({
+  getContactLookupSources,
+  getCalendarEventById,
+  getGmailAddress,
+}) {
+  return async (participants, calendarEventId, selfEmail) => {
+    const sources = getContactLookupSources();
+    const gmailAddress = await getGmailAddress();
+    const calendarEvent = calendarEventId ? getCalendarEventById(calendarEventId) : null;
+    return personAttendees(
+      {
+        ...sources,
+        excludedEmails: [
+          ...(sources.excludedEmails ?? []),
+          ...[selfEmail, gmailAddress].filter(Boolean),
+        ],
+      },
+      participants,
+      { organizerEmail: calendarEvent?.organizer_email ?? null }
+    );
+  };
 }
 
 function collectPeople({ meetings = [], contacts = [], excludedEmails = [] }, now) {
@@ -172,4 +208,4 @@ function searchContacts(sources, query, { limit = 5, now = Date.now() } = {}) {
   };
 }
 
-module.exports = { searchContacts, excludedAddresses, personAttendees };
+module.exports = { searchContacts, excludedAddresses, personAttendees, createNoteAttendeesLookup };

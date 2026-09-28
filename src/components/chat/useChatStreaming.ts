@@ -58,18 +58,20 @@ function estimateModelSizeB(modelId: string): number {
 }
 
 // Main adds the meeting's organizer (calendars often leave them out of the
-// attendees) and drops the user and rooms with find_contact's rules; a
-// failed lookup just leaves the block out.
+// attendees), then drops the user (their OpenWhispr address included) and
+// rooms with find_contact's rules; a failed lookup just leaves the block out.
 async function buildNoteAttendeesContext(
   participants: CalendarAttendee[] | undefined,
-  calendarEventId: string | null | undefined
+  calendarEventId: string | null | undefined,
+  selfEmail: string | null | undefined
 ): Promise<string> {
   if (!window.electronAPI?.connectorNoteAttendees) return "";
   if (!participants?.length && !calendarEventId) return "";
   try {
     const result = await window.electronAPI.connectorNoteAttendees(
       participants ?? [],
-      calendarEventId ?? null
+      calendarEventId ?? null,
+      selfEmail ?? null
     );
     return noteAttendeesContext(result?.attendees ?? []);
   } catch {
@@ -132,6 +134,8 @@ interface UseChatStreamingOptions {
   noteAttendees?: CalendarAttendee[];
   /** The meeting note's calendar event, whose organizer is an attendee too. */
   noteCalendarEventId?: string | null;
+  /** The signed-in user's OpenWhispr address, never listed as an attendee. */
+  noteSelfEmail?: string | null;
   onStreamComplete?: (assistantId: string, content: string, toolCalls?: ToolCallInfo[]) => void;
   /** Fires exactly once when displayable assistant content or tool activity becomes available. */
   onResponseContent?: () => void;
@@ -191,6 +195,7 @@ export function useChatStreaming({
   allowConnectors = false,
   noteAttendees,
   noteCalendarEventId,
+  noteSelfEmail,
   onStreamComplete,
   onResponseContent,
 }: UseChatStreamingOptions): ChatStreaming {
@@ -208,6 +213,8 @@ export function useChatStreaming({
   noteAttendeesRef.current = noteAttendees;
   const noteCalendarEventIdRef = useRef(noteCalendarEventId);
   noteCalendarEventIdRef.current = noteCalendarEventId;
+  const noteSelfEmailRef = useRef(noteSelfEmail);
+  noteSelfEmailRef.current = noteSelfEmail;
   const toolRegistryRef = useRef<{ key: string; registry: ToolRegistry } | null>(null);
   const toolActivityStartedAtRef = useRef<number | null>(null);
   const toolActivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -434,7 +441,11 @@ export function useChatStreaming({
         const [ragContext, attendeesContext] = await Promise.all([
           buildRAGContext(userText, scope),
           connectorsOffered
-            ? buildNoteAttendeesContext(noteAttendeesRef.current, noteCalendarEventIdRef.current)
+            ? buildNoteAttendeesContext(
+                noteAttendeesRef.current,
+                noteCalendarEventIdRef.current,
+                noteSelfEmailRef.current
+              )
             : "",
         ]);
         if (cancelled() || !mountedRef.current) return;

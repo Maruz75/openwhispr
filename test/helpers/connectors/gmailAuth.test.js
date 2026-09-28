@@ -139,6 +139,8 @@ test("authorize asks only for gmail.send, exchanges with the PKCE verifier, and 
   assert.deepEqual(credential, {
     email: "you@example.test",
     sub: "sub-1",
+    // The client the refresh token belongs to (see the client-change test).
+    clientId: CLIENT.clientId,
     refreshToken: "refresh-1",
     accessToken: "access-1",
     expiresAt: NOW + 3599 * 1000,
@@ -541,7 +543,7 @@ test("a reconnect during a refresh wins: connection_changed, and nothing is writ
   for (const [index, reply] of replies.entries()) {
     const credentials = memoryCredentials(EXPIRED, { connectorId: "gmail" });
     let replaced = false;
-    const { auth, slot } = await setup({
+    const { auth, google, slot } = await setup({
       credentials,
       script: {
         [TOKEN]: [
@@ -559,6 +561,7 @@ test("a reconnect during a refresh wins: connection_changed, and nothing is writ
     });
 
     assert.deepEqual(await auth.getAccessToken(BINDING), CONNECTION_CHANGED, `case ${index}`);
+    assert.equal(hits(google, TOKEN).length, 1, `case ${index}: no retry for the old login`);
     assert.deepEqual(slot(), OTHER_LOGIN, `case ${index}`);
     assert.equal(credentials.saves.length, 0, `case ${index}`);
   }
@@ -713,17 +716,18 @@ test("a Gmail grant shares the calendar's only in the same Cloud project, for a 
 
 test("Disconnect keeps a shared grant alive: no revoke, unless the device is being erased", async () => {
   const asked = [];
-  const sharesGrant = (email) => {
-    asked.push(email);
+  const sharesGrant = (email, clientId) => {
+    asked.push([email, clientId]);
     return true;
   };
   const shared = await setup({ script: { [REVOKE]: [REVOKED_OK] }, sharesGrant });
-  await shared.auth.revoke(CONNECTED);
+  assert.deepEqual(await shared.auth.revoke(CONNECTED), { kept: true }, "Settings says so");
   assert.deepEqual(hits(shared.google, REVOKE), [], "the calendar's grant stays");
-  assert.deepEqual(asked, ["you@example.test"], "checked for the login's own address");
+  // A login saved before its client was recorded counts as the current one.
+  assert.deepEqual(asked, [["you@example.test", CLIENT.clientId]], "checked for the login");
 
   const erasing = await setup({ script: { [REVOKE]: [REVOKED_OK] }, sharesGrant });
-  await erasing.auth.revoke(CONNECTED, { erasingDevice: true });
+  assert.equal(await erasing.auth.revoke(CONNECTED, { erasingDevice: true }), null);
   assert.deepEqual(
     hits(erasing.google, REVOKE).map((call) => call.form),
     [{ token: "refresh-1" }]
@@ -737,6 +741,67 @@ test("Disconnect keeps a shared grant alive: no revoke, unless the device is bei
   });
   await assert.doesNotReject(unreadable.auth.revoke(CONNECTED));
   assert.deepEqual(hits(unreadable.google, REVOKE), [], "a check that can't run keeps the grant");
+});
+
+test("the shared-grant check asks about the client the login was issued to", async () => {
+  const asked = [];
+  const { auth, google } = await setup({
+    script: { [REVOKE]: [REVOKED_OK] },
+    sharesGrant: (email, clientId) => {
+      asked.push(clientId);
+      return false;
+    },
+  });
+  // Issued under the calendar's client; this build now has its own Gmail pair.
+  await auth.revoke({ ...CONNECTED, clientId: "123456789012-calendar.apps.googleusercontent.com" });
+  assert.deepEqual(asked, ["123456789012-calendar.apps.googleusercontent.com"]);
+  assert.equal(hits(google, REVOKE).length, 1);
+});
+
+test("a login issued to another OAuth client needs a reconnect, without calling Google", async () => {
+  const { auth, google, slot } = await setup({
+    credential: { ...EXPIRED, clientId: "999999999999-old.apps.googleusercontent.com" },
+  });
+  assert.deepEqual(await auth.getAccessToken(BINDING), RECONNECT_NEEDED);
+  assert.deepEqual(google.calls, []);
+  assert.equal(slot().needsReconnect, true);
+
+  // The same client refreshes as usual.
+  const same = await setup({
+    credential: { ...EXPIRED, clientId: CLIENT.clientId },
+    script: { [TOKEN]: [REFRESHED] },
+  });
+  assert.equal((await same.auth.getAccessToken(BINDING)).token, "access-2");
+});
+
+test("two OpenWhispr accounts' logins never share a refresh, even at the same generation", async () => {
+  const credentials = memoryCredentials(EXPIRED, { connectorId: "gmail" });
+  credentials.replace(
+    "acct-2",
+    "gmail",
+    { ...EXPIRED, sub: "sub-2", refreshToken: "refresh-2" },
+    0
+  );
+  const { auth, google } = await setup({
+    credentials,
+    script: {
+      [TOKEN]: [
+        REFRESHED,
+        { body: { access_token: "access-3", expires_in: 3599, scope: GRANTED } },
+      ],
+    },
+  });
+
+  const [first, second] = await Promise.all([
+    auth.getAccessToken(BINDING),
+    auth.getAccessToken({ ownerAccountId: "acct-2", accountId: "sub-2", generation: 1 }),
+  ]);
+  assert.deepEqual(
+    hits(google, TOKEN).map((call) => call.form.refresh_token),
+    ["refresh-1", "refresh-2"]
+  );
+  assert.equal(first.token, "access-2");
+  assert.equal(second.token, "access-3", "never the other account's token");
 });
 
 test("a refused grant shared with a connected calendar is not revoked, and still fails", async () => {

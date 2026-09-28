@@ -3976,6 +3976,7 @@
       "connecting": "请在浏览器中完成连接… 如果 Google 显示访问已被阻止，需要您所在组织的 Google 管理员允许 OpenWhispr。",
       "connectedAs": "已以 {{account}} 身份连接",
       "needsReconnect": "需要重新连接 Gmail。",
+      "grantKept": "已断开连接。Google 日历使用相同的 Google 权限，因此在您也断开 Google 日历之前，OpenWhispr 仍会显示在您的 Google 帐号中。",
       "proRequired": "升级到付费计划，让助手通过 Gmail 为您发送邮件。",
       "errors": {
         "connect_failed": "无法连接 Gmail，请重试。",

@@ -4145,6 +4145,7 @@
       "connecting": "Schließe die Verbindung in deinem Browser ab… Wenn Google den Zugriff als blockiert meldet, muss der Google-Administrator deiner Organisation OpenWhispr zulassen.",
       "connectedAs": "Verbunden als {{account}}",
       "needsReconnect": "Gmail muss erneut verbunden werden.",
+      "grantKept": "Getrennt. Google Kalender nutzt dieselbe Google-Berechtigung, daher bleibt OpenWhispr in deinem Google-Konto aufgeführt, bis du auch Google Kalender trennst.",
       "proRequired": "Upgrade auf einen kostenpflichtigen Plan, damit der Assistent E-Mails über Gmail für dich sendet.",
       "errors": {
         "connect_failed": "Gmail konnte nicht verbunden werden. Versuche es erneut.",

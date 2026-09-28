@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { ToolExecutionContext } from "../services/tools/ToolRegistry";
 import type {
+  ApprovalEdits,
   ApprovalOutcome,
   ConnectorCommitResult,
   ConnectorEdits,
@@ -266,10 +267,14 @@ export async function approveAction(key: string): Promise<void> {
     return;
   }
 
-  const final =
-    fields && fieldsDiffer(fields, entry.preview.fields ?? {}) ? copyFields(fields) : undefined;
-  const finalText =
-    !fields && entry.draft.body !== entry.preview.body ? entry.draft.body : undefined;
+  // Reported whatever the outcome, so after a failure the model proposes the
+  // email the user settled on rather than its own draft.
+  const userEdits: ApprovalEdits =
+    fields && fieldsDiffer(fields, entry.preview.fields ?? {})
+      ? { final: copyFields(fields) }
+      : !fields && entry.draft.body !== entry.preview.body
+        ? { finalText: entry.draft.body }
+        : {};
   const destination =
     (result.state === "sent" || result.state === "unknown") &&
     typeof result.destinationLabel === "string" &&
@@ -283,8 +288,7 @@ export async function approveAction(key: string): Promise<void> {
         {
           state: "sent",
           url: result.url,
-          ...(finalText !== undefined ? { finalText } : {}),
-          ...(final !== undefined ? { final } : {}),
+          ...userEdits,
           ...destination,
         },
         "sent",
@@ -294,7 +298,7 @@ export async function approveAction(key: string): Promise<void> {
     case "failed":
       settle(
         key,
-        { state: "failed", errorCode: result.errorCode, message: result.message },
+        { state: "failed", errorCode: result.errorCode, message: result.message, ...userEdits },
         "failed",
         { message: result.message, errorCode: result.errorCode }
       );
@@ -305,6 +309,7 @@ export async function approveAction(key: string): Promise<void> {
         {
           state: "unknown",
           ...(result.checkUrl !== undefined ? { checkUrl: result.checkUrl } : {}),
+          ...userEdits,
           ...destination,
         },
         "unknown",

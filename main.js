@@ -540,9 +540,9 @@ function initializeCoreManagers() {
     credentials: connectorCredentials,
     getClientCredentials: () => gmailClientCredentials(process.env),
     // Revoking Gmail must not disconnect that account's Google Calendar.
-    sharesGrant: (email) =>
+    sharesGrant: (email, clientId) =>
       sharesCalendarGrant({
-        gmailClientId: gmailClientCredentials(process.env).clientId,
+        gmailClientId: clientId,
         calendarClientId: process.env.GOOGLE_CALENDAR_CLIENT_ID,
         calendarEmails: (googleCalendarManager?.getAccounts() ?? []).map(
           (account) => account.email

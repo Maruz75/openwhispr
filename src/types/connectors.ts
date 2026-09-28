@@ -57,19 +57,23 @@ export type ConnectorDirectResult =
   | { state: "unavailable"; reason: string }
   | { state: "not_sent"; reason: string };
 
+/** What the user changed on a card before pressing Send. */
+export interface ApprovalEdits {
+  /** The edited text of a card without fields, when the user changed it. */
+  finalText?: string;
+  /** A fields card's fields as the user left them, when they changed any. */
+  final?: Record<string, string | string[]>;
+}
+
 export type ApprovalOutcome =
-  | {
+  | ({
       state: "sent";
       url?: string;
-      /** The edited text of a card without fields, when the user changed it. */
-      finalText?: string;
-      /** A fields card's fields as sent, when the user changed any. */
-      final?: Record<string, string | string[]>;
       /** Who it went to, when that differs from the prepared preview's label. */
       destinationLabel?: string;
-    }
-  | { state: "failed"; errorCode: string; message: string }
-  | { state: "unknown"; checkUrl?: string; destinationLabel?: string }
+    } & ApprovalEdits)
+  | ({ state: "failed"; errorCode: string; message: string } & ApprovalEdits)
+  | ({ state: "unknown"; checkUrl?: string; destinationLabel?: string } & ApprovalEdits)
   | { state: "cancelled" }
   | { state: "not_sent"; reason: string };
 
@@ -89,7 +93,8 @@ export type ConnectorConnectResult =
   | { status: "unavailable"; reason: string };
 
 export type ConnectorDisconnectResult =
-  | { status: "disconnected" }
+  /** grantKept: another login (Google Calendar) shares the provider's grant, so it wasn't revoked. */
+  | { status: "disconnected"; grantKept?: boolean }
   | { status: "failed"; errorCode: string }
   | { status: "unavailable"; reason: string };
 

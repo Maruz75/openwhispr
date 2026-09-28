@@ -78,12 +78,8 @@ export function useEmbeddedChat({
   );
 
   const noteAttendees = useMemo(
-    () =>
-      attendeesForUser(parseNoteParticipants(noteParticipants), {
-        ownNote: noteOwnedByUser,
-        selfEmail,
-      }),
-    [noteOwnedByUser, noteParticipants, selfEmail]
+    () => attendeesForUser(parseNoteParticipants(noteParticipants), noteOwnedByUser),
+    [noteOwnedByUser, noteParticipants]
   );
 
   // A meeting note's chat drafts follow-ups to its attendees, so it offers
@@ -95,6 +91,7 @@ export function useEmbeddedChat({
     allowConnectors: true,
     noteAttendees,
     noteCalendarEventId,
+    noteSelfEmail: selfEmail,
     onStreamComplete: (_id, content, toolCalls) => {
       persistence.saveAssistantMessage(content, toolCalls);
     },
@@ -142,18 +139,27 @@ export function useEmbeddedChat({
     };
   }, [noteId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // useChatStreaming returns a fresh object every render; cancelStream is
+  // stable. Leaving a conversation cancels its turn, as in ChatView: a card
+  // waiting for approval would otherwise hold the send lock and save its
+  // reply into whichever conversation is open when it settles.
+  const { cancelStream } = streaming;
+
   const switchConversation = useCallback(
     async (id: number) => {
+      if (id === conversationId) return;
+      cancelStream();
       await persistence.loadConversation(id);
       setConversationId(id);
     },
-    [persistence]
+    [cancelStream, conversationId, persistence]
   );
 
   const startNewChat = useCallback(() => {
+    cancelStream();
     persistence.handleNewChat();
     setConversationId(null);
-  }, [persistence]);
+  }, [cancelStream, persistence]);
 
   const createConversation = useCallback(
     async (text: string) => {

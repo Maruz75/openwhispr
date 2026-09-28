@@ -223,18 +223,25 @@ function registerConnectorIpc({
   if (noteAttendees) {
     // A note's attendees, minus the user and rooms, for the note chat's
     // context. They go to the model, so the org switch applies here too.
-    ipcMain.handle("connector-note-attendees", async (event, participants, calendarEventId) => {
-      if (!Array.isArray(participants)) return { attendees: [] };
-      const attendees = sanitizeNoteAttendees(participants);
-      const eventId =
-        isNonEmptyString(calendarEventId) && calendarEventId.length <= MAX_EVENT_ID_LENGTH
-          ? calendarEventId
-          : null;
-      if (attendees.length === 0 && !eventId) return { attendees: [] };
-      const refusal = policyRefusal(await getPolicyState(event));
-      if (refusal) return { attendees: [], unavailableReason: refusal };
-      return { attendees: await noteAttendees(attendees, eventId) };
-    });
+    ipcMain.handle(
+      "connector-note-attendees",
+      async (event, participants, calendarEventId, selfEmail) => {
+        if (!Array.isArray(participants)) return { attendees: [] };
+        const attendees = sanitizeNoteAttendees(participants);
+        const eventId =
+          isNonEmptyString(calendarEventId) && calendarEventId.length <= MAX_EVENT_ID_LENGTH
+            ? calendarEventId
+            : null;
+        if (attendees.length === 0 && !eventId) return { attendees: [] };
+        const refusal = policyRefusal(await getPolicyState(event));
+        if (refusal) return { attendees: [], unavailableReason: refusal };
+        const ownAddress =
+          isNonEmptyString(selfEmail) && selfEmail.length <= MAX_ATTENDEE_EMAIL_LENGTH
+            ? selfEmail.trim()
+            : null;
+        return { attendees: await noteAttendees(attendees, eventId, ownAddress) };
+      }
+    );
   }
 }
 
