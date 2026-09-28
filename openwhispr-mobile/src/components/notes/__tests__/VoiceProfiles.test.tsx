@@ -35,20 +35,21 @@ describe('VoiceProfileList', () => {
     jest.clearAllMocks();
   });
 
-  it('renders owner badge and opens the profile on row press', () => {
+  it('renders your badge and opens the profile on row press', () => {
     const onOpenProfile = jest.fn();
     const { getByText, getByTestId } = render(
       <VoiceProfileList profiles={[profile()]} {...baseListProps} onOpenProfile={onOpenProfile} />,
     );
 
-    expect(getByText('Owner')).toBeTruthy();
+    expect(getByText('You')).toBeTruthy();
+    expect(getByText(/Added /)).toBeTruthy();
 
     fireEvent.press(getByTestId('voice-profile-row-1'));
 
     expect(onOpenProfile).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
   });
 
-  it('offers owner enrollment in the empty state', () => {
+  it('offers to teach your voice in the empty state', () => {
     const onEnrollOwner = jest.fn();
     const { getByTestId, getByText } = render(
       <VoiceProfileList profiles={[]} {...baseListProps} onEnrollOwner={onEnrollOwner} />,
@@ -56,15 +57,14 @@ describe('VoiceProfileList', () => {
 
     expect(getByText('Label speakers automatically')).toBeTruthy();
     expect(getByText(/works with on-device transcription/i)).toBeTruthy();
-    // Worded like the Enroll Me row and prompt card.
-    expect(getByText('Enroll Me')).toBeTruthy();
+    expect(getByText('Teach Your Voice')).toBeTruthy();
     fireEvent.press(getByTestId('voice-profile-enroll-owner-empty'));
 
     expect(onEnrollOwner).toHaveBeenCalled();
   });
 
-  it('hides the owner enrollment action once an owner exists', () => {
-    const { queryByTestId, getByTestId } = render(
+  it("offers to add someone's voice and hides Teach Your Voice once you have one", () => {
+    const { queryByTestId, getByText } = render(
       <VoiceProfileList
         profiles={[profile(), profile({ id: 2, displayName: 'Alice', isOwner: 0 })]}
         {...baseListProps}
@@ -72,6 +72,6 @@ describe('VoiceProfileList', () => {
     );
 
     expect(queryByTestId('voice-profile-enroll-owner')).toBeNull();
-    expect(getByTestId('voice-profile-enroll-speaker')).toBeTruthy();
+    expect(getByText("Add Someone's Voice")).toBeTruthy();
   });
 });
