@@ -57,6 +57,7 @@ const renderRecorder = (overrides: Partial<Parameters<typeof VoiceEnrollmentReco
   const props = {
     isOwner: true,
     isModelReady: jest.fn(async () => true),
+    isModelDownloading: jest.fn(() => false),
     downloadModel: jest.fn(async () => undefined),
     onSubmit: jest.fn(async () => undefined),
     onDone: jest.fn(),
@@ -137,7 +138,7 @@ beforeEach(() => {
     stopRecording: jest.fn(),
     stopRecordingRaw,
     cancelRecording,
-    audioRecorder: {} as ReturnType<typeof useAudioRecording>['audioRecorder'],
+    audioRecorder: { isRecording: true } as ReturnType<typeof useAudioRecording>['audioRecorder'],
   });
 });
 afterEach(() => jest.useRealTimers());
@@ -162,7 +163,7 @@ describe('VoiceEnrollmentRecorder', () => {
     fireEvent.press(utils.getByTestId('voice-enrollment-download'));
     expect(utils.getByTestId('voice-enrollment-downloading')).toBeTruthy();
 
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -181,7 +182,7 @@ describe('VoiceEnrollmentRecorder', () => {
     await waitFor(() => expect(utils.getByTestId('voice-enrollment-download')).toBeTruthy());
     fireEvent.press(utils.getByTestId('voice-enrollment-download'));
 
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -203,7 +204,7 @@ describe('VoiceEnrollmentRecorder', () => {
     await waitFor(() => expect(utils.getByTestId('voice-enrollment-download')).toBeTruthy());
     fireEvent.press(utils.getByTestId('voice-enrollment-download'));
 
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -230,7 +231,7 @@ describe('VoiceEnrollmentRecorder', () => {
     const utils = renderRecorder({ isModelReady: jest.fn(async () => false), downloadModel });
     await waitFor(() => expect(utils.getByTestId('voice-enrollment-download')).toBeTruthy());
     fireEvent.press(utils.getByTestId('voice-enrollment-download'));
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -249,9 +250,9 @@ describe('VoiceEnrollmentRecorder', () => {
     await waitFor(() => expect(utils.props.onSubmit).toHaveBeenCalledTimes(1));
   });
 
-  it('keeps Done off until 11 seconds and stops by itself at 30', async () => {
+  it('keeps Done off until 15 seconds and stops by itself at 30', async () => {
     const utils = renderRecorder();
-    await recordFor(utils, 10);
+    await recordFor(utils, 14);
     expect(utils.getByTestId('voice-enrollment-stop').props.accessibilityState.disabled).toBe(true);
     expect(utils.getByText('Keep reading')).toBeTruthy();
 
@@ -264,7 +265,11 @@ describe('VoiceEnrollmentRecorder', () => {
     expect(utils.queryByText('Keep reading')).toBeNull();
 
     await act(async () => {
-      jest.advanceTimersByTime(19_000);
+      jest.advanceTimersByTime(14_000);
+    });
+    expect(stopRecordingRaw).not.toHaveBeenCalled();
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
     });
     await waitFor(() => expect(stopRecordingRaw).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(utils.props.onSubmit).toHaveBeenCalledTimes(1));
@@ -292,7 +297,7 @@ describe('VoiceEnrollmentRecorder', () => {
 
   it('submits one sample with the consent time and shows success', async () => {
     const utils = renderRecorder();
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -317,7 +322,7 @@ describe('VoiceEnrollmentRecorder', () => {
       throw new VoiceEnrollmentError(VOICE_ENROLLMENT_LOW_SNR, 'snr');
     });
     const utils = renderRecorder({ onSubmit });
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -339,7 +344,7 @@ describe('VoiceEnrollmentRecorder', () => {
         throw error;
       }),
     });
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -354,7 +359,7 @@ describe('VoiceEnrollmentRecorder', () => {
         throw new SpeakerProfileOwnerAlreadyExistsError();
       }),
     });
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -375,7 +380,7 @@ describe('VoiceEnrollmentRecorder', () => {
       )
       .mockResolvedValueOnce(undefined);
     const utils = renderRecorder({ onSubmit });
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -403,7 +408,7 @@ describe('VoiceEnrollmentRecorder', () => {
     const utils = renderRecorder({ isModelReady: jest.fn(async () => false), downloadModel });
     await waitFor(() => expect(utils.getByTestId('voice-enrollment-download')).toBeTruthy());
     fireEvent.press(utils.getByTestId('voice-enrollment-download'));
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -444,7 +449,7 @@ describe('VoiceEnrollmentRecorder', () => {
 
   it('keeps the profile name on a retrain', async () => {
     const utils = renderRecorder({ isOwner: false, profileId: 5, defaultDisplayName: 'Alice' });
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -471,6 +476,7 @@ describe('VoiceEnrollmentRecorder', () => {
     });
 
     expect(showMicPermissionAlert).toHaveBeenCalledTimes(1);
+    expect(utils.getByText(/check that OpenWhispr can use it in Settings/i)).toBeTruthy();
   });
 
   it('shows a failure and Try Again when the microphone cannot start', async () => {
@@ -482,15 +488,120 @@ describe('VoiceEnrollmentRecorder', () => {
     });
 
     expect(utils.getByTestId('voice-enrollment-error')).toBeTruthy();
-    expect(utils.getByText(/couldn't start the microphone/i)).toBeTruthy();
+    expect(utils.getByText("Couldn't start the microphone. Try again.")).toBeTruthy();
     expect(utils.getByTestId('voice-enrollment-try-again')).toBeTruthy();
     expect(showMicPermissionAlert).not.toHaveBeenCalled();
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+  });
+
+  it('says a call interrupted the read as soon as the recorder pauses', async () => {
+    const recorder = {
+      uri: 'file://partial.wav',
+      isRecording: true,
+      stop: jest.fn(async () => {}),
+    };
+    mockUseAudioRecording.mockReturnValue({
+      ...mockUseAudioRecording(),
+      audioRecorder: recorder as unknown as ReturnType<typeof useAudioRecording>['audioRecorder'],
+    });
+    const utils = renderRecorder();
+    await recordFor(utils, 5);
+
+    recorder.isRecording = false;
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(utils.getByText(/interrupted/i)).toBeTruthy();
+    expect(recorder.stop).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file://partial.wav', {
+        idempotent: true,
+      }),
+    );
+    expect(stopRecordingRaw).not.toHaveBeenCalled();
+    expect(utils.props.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('keeps the time you first started reading as the consent time across Try Again', async () => {
+    const now = jest
+      .fn()
+      .mockReturnValueOnce(new Date('2026-09-27T09:00:00.000Z'))
+      .mockReturnValue(new Date('2026-09-27T09:05:00.000Z'));
+    const onSubmit = jest
+      .fn()
+      .mockRejectedValueOnce(new VoiceEnrollmentError(VOICE_ENROLLMENT_LOW_SNR, 'snr'))
+      .mockResolvedValueOnce(undefined);
+    const utils = renderRecorder({ now, onSubmit });
+    await recordFor(utils, 15);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+    await waitFor(() => expect(utils.getByTestId('voice-enrollment-try-again')).toBeTruthy());
+    fireEvent.press(utils.getByTestId('voice-enrollment-try-again'));
+    await recordFor(utils, 15);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    expect(onSubmit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ consentAcceptedAt: '2026-09-27T09:00:00.000Z' }),
+    );
+  });
+
+  it('joins a download already running instead of asking again', async () => {
+    const downloadModel = jest.fn(() => new Promise<void>(() => {}));
+    const isModelReady = jest.fn(async () => false);
+    const utils = renderRecorder({
+      isModelReady,
+      isModelDownloading: jest.fn(() => true),
+      downloadModel,
+    });
+
+    await waitFor(() => expect(utils.getByTestId('voice-enrollment-record')).toBeTruthy());
+    expect(utils.queryByText('Download the speaker model')).toBeNull();
+    expect(utils.getByTestId('voice-enrollment-downloading')).toBeTruthy();
+    expect(downloadModel).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops the download wait when you leave', async () => {
+    const downloadModel = jest.fn(() => new Promise<void>(() => {}));
+    const utils = renderRecorder({ isModelReady: jest.fn(async () => false), downloadModel });
+    await waitFor(() => expect(utils.getByTestId('voice-enrollment-download')).toBeTruthy());
+    fireEvent.press(utils.getByTestId('voice-enrollment-download'));
+    await recordFor(utils, 15);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+    expect(utils.getByTestId('voice-enrollment-checking')).toBeTruthy();
+
+    const timersWhileWaiting = jest.getTimerCount();
+    utils.unmount();
+    await act(async () => undefined);
+
+    expect(FileSystem.deleteAsync).toHaveBeenCalledTimes(1);
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file://sample.wav', { idempotent: true });
+    // The 3-minute wait timer goes with the screen (unmounting schedules one of its own).
+    expect(jest.getTimerCount()).toBeLessThanOrEqual(timersWhileWaiting);
+  });
+
+  it("labels a retrained profile of yours by the profile's name", async () => {
+    const utils = renderRecorder({ profileId: 3, defaultDisplayName: 'Chad' });
+    await recordFor(utils, 15);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+
+    await waitFor(() =>
+      expect(utils.getByText('Future on-device meetings will label you as Chad.')).toBeTruthy(),
+    );
   });
 
   it('cancels the recording and deletes it when you leave mid-read', async () => {
     mockUseAudioRecording.mockReturnValue({
       ...mockUseAudioRecording(),
-      audioRecorder: { uri: 'file://partial.wav' } as ReturnType<
+      audioRecorder: { uri: 'file://partial.wav', isRecording: true } as ReturnType<
         typeof useAudioRecording
       >['audioRecorder'],
     });
@@ -509,7 +620,7 @@ describe('VoiceEnrollmentRecorder', () => {
       () => new Promise<string>((resolve) => (finishStop = resolve)),
     );
     const utils = renderRecorder();
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -536,7 +647,7 @@ describe('VoiceEnrollmentRecorder', () => {
     let finishStop: () => void = () => {};
     mockReleasingRecorder(() => new Promise<void>((resolve) => (finishStop = resolve)));
     const utils = renderRecorder();
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -553,7 +664,7 @@ describe('VoiceEnrollmentRecorder', () => {
     mockReleasingRecorder();
     const onSubmit = jest.fn(() => new Promise<void>((resolve) => (finishSubmit = resolve)));
     const utils = renderRecorder({ onSubmit });
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
@@ -574,7 +685,7 @@ describe('VoiceEnrollmentRecorder', () => {
       async () => {
         throw new Error('stop failed');
       },
-      /something went wrong/i,
+      /couldn't finish the recording/i,
     ],
   ])(
     'deletes the sample and shows a failure when stopping %s',
@@ -582,12 +693,12 @@ describe('VoiceEnrollmentRecorder', () => {
       stopRecordingRaw.mockImplementationOnce(stopResult);
       mockUseAudioRecording.mockReturnValue({
         ...mockUseAudioRecording(),
-        audioRecorder: { uri: 'file://partial.wav' } as ReturnType<
+        audioRecorder: { uri: 'file://partial.wav', isRecording: true } as ReturnType<
           typeof useAudioRecording
         >['audioRecorder'],
       });
       const utils = renderRecorder();
-      await recordFor(utils, 12);
+      await recordFor(utils, 15);
       await act(async () => {
         fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
       });
@@ -627,7 +738,7 @@ describe('VoiceEnrollmentRecorder', () => {
     );
 
     fireEvent.changeText(utils.getByTestId('voice-enrollment-name'), 'Alice');
-    await recordFor(utils, 12);
+    await recordFor(utils, 15);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });

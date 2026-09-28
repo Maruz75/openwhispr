@@ -128,6 +128,11 @@ describe('voiceSetupCandidates', () => {
     expect(candidates({ segments: short })).toEqual([]);
   });
 
+  it('includes a speaker with exactly 10 s of speech', () => {
+    const enough = [segment({ speakerLabel: 'speaker_0', startMs: 0, endMs: 10_000 })];
+    expect(candidates({ segments: enough }).map((candidate) => candidate.speakerId)).toEqual([10]);
+  });
+
   it('leaves out speakers without a sample from this meeting', () => {
     expect(candidates({ embeddingsByLabel: { speaker_1: [] } })).toEqual([]);
     expect(candidates({ embeddingsByLabel: undefined })).toEqual([]);

@@ -987,7 +987,37 @@ describe('voice profile enrollment', () => {
 
     expect(downloadModel).toHaveBeenCalledTimes(1);
     await expect(useNotesStore.getState().isDiarizerModelReady()).resolves.toBe(true);
-    mockGetDiarizer.mockReset();
+  });
+
+  it('waits for a speaker-model download already running before diarizing a meeting', async () => {
+    let finish: () => void = () => {};
+    const diarize = jest.fn(async (_wavUri: string, _count?: number) => ({
+      segments: [],
+      embeddings: {},
+    }));
+    mockGetDiarizer.mockReturnValue({
+      diarize,
+      isModelDownloaded: jest.fn(async () => false),
+      downloadModel: jest.fn(() => new Promise<void>((resolve) => (finish = resolve))),
+    });
+    mockProcessMeeting.mockImplementation(
+      async (_input: unknown, deps: { diarizer: { diarize: typeof diarize } }) => {
+        await deps.diarizer.diarize('file://meeting.wav', 2);
+        return { speakerEmbeddingsByLabel: {} };
+      },
+    );
+
+    const download = useNotesStore.getState().downloadDiarizerModel();
+    expect(useNotesStore.getState().isDiarizerModelDownloading()).toBe(true);
+    const pipeline = useNotesStore.getState().runMeetingPipeline(7, 'file://meeting.wav', 2);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(diarize).not.toHaveBeenCalled();
+
+    finish();
+    await download;
+    await pipeline;
+    expect(diarize).toHaveBeenCalledWith('file://meeting.wav', 2);
+    expect(useNotesStore.getState().isDiarizerModelDownloading()).toBe(false);
   });
 
   it('deletes the diarizer model through the explicit delete action', async () => {

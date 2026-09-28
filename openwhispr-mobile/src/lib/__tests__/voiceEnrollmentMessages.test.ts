@@ -8,6 +8,7 @@ import {
   VOICE_ENROLLMENT_PROFILE_NOT_FOUND,
   VOICE_ENROLLMENT_SHORT_SPEECH,
   VoiceEnrollmentError,
+  type EnrollmentQualityFailureCode,
 } from '@/services/diarization/VoiceprintService';
 import {
   VOICE_ENROLLMENT_UNEXPLAINED_FAILURE,
@@ -52,13 +53,7 @@ describe('voiceEnrollmentFailureMessage', () => {
   });
 
   describe('when the recording was quiet', () => {
-    const levelFailure = (
-      code:
-        | typeof VOICE_ENROLLMENT_LOW_SPEECH_RATIO
-        | typeof VOICE_ENROLLMENT_SHORT_SPEECH
-        | typeof VOICE_ENROLLMENT_NO_MEANINGFUL_SPEAKER,
-      peakDb: number,
-    ) =>
+    const levelFailure = (code: EnrollmentQualityFailureCode, peakDb: number) =>
       voiceEnrollmentFailureMessage(
         new VoiceEnrollmentError(code, 'raw service text', {
           ok: false,
@@ -94,6 +89,25 @@ describe('voiceEnrollmentFailureMessage', () => {
       );
       expect(levelFailure(VOICE_ENROLLMENT_SHORT_SPEECH, -9.4)).toBe(
         "We didn't hear enough. Read the whole script.",
+      );
+      expect(levelFailure(VOICE_ENROLLMENT_NO_MEANINGFUL_SPEAKER, -9.4)).toBe(
+        "We couldn't pick out your voice. Read the whole script with your phone close by.",
+      );
+    });
+
+    it('draws the line at a loudest moment of -18 dB', () => {
+      expect(levelFailure(VOICE_ENROLLMENT_LOW_SPEECH_RATIO, -18)).toBe(
+        'Lots of pauses. Read at your normal pace.',
+      );
+      expect(levelFailure(VOICE_ENROLLMENT_LOW_SPEECH_RATIO, -18.1)).toBe(quiet);
+    });
+
+    it("keeps the noise and second-voice messages, which a quiet voice doesn't explain", () => {
+      expect(levelFailure(VOICE_ENROLLMENT_LOW_SNR, -30)).toBe(
+        'Too much background noise. Try somewhere quieter.',
+      );
+      expect(levelFailure(VOICE_ENROLLMENT_MULTIPLE_SPEAKERS, -30)).toBe(
+        'We heard more than one voice. Try again on your own.',
       );
     });
   });

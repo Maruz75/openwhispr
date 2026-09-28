@@ -5,6 +5,7 @@ import { notesRepository, spacesRepository } from '@/data';
 import type { Note, Folder, NoteUpdate, Space } from '@/data';
 import type { ConflictedNote, Segment, Speaker, SpeakerProfile } from '@/data/types';
 import type { CalendarParticipant } from '@/data/calendarTypes';
+import type { Diarizer } from '@/lib/diarization/diarizer';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import { useConfigStore } from '@/store/useConfigStore';
@@ -136,6 +137,16 @@ const identifyMeetingSpeakers = (
 };
 
 let diarizerModelDownload: Promise<void> | null = null;
+
+// Diarizing with the model missing downloads it natively, into the folder a download
+// already running is writing, so it waits for that download first.
+const diarizerAfterModelDownload = (diarizer: Diarizer): Diarizer => ({
+  ...diarizer,
+  diarize: async (wavUri, numberOfSpeakers) => {
+    await diarizerModelDownload?.catch(() => undefined);
+    return diarizer.diarize(wavUri, numberOfSpeakers);
+  },
+});
 
 const DEFAULT_FOLDER_ID = 1;
 const MEETINGS_FOLDER_NAME = 'meetings';
@@ -417,6 +428,7 @@ interface NotesStore {
   isDiarizerModelReady: () => Promise<boolean>;
   isLocalAsrModelReady: () => Promise<boolean>;
   downloadDiarizerModel: () => Promise<void>;
+  isDiarizerModelDownloading: () => boolean;
   deleteDiarizerModel: () => Promise<void>;
   getNoteSegments: (noteId: number) => Segment[];
   getNoteSpeakers: (noteId: number) => Speaker[];
@@ -735,7 +747,7 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
               language: opts.language,
               wordTimestamps: opts.wordTimestamps,
             }),
-          diarizer: getDiarizer(),
+          diarizer: diarizerAfterModelDownload(getDiarizer()),
           repo: notesRepository,
         },
       );
@@ -808,6 +820,7 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
       });
     return diarizerModelDownload;
   },
+  isDiarizerModelDownloading: () => diarizerModelDownload !== null,
 
   deleteDiarizerModel: async () => {
     await loadDiarizer().deleteModel();

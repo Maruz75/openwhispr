@@ -40,6 +40,7 @@ export default function VoiceEnrollmentScreen() {
   const relabelMeetingSpeakers = useNotesStore((state) => state.relabelMeetingSpeakers);
   const isDiarizerModelReady = useNotesStore((state) => state.isDiarizerModelReady);
   const downloadDiarizerModel = useNotesStore((state) => state.downloadDiarizerModel);
+  const isDiarizerModelDownloading = useNotesStore((state) => state.isDiarizerModelDownloading);
 
   useEffect(() => {
     loadVoiceProfiles();
@@ -130,8 +131,9 @@ export default function VoiceEnrollmentScreen() {
         <VoiceEnrollmentRecorder
           isOwner={isOwner}
           profileId={existingProfile?.id}
-          defaultDisplayName={existingProfile?.displayName ?? (isOwner ? 'Me' : '')}
+          defaultDisplayName={existingProfile?.displayName}
           isModelReady={isDiarizerModelReady}
+          isModelDownloading={isDiarizerModelDownloading}
           downloadModel={downloadDiarizerModel}
           onSubmit={handleSubmit}
           onDone={leave}

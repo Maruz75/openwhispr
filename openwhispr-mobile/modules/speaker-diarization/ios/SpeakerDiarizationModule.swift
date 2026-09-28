@@ -25,14 +25,8 @@ public class SpeakerDiarizationModule: Module {
 
     AsyncFunction("downloadModel") { (promise: Promise) in
       Task {
-        let marker = Self.downloadInProgressMarker()
-        // Stays behind if the app dies mid-download, so a half-written model never reads as ready.
-        try? FileManager.default.createDirectory(
-          at: marker.deletingLastPathComponent(), withIntermediateDirectories: true)
-        FileManager.default.createFile(atPath: marker.path, contents: nil)
         do {
-          _ = try await OfflineDiarizerModels.load() // downloads the offline-variant models if missing
-          try? FileManager.default.removeItem(at: marker)
+          _ = try await Self.loadModels()
           promise.resolve(nil)
         } catch {
           promise.reject("MODEL_DOWNLOAD_ERROR", error.localizedDescription)
@@ -77,9 +71,7 @@ public class SpeakerDiarizationModule: Module {
           }
 
           let manager = OfflineDiarizerManager(config: config)
-          let models = try await OfflineDiarizerModels.load()
-          // A successful load also finishes a download that was cut off.
-          try? FileManager.default.removeItem(at: Self.downloadInProgressMarker())
+          let models = try await Self.loadModels()
           manager.initialize(models: models)
 
           // Stream from the file (memory-mapped, chunked) rather than reading the whole recording
@@ -140,6 +132,21 @@ public class SpeakerDiarizationModule: Module {
   static func downloadInProgressMarker() -> URL {
     OfflineDiarizerModels.defaultModelsDirectory()
       .appendingPathComponent(".openwhispr-download-in-progress")
+  }
+
+  // Loads the offline models, downloading any that are missing. The marker stays behind if the
+  // app dies mid-download, so a half-written model never reads as ready; a successful load also
+  // finishes a download that was cut off.
+  static func loadModels() async throws -> OfflineDiarizerModels {
+    let marker = downloadInProgressMarker()
+    if !modelsCached() {
+      try? FileManager.default.createDirectory(
+        at: marker.deletingLastPathComponent(), withIntermediateDirectories: true)
+      FileManager.default.createFile(atPath: marker.path, contents: nil)
+    }
+    let models = try await OfflineDiarizerModels.load()
+    try? FileManager.default.removeItem(at: marker)
+    return models
   }
 
   static func modelsCached() -> Bool {
