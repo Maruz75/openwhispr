@@ -1,7 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { once } = require("node:events");
-const { WebSocketServer } = require("ws");
+const { EventEmitter, once } = require("node:events");
+const { Worker } = require("node:worker_threads");
+const { WebSocket, WebSocketServer } = require("ws");
 const {
   OrukeetStreaming,
   streamingUrl,
@@ -172,7 +173,10 @@ test("missing final acknowledgement has a bounded timeout", async (t) => {
   const { adapter, options } = await fixture(t);
   await adapter.connect(options);
   adapter.sendAudio(Buffer.alloc(640));
+  const started = performance.now();
   await assert.rejects(adapter.finalize(), /timed out/);
+  // Self-hosted streams wait their connect timeout (300 ms here) for a final.
+  assert.ok(performance.now() - started < 1000);
 });
 
 test("URL normalization retains the selected server and refuses unsafe credential URLs", () => {
@@ -320,14 +324,18 @@ test("a failure while the session token is minted raises no stream error", async
 // Answers pings until the test stalls it, like a GPU host whose server process
 // wedges while its TCP connection stays open.
 async function stallableFixture(t, onMessage, adapterOptions) {
-  const control = { answering: true };
+  const control = { answering: true, delayMs: 0, socket: null };
   const setup = await fixture(t, onMessage, {
     serverOptions: { autoPong: false },
     adapterOptions,
-    onConnection: (socket) =>
+    onConnection: (socket) => {
+      control.socket = socket;
       socket.on("ping", (data) => {
-        if (control.answering) socket.pong(data);
-      }),
+        if (!control.answering) return;
+        if (control.delayMs) setTimeout(() => socket.pong(data), control.delayMs);
+        else socket.pong(data);
+      });
+    },
   });
   return { ...setup, control };
 }
@@ -336,46 +344,138 @@ test(
   "a stream whose server stops answering pings fails while recording",
   { timeout: 2000 },
   async (t) => {
-    const livenessMs = 200;
+    const livenessMs = 400;
     const { adapter, options, control } = await stallableFixture(t, undefined, { livenessMs });
     const raised = new Promise((resolve) => {
       adapter.onError = resolve;
     });
     await adapter.connect(options);
     await once(adapter.ws, "pong");
+    const closed = once(control.socket, "close");
     control.answering = false;
     const stalledAt = performance.now();
     adapter.sendAudio(Buffer.alloc(640));
 
     assert.match((await raised).message, /stopped responding/);
-    assert.ok(performance.now() - stalledAt < livenessMs * 2.5);
+    const detectedAfter = performance.now() - stalledAt;
+    assert.ok(
+      detectedAfter > livenessMs - 20 && detectedAfter < livenessMs * 2,
+      `${detectedAfter}`
+    );
     await assert.rejects(adapter.finalize(), /stopped responding/);
+    // Dropped rather than closed behind unsent audio, so the server sees 1006.
+    assert.equal((await closed)[0], 1006);
   }
 );
 
-test("a blocked main thread is not judged a stalled server", { timeout: 2000 }, async (t) => {
-  const { adapter, options } = await stallableFixture(
+test("a blocked main thread is not judged a stalled server", { timeout: 5000 }, async (t) => {
+  const livenessMs = 400;
+  const { adapter, options, control } = await stallableFixture(
     t,
     (socket, event) => {
       if (event.type === "commit") socket.send(JSON.stringify({ type: "final", text: "Kept." }));
     },
-    { livenessMs: 100 }
+    { livenessMs }
   );
   const errors = [];
   adapter.onError = (error) => errors.push(error);
   await adapter.connect(options);
   await new Promise((resolve) =>
     adapter.ws.once("pong", () => {
-      const until = performance.now() + 400;
+      // The ping sent after the block is answered later than one check
+      // interval, but within the liveness window.
+      control.delayMs = livenessMs * 0.75;
+      const until = performance.now() + livenessMs * 2.5;
       while (performance.now() < until);
       resolve();
     })
   );
   adapter.sendAudio(Buffer.alloc(640));
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  await new Promise((resolve) => setTimeout(resolve, livenessMs * 1.5));
 
   assert.deepEqual(errors, []);
   assert.equal((await adapter.finalize()).text, "Kept.");
+});
+
+// Runs the server on its own thread, so it answers while the test blocks the
+// main thread. Each ping is reported to the main thread before its pong.
+async function threadedServer(t, pongDelayMs) {
+  const worker = new Worker(
+    `
+    const { parentPort } = require("node:worker_threads");
+    const { WebSocketServer } = require(${JSON.stringify(require.resolve("ws"))});
+    const server = new WebSocketServer({ port: 0, host: "127.0.0.1", autoPong: false });
+    server.on("listening", () => parentPort.postMessage(server.address().port));
+    server.on("connection", (socket) => {
+      socket.on("ping", (data) => {
+        parentPort.postMessage("ping");
+        setTimeout(() => socket.pong(data), ${pongDelayMs});
+      });
+      socket.send(
+        JSON.stringify({
+          type: "ready",
+          sample_rate: 16000,
+          channels: 1,
+          encoding: "pcm_s16le",
+          max_seconds: 60,
+        })
+      );
+    });
+    `,
+    { eval: true }
+  );
+  t.after(() => worker.terminate());
+  const [port] = await once(worker, "message");
+  return { worker, options: { baseUrl: `http://127.0.0.1:${port}`, apiKey: "test-key" } };
+}
+
+test(
+  "a pong that arrived while the main thread was blocked counts",
+  { timeout: 5000 },
+  async (t) => {
+    const { worker, options } = await threadedServer(t, 20);
+    const livenessMs = 1000;
+    const adapter = new OrukeetStreaming({ timeoutMs: 1000, livenessMs });
+    t.after(() => adapter.disconnect());
+    const errors = [];
+    adapter.onError = (error) => errors.push(error);
+    await adapter.connect(options);
+    await once(adapter.ws, "pong");
+    let pinged = false;
+    const ping = adapter.ws.ping.bind(adapter.ws);
+    adapter.ws.ping = () => {
+      ping();
+      adapter.ws.ping = ping;
+      pinged = true;
+    };
+    worker.on("message", () => {
+      if (!pinged) return;
+      pinged = false;
+      // Blocks until just past the next check's due time, so that check is on
+      // time while the pong waiting on the socket is its only sign of life.
+      const until = performance.now() + livenessMs * 0.65;
+      while (performance.now() < until);
+    });
+    await new Promise((resolve) => setTimeout(resolve, livenessMs * 1.5));
+
+    assert.deepEqual(errors, []);
+  }
+);
+
+test("any server message keeps an armed stream alive", { timeout: 2000 }, async (t) => {
+  const livenessMs = 200;
+  const { adapter, options, control } = await stallableFixture(t, undefined, { livenessMs });
+  const errors = [];
+  adapter.onError = (error) => errors.push(error);
+  await adapter.connect(options);
+  await once(adapter.ws, "pong");
+  control.answering = false;
+  const language = JSON.stringify({ type: "language", language: "en", language_confidence: 0.9 });
+  const chatter = setInterval(() => control.socket.send(language), livenessMs / 4);
+  await new Promise((resolve) => setTimeout(resolve, livenessMs * 3));
+  clearInterval(chatter);
+
+  assert.deepEqual(errors, []);
 });
 
 test("a server that never answers pings is not judged stalled", { timeout: 2000 }, async (t) => {
@@ -428,16 +528,93 @@ test("a closed stream stops checking liveness", { timeout: 2000 }, async (t) => 
   assert.deepEqual(errors, []);
 });
 
-test("the final deadline scales with the audio sent", { timeout: 2000 }, async (t) => {
-  const { adapter, options } = await fixture(t, undefined, {
-    adapterOptions: { timeoutMs: 5000, finalTimeoutMs: (audioSeconds) => audioSeconds * 1000 },
+// A ready socket whose writes complete only when the test says so, like an
+// uplink still draining audio queued ahead of the commit.
+async function heldSocketAdapter(t, adapterOptions) {
+  const socket = Object.assign(new EventEmitter(), {
+    readyState: WebSocket.OPEN,
+    bufferedAmount: 0,
+    writes: [],
+    send: (data, onSent) => socket.writes.push({ data, onSent }),
+    close: () => {},
+    terminate: () => {},
   });
-  await adapter.connect(options);
-  adapter.sendAudio(Buffer.alloc(3200)); // 0.1 s of 16 kHz PCM16
-  const started = Date.now();
+  const adapter = new OrukeetStreaming({ createSocket: () => socket, ...adapterOptions });
+  t.after(() => adapter.disconnect());
+  const connected = adapter.connect({ baseUrl: "https://orukeet.test", apiKey: "test-key" });
+  socket.emit(
+    "message",
+    JSON.stringify({
+      type: "ready",
+      sample_rate: 16000,
+      channels: 1,
+      encoding: "pcm_s16le",
+      max_seconds: 60,
+    })
+  );
+  await connected;
+  const writeCommit = () => {
+    const commit = socket.writes.at(-1);
+    assert.equal(JSON.parse(commit.data).type, "commit");
+    commit.onSent();
+  };
+  return { adapter, socket, writeCommit };
+}
 
-  await assert.rejects(adapter.finalize(), /timed out/);
-  assert.ok(Date.now() - started < 1000);
+test(
+  "the final deadline scales with the audio and starts once the commit is written",
+  { timeout: 2000 },
+  async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { adapter, writeCommit } = await heldSocketAdapter(t, {
+      finalTimeoutMs: (audioSeconds) => audioSeconds * 1000,
+    });
+    adapter.sendAudio(Buffer.alloc(64000)); // 2 s of 16 kHz PCM16
+    const final = adapter.finalize();
+    final.catch(() => {});
+
+    t.mock.timers.tick(10000);
+    assert.equal(adapter.failure, undefined);
+    writeCommit();
+    t.mock.timers.tick(1999);
+    assert.equal(adapter.failure, undefined);
+    t.mock.timers.tick(1);
+    await assert.rejects(final, /final transcript timed out/);
+  }
+);
+
+test(
+  "a commit that is never written out still times out after 30 s",
+  { timeout: 2000 },
+  async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { adapter } = await heldSocketAdapter(t, { finalTimeoutMs: () => 1000 });
+    adapter.sendAudio(Buffer.alloc(640));
+    const final = adapter.finalize();
+    final.catch(() => {});
+
+    t.mock.timers.tick(29999);
+    assert.equal(adapter.failure, undefined);
+    t.mock.timers.tick(1);
+    await assert.rejects(final, /final transcript timed out/);
+  }
+);
+
+test("a delivered final clears the 30 s cap", { timeout: 2000 }, async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { adapter, socket, writeCommit } = await heldSocketAdapter(t, {
+    finalTimeoutMs: () => 1000,
+  });
+  let closed = false;
+  adapter.onClose = () => (closed = true);
+  adapter.sendAudio(Buffer.alloc(640));
+  const final = adapter.finalize();
+  writeCommit();
+  socket.emit("message", JSON.stringify({ type: "final", text: "Done." }));
+  assert.equal((await final).text, "Done.");
+
+  t.mock.timers.tick(30000);
+  assert.equal(closed, false);
 });
 
 test("managed streams fail over within seconds instead of the 30 s budget", () => {

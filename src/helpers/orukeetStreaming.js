@@ -231,12 +231,15 @@ class OrukeetStreaming {
     const check = () => {
       if (this.intentionalClose || this.failure || this.finalPromise) return;
       const now = performance.now();
-      // A late tick means this process stalled (a blocked main thread, App Nap,
-      // sleep), not the server, so it only sends the next ping.
-      const onTime = now - lastCheckAt < intervalMs * 1.5;
+      const late = now - lastCheckAt >= intervalMs * 1.5;
       lastCheckAt = now;
-      if (onTime && lastHeardAt !== null && now - lastHeardAt > this.livenessMs) {
-        return this.fail(new Error("Orukeet server stopped responding"));
+      if (lastHeardAt !== null) {
+        // A late tick means this process was held up (a blocked main thread or
+        // App Nap), not the server, so the next ping gets a full window.
+        if (late) lastHeardAt = now;
+        else if (now - lastHeardAt > this.livenessMs) {
+          return this.fail(new Error("Orukeet server stopped responding"));
+        }
       }
       this.ws.ping();
     };
