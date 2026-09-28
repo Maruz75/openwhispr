@@ -57,8 +57,9 @@ function mixesLookalikeScripts(label) {
 
 // The ASCII (punycode) form a mail server routes to, or null when the domain
 // has no valid one. The URL API applies the same IDNA mapping in main and in
-// the renderer.
-function asciiDomain(domain) {
+// the renderer. Exported for gmailMime.js, which writes this form into the
+// From/To/Cc headers.
+export function asciiDomain(domain) {
   try {
     return new URL(`http://${domain}`).hostname;
   } catch {
