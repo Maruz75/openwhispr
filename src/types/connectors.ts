@@ -104,6 +104,12 @@ export interface ConnectorActionRecord {
   createdAt: string;
 }
 
+/** A note attendee the user can address: never the user, a room or a resource. */
+export interface NoteAttendee {
+  name: string | null;
+  email: string;
+}
+
 export interface ContactMatch {
   name: string | null;
   email: string;

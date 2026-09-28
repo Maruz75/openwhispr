@@ -206,3 +206,60 @@ test("equal matches rank the nearest meeting first, whatever order they were see
     ["josh.near@example.com", "josh.far@example.com"]
   );
 });
+
+test("the user's own addresses and the rooms stored events flag are one excluded set", async () => {
+  const { excludedAddresses } = await load();
+  const excluded = excludedAddresses(SOURCES);
+  // excludedEmails (calendar accounts, a Microsoft alias, a flagged room), lowercased…
+  for (const email of ["chad@example.com", "chad.work@corp.test", "boardroom@corp.test"]) {
+    assert.ok(excluded.has(email), email);
+  }
+  // …plus every address a meeting flags as the user.
+  assert.ok(excluded.has("chad@icloud.com"));
+  assert.ok(excluded.has("chad@alias.test"));
+  assert.equal(excluded.has("gabe.torres@example.com"), false);
+  assert.deepEqual([...excludedAddresses({})], []);
+});
+
+test("a note's attendees keep only other people, once each, in the note's order", async () => {
+  const { personAttendees } = await load();
+  const attendees = [
+    { email: "Dana@Example.com", displayName: "Dana Wu", self: false },
+    // The user, three ways: flagged, a calendar account, a Microsoft alias.
+    { email: "someone@new.test", displayName: "Me", self: true },
+    { email: "CHAD@example.com", displayName: "Chad", self: false },
+    { email: "chad.work@corp.test", displayName: null, self: false },
+    // Rooms: flagged, a Google resource address, one a stored event flags.
+    { email: "room-9@corp.test", displayName: "Room 9", self: false, resource: true },
+    { email: "room-4@resource.calendar.google.com", displayName: "Room 4", self: false },
+    { email: "boardroom@corp.test", displayName: "Boardroom", self: false },
+    { email: "gabe.torres@example.com", displayName: "  Gabe\n Torres ", self: false },
+    // The same person again, in another case.
+    { email: "dana@example.com", displayName: "Dana", self: false },
+    { email: "kim@example.com", displayName: null, self: false },
+  ];
+
+  assert.deepEqual(personAttendees(SOURCES, attendees), [
+    { name: "Dana Wu", email: "Dana@Example.com" },
+    { name: "Gabe Torres", email: "gabe.torres@example.com" },
+    { name: null, email: "kim@example.com" },
+  ]);
+});
+
+test("attendees that aren't people or aren't well formed are dropped", async () => {
+  const { personAttendees } = await load();
+  assert.deepEqual(personAttendees(SOURCES, "not a list"), []);
+  assert.deepEqual(
+    personAttendees(SOURCES, [
+      null,
+      "dana@example.com",
+      { displayName: "No address" },
+      { email: 42 },
+      { email: "not-an-address" },
+      { email: "en.usa#holiday@group.v.calendar.google.com" },
+      { email: " lee@example.com ", displayName: 7 },
+    ]),
+    [{ name: null, email: "lee@example.com" }]
+  );
+  assert.deepEqual(personAttendees({}, []), []);
+});

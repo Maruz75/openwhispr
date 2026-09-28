@@ -548,3 +548,96 @@ test("a held verdict that throws on the deadline fallback fails closed", async (
   });
   assert.equal(await resolver({}), "unavailable");
 });
+
+function registerNoteAttendees(policies) {
+  const ipcMain = fakeIpcMain();
+  const received = [];
+  return load().then(({ registerConnectorIpc }) => {
+    registerConnectorIpc({
+      ipcMain,
+      manager: fakeManager(),
+      getPolicyState: async () => policies.shift(),
+      getAccountScope: () => SCOPE,
+      noteAttendees: (list) => {
+        received.push(list);
+        return list
+          .filter((attendee) => !attendee.self)
+          .map(({ email, displayName }) => ({ name: displayName, email }));
+      },
+    });
+    return { handler: ipcMain.handlers.get("connector-note-attendees"), received };
+  });
+}
+
+test("note attendees pass only well-formed fields to the filter, and follow the org policy", async () => {
+  const policies = ["allowed", "blocked", "unavailable"];
+  const { handler, received } = await registerNoteAttendees(policies);
+  const list = [
+    {
+      email: "dana@example.com",
+      displayName: "Dana",
+      responseStatus: "accepted",
+      self: false,
+      extra: "dropped",
+    },
+    { email: "me@example.com", displayName: null, self: true },
+    { email: "room@corp.test", displayName: "Room", resource: true, self: "yes" },
+    { email: "" },
+    { displayName: "No address" },
+    "kim@example.com",
+    null,
+    { email: `${"a".repeat(320)}@example.com` },
+    { email: "lee@example.com", displayName: "x".repeat(201) },
+  ];
+
+  assert.deepEqual(await handler({}, list), {
+    attendees: [
+      { name: "Dana", email: "dana@example.com" },
+      { name: "Room", email: "room@corp.test" },
+      { name: null, email: "lee@example.com" },
+    ],
+  });
+  assert.deepEqual(received, [
+    [
+      { email: "dana@example.com", displayName: "Dana", self: false, resource: false },
+      { email: "me@example.com", displayName: null, self: true, resource: false },
+      { email: "room@corp.test", displayName: "Room", self: false, resource: true },
+      { email: "lee@example.com", displayName: null, self: false, resource: false },
+    ],
+  ]);
+  assert.deepEqual(await handler({}, list), { attendees: [], unavailableReason: "policy_blocked" });
+  assert.deepEqual(await handler({}, list), {
+    attendees: [],
+    unavailableReason: "policy_unavailable",
+  });
+  assert.equal(received.length, 1);
+});
+
+test("a note's attendee list is cut at 200, and a malformed or empty one skips the policy lookup", async () => {
+  const policies = ["allowed"];
+  const { handler, received } = await registerNoteAttendees(policies);
+  const many = Array.from({ length: 300 }, (_, index) => ({
+    email: `person${index}@example.com`,
+    displayName: null,
+    self: false,
+  }));
+
+  const { attendees } = await handler({}, many);
+
+  assert.equal(attendees.length, 200);
+  assert.equal(attendees[199].email, "person199@example.com");
+  assert.equal(received[0].length, 200);
+  // Nothing to filter: no policy lookup, no filter call.
+  assert.deepEqual(await handler({}, "not a list"), { attendees: [] });
+  assert.deepEqual(await handler({}, []), { attendees: [] });
+  assert.deepEqual(await handler({}, [{ displayName: "No address" }]), { attendees: [] });
+  assert.equal(received.length, 1);
+  assert.equal(policies.length, 0);
+});
+
+test("without an attendee filter, no note-attendees channel is registered", async () => {
+  const { registerConnectorIpc } = await load();
+  const ipcMain = fakeIpcMain();
+  registerConnectorIpc({ ipcMain, manager: fakeManager(), getPolicyState: async () => "allowed" });
+  assert.equal(ipcMain.handlers.has("connector-note-attendees"), false);
+});

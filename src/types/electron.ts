@@ -7,6 +7,7 @@ import type {
   ManagedEnterpriseRequestContext,
 } from "./enterpriseIdentity";
 import type {
+  CalendarAttendee,
   CalendarAvailabilityRequest,
   CalendarAvailabilityResult,
   MicrosoftCalendarAccount,
@@ -22,6 +23,7 @@ import type {
   ConnectorPrepareResult,
   ConnectorStatus,
   ContactMatch,
+  NoteAttendee,
 } from "./connectors";
 
 export type LocalTranscriptionProvider = "whisper" | "nvidia" | "cohere";
@@ -2941,6 +2943,10 @@ declare global {
       connectorFindContacts?: (
         query: string
       ) => Promise<{ contacts: ContactMatch[]; hasMore?: boolean; unavailableReason?: string }>;
+      /** A note's participants minus the user and rooms (main applies find_contact's exclusions). */
+      connectorNoteAttendees?: (
+        participants: CalendarAttendee[]
+      ) => Promise<{ attendees: NoteAttendee[]; unavailableReason?: string }>;
       connectorConnect?: (connectorId: string) => Promise<ConnectorConnectResult>;
       connectorDisconnect?: (connectorId: string) => Promise<ConnectorDisconnectResult>;
       onConnectorStatusChanged?: (callback: (statuses: ConnectorStatus[]) => void) => () => void;

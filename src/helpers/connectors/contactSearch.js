@@ -25,12 +25,62 @@ function parseAttendees(value) {
   }
 }
 
-function collectPeople({ meetings = [], contacts = [], excludedEmails = [] }, now) {
+/**
+ * The user's own addresses and the rooms stored events flag, lowercased: the
+ * calendar accounts, Microsoft aliases and resources (excludedEmails), plus
+ * every address a meeting marks as the user (self). find_contact and a note's
+ * attendee list both leave these out.
+ */
+function excludedAddresses({ meetings = [], excludedEmails = [] }) {
   const excluded = new Set(excludedEmails.map((email) => String(email).toLowerCase()));
+  for (const row of meetings) {
+    for (const attendee of parseAttendees(row.attendees)) {
+      if (attendee?.self && typeof attendee.email === "string") {
+        excluded.add(attendee.email.toLowerCase());
+      }
+    }
+  }
+  return excluded;
+}
+
+function isPersonAddress(email) {
+  return typeof email === "string" && email.includes("@") && !NON_PERSON_ADDRESS.test(email);
+}
+
+// A display name is one line for the model's attendee list.
+function attendeeName(value) {
+  if (typeof value !== "string") return null;
+  const name = value.replace(/[\p{Cc}\s]+/gu, " ").trim();
+  return name || null;
+}
+
+/**
+ * A note's attendees who are other people: never the user (flagged self, or
+ * one of their addresses), a room or resource, or a non-person calendar
+ * address. De-duplicated case-insensitively, in the note's order.
+ */
+function personAttendees(sources, attendees) {
+  const excluded = excludedAddresses(sources);
+  const seen = new Set();
+  const people = [];
+  for (const attendee of Array.isArray(attendees) ? attendees : []) {
+    if (!attendee || attendee.self === true || attendee.resource === true) continue;
+    const email = typeof attendee.email === "string" ? attendee.email.trim() : "";
+    if (!isPersonAddress(email)) continue;
+    const key = email.toLowerCase();
+    if (excluded.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    people.push({ name: attendeeName(attendee.displayName), email });
+  }
+  return people;
+}
+
+function collectPeople({ meetings = [], contacts = [], excludedEmails = [] }, now) {
+  const excluded = excludedAddresses({ meetings, excludedEmails });
   const people = new Map();
 
   const remember = (email, name, startTime, isAllDay) => {
-    if (typeof email !== "string" || !email.includes("@") || NON_PERSON_ADDRESS.test(email)) return;
+    if (!isPersonAddress(email)) return;
     const key = email.toLowerCase();
     let person = people.get(key);
     if (!person) {
@@ -49,13 +99,7 @@ function collectPeople({ meetings = [], contacts = [], excludedEmails = [] }, no
   };
 
   for (const row of meetings) {
-    const attendees = parseAttendees(row.attendees);
-    for (const attendee of attendees) {
-      if (attendee?.self && typeof attendee.email === "string") {
-        excluded.add(attendee.email.toLowerCase());
-      }
-    }
-    for (const attendee of attendees) {
+    for (const attendee of parseAttendees(row.attendees)) {
       remember(attendee?.email, attendee?.displayName, row.start_time, row.is_all_day);
     }
     remember(row.organizer_email, null, row.start_time, row.is_all_day);
@@ -120,4 +164,4 @@ function searchContacts(sources, query, { limit = 5, now = Date.now() } = {}) {
   };
 }
 
-module.exports = { searchContacts };
+module.exports = { searchContacts, excludedAddresses, personAttendees };

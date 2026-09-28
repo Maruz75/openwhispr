@@ -78,7 +78,7 @@ async function renderChatStreaming(
   return { captured, offeredTools, reasoningService, usePolicyStore, getMessages: () => messages };
 }
 
-// Typed chat and the voice panel opt in; every other surface leaves it off.
+// Typed chat, the voice panel and a note's chat opt in; container chat leaves it off.
 const CONNECTOR_SURFACE = { allowConnectors: true };
 const BYOK_SETTINGS = {
   chatAgentMode: "providers",
@@ -110,7 +110,7 @@ test("a paid, signed-in chat offers the connector tools", async (t) => {
   assert.ok(offeredTools[0].includes("find_contact"));
 });
 
-test("a surface that doesn't opt in (note or container chat) never offers them", async (t) => {
+test("a surface that doesn't opt in (container chat) never offers them", async (t) => {
   const { captured, offeredTools } = await renderChatStreaming(t);
   await captured.sendToAI("Reply to Maria", []);
   assert.ok(offeredTools[0].length > 0);
@@ -467,4 +467,100 @@ test("a Gmail login that needs reconnecting asks for a reconnect instead of open
   assert.match(emailDraftDescription(sends[0]), /card in the chat/);
   assert.equal(JSON.parse(result.data).reason, "reconnect_needed");
   assert.deepEqual(calls, { prepare: 0, runDirect: 0 });
+});
+
+// A meeting note's participants as the note row stores them.
+const NOTE_ATTENDEES = [
+  { email: "dana@example.com", displayName: "Dana Wu", responseStatus: "accepted", self: false },
+  { email: "me@example.com", displayName: "Me", responseStatus: "accepted", self: true },
+];
+
+// A note chat whose system prompt is captured per send; main's attendee
+// filter answers with `answer` and records what it was asked.
+async function renderNoteChat(t, hookOptions, { answer, subscribed = true } = {}) {
+  const lookups = [];
+  const rendered = await renderChatStreaming(
+    t,
+    { noteContext: "Note ID: 7\nTitle: Kickoff", noteAttendees: NOTE_ATTENDEES, ...hookOptions },
+    {
+      subscribed,
+      electronAPI: {
+        connectorNoteAttendees: async (participants) => {
+          lookups.push(participants);
+          if (answer instanceof Error) throw answer;
+          return answer ?? { attendees: [{ name: "Dana Wu", email: "dana@example.com" }] };
+        },
+      },
+    }
+  );
+  const prompts = [];
+  rendered.reasoningService.processTextStreamingCloud.mock.mockImplementation(
+    (_messages, config) => {
+      prompts.push(config.systemPrompt);
+      return (async function* () {
+        yield { type: "done", finishReason: "stop" };
+      })();
+    }
+  );
+  return { ...rendered, lookups, prompts };
+}
+
+test("a note chat with connectors lists the note's attendees and how to read 'everyone'", async (t) => {
+  const { captured, lookups, prompts } = await renderNoteChat(t, CONNECTOR_SURFACE);
+  await captured.sendToAI("Draft a follow-up to everyone", []);
+
+  assert.deepEqual(lookups, [NOTE_ATTENDEES]);
+  assert.match(prompts[0], /Meeting attendees/);
+  assert.match(prompts[0], /- Dana Wu <dana@example\.com>/);
+  assert.match(prompts[0], /"everyone"/);
+  assert.match(prompts[0], /find_contact/);
+  assert.match(prompts[0], /Title: Kickoff/);
+});
+
+test("a chat that offers no connector tools never looks up or lists attendees", async (t) => {
+  const { captured, lookups, prompts } = await renderNoteChat(t, {});
+  await captured.sendToAI("Summarize this", []);
+
+  assert.deepEqual(lookups, []);
+  assert.doesNotMatch(prompts[0], /Meeting attendees/);
+  assert.match(prompts[0], /Title: Kickoff/, "the note itself is still there");
+});
+
+test("a free plan's note chat never looks up or lists attendees", async (t) => {
+  const { captured, lookups, prompts } = await renderNoteChat(t, CONNECTOR_SURFACE, {
+    subscribed: false,
+  });
+  await captured.sendToAI("Draft a follow-up to everyone", []);
+
+  assert.deepEqual(lookups, []);
+  assert.doesNotMatch(prompts[0], /Meeting attendees/);
+});
+
+test("a note without attendees skips the lookup and gets no block", async (t) => {
+  const { captured, lookups, prompts } = await renderNoteChat(
+    t,
+    { ...CONNECTOR_SURFACE, noteAttendees: [] },
+    { answer: { attendees: [] } }
+  );
+  await captured.sendToAI("Draft a follow-up", []);
+  assert.deepEqual(lookups, [], "an empty note skips the lookup");
+  assert.doesNotMatch(prompts[0], /Meeting attendees/);
+});
+
+test("attendees main filters out entirely leave no block", async (t) => {
+  const { captured, lookups, prompts } = await renderNoteChat(t, CONNECTOR_SURFACE, {
+    answer: { attendees: [] },
+  });
+  await captured.sendToAI("Draft a follow-up", []);
+  assert.equal(lookups.length, 1);
+  assert.doesNotMatch(prompts[0], /Meeting attendees/);
+});
+
+test("a failed attendee lookup still answers, without the block", async (t) => {
+  const { captured, prompts } = await renderNoteChat(t, CONNECTOR_SURFACE, {
+    answer: new Error("no handler"),
+  });
+  await captured.sendToAI("Draft a follow-up", []);
+  assert.equal(prompts.length, 1);
+  assert.doesNotMatch(prompts[0], /Meeting attendees/);
 });

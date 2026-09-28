@@ -97,6 +97,9 @@ const NOTE = {
   updated_at: "2026-09-01T00:00:00.000Z",
   space_id: null,
   folder_id: null,
+  participants: JSON.stringify([
+    { email: "dana@example.com", displayName: "Dana Wu", responseStatus: null, self: false },
+  ]),
 };
 
 const ENHANCEMENT = { content: NOTE.enhanced_content, isStale: false, onChange() {} };
@@ -158,7 +161,8 @@ async function loadNoteEditor(t) {
       "/EmbeddedChat": `export default function EmbeddedChat() { return null; }`,
       "/hooks/useAuth": `export function useAuth() { return { isSignedIn: false, user: null }; }`,
       "/hooks/useEmbeddedChat": `
-        export function useEmbeddedChat() {
+        export function useEmbeddedChat(options) {
+          globalThis.__embeddedChatOptions = options;
           return {
             messages: [],
             send() {},
@@ -280,5 +284,18 @@ test("hides the highlight instead of freezing it when no tab matches the selecti
     "the highlight fades in place rather than staying lit over nothing"
   );
 
+  await unmount();
+});
+
+test("the note's chat gets the note's participants, as stored", async (t) => {
+  t.after(() => {
+    delete globalThis.__embeddedChatOptions;
+  });
+  const { render, unmount } = await loadNoteEditor(t);
+
+  await render(ENHANCEMENT);
+
+  assert.equal(globalThis.__embeddedChatOptions.noteParticipants, NOTE.participants);
+  assert.equal(globalThis.__embeddedChatOptions.noteId, NOTE.id);
   await unmount();
 });

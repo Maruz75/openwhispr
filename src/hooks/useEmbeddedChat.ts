@@ -3,6 +3,7 @@ import { useChatPersistence } from "../components/chat/useChatPersistence";
 import { useChatStreaming } from "../components/chat/useChatStreaming";
 import { useChatMessageSender } from "../components/chat/useChatMessageSender";
 import type { Message, AgentState } from "../components/chat/types";
+import { parseNoteParticipants } from "../utils/noteAttendees";
 
 interface UseEmbeddedChatOptions {
   noteId: number | null;
@@ -10,6 +11,8 @@ interface UseEmbeddedChatOptions {
   noteTitle: string;
   noteContent: string;
   noteTranscript?: string;
+  /** The note's raw `participants` JSON (CalendarAttendee[]), or null. */
+  noteParticipants?: string | null;
 }
 
 interface NoteConversationItem {
@@ -37,6 +40,7 @@ export function useEmbeddedChat({
   noteTitle,
   noteContent,
   noteTranscript,
+  noteParticipants,
 }: UseEmbeddedChatOptions): UseEmbeddedChatReturn {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [noteConversations, setNoteConversations] = useState<NoteConversationItem[]>([]);
@@ -64,10 +68,16 @@ export function useEmbeddedChat({
     [folderId, noteContent, noteId, noteTitle, noteTranscript]
   );
 
+  const noteAttendees = useMemo(() => parseNoteParticipants(noteParticipants), [noteParticipants]);
+
+  // A meeting note's chat drafts follow-ups to its attendees, so it offers
+  // the connector tools (still subject to plan, sign-in and policy).
   const streaming = useChatStreaming({
     messages: persistence.messages,
     setMessages: persistence.setMessages,
     noteContext,
+    allowConnectors: true,
+    noteAttendees,
     onStreamComplete: (_id, content, toolCalls) => {
       persistence.saveAssistantMessage(content, toolCalls);
     },

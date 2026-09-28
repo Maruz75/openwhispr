@@ -3,6 +3,11 @@ const { connectorPolicyState, policyRefusal } = require("./connectorPolicy");
 const POLICY_TIMEOUT_MS = 1500;
 // A name or part of an address; anything longer is not a lookup.
 const MAX_CONTACT_QUERY_LENGTH = 200;
+// More than any meeting invite; a longer list is cut, not refused.
+const MAX_NOTE_ATTENDEES = 200;
+// RFC 5321's address limit, and a generous display name.
+const MAX_ATTENDEE_EMAIL_LENGTH = 320;
+const MAX_ATTENDEE_NAME_LENGTH = 200;
 
 function isNonEmptyString(value) {
   return typeof value === "string" && value.length > 0;
@@ -10,6 +15,26 @@ function isNonEmptyString(value) {
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+// Only the fields the attendee filter reads, from well-formed items.
+function sanitizeNoteAttendees(list) {
+  const attendees = [];
+  for (const item of list.slice(0, MAX_NOTE_ATTENDEES)) {
+    if (!isPlainObject(item) || !isNonEmptyString(item.email)) continue;
+    if (item.email.length > MAX_ATTENDEE_EMAIL_LENGTH) continue;
+    const displayName =
+      typeof item.displayName === "string" && item.displayName.length <= MAX_ATTENDEE_NAME_LENGTH
+        ? item.displayName
+        : null;
+    attendees.push({
+      email: item.email,
+      displayName,
+      self: item.self === true,
+      resource: item.resource === true,
+    });
+  }
+  return attendees;
 }
 
 // Connectors must tell "signed out" ({}) from "can't tell" (null). Without a
@@ -88,7 +113,14 @@ function sameAccountScope(left, right) {
 
 // getAccountScope() is the signed-in account bound to the current credential
 // and its generation, or null.
-function registerConnectorIpc({ ipcMain, manager, getPolicyState, getAccountScope, findContacts }) {
+function registerConnectorIpc({
+  ipcMain,
+  manager,
+  getPolicyState,
+  getAccountScope,
+  findContacts,
+  noteAttendees,
+}) {
   // The verdict and the account that owns the receipt come from one
   // credential: a sign-in or account switch during the policy wait leaves no
   // account, so the action is refused rather than filed under the wrong one.
@@ -183,6 +215,19 @@ function registerConnectorIpc({ ipcMain, manager, getPolicyState, getAccountScop
       const refusal = policyRefusal(await getPolicyState(event));
       if (refusal) return { contacts: [], unavailableReason: refusal };
       return findContacts(query.trim());
+    });
+  }
+
+  if (noteAttendees) {
+    // A note's attendees, minus the user and rooms, for the note chat's
+    // context. They go to the model, so the org switch applies here too.
+    ipcMain.handle("connector-note-attendees", async (event, participants) => {
+      if (!Array.isArray(participants)) return { attendees: [] };
+      const attendees = sanitizeNoteAttendees(participants);
+      if (attendees.length === 0) return { attendees: [] };
+      const refusal = policyRefusal(await getPolicyState(event));
+      if (refusal) return { attendees: [], unavailableReason: refusal };
+      return { attendees: noteAttendees(attendees) };
     });
   }
 }

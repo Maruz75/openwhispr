@@ -29,6 +29,7 @@ import {
   getAgentSystemPrompt,
 } from "../../config/prompts";
 import { getDictionaryHintWords } from "../../utils/snippets";
+import { noteAttendeesContext } from "../../utils/noteAttendees";
 import { createToolRegistry } from "../../services/tools";
 import {
   executeTool,
@@ -39,6 +40,7 @@ import { createToolExecutionScope, type ToolExecutionScope } from "./toolExecuti
 import { getAgentToolActivityRemainingMs } from "../../helpers/agentToolPresentation";
 import type { Message, AgentState, ChatImageAttachment, ToolCallInfo } from "./types";
 import type { ContainerScope } from "../../types/chat";
+import type { CalendarAttendee } from "../../types/calendar";
 import {
   buildAgentRequestText,
   type AgentSelectionContext,
@@ -53,6 +55,20 @@ const LOCAL_TOOL_MIN_PARAMS_B = 4;
 function estimateModelSizeB(modelId: string): number {
   const match = modelId.match(/-([\d.]+)[bB]/);
   return match ? parseFloat(match[1]) : 0;
+}
+
+// Main drops the user and rooms with find_contact's rules; a failed lookup
+// just leaves the block out.
+async function buildNoteAttendeesContext(
+  participants: CalendarAttendee[] | undefined
+): Promise<string> {
+  if (!participants?.length || !window.electronAPI?.connectorNoteAttendees) return "";
+  try {
+    const result = await window.electronAPI.connectorNoteAttendees(participants);
+    return noteAttendeesContext(result?.attendees ?? []);
+  } catch {
+    return "";
+  }
 }
 
 async function buildRAGContext(userText: string, scope?: ContainerScope): Promise<string> {
@@ -103,6 +119,11 @@ interface UseChatStreamingOptions {
    * policy allow them. Off unless a surface opts in: they act outside the app.
    */
   allowConnectors?: boolean;
+  /**
+   * The meeting note's participants (note chat). Listed for the model only in
+   * a send that offers connector tools, so recipients come from them.
+   */
+  noteAttendees?: CalendarAttendee[];
   onStreamComplete?: (assistantId: string, content: string, toolCalls?: ToolCallInfo[]) => void;
   /** Fires exactly once when displayable assistant content or tool activity becomes available. */
   onResponseContent?: () => void;
@@ -160,6 +181,7 @@ export function useChatStreaming({
   noteContext: externalNoteContext,
   searchScope,
   allowConnectors = false,
+  noteAttendees,
   onStreamComplete,
   onResponseContent,
 }: UseChatStreamingOptions): ChatStreaming {
@@ -173,6 +195,8 @@ export function useChatStreaming({
   noteContextRef.current = externalNoteContext;
   const searchScopeRef = useRef(searchScope);
   searchScopeRef.current = searchScope;
+  const noteAttendeesRef = useRef(noteAttendees);
+  noteAttendeesRef.current = noteAttendees;
   const toolRegistryRef = useRef<{ key: string; registry: ToolRegistry } | null>(null);
   const toolActivityStartedAtRef = useRef<number | null>(null);
   const toolActivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -345,6 +369,7 @@ export function useChatStreaming({
 
         const scope = searchScopeRef.current;
         let registry: ToolRegistry | null = null;
+        let connectorsOffered = false;
         if (supportsTools) {
           const scopeKey = scope ? `${scope.spaceId}:${scope.folderId ?? ""}` : "";
           // The calendar tool reads the shared provider-deduped events table,
@@ -369,6 +394,7 @@ export function useChatStreaming({
                 slackReady,
               }
             : undefined;
+          connectorsOffered = connectors !== undefined;
           // Triggers ride in the tool description, so a snippet edit rebuilds the registry.
           const snippetKey = settings.snippets.map((s) => s.trigger).join("|");
           const cacheKey = `${settings.isSignedIn}-${calendarConnected}-${settings.cloudBackupEnabled}-${scopeKey}-${webSearchEnabled}-${snippetKey}-${connectors?.emailDraftTarget ?? "no-connectors"}-${slackReady}`;
@@ -394,9 +420,14 @@ export function useChatStreaming({
           }
         }
 
-        const ragContext = await buildRAGContext(userText, scope);
+        const [ragContext, attendeesContext] = await Promise.all([
+          buildRAGContext(userText, scope),
+          connectorsOffered ? buildNoteAttendeesContext(noteAttendeesRef.current) : "",
+        ]);
         if (cancelled() || !mountedRef.current) return;
-        const combinedContext = [noteContextRef.current, ragContext].filter(Boolean).join("\n\n");
+        const combinedContext = [noteContextRef.current, attendeesContext, ragContext]
+          .filter(Boolean)
+          .join("\n\n");
         // The user's dictionary rides on every conversation so replies use their
         // jargon — same suffix the dictation prompts carry.
         let systemPrompt = appendDictionarySuffix(
