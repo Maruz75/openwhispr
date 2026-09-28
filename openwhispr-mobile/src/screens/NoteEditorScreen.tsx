@@ -348,16 +348,15 @@ export default function NoteEditorScreen() {
   useEffect(() => {
     closeMove();
   }, [closeMove, noteId, isSpaceUnknown]);
-  // The participants' `self` comes from the calendar of whoever created the note; notes are only
-  // someone else's in a team Space, where the owner is known once the note has synced.
+  // The participants' `self` comes from the calendar of whoever created the note. Only the team
+  // sync records an owner, so a note without one is yours, even when its Space is unknown here.
   const attendees = useMemo(
     () =>
       markViewer(calendarParticipants, {
-        creatorIsViewer:
-          scopeSpaceId == null || !note?.ownerUserId || note.ownerUserId === user?.id,
+        creatorIsViewer: !note?.ownerUserId || note.ownerUserId === user?.id,
         viewerEmail: user?.email ?? null,
       }),
-    [calendarParticipants, note?.ownerUserId, scopeSpaceId, user?.email, user?.id],
+    [calendarParticipants, note?.ownerUserId, user?.email, user?.id],
   );
   const attendeeLabel = formatAttendeeChipLabel(attendees);
   const meetingNotesContext = useMemo(

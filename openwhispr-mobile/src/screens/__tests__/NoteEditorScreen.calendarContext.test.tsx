@@ -1483,6 +1483,17 @@ describe('NoteEditorScreen meta row', () => {
       expect(queryByText('Uma User')).toBeNull();
     });
 
+    it('labels you, not the teammate who created the note, as You while its Space is unknown', () => {
+      mockNotesState.spaces = [];
+      mockNote = note({ spaceId: 2, ownerUserId: 'teammate-9', participants });
+      mockNotesState.notes = [mockNote];
+      const { getByTestId, getByText, queryByText } = render(<NoteEditorScreen />);
+      fireEvent.press(getByTestId('note-meta-attendees'));
+      expect(getByText('Sam Lee')).toBeTruthy();
+      expect(getByText('You')).toBeTruthy();
+      expect(queryByText('Uma User')).toBeNull();
+    });
+
     it('trusts your calendar’s own row on a team note you created', () => {
       // Your calendar account needn't share your OpenWhispr address.
       const ownCalendar = JSON.stringify([
