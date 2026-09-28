@@ -1,6 +1,20 @@
 const WebSocket = require("ws");
 
 const MAX_PENDING_BYTES = 2 * 1024 * 1024;
+// Mono 16 kHz PCM16.
+const BYTES_PER_SECOND = 32000;
+
+// Managed Cloud keeps the capture for a batch upload, so a stalled or
+// unreachable GPU host should fail over within seconds rather than hold the
+// user for the full 30 s budget. BYOK servers keep the defaults: they have no
+// fallback, and a busy self-hosted CPU may legitimately answer slowly.
+const MANAGED_STREAM_OPTIONS = {
+  // A refused commit must close this attempt instead of retrying for 30 s.
+  retryCapacity: false,
+  timeoutMs: 10000,
+  livenessMs: 5000,
+  finalTimeoutMs: (audioSeconds) => Math.min(30000, 5000 + audioSeconds * 100),
+};
 
 function languageMetadata(message) {
   const language = message.language;
@@ -59,10 +73,14 @@ class OrukeetStreaming {
     createSocket = (url, options, protocols) => new WebSocket(url, protocols, options),
     timeoutMs = 30000,
     retryCapacity = true,
+    livenessMs = null,
+    finalTimeoutMs = () => timeoutMs,
   } = {}) {
     this.createSocket = createSocket;
     this.timeoutMs = timeoutMs;
     this.retryCapacity = retryCapacity;
+    this.livenessMs = livenessMs;
+    this.finalTimeoutMs = finalTimeoutMs;
     this.ws = null;
     this.isConnected = false;
     this.pendingAudio = [];
@@ -143,7 +161,7 @@ class OrukeetStreaming {
       ) {
         throw new Error("Orukeet server does not support mono 16 kHz PCM");
       }
-      this.maxAudioBytes = message.max_seconds * 32000;
+      this.maxAudioBytes = message.max_seconds * BYTES_PER_SECOND;
       this.isConnected = true;
       this.connecting = false;
       for (const data of this.pendingAudio) this.writeAudio(data);
@@ -155,6 +173,7 @@ class OrukeetStreaming {
         if (this.isConnected) this.sendControl({ type: "ping" });
       }, 15000);
       this.keepAlive.unref?.();
+      this.startLivenessCheck();
     } else if (message.type === "language") {
       // Advisory audio-language metadata never commits a transcript or triggers a paste.
       // The final message remains authoritative for this recording.
@@ -189,6 +208,29 @@ class OrukeetStreaming {
         this.fail(new Error(message.message || `Orukeet transcription failed: ${message.code}`));
       }
     }
+  }
+
+  // A wedged server can keep its TCP connection open, so a stall only shows up
+  // as missing pongs. The check arms on the first pong: a server that never
+  // answers pings keeps today's behaviour instead of failing every recording.
+  // A pending commit is bounded by the final deadline instead, since inference
+  // may hold the server's event loop.
+  startLivenessCheck() {
+    if (!this.livenessMs) return;
+    let lastPongAt = null;
+    this.ws.on("pong", () => {
+      lastPongAt = Date.now();
+    });
+    const check = () => {
+      if (this.finalPromise) return;
+      if (lastPongAt !== null && Date.now() - lastPongAt > this.livenessMs) {
+        return this.fail(new Error("Orukeet server stopped responding"));
+      }
+      this.ws.ping();
+    };
+    check();
+    this.livenessTimer = setInterval(check, this.livenessMs / 2);
+    this.livenessTimer.unref?.();
   }
 
   sendAudio(data) {
@@ -242,7 +284,7 @@ class OrukeetStreaming {
       this.finalReject = reject;
       this.finalTimer = setTimeout(
         () => this.fail(new Error("Orukeet final transcript timed out")),
-        this.timeoutMs
+        this.finalTimeoutMs(this.audioBytesSent / BYTES_PER_SECOND)
       );
       this.sendControl({ type: "commit" });
     });
@@ -279,6 +321,7 @@ class OrukeetStreaming {
     if (this.intentionalClose) return;
     this.intentionalClose = true;
     clearInterval(this.keepAlive);
+    clearInterval(this.livenessTimer);
     this.isConnected = false;
     this.connecting = false;
     this.pendingAudio = [];
@@ -304,4 +347,4 @@ class OrukeetStreaming {
   }
 }
 
-module.exports = { OrukeetStreaming, streamingUrl };
+module.exports = { OrukeetStreaming, streamingUrl, MANAGED_STREAM_OPTIONS };

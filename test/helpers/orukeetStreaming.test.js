@@ -2,15 +2,20 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const { WebSocketServer } = require("ws");
-const { OrukeetStreaming, streamingUrl } = require("../../src/helpers/orukeetStreaming");
+const {
+  OrukeetStreaming,
+  streamingUrl,
+  MANAGED_STREAM_OPTIONS,
+} = require("../../src/helpers/orukeetStreaming");
 
-async function fixture(t, onMessage) {
-  const server = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+async function fixture(t, onMessage, { serverOptions, adapterOptions, onConnection } = {}) {
+  const server = new WebSocketServer({ port: 0, host: "127.0.0.1", ...serverOptions });
   await once(server, "listening");
   const seen = [];
   server.on("connection", (socket, request) => {
     assert.equal(request.headers.authorization, "Bearer test-key");
     assert.equal(request.url, "/v1/audio/transcriptions/stream");
+    onConnection?.(socket);
     socket.send(
       JSON.stringify({
         type: "ready",
@@ -26,7 +31,7 @@ async function fixture(t, onMessage) {
       onMessage?.(socket, event, seen);
     });
   });
-  const adapter = new OrukeetStreaming({ timeoutMs: 300 });
+  const adapter = new OrukeetStreaming({ timeoutMs: 300, ...adapterOptions });
   t.after(async () => {
     await adapter.disconnect();
     for (const socket of server.clients) socket.terminate();
@@ -310,4 +315,108 @@ test("a failure while the session token is minted raises no stream error", async
     /new Orukeet adapter/
   );
   assert.deepEqual(errors, []);
+});
+
+// Answers pings until the test stalls it, like a GPU host whose server process
+// wedges while its TCP connection stays open.
+async function stallableFixture(t, onMessage, adapterOptions) {
+  const control = { answering: true };
+  const setup = await fixture(t, onMessage, {
+    serverOptions: { autoPong: false },
+    adapterOptions,
+    onConnection: (socket) =>
+      socket.on("ping", (data) => {
+        if (control.answering) socket.pong(data);
+      }),
+  });
+  return { ...setup, control };
+}
+
+test(
+  "a stream whose server stops answering pings fails while recording",
+  { timeout: 2000 },
+  async (t) => {
+    const { adapter, options, control } = await stallableFixture(t, undefined, { livenessMs: 100 });
+    const raised = new Promise((resolve) => {
+      adapter.onError = resolve;
+    });
+    await adapter.connect(options);
+    await once(adapter.ws, "pong");
+    control.answering = false;
+    adapter.sendAudio(Buffer.alloc(640));
+
+    assert.match((await raised).message, /stopped responding/);
+    await assert.rejects(adapter.finalize(), /stopped responding/);
+  }
+);
+
+test("a server that never answers pings is not judged stalled", { timeout: 2000 }, async (t) => {
+  const { adapter, options, control } = await stallableFixture(
+    t,
+    (socket, event) => {
+      if (event.type === "commit") socket.send(JSON.stringify({ type: "final", text: "Kept." }));
+    },
+    { livenessMs: 50 }
+  );
+  control.answering = false;
+  await adapter.connect(options);
+  adapter.sendAudio(Buffer.alloc(640));
+  await new Promise((resolve) => setTimeout(resolve, 200));
+
+  assert.equal((await adapter.finalize()).text, "Kept.");
+});
+
+test(
+  "a commit awaiting its final is bounded by the final deadline, not liveness",
+  { timeout: 2000 },
+  async (t) => {
+    const { adapter, options, control } = await stallableFixture(
+      t,
+      (socket, event) => {
+        if (event.type !== "commit") return;
+        // Inference can hold the server's event loop, so pongs stop meanwhile.
+        control.answering = false;
+        setTimeout(() => socket.send(JSON.stringify({ type: "final", text: "Slow." })), 200);
+      },
+      { livenessMs: 50 }
+    );
+    await adapter.connect(options);
+    await once(adapter.ws, "pong");
+    adapter.sendAudio(Buffer.alloc(640));
+
+    assert.equal((await adapter.finalize()).text, "Slow.");
+  }
+);
+
+test("a closed stream stops checking liveness", { timeout: 2000 }, async (t) => {
+  const { adapter, options } = await stallableFixture(t, undefined, { livenessMs: 50 });
+  const errors = [];
+  adapter.onError = (error) => errors.push(error);
+  await adapter.connect(options);
+  await once(adapter.ws, "pong");
+  await adapter.disconnect();
+  await new Promise((resolve) => setTimeout(resolve, 200));
+
+  assert.deepEqual(errors, []);
+});
+
+test("the final deadline scales with the audio sent", { timeout: 2000 }, async (t) => {
+  const { adapter, options } = await fixture(t, undefined, {
+    adapterOptions: { timeoutMs: 5000, finalTimeoutMs: (audioSeconds) => audioSeconds * 1000 },
+  });
+  await adapter.connect(options);
+  adapter.sendAudio(Buffer.alloc(3200)); // 0.1 s of 16 kHz PCM16
+  const started = Date.now();
+
+  await assert.rejects(adapter.finalize(), /timed out/);
+  assert.ok(Date.now() - started < 1000);
+});
+
+test("managed streams fail over within seconds instead of the 30 s budget", () => {
+  assert.equal(MANAGED_STREAM_OPTIONS.retryCapacity, false);
+  assert.equal(MANAGED_STREAM_OPTIONS.livenessMs, 5000);
+  assert.equal(MANAGED_STREAM_OPTIONS.timeoutMs, 10000);
+  assert.equal(MANAGED_STREAM_OPTIONS.finalTimeoutMs(0), 5000);
+  assert.equal(MANAGED_STREAM_OPTIONS.finalTimeoutMs(60), 11000);
+  assert.equal(MANAGED_STREAM_OPTIONS.finalTimeoutMs(600), 30000);
 });

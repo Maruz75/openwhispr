@@ -27,7 +27,8 @@ const cloudSession = {
 };
 const { once, EventEmitter } = require("node:events");
 const { WebSocket, WebSocketServer } = require("ws");
-const { OrukeetStreaming } = require("../../src/helpers/orukeetStreaming");
+const orukeetStreamingModule = require("../../src/helpers/orukeetStreaming");
+const { OrukeetStreaming } = orukeetStreamingModule;
 const AgentStreamRequestRegistry = require("../../src/helpers/agentStreamRequestRegistry");
 let server,
   target,
@@ -103,6 +104,7 @@ Module._load = function loadWithMocks(request, parent, isMain) {
   if (parent?.filename === handlersModulePath) {
     if (request === "./orukeetStreaming")
       return {
+        ...orukeetStreamingModule,
         OrukeetStreaming: class extends OrukeetStreaming {
           constructor(options) {
             super({
