@@ -47,7 +47,13 @@ function normalizeCommitResult(result) {
     case "sent":
       return {
         state: "sent",
-        ...stringFields({ url: result.url, destinationLabel: result.destinationLabel }),
+        // resultLabel names what the send created ("ENG-124"), for the card
+        // and the model; only a created item has one.
+        ...stringFields({
+          url: result.url,
+          destinationLabel: result.destinationLabel,
+          resultLabel: result.resultLabel,
+        }),
       };
     case "failed":
       return failedResult(result);

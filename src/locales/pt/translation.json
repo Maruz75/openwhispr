@@ -3854,7 +3854,9 @@
       "headers": {
         "default": "Enviar para {{destination}}",
         "slackPost": "Publicar em {{destination}}",
-        "email": "E-mail para {{destination}}"
+        "email": "E-mail para {{destination}}",
+        "issue": "Criar issue em {{destination}}",
+        "comment": "Comentar em {{destination}}"
       },
       "identity": "Como {{account}}",
       "identityWithWorkspace": "Como {{account}} em {{workspace}}",
@@ -3919,6 +3921,37 @@
       },
       "openIn": {
         "gmail": "Abrir no Gmail"
+      },
+      "sendLabel": {
+        "issue": "Criar issue",
+        "comment": "Comentar"
+      },
+      "issue": {
+        "created": "{{result}} criada.",
+        "createdIn": "Issue criada em {{destination}}.",
+        "unknown": "Não foi possível confirmar que a issue foi criada. Verifique {{destination}} antes de tentar novamente.",
+        "titleLabel": "Título",
+        "bodyLabel": "Descrição",
+        "missingTitle": "Adicione um título.",
+        "titleTooLong": "O título pode ter no máximo {{max}} caracteres.",
+        "bodyTooLong": "A descrição pode ter no máximo {{max}} caracteres.",
+        "notes": {
+          "labels": "Etiquetas: {{labels}}",
+          "droppedLabels": "Não adicionadas (não existem em {{destination}}): {{labels}}",
+          "priority": "Prioridade: {{priority}}",
+          "assignee": "Responsável: {{assignee}}",
+          "project": "Projeto: {{project}}"
+        }
+      },
+      "comment": {
+        "posted": "Comentário publicado em {{destination}}.",
+        "unknown": "Não foi possível confirmar que o comentário foi publicado. Verifique {{destination}} antes de tentar novamente.",
+        "bodyLabel": "Comentário",
+        "missingBody": "Escreva um comentário.",
+        "bodyTooLong": "O comentário pode ter no máximo {{max}} caracteres.",
+        "notes": {
+          "targetTitle": "Em \"{{title}}\""
+        }
       }
     },
     "policyOff": "Sua organização desativou os conectores.",
@@ -4077,7 +4110,8 @@
         "gmail": "Não foi possível confirmar o envio do e-mail para {{destination}}. Verifique a pasta Enviados do Gmail."
       },
       "gmailDraftLimit": "Só é possível preparar {{count}} e-mails por solicitação.",
-      "queryResults": "Resultados encontrados: {{total}}"
+      "queryResults": "Resultados encontrados: {{total}}",
+      "cardLimit": "Só é possível preparar {{count}} cartões por solicitação."
     }
   },
   "calendar": {

@@ -51,7 +51,7 @@ export type ConnectorQueryResult =
 // destinationLabel: who the action went to, when Send could change the
 // recipients (an edited email card). Absent means the prepared label stands.
 export type ConnectorCommitResult =
-  | { state: "sent"; url?: string; destinationLabel?: string }
+  | { state: "sent"; url?: string; destinationLabel?: string; resultLabel?: string }
   | { state: "failed"; errorCode: string; message: string }
   | { state: "unknown"; checkUrl?: string; errorCode?: string; destinationLabel?: string }
   | { state: "not_sent"; reason: string; retryable?: boolean };
@@ -83,6 +83,8 @@ export type ApprovalOutcome =
       url?: string;
       /** Who it went to, when that differs from the prepared preview's label. */
       destinationLabel?: string;
+      /** What the send created, when the connector names it ("ENG-124"). */
+      resultLabel?: string;
     } & ApprovalEdits)
   | ({ state: "failed"; errorCode: string; message: string } & ApprovalEdits)
   | ({ state: "unknown"; checkUrl?: string; destinationLabel?: string } & ApprovalEdits)

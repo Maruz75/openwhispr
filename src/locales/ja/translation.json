@@ -3854,7 +3854,9 @@
       "headers": {
         "default": "{{destination}} に送信",
         "slackPost": "{{destination}}に投稿",
-        "email": "{{destination}} 宛てのメール"
+        "email": "{{destination}} 宛てのメール",
+        "issue": "{{destination}} に Issue を作成",
+        "comment": "{{destination}} にコメント"
       },
       "identity": "{{account}} として",
       "identityWithWorkspace": "{{workspace}} の {{account}} として",
@@ -3919,6 +3921,37 @@
       },
       "openIn": {
         "gmail": "Gmailで開く"
+      },
+      "sendLabel": {
+        "issue": "Issue を作成",
+        "comment": "コメント"
+      },
+      "issue": {
+        "created": "{{result}} を作成しました。",
+        "createdIn": "{{destination}} に Issue を作成しました。",
+        "unknown": "Issue が作成されたか確認できませんでした。再試行する前に {{destination}} を確認してください。",
+        "titleLabel": "タイトル",
+        "bodyLabel": "説明",
+        "missingTitle": "タイトルを入力してください。",
+        "titleTooLong": "タイトルは{{max}}文字以内にしてください。",
+        "bodyTooLong": "説明は{{max}}文字以内にしてください。",
+        "notes": {
+          "labels": "ラベル: {{labels}}",
+          "droppedLabels": "追加されません（{{destination}} にありません）: {{labels}}",
+          "priority": "優先度: {{priority}}",
+          "assignee": "担当者: {{assignee}}",
+          "project": "プロジェクト: {{project}}"
+        }
+      },
+      "comment": {
+        "posted": "{{destination}} にコメントしました。",
+        "unknown": "コメントが投稿されたか確認できませんでした。再試行する前に {{destination}} を確認してください。",
+        "bodyLabel": "コメント",
+        "missingBody": "コメントを入力してください。",
+        "bodyTooLong": "コメントは{{max}}文字以内にしてください。",
+        "notes": {
+          "targetTitle": "「{{title}}」へ"
+        }
       }
     },
     "policyOff": "組織によってコネクタが無効にされています。",
@@ -4077,7 +4110,8 @@
         "gmail": "{{destination}} 宛てのメールが送信されたか確認できませんでした。Gmailの送信済みフォルダを確認してください。"
       },
       "gmailDraftLimit": "1回のリクエストで準備できるメールは{{count}}件までです。",
-      "queryResults": "見つかった結果: {{total}}"
+      "queryResults": "見つかった結果: {{total}}",
+      "cardLimit": "1回のリクエストで準備できるカードは{{count}}件までです。"
     }
   },
   "calendar": {

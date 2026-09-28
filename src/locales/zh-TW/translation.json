@@ -3854,7 +3854,9 @@
       "headers": {
         "default": "傳送至 {{destination}}",
         "slackPost": "發佈到 {{destination}}",
-        "email": "寄送郵件給 {{destination}}"
+        "email": "寄送郵件給 {{destination}}",
+        "issue": "在 {{destination}} 中建立問題",
+        "comment": "留言於 {{destination}}"
       },
       "identity": "以 {{account}} 身分",
       "identityWithWorkspace": "以 {{account}}（{{workspace}}）身分",
@@ -3919,6 +3921,37 @@
       },
       "openIn": {
         "gmail": "在 Gmail 中開啟"
+      },
+      "sendLabel": {
+        "issue": "建立問題",
+        "comment": "留言"
+      },
+      "issue": {
+        "created": "已建立 {{result}}。",
+        "createdIn": "已在 {{destination}} 中建立問題。",
+        "unknown": "無法確認問題是否已建立。請先檢查 {{destination}} 再重試。",
+        "titleLabel": "標題",
+        "bodyLabel": "描述",
+        "missingTitle": "請新增標題。",
+        "titleTooLong": "標題不能超過 {{max}} 個字元。",
+        "bodyTooLong": "描述不能超過 {{max}} 個字元。",
+        "notes": {
+          "labels": "標籤：{{labels}}",
+          "droppedLabels": "未新增（{{destination}} 中不存在）：{{labels}}",
+          "priority": "優先順序：{{priority}}",
+          "assignee": "負責人：{{assignee}}",
+          "project": "專案：{{project}}"
+        }
+      },
+      "comment": {
+        "posted": "已在 {{destination}} 留言。",
+        "unknown": "無法確認留言是否已發布。請先檢查 {{destination}} 再重試。",
+        "bodyLabel": "留言",
+        "missingBody": "請輸入留言。",
+        "bodyTooLong": "留言不能超過 {{max}} 個字元。",
+        "notes": {
+          "targetTitle": "關於「{{title}}」"
+        }
       }
     },
     "policyOff": "您的組織已關閉連接器。",
@@ -4077,7 +4110,8 @@
         "gmail": "無法確認寄給 {{destination}} 的郵件是否已傳送，請檢查 Gmail 的「寄件備份」資料夾。"
       },
       "gmailDraftLimit": "每次請求最多只能準備 {{count}} 封郵件。",
-      "queryResults": "找到的結果：{{total}}"
+      "queryResults": "找到的結果：{{total}}",
+      "cardLimit": "每次請求最多只能準備 {{count}} 張卡片。"
     }
   },
   "calendar": {

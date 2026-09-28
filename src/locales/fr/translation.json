@@ -4023,7 +4023,9 @@
       "headers": {
         "default": "Envoyer à {{destination}}",
         "slackPost": "Publier dans {{destination}}",
-        "email": "E-mail à {{destination}}"
+        "email": "E-mail à {{destination}}",
+        "issue": "Créer un ticket dans {{destination}}",
+        "comment": "Commenter {{destination}}"
       },
       "identity": "En tant que {{account}}",
       "identityWithWorkspace": "En tant que {{account}} dans {{workspace}}",
@@ -4088,6 +4090,37 @@
       },
       "openIn": {
         "gmail": "Ouvrir dans Gmail"
+      },
+      "sendLabel": {
+        "issue": "Créer le ticket",
+        "comment": "Commenter"
+      },
+      "issue": {
+        "created": "{{result}} créé.",
+        "createdIn": "Ticket créé dans {{destination}}.",
+        "unknown": "Impossible de confirmer la création du ticket. Vérifiez {{destination}} avant de réessayer.",
+        "titleLabel": "Titre",
+        "bodyLabel": "Description",
+        "missingTitle": "Ajoutez un titre.",
+        "titleTooLong": "Le titre doit compter au plus {{max}} caractères.",
+        "bodyTooLong": "La description doit compter au plus {{max}} caractères.",
+        "notes": {
+          "labels": "Libellés : {{labels}}",
+          "droppedLabels": "Non ajoutés (absents de {{destination}}) : {{labels}}",
+          "priority": "Priorité : {{priority}}",
+          "assignee": "Assigné à : {{assignee}}",
+          "project": "Projet : {{project}}"
+        }
+      },
+      "comment": {
+        "posted": "Commentaire publié sur {{destination}}.",
+        "unknown": "Impossible de confirmer la publication du commentaire. Vérifiez {{destination}} avant de réessayer.",
+        "bodyLabel": "Commentaire",
+        "missingBody": "Rédigez un commentaire.",
+        "bodyTooLong": "Le commentaire doit compter au plus {{max}} caractères.",
+        "notes": {
+          "targetTitle": "Sur « {{title}} »"
+        }
       }
     },
     "policyOff": "Votre organisation a désactivé les connecteurs.",
@@ -4246,7 +4279,8 @@
         "gmail": "Impossible de confirmer l'envoi de l'e-mail à {{destination}}. Vérifiez le dossier Messages envoyés de Gmail."
       },
       "gmailDraftLimit": "Seuls {{count}} e-mails peuvent être préparés par demande.",
-      "queryResults": "Résultats trouvés : {{total}}"
+      "queryResults": "Résultats trouvés : {{total}}",
+      "cardLimit": "Seules {{count}} cartes peuvent être préparées par demande."
     }
   },
   "notesView": {

@@ -2154,3 +2154,30 @@ test("a query that throws or answers malformed fails closed, a lost login is bro
   });
   assert.doesNotMatch(JSON.stringify(logs), /roadmap|linear\.test|secret-token/i);
 });
+
+test("a sent commit may name what it created; nothing else keeps a result label", async () => {
+  const replies = [
+    { state: "sent", url: "https://linear.test/ENG-124", resultLabel: "ENG-124" },
+    { state: "sent", resultLabel: 124 },
+    { state: "unknown", resultLabel: "ENG-125" },
+    { state: "failed", errorCode: "rate_limited", message: "busy", resultLabel: "ENG-126" },
+  ];
+  const { manager } = await setup({
+    async commit() {
+      return replies.shift();
+    },
+  });
+
+  const results = [];
+  for (const text of ["a", "b", "c", "d"]) {
+    const prepared = await manager.prepare("fake", "post", { text }, ALLOWED);
+    results.push(await manager.commit(prepared.actionId, {}, ALLOWED));
+  }
+
+  assert.deepEqual(results, [
+    { state: "sent", url: "https://linear.test/ENG-124", resultLabel: "ENG-124" },
+    { state: "sent" },
+    { state: "unknown" },
+    { state: "failed", errorCode: "rate_limited", message: "busy" },
+  ]);
+});

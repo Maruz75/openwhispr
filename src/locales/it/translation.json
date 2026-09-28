@@ -3854,7 +3854,9 @@
       "headers": {
         "default": "Invia a {{destination}}",
         "slackPost": "Pubblica su {{destination}}",
-        "email": "Email a {{destination}}"
+        "email": "Email a {{destination}}",
+        "issue": "Crea issue in {{destination}}",
+        "comment": "Commenta {{destination}}"
       },
       "identity": "Come {{account}}",
       "identityWithWorkspace": "Come {{account}} in {{workspace}}",
@@ -3919,6 +3921,37 @@
       },
       "openIn": {
         "gmail": "Apri in Gmail"
+      },
+      "sendLabel": {
+        "issue": "Crea issue",
+        "comment": "Commenta"
+      },
+      "issue": {
+        "created": "{{result}} creata.",
+        "createdIn": "Issue creata in {{destination}}.",
+        "unknown": "Impossibile confermare la creazione della issue. Controlla {{destination}} prima di riprovare.",
+        "titleLabel": "Titolo",
+        "bodyLabel": "Descrizione",
+        "missingTitle": "Aggiungi un titolo.",
+        "titleTooLong": "Il titolo può contenere al massimo {{max}} caratteri.",
+        "bodyTooLong": "La descrizione può contenere al massimo {{max}} caratteri.",
+        "notes": {
+          "labels": "Etichette: {{labels}}",
+          "droppedLabels": "Non aggiunte (non presenti in {{destination}}): {{labels}}",
+          "priority": "Priorità: {{priority}}",
+          "assignee": "Assegnata a: {{assignee}}",
+          "project": "Progetto: {{project}}"
+        }
+      },
+      "comment": {
+        "posted": "Commento pubblicato su {{destination}}.",
+        "unknown": "Impossibile confermare la pubblicazione del commento. Controlla {{destination}} prima di riprovare.",
+        "bodyLabel": "Commento",
+        "missingBody": "Scrivi un commento.",
+        "bodyTooLong": "Il commento può contenere al massimo {{max}} caratteri.",
+        "notes": {
+          "targetTitle": "Su «{{title}}»"
+        }
       }
     },
     "policyOff": "La tua organizzazione ha disattivato i connettori.",
@@ -4077,7 +4110,8 @@
         "gmail": "Impossibile confermare l'invio dell'email a {{destination}}. Controlla la cartella Posta inviata di Gmail."
       },
       "gmailDraftLimit": "Si possono preparare solo {{count}} email per richiesta.",
-      "queryResults": "Risultati trovati: {{total}}"
+      "queryResults": "Risultati trovati: {{total}}",
+      "cardLimit": "Si possono preparare solo {{count}} schede per richiesta."
     }
   },
   "calendar": {

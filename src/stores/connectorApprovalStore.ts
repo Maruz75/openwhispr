@@ -39,6 +39,8 @@ export interface ApprovalEntry {
   errorCode?: string;
   /** Who a sent or unknown action went to, as main reported it after Send. */
   destinationLabel?: string;
+  /** What a sent action created, as the connector named it ("ENG-124"). */
+  resultLabel?: string;
   /** Shown on a pending card after a Send that could not run. */
   notice?: "policy_retry";
 }
@@ -281,6 +283,12 @@ export async function approveAction(key: string): Promise<void> {
     result.destinationLabel !== ""
       ? { destinationLabel: result.destinationLabel }
       : {};
+  // resultLabel names what the send created ("ENG-124"); only a sent commit
+  // ever carries one.
+  const created =
+    result.state === "sent" && typeof result.resultLabel === "string" && result.resultLabel !== ""
+      ? { resultLabel: result.resultLabel }
+      : {};
   switch (result.state) {
     case "sent":
       settle(
@@ -290,9 +298,10 @@ export async function approveAction(key: string): Promise<void> {
           url: result.url,
           ...userEdits,
           ...destination,
+          ...created,
         },
         "sent",
-        { url: result.url, ...destination }
+        { url: result.url, ...destination, ...created }
       );
       break;
     case "failed":

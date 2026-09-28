@@ -4023,7 +4023,9 @@
       "headers": {
         "default": "An {{destination}} senden",
         "slackPost": "In {{destination}} posten",
-        "email": "E-Mail an {{destination}}"
+        "email": "E-Mail an {{destination}}",
+        "issue": "Issue in {{destination}} erstellen",
+        "comment": "{{destination}} kommentieren"
       },
       "identity": "Als {{account}}",
       "identityWithWorkspace": "Als {{account}} in {{workspace}}",
@@ -4088,6 +4090,37 @@
       },
       "openIn": {
         "gmail": "In Gmail öffnen"
+      },
+      "sendLabel": {
+        "issue": "Issue erstellen",
+        "comment": "Kommentieren"
+      },
+      "issue": {
+        "created": "{{result}} erstellt.",
+        "createdIn": "Issue in {{destination}} erstellt.",
+        "unknown": "Es konnte nicht bestätigt werden, dass das Issue erstellt wurde. Bitte {{destination}} prüfen, bevor es erneut versucht wird.",
+        "titleLabel": "Titel",
+        "bodyLabel": "Beschreibung",
+        "missingTitle": "Titel hinzufügen.",
+        "titleTooLong": "Der Titel darf höchstens {{max}} Zeichen lang sein.",
+        "bodyTooLong": "Die Beschreibung darf höchstens {{max}} Zeichen lang sein.",
+        "notes": {
+          "labels": "Labels: {{labels}}",
+          "droppedLabels": "Nicht hinzugefügt (nicht in {{destination}}): {{labels}}",
+          "priority": "Priorität: {{priority}}",
+          "assignee": "Zugewiesen an: {{assignee}}",
+          "project": "Projekt: {{project}}"
+        }
+      },
+      "comment": {
+        "posted": "{{destination}} kommentiert.",
+        "unknown": "Es konnte nicht bestätigt werden, dass der Kommentar gepostet wurde. Bitte {{destination}} prüfen, bevor es erneut versucht wird.",
+        "bodyLabel": "Kommentar",
+        "missingBody": "Kommentar eingeben.",
+        "bodyTooLong": "Der Kommentar darf höchstens {{max}} Zeichen lang sein.",
+        "notes": {
+          "targetTitle": "Zu „{{title}}“"
+        }
       }
     },
     "policyOff": "Konnektoren wurden von deiner Organisation deaktiviert.",
@@ -4246,7 +4279,8 @@
         "gmail": "Konnte nicht bestätigen, dass die E-Mail an {{destination}} gesendet wurde. Prüfe den Gmail-Ordner „Gesendet“."
       },
       "gmailDraftLimit": "Pro Anfrage können nur {{count}} E-Mails vorbereitet werden.",
-      "queryResults": "Gefundene Ergebnisse: {{total}}"
+      "queryResults": "Gefundene Ergebnisse: {{total}}",
+      "cardLimit": "Pro Anfrage können nur {{count}} Karten vorbereitet werden."
     }
   },
   "notesView": {

@@ -134,6 +134,8 @@ async function mountEmailCard(
         signal: new AbortController().signal,
         onApprovalRequested() {},
         onHoldDelivery() {},
+        claimTurnSlot: () => true,
+        releaseTurnSlot() {},
       },
       "gmail",
       "send",

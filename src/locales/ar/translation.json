@@ -716,7 +716,9 @@
       "headers": {
         "default": "إرسال إلى {{destination}}",
         "slackPost": "نشر في {{destination}}",
-        "email": "بريد إلكتروني إلى {{destination}}"
+        "email": "بريد إلكتروني إلى {{destination}}",
+        "issue": "إنشاء مشكلة في {{destination}}",
+        "comment": "التعليق على {{destination}}"
       },
       "identity": "بصفتك {{account}}",
       "identityWithWorkspace": "بصفتك {{account}} في {{workspace}}",
@@ -781,6 +783,37 @@
       },
       "openIn": {
         "gmail": "فتح في Gmail"
+      },
+      "sendLabel": {
+        "issue": "إنشاء مشكلة",
+        "comment": "تعليق"
+      },
+      "issue": {
+        "created": "تم إنشاء {{result}}.",
+        "createdIn": "تم إنشاء مشكلة في {{destination}}.",
+        "unknown": "تعذّر تأكيد إنشاء المشكلة. تحقق من {{destination}} قبل المحاولة مرة أخرى.",
+        "titleLabel": "العنوان",
+        "bodyLabel": "الوصف",
+        "missingTitle": "أضف عنوانًا.",
+        "titleTooLong": "اجعل العنوان {{max}} حرفًا أو أقل.",
+        "bodyTooLong": "اجعل الوصف {{max}} حرفًا أو أقل.",
+        "notes": {
+          "labels": "التسميات: {{labels}}",
+          "droppedLabels": "لم تُضف (غير موجودة في {{destination}}): {{labels}}",
+          "priority": "الأولوية: {{priority}}",
+          "assignee": "المُسنَد إليه: {{assignee}}",
+          "project": "المشروع: {{project}}"
+        }
+      },
+      "comment": {
+        "posted": "تم التعليق على {{destination}}.",
+        "unknown": "تعذّر تأكيد نشر التعليق. تحقق من {{destination}} قبل المحاولة مرة أخرى.",
+        "bodyLabel": "التعليق",
+        "missingBody": "اكتب تعليقًا.",
+        "bodyTooLong": "اجعل التعليق {{max}} حرفًا أو أقل.",
+        "notes": {
+          "targetTitle": "على \"{{title}}\""
+        }
       }
     },
     "policyOff": "أوقفت مؤسستك تشغيل الموصلات.",
@@ -939,7 +972,8 @@
         "gmail": "تعذّر تأكيد إرسال البريد الإلكتروني إلى {{destination}}. تحقق من مجلد البريد المُرسل في Gmail."
       },
       "gmailDraftLimit": "يمكن تجهيز {{count}} رسائل بريد إلكتروني فقط لكل طلب.",
-      "queryResults": "النتائج التي عُثر عليها: {{total}}"
+      "queryResults": "النتائج التي عُثر عليها: {{total}}",
+      "cardLimit": "يمكن تجهيز {{count}} بطاقات فقط لكل طلب."
     }
   },
   "auth": {

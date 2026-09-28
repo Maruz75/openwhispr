@@ -18,7 +18,16 @@ import {
   hasEmailFieldProblem,
   toEmailFields,
 } from "../../utils/emailApprovalFields";
+import {
+  issueFieldProblem,
+  issueProblemCopy,
+  issueSentCopy,
+  issueUnknownCopy,
+  issueVerb,
+  toIssueFields,
+} from "../../utils/issueApprovalFields";
 import { EmailApprovalFields } from "./EmailApprovalFields";
+import { IssueApprovalFields } from "./IssueApprovalFields";
 
 // The draft lives in the store, so edit mode only changes how it is shown:
 // Send always commits exactly what the card displays.
@@ -33,17 +42,21 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
   // back to the plain layout rather than showing empty fields.
   const emailFields =
     preview.verbKey === "email" && draft.fields ? toEmailFields(draft.fields) : null;
+  // So does an issue or comment card, with its title and body.
+  const verb = issueVerb(preview.verbKey);
+  const issueFields = verb && draft.fields ? toIssueFields(draft.fields, verb) : null;
   // Who it goes to follows the user's edits: main's answer once sent,
   // otherwise the card's own To and Cc.
   const destination =
     entry.destinationLabel ??
     ((emailFields && recipientsLabel(emailFields.to, emailFields.cc)) || preview.destinationLabel);
   const problems = emailFields ? emailFieldProblems(emailFields) : null;
-  // Send commits exactly what the card shows, so it waits until every
-  // address on it is one the email can go to, within Gmail's limits.
-  const sendBlocked = Boolean(problems && hasEmailFieldProblem(problems));
+  const issueProblem = verb && issueFields ? issueFieldProblem(issueFields, verb) : null;
+  // Send commits exactly what the card shows, so it waits until the card
+  // holds something the provider would accept.
+  const sendBlocked = Boolean(problems && hasEmailFieldProblem(problems)) || issueProblem !== null;
   const problemsId = useId();
-  const problemText = !problems
+  const emailProblemText = !problems
     ? null
     : problems.invalid.length > 0
       ? t("connectors.approval.email.invalidAddress", { address: problems.invalid[0] })
@@ -56,6 +69,27 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
             : problems.bodyTooLong
               ? t("connectors.approval.email.bodyTooLong")
               : null;
+  const issueProblemRef = verb && issueProblem ? issueProblemCopy(issueProblem, verb) : null;
+  const problemText = issueProblemRef
+    ? t(issueProblemRef.key, issueProblemRef.values)
+    : emailProblemText;
+  const hasFieldLayout = Boolean(emailFields || issueFields);
+
+  // Each layout names its own button and outcomes ("Create issue",
+  // "Created ENG-124"); every other card keeps Send and "Sent to …".
+  const sendLabel = t(`connectors.approval.sendLabel.${preview.verbKey}`, {
+    defaultValue: t("connectors.approval.send"),
+  });
+  const sentRef = verb ? issueSentCopy(verb, destination, entry.resultLabel) : null;
+  const sentText = sentRef
+    ? t(sentRef.key, sentRef.values)
+    : t("connectors.approval.sent", { destination });
+  const unknownRef = verb ? issueUnknownCopy(verb, destination) : null;
+  const unknownText = emailFields
+    ? t("connectors.approval.email.unknown")
+    : unknownRef
+      ? t(unknownRef.key, unknownRef.values)
+      : t("connectors.approval.unknown", { destination });
 
   // Send and Cancel remove the button that had focus; the card keeps it, so
   // keyboard and screen-reader users land on the result.
@@ -116,17 +150,17 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
             problemsId={problemsId}
             onChange={(patch) => updateApprovalDraft(entry.key, { fields: patch })}
           />
-          {/* Polite and always present, so a screen reader hears each new
-              reason without being interrupted on every keystroke. */}
-          {entry.state === "pending" && (
-            <p
-              id={problemsId}
-              aria-live="polite"
-              className="mt-2 text-xs text-destructive empty:mt-0"
-            >
-              {problemText}
-            </p>
-          )}
+        </div>
+      ) : issueFields && verb ? (
+        <div className="mt-2" onKeyDown={showEditor ? onEditorKeyDown : undefined}>
+          <IssueApprovalFields
+            verb={verb}
+            fields={issueFields}
+            editing={showEditor}
+            problem={issueProblem}
+            problemsId={problemsId}
+            onChange={(patch) => updateApprovalDraft(entry.key, { fields: patch })}
+          />
         </div>
       ) : showEditor ? (
         <div className="mt-2 space-y-2" onKeyDown={onEditorKeyDown}>
@@ -156,8 +190,16 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
         </div>
       )}
 
+      {/* Polite and always present, so a screen reader hears each new
+          reason without being interrupted on every keystroke. */}
+      {hasFieldLayout && entry.state === "pending" && (
+        <p id={problemsId} aria-live="polite" className="mt-2 text-xs text-destructive empty:mt-0">
+          {problemText}
+        </p>
+      )}
+
       {preview.notes?.map((note) => (
-        <p key={note.key} className="mt-1 text-xs text-muted-foreground">
+        <p key={note.key} className="mt-1 text-xs text-muted-foreground" dir="auto">
           {t(note.key, note.values)}
         </p>
       ))}
@@ -173,7 +215,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
         )}
         {entry.state === "sent" && (
           <p className="mt-2 text-foreground">
-            {t("connectors.approval.sent", { destination })}
+            {sentText}
             {entry.url && (
               <Button size="sm" variant="link" onClick={() => openLink(entry.url as string)}>
                 {openLabel}
@@ -195,9 +237,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
         )}
         {entry.state === "unknown" && (
           <p className="mt-2 text-foreground">
-            {emailFields
-              ? t("connectors.approval.email.unknown")
-              : t("connectors.approval.unknown", { destination })}
+            {unknownText}
             {entry.url && (
               <Button size="sm" variant="link" onClick={() => openLink(entry.url as string)}>
                 {openLabel}
@@ -225,7 +265,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
               void approveAction(entry.key);
             }}
           >
-            {t("connectors.approval.send")}
+            {sendLabel}
           </Button>
           <Button size="sm" variant="outline" onClick={() => setEditing((value) => !value)}>
             {editing ? t("connectors.approval.doneEditing") : t("connectors.approval.edit")}

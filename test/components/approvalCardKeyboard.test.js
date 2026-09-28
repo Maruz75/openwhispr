@@ -129,6 +129,8 @@ async function mountPendingCard(t) {
         signal: new AbortController().signal,
         onApprovalRequested() {},
         onHoldDelivery() {},
+        claimTurnSlot: () => true,
+        releaseTurnSlot() {},
       },
       "slack",
       "send_message",

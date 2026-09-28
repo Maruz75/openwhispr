@@ -169,6 +169,7 @@ function toolContext(messageId, toolCallId, held = { count: 0 }) {
       held.count += 1;
     },
     claimTurnSlot: () => true,
+    releaseTurnSlot() {},
   };
 }
 
@@ -1031,8 +1032,15 @@ test("a cancelled Gmail card gives its slot back", async (t) => {
   const result = await pending;
 
   assert.equal(result.data.status, "cancelled_by_user");
-  assert.deepEqual(context.claims, [["email_draft", 3]]);
-  assert.deepEqual(context.releases, ["email_draft"]);
+  assert.deepEqual(
+    context.claims,
+    [
+      ["email_draft", 3],
+      ["approval_card", 5],
+    ],
+    "the card that appeared also claimed a card slot"
+  );
+  assert.deepEqual(context.releases, ["email_draft"], "a card the user saw keeps its card slot");
 });
 
 test("a Gmail login that needs reconnecting stops before any card or compose window", async (t) => {
@@ -1089,7 +1097,7 @@ test("a reconnect main reports while preparing reads the same as one the store k
   assert.equal(result.data.status, "unavailable");
   assert.equal(result.data.reason, "reconnect_needed");
   assert.match(result.data.guidance, /reconnect Gmail/);
-  assert.deepEqual(context.releases, ["email_draft"]);
+  assert.deepEqual(context.releases, ["approval_card", "email_draft"]);
 });
 
 test("a prepare call main rejects gives the slot back and tells the model not to retry", async (t) => {
@@ -1109,7 +1117,7 @@ test("a prepare call main rejects gives the slot back and tells the model not to
   assert.equal(result.data.status, "unavailable");
   assert.equal(result.data.reason, "connectors_unavailable");
   assert.doesNotMatch(JSON.stringify(result), /remote method/);
-  assert.deepEqual(context.releases, ["email_draft"]);
+  assert.deepEqual(context.releases, ["approval_card", "email_draft"]);
 });
 
 test("with Gmail chosen, names and bad addresses still come back as questions", async (t) => {
@@ -1310,4 +1318,119 @@ test("runQueryAction passes every other outcome through the shared tool results"
   const noContext = await runQueryAction(undefined, "linear", "search_issues", {});
   assert.equal(noContext.data.reason, "no_chat_context");
   assert.equal(queried, before, "no chat, no query");
+});
+
+const loadRunApproval = () => import("../../src/services/tools/connectors/runApprovalAction.ts");
+const loadExecutionScope = () => import("../../src/components/chat/toolExecutionScope.ts");
+
+// Polls a condition without risking an indefinite hang: a regression that
+// never satisfies it fails the test instead of stalling the whole suite.
+async function waitUntil(condition, description, maxIterations = 2000) {
+  for (let i = 0; i < maxIterations; i += 1) {
+    if (condition()) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.fail(`timed out waiting for: ${description}`);
+}
+
+test("a turn raises at most five cards across connectors; a call that shows no card gives its slot back", async (t) => {
+  await useEnglish();
+  let prepares = 0;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async (_connectorId, _action, args) => {
+          prepares += 1;
+          if (args.text === "unclear") {
+            return { status: "needs_clarification", message: "Which channel?", candidates: [] };
+          }
+          if (args.text === "broken") throw new Error("Error invoking remote method");
+          return {
+            status: "ready",
+            actionId: `a-${prepares}`,
+            preview: {
+              verbKey: "slackPost",
+              destinationLabel: "#eng",
+              accountLabel: "chad",
+              body: args.text,
+            },
+          };
+        },
+        connectorCancel: async () => ({ cancelled: true }),
+      },
+    },
+  });
+  const [
+    { runApprovalAction, MAX_APPROVAL_CARDS_PER_TURN },
+    { createToolExecutionScope },
+    approvals,
+  ] = await Promise.all([loadRunApproval(), loadExecutionScope(), loadApprovals()]);
+  approvals.useConnectorApprovalStore.setState({ entries: {} });
+  const scope = createToolExecutionScope();
+  const run = (id, text) =>
+    runApprovalAction(
+      scope.createContext({ messageId: "m-cap", toolCallId: id }),
+      "slack",
+      "send_message",
+      { destination: "#eng", text }
+    );
+
+  assert.equal(MAX_APPROVAL_CARDS_PER_TURN, 5);
+  // Neither shows a card, so neither uses up the turn.
+  assert.equal((await run("q", "unclear")).data.status, "needs_clarification");
+  assert.equal((await run("b", "broken")).data.status, "unavailable");
+
+  // The AI SDK runs a step's calls in parallel: eight at once.
+  const results = ["1", "2", "3", "4", "5", "6", "7", "8"].map((id) => run(id, `issue ${id}`));
+  const entries = () => Object.values(approvals.useConnectorApprovalStore.getState().entries);
+  await waitUntil(() => entries().length >= 5, "5 approval cards to appear");
+  const refused = await Promise.all(results.slice(5));
+
+  assert.equal(prepares, 2 + 5, "the calls past the cap never reach main");
+  for (const result of refused) {
+    assert.equal(result.data.status, "not_sent");
+    assert.equal(result.data.reason, "card_limit");
+    assert.match(result.data.guidance, /Only 5 approval cards can be prepared per request/);
+    assert.equal(result.displayText, "Only 5 cards can be prepared per request.");
+  }
+
+  // A card the user saw and cancelled still counted.
+  for (const entry of entries()) approvals.cancelApproval(entry.key);
+  await Promise.all(results.slice(0, 5));
+  assert.equal((await run("9", "late")).data.reason, "card_limit");
+
+  // A new turn starts over.
+  const next = createToolExecutionScope().createContext({ messageId: "m-next", toolCallId: "1" });
+  assert.equal(next.claimTurnSlot("approval_card", MAX_APPROVAL_CARDS_PER_TURN), true);
+});
+
+test("a Gmail email the card cap refuses gives back its email slot", async (t) => {
+  let prepared = 0;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => {
+          prepared += 1;
+        },
+      },
+    },
+  });
+  await setGmailStatus();
+  const { createEmailDraftTool } = await loadEmail();
+  const context = gmailContext("m27", "call-27");
+  context.claimTurnSlot = (key, limit) => {
+    context.claims.push([key, limit]);
+    return key !== "approval_card";
+  };
+
+  const result = await createEmailDraftTool("gmailSend").execute(GMAIL_DRAFT, context);
+
+  assert.equal(result.data.status, "not_sent");
+  assert.equal(result.data.reason, "card_limit");
+  assert.equal(prepared, 0);
+  assert.deepEqual(context.claims, [
+    ["email_draft", 3],
+    ["approval_card", 5],
+  ]);
+  assert.deepEqual(context.releases, ["email_draft"]);
 });

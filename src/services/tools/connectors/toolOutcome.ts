@@ -1,5 +1,6 @@
 import i18n from "../../../i18n";
 import { connectorErrorText } from "../../../utils/connectorErrorCopy";
+import { issueSentCopy, issueUnknownCopy, issueVerb } from "../../../utils/issueApprovalFields";
 import type { ToolResult } from "../ToolRegistry";
 import type {
   ApprovalEdits,
@@ -90,11 +91,19 @@ export interface ApprovalOutcomeOptions {
   unknownGuidance?: string;
   /** Picks the connector's own wording for a failed or unknown tool step. */
   connectorId?: string;
+  /** The card's layout; an issue or comment reads "Created ENG-124" rather than "Sent to". */
+  verbKey?: string;
 }
 
 // A connector with its own wording says where to look (Gmail: "Check your
-// Gmail Sent folder."); any other keeps the generic line.
-function unknownDisplayText(destination: string, connectorId?: string): string {
+// Gmail Sent folder."); an issue or comment names what may not exist; any
+// other keeps the generic line.
+function unknownDisplayText(destination: string, connectorId?: string, verbKey?: string): string {
+  const verb = verbKey ? issueVerb(verbKey) : null;
+  if (verb) {
+    const copy = issueUnknownCopy(verb, destination);
+    return i18n.t(copy.key, copy.values);
+  }
   const generic = i18n.t("connectors.approval.unknown", { destination });
   return connectorId
     ? i18n.t(`connectors.toolStatus.unknownSent.${connectorId}`, {
@@ -102,6 +111,13 @@ function unknownDisplayText(destination: string, connectorId?: string): string {
         defaultValue: generic,
       })
     : generic;
+}
+
+function sentDisplayText(destination: string, resultLabel?: string, verbKey?: string): string {
+  const verb = verbKey ? issueVerb(verbKey) : null;
+  if (!verb) return i18n.t("connectors.approval.sent", { destination });
+  const copy = issueSentCopy(verb, destination, resultLabel);
+  return i18n.t(copy.key, copy.values);
 }
 
 // What the user changed on the card, so the model describes (or proposes
@@ -127,8 +143,10 @@ export function approvalOutcomeResult(
           url: outcome.url,
           destination,
           ...userEdits(outcome),
+          // What was created ("ENG-124"), so the model can name it.
+          ...(outcome.resultLabel !== undefined ? { reference: outcome.resultLabel } : {}),
         },
-        displayText: i18n.t("connectors.approval.sent", { destination }),
+        displayText: sentDisplayText(destination, outcome.resultLabel, options.verbKey),
       };
     case "cancelled":
       return {
@@ -160,7 +178,7 @@ export function approvalOutcomeResult(
             options.unknownGuidance ?? `Tell the user to check ${destination}.`
           }`,
         },
-        displayText: unknownDisplayText(destination, options.connectorId),
+        displayText: unknownDisplayText(destination, options.connectorId, options.verbKey),
       };
   }
 }

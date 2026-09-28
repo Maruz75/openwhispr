@@ -3898,7 +3898,9 @@
       "headers": {
         "default": "Отправить в {{destination}}",
         "slackPost": "Опубликовать в {{destination}}",
-        "email": "Письмо для {{destination}}"
+        "email": "Письмо для {{destination}}",
+        "issue": "Создать задачу в {{destination}}",
+        "comment": "Комментарий к {{destination}}"
       },
       "identity": "От имени {{account}}",
       "identityWithWorkspace": "От имени {{account}} в {{workspace}}",
@@ -3963,6 +3965,37 @@
       },
       "openIn": {
         "gmail": "Открыть в Gmail"
+      },
+      "sendLabel": {
+        "issue": "Создать задачу",
+        "comment": "Комментировать"
+      },
+      "issue": {
+        "created": "Создано: {{result}}.",
+        "createdIn": "Задача создана в {{destination}}.",
+        "unknown": "Не удалось подтвердить создание задачи. Проверьте {{destination}}, прежде чем пробовать снова.",
+        "titleLabel": "Заголовок",
+        "bodyLabel": "Описание",
+        "missingTitle": "Добавьте заголовок.",
+        "titleTooLong": "Заголовок должен быть не длиннее {{max}} символов.",
+        "bodyTooLong": "Описание должно быть не длиннее {{max}} символов.",
+        "notes": {
+          "labels": "Метки: {{labels}}",
+          "droppedLabels": "Не добавлены (нет в {{destination}}): {{labels}}",
+          "priority": "Приоритет: {{priority}}",
+          "assignee": "Исполнитель: {{assignee}}",
+          "project": "Проект: {{project}}"
+        }
+      },
+      "comment": {
+        "posted": "Комментарий к {{destination}} опубликован.",
+        "unknown": "Не удалось подтвердить публикацию комментария. Проверьте {{destination}}, прежде чем пробовать снова.",
+        "bodyLabel": "Комментарий",
+        "missingBody": "Напишите комментарий.",
+        "bodyTooLong": "Комментарий должен быть не длиннее {{max}} символов.",
+        "notes": {
+          "targetTitle": "К «{{title}}»"
+        }
       }
     },
     "policyOff": "Ваша организация отключила коннекторы.",
@@ -4121,7 +4154,8 @@
         "gmail": "Не удалось подтвердить отправку письма для {{destination}}. Проверьте папку «Отправленные» в Gmail."
       },
       "gmailDraftLimit": "Лимит писем на один запрос: {{count}}.",
-      "queryResults": "Найдено результатов: {{total}}"
+      "queryResults": "Найдено результатов: {{total}}",
+      "cardLimit": "Лимит карточек на один запрос: {{count}}."
     }
   },
   "calendar": {

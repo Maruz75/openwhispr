@@ -77,7 +77,14 @@ test("runApprovalAction passes clarifications straight back to the model", async
   const { runApprovalAction } = await loadRun();
   const controller = new AbortController();
   const result = await runApprovalAction(
-    { messageId: "m1", toolCallId: "call-1", signal: controller.signal, onApprovalRequested() {} },
+    {
+      messageId: "m1",
+      toolCallId: "call-1",
+      signal: controller.signal,
+      onApprovalRequested() {},
+      claimTurnSlot: () => true,
+      releaseTurnSlot() {},
+    },
     "slack",
     "send_message",
     { destination: "#eng" }
@@ -114,7 +121,14 @@ test("runApprovalAction waits for the card and returns the send", async (t) => {
   const controller = new AbortController();
 
   const pending = runApprovalAction(
-    { messageId: "m1", toolCallId: "call-2", signal: controller.signal, onApprovalRequested() {} },
+    {
+      messageId: "m1",
+      toolCallId: "call-2",
+      signal: controller.signal,
+      onApprovalRequested() {},
+      claimTurnSlot: () => true,
+      releaseTurnSlot() {},
+    },
     "slack",
     "send_message",
     { destination: "#eng", text: "hi" }
@@ -235,7 +249,8 @@ test("a failed or unknown email still tells the model what the user changed", as
   assert.equal(unknown.finalText, "edited");
   assert.equal(unknown.status, "unknown");
   assert.equal(
-    "final" in approvalOutcomeResult({ state: "failed", errorCode: "x", message: "m" }, "#eng").data,
+    "final" in
+      approvalOutcomeResult({ state: "failed", errorCode: "x", message: "m" }, "#eng").data,
     false,
     "an unedited card adds nothing"
   );
@@ -311,6 +326,8 @@ test("runApprovalAction words a Gmail failure for Gmail and passes its unknown g
     toolCallId,
     signal: new AbortController().signal,
     onApprovalRequested() {},
+    claimTurnSlot: () => true,
+    releaseTurnSlot() {},
   });
   const options = { unknownGuidance: "Tell the user to check their Gmail Sent folder." };
 
@@ -368,5 +385,94 @@ test("runApprovalAction words a Gmail failure for Gmail and passes its unknown g
   assert.equal(
     approvalOutcomeResult({ state: "unknown" }, "#eng").displayText,
     "Couldn't confirm it was sent. Check #eng."
+  );
+});
+
+test("a created item's label reaches the card and the model; a malformed one doesn't", async (t) => {
+  const replies = [
+    { state: "sent", url: "https://linear.test/ENG-124", resultLabel: "ENG-124" },
+    { state: "sent", url: "https://linear.test/ENG-125", resultLabel: 125 },
+  ];
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => ({
+          status: "ready",
+          actionId: `a-${replies.length}`,
+          preview: {
+            verbKey: "default",
+            destinationLabel: "ENG",
+            accountLabel: "chad",
+            body: "hi",
+          },
+        }),
+        connectorCommit: async () => replies.shift(),
+        connectorCancel: async () => ({ cancelled: true }),
+      },
+    },
+  });
+  const { runApprovalAction } = await loadRun();
+  const { approvalKey, approveAction, useConnectorApprovalStore } = await loadStore();
+  useConnectorApprovalStore.setState({ entries: {} });
+  const send = async (toolCallId) => {
+    const pending = runApprovalAction(
+      {
+        messageId: "m7",
+        toolCallId,
+        signal: new AbortController().signal,
+        onApprovalRequested() {},
+        claimTurnSlot: () => true,
+        releaseTurnSlot() {},
+      },
+      "linear",
+      "create_issue",
+      {}
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    await approveAction(approvalKey("m7", toolCallId));
+    return {
+      result: await pending,
+      entry: useConnectorApprovalStore.getState().entries[approvalKey("m7", toolCallId)],
+    };
+  };
+
+  const created = await send("call-7");
+  assert.equal(created.result.data.reference, "ENG-124");
+  assert.equal(created.entry.resultLabel, "ENG-124");
+
+  const malformed = await send("call-8");
+  assert.equal("reference" in malformed.result.data, false);
+  assert.equal(malformed.entry.resultLabel, undefined);
+});
+
+test("an issue or comment's tool step says what was created, or where to check", async () => {
+  const { approvalOutcomeResult } = await loadOutcome();
+  await (await loadI18n()).changeLanguage("en");
+
+  const created = approvalOutcomeResult(
+    { state: "sent", url: "https://linear.test/ENG-124", resultLabel: "ENG-124" },
+    "ENG",
+    { connectorId: "linear", verbKey: "issue" }
+  );
+  assert.equal(created.displayText, "Created ENG-124.");
+  assert.equal(created.data.reference, "ENG-124");
+  assert.equal(
+    approvalOutcomeResult({ state: "sent" }, "ENG", { verbKey: "issue" }).displayText,
+    "Created an issue in ENG."
+  );
+  assert.equal(
+    approvalOutcomeResult({ state: "sent" }, "ENG-123", { verbKey: "comment" }).displayText,
+    "Commented on ENG-123."
+  );
+  assert.equal(
+    approvalOutcomeResult({ state: "unknown" }, "ENG-123", {
+      connectorId: "linear",
+      verbKey: "comment",
+    }).displayText,
+    "Couldn't confirm the comment was posted. Check ENG-123 before trying again."
+  );
+  assert.equal(
+    approvalOutcomeResult({ state: "sent" }, "#eng", { verbKey: "slackPost" }).displayText,
+    "Sent to #eng."
   );
 });

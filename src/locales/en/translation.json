@@ -4023,7 +4023,9 @@
       "headers": {
         "default": "Send to {{destination}}",
         "slackPost": "Post to {{destination}}",
-        "email": "Email to {{destination}}"
+        "email": "Email to {{destination}}",
+        "issue": "Create issue in {{destination}}",
+        "comment": "Comment on {{destination}}"
       },
       "identity": "As {{account}}",
       "identityWithWorkspace": "As {{account}} in {{workspace}}",
@@ -4088,6 +4090,37 @@
       },
       "openIn": {
         "gmail": "Open in Gmail"
+      },
+      "sendLabel": {
+        "issue": "Create issue",
+        "comment": "Comment"
+      },
+      "issue": {
+        "created": "Created {{result}}.",
+        "createdIn": "Created an issue in {{destination}}.",
+        "unknown": "Couldn't confirm the issue was created. Check {{destination}} before trying again.",
+        "titleLabel": "Title",
+        "bodyLabel": "Description",
+        "missingTitle": "Add a title.",
+        "titleTooLong": "Keep the title to {{max}} characters or fewer.",
+        "bodyTooLong": "Keep the description to {{max}} characters or fewer.",
+        "notes": {
+          "labels": "Labels: {{labels}}",
+          "droppedLabels": "Not added (not in {{destination}}): {{labels}}",
+          "priority": "Priority: {{priority}}",
+          "assignee": "Assignee: {{assignee}}",
+          "project": "Project: {{project}}"
+        }
+      },
+      "comment": {
+        "posted": "Commented on {{destination}}.",
+        "unknown": "Couldn't confirm the comment was posted. Check {{destination}} before trying again.",
+        "bodyLabel": "Comment",
+        "missingBody": "Write a comment.",
+        "bodyTooLong": "Keep the comment to {{max}} characters or fewer.",
+        "notes": {
+          "targetTitle": "On \"{{title}}\""
+        }
       }
     },
     "policyOff": "Connectors are turned off by your organization.",
@@ -4246,7 +4279,8 @@
         "gmail": "Couldn't confirm the email to {{destination}} was sent. Check your Gmail Sent folder."
       },
       "gmailDraftLimit": "Only {{count}} emails can be prepared per request.",
-      "queryResults": "Results found: {{total}}"
+      "queryResults": "Results found: {{total}}",
+      "cardLimit": "Only {{count}} cards can be prepared per request."
     }
   },
   "notesView": {

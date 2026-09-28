@@ -3854,7 +3854,9 @@
       "headers": {
         "default": "发送到 {{destination}}",
         "slackPost": "发布到 {{destination}}",
-        "email": "发送邮件给 {{destination}}"
+        "email": "发送邮件给 {{destination}}",
+        "issue": "在 {{destination}} 中创建问题",
+        "comment": "评论 {{destination}}"
       },
       "identity": "以 {{account}} 身份",
       "identityWithWorkspace": "以 {{account}}（{{workspace}}）身份",
@@ -3919,6 +3921,37 @@
       },
       "openIn": {
         "gmail": "在 Gmail 中打开"
+      },
+      "sendLabel": {
+        "issue": "创建问题",
+        "comment": "评论"
+      },
+      "issue": {
+        "created": "已创建 {{result}}。",
+        "createdIn": "已在 {{destination}} 中创建问题。",
+        "unknown": "无法确认问题是否已创建。请先检查 {{destination}} 再重试。",
+        "titleLabel": "标题",
+        "bodyLabel": "描述",
+        "missingTitle": "请添加标题。",
+        "titleTooLong": "标题不能超过 {{max}} 个字符。",
+        "bodyTooLong": "描述不能超过 {{max}} 个字符。",
+        "notes": {
+          "labels": "标签：{{labels}}",
+          "droppedLabels": "未添加（{{destination}} 中不存在）：{{labels}}",
+          "priority": "优先级：{{priority}}",
+          "assignee": "负责人：{{assignee}}",
+          "project": "项目：{{project}}"
+        }
+      },
+      "comment": {
+        "posted": "已评论 {{destination}}。",
+        "unknown": "无法确认评论是否已发布。请先检查 {{destination}} 再重试。",
+        "bodyLabel": "评论",
+        "missingBody": "请填写评论。",
+        "bodyTooLong": "评论不能超过 {{max}} 个字符。",
+        "notes": {
+          "targetTitle": "关于“{{title}}”"
+        }
       }
     },
     "policyOff": "您的组织已关闭连接器。",
@@ -4077,7 +4110,8 @@
         "gmail": "无法确认发给 {{destination}} 的邮件是否已发送，请检查 Gmail 的“已发送”文件夹。"
       },
       "gmailDraftLimit": "每次请求最多只能准备 {{count}} 封邮件。",
-      "queryResults": "找到的结果：{{total}}"
+      "queryResults": "找到的结果：{{total}}",
+      "cardLimit": "每次请求最多只能准备 {{count}} 张卡片。"
     }
   },
   "calendar": {
