@@ -380,3 +380,35 @@ describe('NoteEditorScreen — conflict banner', () => {
     expect(mockNotesState.getNoteById).toHaveBeenCalledWith(7);
   });
 });
+
+describe('NoteEditorScreen — using the server copy mid-edit', () => {
+  it('drops the unsaved edit to the generated notes and shows the server version', async () => {
+    mockNote = note({ enhancedContent: '## Local notes' });
+    mockNotesState.notes = [mockNote];
+    mockGetConflictedNote.mockReturnValue({
+      id: 7,
+      title: 'Customer Planning',
+      conflictServerNote: remoteNote({ enhanced_content: '## Server notes' }),
+    });
+    const { getByTestId, getByText, queryByTestId } = render(<NoteEditorScreen />);
+
+    fireEvent.press(getByTestId('enhanced-edit'));
+    fireEvent.changeText(getByTestId('enhanced-editor'), '## Mine');
+
+    // The repository now holds the server's copy.
+    mockNote = note({ enhancedContent: '## Server notes' });
+    mockNotesState.notes = [mockNote];
+    act(() => {
+      fireEvent.press(getByTestId('conflict-banner-use-server'));
+    });
+    // Outlast the 800 ms save debounce.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    });
+
+    const savedEnhanced = mockUpdateNote.mock.calls.map(([, updates]) => updates.enhancedContent);
+    expect(savedEnhanced).not.toContain('## Mine');
+    expect(queryByTestId('enhanced-editor')).toBeNull();
+    expect(getByText('## Server notes')).toBeTruthy();
+  });
+});

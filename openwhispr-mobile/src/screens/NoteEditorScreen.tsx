@@ -188,6 +188,9 @@ export default function NoteEditorScreen() {
   const [chatVisible, setChatVisible] = useState(false);
   const [transcriptSheetVisible, setTranscriptSheetVisible] = useState(false);
   const [attendeesVisible, setAttendeesVisible] = useState(false);
+  const [enhancedEditing, setEnhancedEditing] = useState(false);
+  // Bumped to remount the generated-notes editor when its draft must be thrown away.
+  const [enhancedEditorRevision, setEnhancedEditorRevision] = useState(0);
   const [chatMessages, setChatMessages] = useState<ChatOverNoteMessage[]>([]);
   const [chatDraft, setChatDraft] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
@@ -242,6 +245,7 @@ export default function NoteEditorScreen() {
     setChatVisible(false);
     setTranscriptSheetVisible(false);
     setAttendeesVisible(false);
+    setEnhancedEditing(false);
     setChatMessages([]);
     setChatDraft('');
     setChatError(null);
@@ -369,29 +373,6 @@ export default function NoteEditorScreen() {
     resolveConflictKeepMine(noteId);
   }, [noteId, resolveConflictKeepMine]);
 
-  const handleUseServerCopy = useCallback(() => {
-    safeHaptics('selection');
-    resolveConflictUseServer(noteId);
-    // The editor's title/content state is a local draft, not derived straight from `note` on
-    // every render — refresh it explicitly now that the repository holds the server's copy.
-    const refreshed = getNoteById(noteId);
-    if (refreshed) {
-      setTitle(refreshed.title);
-      setContent(refreshed.content);
-      const end = refreshed.content.length;
-      setSelection({ start: end, end });
-      originalTitleRef.current = refreshed.title;
-      originalContentRef.current = refreshed.content;
-      learnedBaselineRef.current = refreshed.content;
-      setViewMode(
-        defaultNoteBodyView({
-          isAudioTranscript: isAudioTranscriptNote(refreshed),
-          hasEnhanced: !!refreshed.enhancedContent,
-        }),
-      );
-    }
-  }, [noteId, resolveConflictUseServer, getNoteById]);
-
   const maybeLearnCorrections = useCallback(
     (newContent: string) => {
       if (!autoLearnEnabledRef.current) return;
@@ -453,10 +434,39 @@ export default function NoteEditorScreen() {
 
   const handleEnhancedEditingChange = useCallback(
     (editing: boolean) => {
+      setEnhancedEditing(editing);
       if (!editing) flushEnhancedSave();
     },
     [flushEnhancedSave],
   );
+
+  const handleUseServerCopy = useCallback(() => {
+    safeHaptics('selection');
+    // Unsaved local edits would land on top of the server copy the user just chose.
+    discardEnhancedSave();
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = null;
+    setEnhancedEditorRevision((revision) => revision + 1);
+    resolveConflictUseServer(noteId);
+    // The editor's title/content state is a local draft, not derived straight from `note` on
+    // every render — refresh it explicitly now that the repository holds the server's copy.
+    const refreshed = getNoteById(noteId);
+    if (refreshed) {
+      setTitle(refreshed.title);
+      setContent(refreshed.content);
+      const end = refreshed.content.length;
+      setSelection({ start: end, end });
+      originalTitleRef.current = refreshed.title;
+      originalContentRef.current = refreshed.content;
+      learnedBaselineRef.current = refreshed.content;
+      setViewMode(
+        defaultNoteBodyView({
+          isAudioTranscript: isAudioTranscriptNote(refreshed),
+          hasEnhanced: !!refreshed.enhancedContent,
+        }),
+      );
+    }
+  }, [discardEnhancedSave, noteId, resolveConflictUseServer, getNoteById]);
 
   useEffect(
     () => () => {
@@ -1009,7 +1019,8 @@ export default function NoteEditorScreen() {
   }
 
   const hasEnhanced = !!note?.enhancedContent;
-  const bodyTabInput = { usesSegmentTranscript, hasEnhanced };
+  // An open editor keeps its tab, so clearing the notes to rewrite them doesn't close it.
+  const bodyTabInput = { usesSegmentTranscript, hasEnhanced: hasEnhanced || enhancedEditing };
   const bodyTabs = getNoteBodyTabs(bodyTabInput);
   const bodyView = resolveNoteBodyView(viewMode, bodyTabInput);
   const actionInputHash = makeContentHash(actionInputText);
@@ -1183,6 +1194,7 @@ export default function NoteEditorScreen() {
           <View className="relative">
             {bodyView === 'enhanced' ? (
               <EditableMarkdown
+                key={`${noteId}-${enhancedEditorRevision}`}
                 content={note?.enhancedContent ?? ''}
                 editable={!isEnhancing}
                 onChange={handleEnhancedChange}

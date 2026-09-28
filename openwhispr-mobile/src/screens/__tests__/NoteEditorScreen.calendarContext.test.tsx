@@ -1134,3 +1134,32 @@ describe('NoteEditorScreen meta row', () => {
     expect(queryByTestId('note-meta-attendees')).toBeNull();
   });
 });
+
+describe('NoteEditorScreen clearing generated notes', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('keeps the editor open when the generated notes are cleared mid-edit', () => {
+    jest.useFakeTimers();
+    mockNote = note({ enhancedContent: '## Summary' });
+    mockNotesState.notes = [mockNote];
+    const { getByTestId, rerender } = render(<NoteEditorScreen />);
+
+    fireEvent.press(getByTestId('enhanced-edit'));
+    fireEvent.changeText(getByTestId('enhanced-editor'), '');
+    act(() => {
+      jest.advanceTimersByTime(800);
+    });
+    expect(mockUpdateNote).toHaveBeenCalledWith(7, { enhancedContent: '' });
+
+    // The store now holds the cleared notes.
+    mockNote = note({ enhancedContent: '' });
+    mockNotesState.notes = [mockNote];
+    rerender(<NoteEditorScreen />);
+
+    fireEvent.changeText(getByTestId('enhanced-editor'), '## Rewritten');
+    fireEvent.press(getByTestId('enhanced-done'));
+    expect(mockUpdateNote).toHaveBeenLastCalledWith(7, { enhancedContent: '## Rewritten' });
+  });
+});
