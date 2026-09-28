@@ -294,6 +294,20 @@ function privatizeOnnxRuntimeDir(dir) {
   privatizeWindowsOnnxRuntime({ binDir: dir, binaryPaths: [], libraryNames: images });
 }
 
+// `npm run dev` loads sherpa-onnx-node's platform package straight from node_modules,
+// which afterPack never touches, so the #2054 collision would still hit the voice
+// worker in development. Idempotent, like the packaged rename.
+function privatizeInstalledSherpaNode(
+  platformArch,
+  modulesDir = path.join(__dirname, "..", "node_modules")
+) {
+  if (!platformArch.startsWith("win32-")) return;
+  const dir = path.join(modulesDir, `sherpa-onnx-win-${platformArch.slice("win32-".length)}`);
+  if (!fs.existsSync(dir)) return;
+  privatizeOnnxRuntimeDir(dir);
+  console.log(`  ${path.basename(dir)} loads ${WINDOWS_ONNXRUNTIME_PRIVATE_NAME}`);
+}
+
 function verifyOnnxRuntimePrivatizedDir(dir) {
   const images = fs.readdirSync(dir).filter(isPeImageName);
   if (!images.includes(WINDOWS_ONNXRUNTIME_PRIVATE_NAME)) {
@@ -507,6 +521,8 @@ async function main() {
       return;
     }
 
+    privatizeInstalledSherpaNode(args.platformArch);
+
     // Remove old CLI-style binaries replaced by WS server binaries
     const oldBinaryName = args.platformArch.startsWith("win32")
       ? `sherpa-onnx-${args.platformArch}.exe`
@@ -561,6 +577,7 @@ module.exports = {
   findObsoleteLibraries,
   isCompleteInstall,
   parseMacosDeploymentTargets,
+  privatizeInstalledSherpaNode,
   privatizeOnnxRuntimeDir,
   privatizeWindowsOnnxRuntime,
   validateMacosDeploymentTargets,

@@ -140,9 +140,8 @@ test("privatizes ONNX Runtime in the target Windows package", (t) => {
     "KERNEL32.dll",
     "ow-onnxrt.dll",
   ]);
-  // A stray non-target package is not the runtime this build loads; leave it alone.
-  const other = path.join(modulesDir, "sherpa-onnx-win-ia32");
-  assert.equal(fs.existsSync(path.join(other, "onnxruntime.dll")), true);
+  // A stray non-target package is not the runtime this build loads, so it doesn't ship.
+  assert.equal(fs.existsSync(path.join(modulesDir, "sherpa-onnx-win-ia32")), false);
 });
 
 // The fixtures are valid PE images importing onnxruntime.dll, so privatizing
@@ -165,3 +164,20 @@ for (const platform of ["darwin", "linux"]) {
     assert.deepEqual(fs.readFileSync(path.join(dir, "sherpa-onnx.node")), addonBefore);
   });
 }
+
+test("drops sherpa-onnx packages the target never loads, keeping both for universal", (t) => {
+  const packages = ["sherpa-onnx-darwin-arm64", "sherpa-onnx-darwin-x64", "sherpa-onnx-node"];
+  const intel = makeApp(t, { platform: "darwin", arch: "x64", sherpaPackages: packages });
+  prepareVoiceDependencies(intel.context);
+  assert.deepEqual(
+    fs.readdirSync(intel.modulesDir).filter((name) => name.startsWith("sherpa")),
+    ["sherpa-onnx-darwin-x64", "sherpa-onnx-node"]
+  );
+
+  const universal = makeApp(t, { platform: "darwin", arch: "universal", sherpaPackages: packages });
+  prepareVoiceDependencies(universal.context);
+  assert.equal(
+    fs.readdirSync(universal.modulesDir).filter((name) => name.startsWith("sherpa")).length,
+    3
+  );
+});

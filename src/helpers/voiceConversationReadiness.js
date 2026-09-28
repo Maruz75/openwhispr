@@ -4,11 +4,20 @@ const VOICE_LANGUAGES = new Set(["en", "auto"]);
 /**
  * Pure precondition check for starting a hands-free voice session: language support,
  * the bundled VAD/Smart Turn/Pocket models, a downloaded Parakeet speech model, and a
- * brain that can answer (a downloaded local model, or OpenWhispr Cloud while signed in).
+ * brain that can answer (a downloaded local model, OpenWhispr Cloud while signed in, or
+ * a BYOK provider with its API key).
  * Checked in this order so the cheapest, least surprising failure (language) is
  * reported before anything else.
  */
-function checkVoiceConversationReadiness({ modelStatus, speechModelDownloaded, language, brain }) {
+function checkVoiceConversationReadiness({
+  meetingRecording = false,
+  modelStatus,
+  speechModelDownloaded,
+  language,
+  brain,
+}) {
+  // A meeting recording holds the mic, and the assistant would answer the meeting.
+  if (meetingRecording) return { ready: false, reason: "meeting-recording" };
   // Language first: no point downloading models the user can't use.
   if (!VOICE_LANGUAGES.has(language || "auto"))
     return { ready: false, reason: "language-unsupported" };
@@ -26,6 +35,7 @@ function checkVoiceConversationReadiness({ modelStatus, speechModelDownloaded, l
   if (brain.mode === "openwhispr" && !brain.signedIn) {
     return { ready: false, reason: "brain-sign-in-required" };
   }
+  if (brain.keyMissing) return { ready: false, reason: "brain-key-missing" };
   return { ready: true };
 }
 

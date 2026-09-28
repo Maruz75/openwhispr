@@ -305,6 +305,8 @@ function verifyUnpackedBinaries(context) {
 // sherpa-onnx-node loads `sherpa-onnx-${platform}-${os.arch()}` at runtime, so
 // the package must match the target arch, not the build host's: a mac x64
 // build on an arm64 runner only gets darwin-arm64 from `npm ci`.
+const SHERPA_PLATFORM_PACKAGE = /^sherpa-onnx-(?:darwin|linux|win)-(?:arm64|x64|ia32)$/;
+
 function requiredSherpaPackages({ platform, arch }) {
   const sherpaPlatform = platform === "win32" ? "win" : platform;
   const archs = arch === "universal" ? ["arm64", "x64"] : [arch];
@@ -334,6 +336,14 @@ function prepareVoiceDependencies(context) {
     throw new Error(
       `afterPack: missing ${missing.join(", ")} in ${modulesDir}; voice conversation would fail to load for this target (install the target-arch platform package before packaging)`
     );
+  }
+  // npm installs the build host's package too, so a mac x64 build made on an arm64
+  // runner would also ship darwin-arm64 (~33 MB) that it never loads.
+  for (const name of fs.readdirSync(modulesDir)) {
+    if (SHERPA_PLATFORM_PACKAGE.test(name) && !sherpaDirs.includes(name)) {
+      fs.rmSync(path.join(modulesDir, name), { recursive: true, force: true });
+      console.log(`  afterPack: removed ${name}, which this target never loads`);
+    }
   }
   const ortDist = path.join(modulesDir, "onnxruntime-web", "dist");
   const missingRuntime = SMART_TURN_RUNTIME_FILES.filter(

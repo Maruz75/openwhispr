@@ -1836,7 +1836,7 @@ declare global {
         getReadiness: (request: {
           parakeetModel: string;
           language: string;
-          brain: { mode: string; model: string; signedIn: boolean };
+          brain: { mode: string; model: string; provider: string; signedIn: boolean };
         }) => Promise<import("../services/voice/types").VoiceConversationReadiness>;
         downloadModels: () => Promise<{ ready: boolean; missing: string[]; missingBytes: number }>;
         cancelModelDownload: () => Promise<{ cancelled: boolean }>;

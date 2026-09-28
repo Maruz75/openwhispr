@@ -4194,7 +4194,10 @@
       "micDenied": "語音對話無法使用麥克風。請在系統設定中允許 OpenWhispr 存取麥克風。",
       "startFailed": "無法開始語音對話。請再試一次。",
       "transcriptionFailed": "無法轉寫這段語音。請再說一次。",
-      "brainSignInRequired": "請登入以在語音對話中使用 OpenWhispr Cloud，或為語音助理選擇本機模型。"
+      "brainSignInRequired": "請登入以在語音對話中使用 OpenWhispr Cloud，或為語音助理選擇本機模型。",
+      "endedForMeeting": "會議錄製已開始，語音對話已結束。",
+      "meetingRecording": "正在錄製會議，無法開始語音對話。",
+      "brainKeyMissing": "請在「設定 → AI 模型」中為語音助理的供應商新增 API 金鑰，或選擇本機模型。"
     }
   }
 }

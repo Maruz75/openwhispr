@@ -71,7 +71,7 @@ Module._load = originalLoad;
 const activeChanges = [];
 const startedServers = [];
 const transcriptions = [];
-registerVoiceConversationIpc({
+const voiceConversation = registerVoiceConversationIpc({
   parakeetManager: {
     isModelDownloaded: () => true,
     startServer: async (model) => void startedServers.push(model),
@@ -251,4 +251,36 @@ test("a session starting while the idle worker shuts down waits for it, then loa
   voiceWorker.configure.resolve();
   await started;
   assert.deepEqual(activeChanges, [true], "its exit doesn't end the new session");
+});
+
+test("a meeting recording that starts ends the voice session and tells the renderer why", async () => {
+  const webContents = await startSession();
+
+  voiceConversation.endSessionForMeeting();
+
+  assert.deepEqual(activeChanges, [true, false]);
+  assert.deepEqual(sentOfType(webContents, "ended"), [{ type: "ended", reason: "meeting" }]);
+  // With no session running it does nothing.
+  voiceConversation.endSessionForMeeting();
+  assert.equal(sentOfType(webContents, "ended").length, 1);
+});
+
+test("readiness checks the BYOK provider's API key in the main process", async () => {
+  const readiness = (provider) =>
+    handlers.get("voice-conversation:get-readiness")(
+      {},
+      { parakeetModel: "p", language: "en", brain: { mode: "providers", model: "m", provider } }
+    );
+  const saved = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    assert.equal((await readiness("openai")).reason, "brain-key-missing");
+    process.env.OPENAI_API_KEY = "sk-test";
+    assert.deepEqual(await readiness("openai"), { ready: true });
+    // Custom endpoints bring their own credentials; they aren't checked here.
+    assert.deepEqual(await readiness("custom"), { ready: true });
+  } finally {
+    if (saved === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = saved;
+  }
 });

@@ -70,6 +70,8 @@ const READINESS_MESSAGE_KEYS = {
   "speech-model-missing": "voiceConversation.errors.speechModelMissing",
   "brain-not-downloaded": "voiceConversation.errors.brainNotDownloaded",
   "brain-sign-in-required": "voiceConversation.errors.brainSignInRequired",
+  "meeting-recording": "voiceConversation.errors.meetingRecording",
+  "brain-key-missing": "voiceConversation.errors.brainKeyMissing",
 } as const;
 
 /**
@@ -95,11 +97,15 @@ function dictationSpeechModel(settings: {
  * model family (e.g. "qwen", "gemma"), never the literal string "local".
  */
 function resolveVoiceBrain(
-  voiceModel: { mode?: string; model?: string },
+  voiceModel: { mode?: string; model?: string; provider?: string },
   brainOverride: string | null
-): { mode: string; model: string } {
-  if (brainOverride) return { mode: "local", model: brainOverride };
-  return { mode: voiceModel.mode || "", model: voiceModel.model || "" };
+): { mode: string; model: string; provider: string } {
+  if (brainOverride) return { mode: "local", model: brainOverride, provider: "local" };
+  return {
+    mode: voiceModel.mode || "",
+    model: voiceModel.model || "",
+    provider: voiceModel.provider || "",
+  };
 }
 
 /**
@@ -341,6 +347,10 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
           releaseHold();
           onErrorRef.current?.(t("voiceConversation.errors.transcriptionFailed"));
         }
+      } else if (event.type === "ended") {
+        // A meeting recording took the mic; main has already ended the session.
+        onErrorRef.current?.(t("voiceConversation.errors.endedForMeeting"));
+        void stopRef.current();
       }
     },
     [api, chunker, dropAnswer, releaseHold, t]

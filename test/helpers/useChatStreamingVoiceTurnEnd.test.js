@@ -285,3 +285,47 @@ test("only a local model's voice turn is capped, and loosely enough for a dictat
   // Local voice turn; typed chat is never capped; a BYOK model may spend tokens thinking.
   assert.deepEqual(caps, [1024, undefined, undefined]);
 });
+
+test("on a local model a repeated write runs once, tells the model it didn't run, and leaves one chip", async (t) => {
+  const savedNotes = [];
+  const { hook, messages, reasoningService } = await mountChatStreaming(t, {
+    settings: LOCAL_TOOL_MODEL,
+    electronAPI: {
+      saveNote: async (title) => {
+        savedNotes.push(title);
+        return { success: true, note: { id: savedNotes.length, title } };
+      },
+    },
+  });
+  const toolResults = [];
+  t.mock.method(
+    reasoningService,
+    "processTextStreamingAI",
+    async function* (_messages, _model, _provider, _options, tools) {
+      for (const id of ["call-1", "call-2"]) {
+        const args = { title: "Dentist", content: "Call the dentist on Friday" };
+        yield {
+          type: "tool_calls",
+          calls: [{ id, name: "create_note", arguments: JSON.stringify(args) }],
+        };
+        const result = await tools.create_note.execute(args, { toolCallId: id, messages: [] });
+        toolResults.push(result);
+        yield { type: "tool_result", callId: id, displayText: "Done" };
+      }
+    }
+  );
+  const { tap, heard } = makeVoiceTap();
+
+  await React.act(async () => {
+    await hook().sendToAI("make a note to call the dentist", [], { voiceTap: tap });
+  });
+
+  assert.deepEqual(savedNotes, ["Dentist"], "the note is written once");
+  assert.match(toolResults[1].note, /NOT run/);
+  assert.deepEqual(heard.writes, [["create_note", true]]);
+  const assistant = messages().find((message) => message.role === "assistant");
+  assert.deepEqual(
+    assistant.toolCalls.map((call) => call.id),
+    ["call-1"]
+  );
+});

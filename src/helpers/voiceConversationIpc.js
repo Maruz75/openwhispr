@@ -11,6 +11,7 @@ const {
   resolveVoiceParakeetModel,
 } = require("./voiceConversationConfig");
 const { checkVoiceConversationReadiness } = require("./voiceConversationReadiness");
+const { BYOK_API_KEYS } = require("../config/secretKeys");
 const { createDownloadSignal } = require("./downloadUtils");
 
 const WORKER_IDLE_STOP_MS = 5 * 60 * 1000;
@@ -22,6 +23,7 @@ function registerVoiceConversationIpc({
   parakeetManager,
   onSessionActiveChange,
   warmSemanticSearch,
+  isMeetingRecording,
 }) {
   let sender = null;
   let session = null;
@@ -245,7 +247,11 @@ function registerVoiceConversationIpc({
       modelManager.ensureInitialized();
       brainDownloaded = await modelManager.isModelDownloaded(brain.model).catch(() => false);
     }
+    // The standard BYOK providers keep their key in the environment; custom and
+    // enterprise providers have their own credentials, so they aren't checked here.
+    const byokKey = BYOK_API_KEYS.find((entry) => entry.base === brain.provider);
     return checkVoiceConversationReadiness({
+      meetingRecording: Boolean(isMeetingRecording?.()),
       modelStatus: voiceModels.getVoiceModelStatus(),
       speechModelDownloaded: Boolean(speechModel && parakeetManager.isModelDownloaded(speechModel)),
       language: request.language,
@@ -254,6 +260,7 @@ function registerVoiceConversationIpc({
         model: brain.model,
         downloaded: brainDownloaded,
         signedIn: Boolean(brain.signedIn),
+        keyMissing: brain.mode === "providers" && Boolean(byokKey) && !process.env[byokKey.env],
       },
     });
   });
@@ -295,6 +302,15 @@ function registerVoiceConversationIpc({
     voiceWorker.notify("vad-reset", {});
     return { stopped: true };
   });
+
+  return {
+    // A meeting recording takes the mic, and the assistant would answer the meeting.
+    endSessionForMeeting() {
+      if (!session) return;
+      endSession();
+      send({ type: "ended", reason: "meeting" });
+    },
+  };
 }
 
 module.exports = { registerVoiceConversationIpc };

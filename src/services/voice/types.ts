@@ -53,7 +53,9 @@ export type VoiceConversationReadiness =
         | "voice-models-missing"
         | "speech-model-missing"
         | "brain-not-downloaded"
-        | "brain-sign-in-required";
+        | "brain-sign-in-required"
+        | "meeting-recording"
+        | "brain-key-missing";
       missing?: string[];
       missingBytes?: number;
     };
@@ -75,4 +77,5 @@ export type VoiceConversationEvent =
       samples: Float32Array;
       at: number;
     }
-  | { type: "error"; stage: "stt" | "worker"; message: string };
+  | { type: "error"; stage: "stt" | "worker"; message: string }
+  | { type: "ended"; reason: "meeting" };

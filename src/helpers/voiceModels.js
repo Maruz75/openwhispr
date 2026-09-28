@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { getModelsDirForService } = require("./modelDirUtils");
+const { isProcessAlive } = require("./sidecarReaper");
 
 const POCKET_DIR = "sherpa-onnx-pocket-tts-int8-2026-01-26";
 // Release gate: the publisher marks this clip test-only; ship a licensed clip.
@@ -145,15 +146,6 @@ async function extractArchiveModel(
   }
 }
 
-function isProcessRunning(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
-}
-
 // A crash skips the cleanup above, so clear staging whose process is gone.
 // Staging owned by a live process (a second instance, or the dev download
 // script beside the app) may still be mid-extraction.
@@ -161,7 +153,7 @@ function removeStaleStaging(modelsDir, logger) {
   const prefixes = VOICE_MODELS.filter((model) => model.archive).map(stagingPrefix);
   for (const name of fs.readdirSync(modelsDir)) {
     const prefix = prefixes.find((candidate) => name.startsWith(candidate));
-    if (prefix && !isProcessRunning(Number.parseInt(name.slice(prefix.length), 10))) {
+    if (prefix && !isProcessAlive(Number.parseInt(name.slice(prefix.length), 10))) {
       removeBestEffort(path.join(modelsDir, name), logger);
     }
   }

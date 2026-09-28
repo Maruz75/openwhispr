@@ -4194,7 +4194,10 @@
       "micDenied": "Die Sprachkonversation kann nicht auf das Mikrofon zugreifen. Erlauben Sie OpenWhispr den Mikrofonzugriff in den Systemeinstellungen.",
       "startFailed": "Die Sprachkonversation konnte nicht gestartet werden. Versuchen Sie es erneut.",
       "transcriptionFailed": "Das konnte nicht transkribiert werden. Sagen Sie es bitte noch einmal.",
-      "brainSignInRequired": "Melden Sie sich an, um OpenWhispr Cloud für die Sprachkonversation zu nutzen, oder wählen Sie ein lokales Modell für den Sprachassistenten."
+      "brainSignInRequired": "Melden Sie sich an, um OpenWhispr Cloud für die Sprachkonversation zu nutzen, oder wählen Sie ein lokales Modell für den Sprachassistenten.",
+      "endedForMeeting": "Die Sprachkonversation wurde beendet, weil eine Besprechungsaufnahme gestartet wurde.",
+      "meetingRecording": "Die Sprachkonversation kann nicht starten, während eine Besprechung aufgenommen wird.",
+      "brainKeyMissing": "Fügen Sie unter Einstellungen → KI-Modelle einen API-Schlüssel für den Anbieter des Sprachassistenten hinzu, oder wählen Sie ein lokales Modell."
     }
   }
 }

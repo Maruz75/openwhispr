@@ -4194,7 +4194,10 @@
       "micDenied": "Voice conversation can't use the microphone. Allow microphone access for OpenWhispr in your system settings.",
       "startFailed": "Voice conversation couldn't start. Try again.",
       "transcriptionFailed": "Couldn't transcribe that. Try saying it again.",
-      "brainSignInRequired": "Sign in to use OpenWhispr Cloud for voice conversation, or pick a local model for the Voice Assistant."
+      "brainSignInRequired": "Sign in to use OpenWhispr Cloud for voice conversation, or pick a local model for the Voice Assistant.",
+      "endedForMeeting": "Voice conversation ended because a meeting recording started.",
+      "meetingRecording": "Voice conversation can't start while a meeting is being recorded.",
+      "brainKeyMissing": "Add an API key for the Voice Assistant's provider in Settings → AI Models, or pick a local model."
     }
   }
 }

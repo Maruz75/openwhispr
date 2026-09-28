@@ -4194,7 +4194,10 @@
       "micDenied": "La conversación por voz no puede usar el micrófono. Permite el acceso al micrófono para OpenWhispr en la configuración del sistema.",
       "startFailed": "No se pudo iniciar la conversación por voz. Inténtalo de nuevo.",
       "transcriptionFailed": "No se pudo transcribir. Intenta decirlo de nuevo.",
-      "brainSignInRequired": "Inicia sesión para usar OpenWhispr Cloud en la conversación por voz, o elige un modelo local para el Asistente de voz."
+      "brainSignInRequired": "Inicia sesión para usar OpenWhispr Cloud en la conversación por voz, o elige un modelo local para el Asistente de voz.",
+      "endedForMeeting": "La conversación por voz terminó porque empezó la grabación de una reunión.",
+      "meetingRecording": "La conversación por voz no puede empezar mientras se graba una reunión.",
+      "brainKeyMissing": "Añade una clave de API para el proveedor del Asistente de voz en Configuración → Modelos de IA, o elige un modelo local."
     }
   }
 }

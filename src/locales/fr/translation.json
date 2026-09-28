@@ -4194,7 +4194,10 @@
       "micDenied": "La conversation vocale ne peut pas utiliser le micro. Autorisez l'accès au micro pour OpenWhispr dans les réglages du système.",
       "startFailed": "La conversation vocale n'a pas pu démarrer. Réessayez.",
       "transcriptionFailed": "Impossible de transcrire cela. Essayez de le redire.",
-      "brainSignInRequired": "Connectez-vous pour utiliser OpenWhispr Cloud en conversation vocale, ou choisissez un modèle local pour l'Assistant vocal."
+      "brainSignInRequired": "Connectez-vous pour utiliser OpenWhispr Cloud en conversation vocale, ou choisissez un modèle local pour l'Assistant vocal.",
+      "endedForMeeting": "La conversation vocale s'est arrêtée, car l'enregistrement d'une réunion a commencé.",
+      "meetingRecording": "La conversation vocale ne peut pas démarrer pendant l'enregistrement d'une réunion.",
+      "brainKeyMissing": "Ajoutez une clé API pour le fournisseur de l'Assistant vocal dans Réglages → Modèles IA, ou choisissez un modèle local."
     }
   }
 }

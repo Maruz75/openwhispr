@@ -404,3 +404,14 @@ test("a paused answer that ends with nothing to say un-pauses the player for the
 
   assert.deepEqual(calls.player, ["pause", "resume"]);
 });
+
+test("a meeting recording that takes the mic ends the session with a translated message", async (t) => {
+  const { hook, calls, act, events, startListening } = await mountVoiceConversation(t);
+  await startListening();
+
+  await act(() => events.emit({ type: "ended", reason: "meeting" }));
+
+  assert.equal(hook.current.state, "off");
+  assert.equal(calls.micStops, 1);
+  assert.deepEqual(calls.errors, ["voiceConversation.errors.endedForMeeting"]);
+});

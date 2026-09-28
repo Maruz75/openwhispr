@@ -76,3 +76,22 @@ test("an OpenWhispr Cloud brain needs the user signed in", () => {
     { ready: true }
   );
 });
+
+test("a voice conversation won't start over a meeting recording", () => {
+  assert.deepEqual(checkVoiceConversationReadiness({ ...READY, meetingRecording: true }), {
+    ready: false,
+    reason: "meeting-recording",
+  });
+});
+
+test("a BYOK brain whose API key is missing is refused before the session starts", () => {
+  const byok = { mode: "providers", model: "gpt-5-mini", downloaded: false };
+  assert.deepEqual(
+    checkVoiceConversationReadiness({ ...READY, brain: { ...byok, keyMissing: true } }),
+    { ready: false, reason: "brain-key-missing" }
+  );
+  assert.deepEqual(
+    checkVoiceConversationReadiness({ ...READY, brain: { ...byok, keyMissing: false } }),
+    { ready: true }
+  );
+});

@@ -4194,7 +4194,10 @@
       "micDenied": "语音对话无法使用麦克风。请在系统设置中允许 OpenWhispr 访问麦克风。",
       "startFailed": "无法开始语音对话。请重试。",
       "transcriptionFailed": "无法转写这段语音。请再说一遍。",
-      "brainSignInRequired": "请登录以在语音对话中使用 OpenWhispr Cloud，或为语音助手选择本地模型。"
+      "brainSignInRequired": "请登录以在语音对话中使用 OpenWhispr Cloud，或为语音助手选择本地模型。",
+      "endedForMeeting": "会议录制已开始，语音对话已结束。",
+      "meetingRecording": "正在录制会议，无法开始语音对话。",
+      "brainKeyMissing": "请在“设置 → AI 模型”中为语音助手的提供商添加 API 密钥，或选择本地模型。"
     }
   }
 }

@@ -1324,10 +1324,11 @@ class IPCHandlers {
   }
 
   setupHandlers() {
-    require("./voiceConversationIpc").registerVoiceConversationIpc({
+    this.voiceConversation = require("./voiceConversationIpc").registerVoiceConversationIpc({
       parakeetManager: this.parakeetManager,
       onSessionActiveChange: (active) => this.windowManager.setVoiceConversationActive(active),
       warmSemanticSearch: () => this.getSemanticSearch?.()?.warmUp(),
+      isMeetingRecording: () => Boolean(this.meetingDetectionEngine?.isRecordingMeeting()),
     });
 
     ipcMain.handle("onboarding-set-window-mode", (_event, mode) =>
@@ -8570,6 +8571,7 @@ class IPCHandlers {
       meetingReconnectCount = 0;
       meetingFatalErrorSent = false;
       this.meetingDetectionEngine?.endRecordingSession();
+      this.voiceConversation?.endSessionForMeeting();
       this.meetingDetectionEngine?.setUserRecording(true);
 
       const completeStart = async (result) => {
