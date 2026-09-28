@@ -11,9 +11,10 @@ const MIN_SEGMENT_SAMPLES = SAMPLE_RATE * MIN_SEGMENT_SECONDS;
 const MAX_EMBEDDING_SECONDS = 8;
 const MAX_EMBEDDING_SAMPLES = SAMPLE_RATE * MAX_EMBEDDING_SECONDS;
 const MODEL_FILE = "3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx";
-// Live meetings extract every few seconds, so this only fires once a meeting and its
-// post-meeting diarization are done; the unload lets the idle ONNX worker exit.
-const IDLE_UNLOAD_MS = 5 * 60 * 1000;
+// Live meetings extract during remote speech, so this normally fires once a meeting and its
+// post-meeting diarization are done (a longer silence mid-meeting costs one reload). The
+// unload lets the idle ONNX worker exit.
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
 class SpeakerEmbeddings {
   constructor() {
@@ -76,14 +77,14 @@ class SpeakerEmbeddings {
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
       this.unload().catch((err) =>
-        debugLogger.debug("speaker-embeddings idle unload failed", { error: err?.message })
+        debugLogger.warn("speaker-embeddings idle unload failed", { error: err?.message })
       );
-    }, IDLE_UNLOAD_MS);
-    this.idleTimer?.unref?.();
+    }, IDLE_TIMEOUT_MS);
+    this.idleTimer.unref();
   }
 
   _extractEmbeddingFromSamples(samples) {
-    // Cleared up front so a queued extract keeps the idle unload from firing ahead of it.
+    // A timer armed by an earlier extract must not queue an unload behind this one.
     this._clearIdleTimer();
     return this._enqueue(async () => {
       try {
@@ -116,8 +117,8 @@ class SpeakerEmbeddings {
       } finally {
         this.loadPromise = null;
         this.loadedGeneration = null;
+        await onnxWorkerClient.releaseIfIdle();
       }
-      await onnxWorkerClient.releaseIfIdle();
     });
   }
 

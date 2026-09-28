@@ -168,15 +168,14 @@ class OnnxWorkerClient {
       }
       const delay =
         RESPAWN_BACKOFF_MS[Math.min(this.crashCount - 1, RESPAWN_BACKOFF_MS.length - 1)];
-      debugLogger.info("onnx worker respawn scheduled", {
+      debugLogger.info("onnx worker respawn backoff", {
         delayMs: delay,
         crashCount: this.crashCount,
       });
+      // The next request respawns the worker; spawning here would leave an empty worker
+      // running (e.g. after a crash during an unload) that nothing ever releases.
       this.respawnTimer = setTimeout(() => {
         this.respawnTimer = null;
-        this._spawn().catch((spawnErr) => {
-          debugLogger.error("onnx worker respawn failed", { error: spawnErr?.message });
-        });
       }, delay);
     }
   }
@@ -238,7 +237,7 @@ class OnnxWorkerClient {
       const timeout = setTimeout(() => {
         if (!this.pending.delete(id)) return;
         reject(new Error(`onnx worker request timeout: ${method}`));
-        // The worker serializes text work, so one hung request wedges every later one.
+        // The worker serializes each session's calls, so one hung request wedges every later one.
         debugLogger.warn("onnx worker request timeout; killing worker", { method });
         this.killedForTimeout = true;
         try {

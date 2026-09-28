@@ -223,10 +223,13 @@ async function speakerExtract({ samplesBuffer }) {
   return { embeddingBuffer: data.buffer };
 }
 
+// Unloads clear the session before releasing it, so a release that throws can't leave ping
+// reporting a loaded session and keep releaseIfIdle from ever exiting the worker.
 async function speakerUnload() {
-  if (speakerSession) await speakerSession.release();
+  const session = speakerSession;
   speakerSession = null;
   speakerInputName = null;
+  if (session) await session.release();
   log("info", "speaker session unloaded");
   return { ok: true };
 }
@@ -350,9 +353,10 @@ async function textEmbed({ text }) {
 }
 
 async function textUnload() {
-  if (textSession) await textSession.release();
+  const session = textSession;
   textSession = null;
   textTokenizer = null;
+  if (session) await session.release();
   log("info", "text session unloaded");
   return { ok: true };
 }
@@ -379,11 +383,11 @@ async function dispatch({ id, method, payload }) {
   }
   try {
     let result;
-    const session = method.split(".")[0];
-    if (session in sessionQueues) {
+    const queueKey = method.split(".")[0];
+    if (Object.hasOwn(sessionQueues, queueKey)) {
       // Message callbacks overlap; never release a session during native inference.
-      const operation = sessionQueues[session].then(() => handler(payload || {}));
-      sessionQueues[session] = operation.catch(() => {});
+      const operation = sessionQueues[queueKey].then(() => handler(payload || {}));
+      sessionQueues[queueKey] = operation.catch(() => {});
       result = await operation;
     } else {
       result = await handler(payload || {});

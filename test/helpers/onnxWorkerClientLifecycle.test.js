@@ -241,3 +241,17 @@ test("a request timeout kills the worker so the crash path respawns it", async (
   assert.equal(h.client.crashCount, 1);
   assert.ok(h.client.respawnTimer);
 });
+
+test("a crash respawns the worker on the next request after the backoff, never eagerly", async () => {
+  const h = createHarness();
+  await h.client.request("ping", {});
+  h.forks[0].emit("exit", 1);
+  await assert.rejects(h.client.request("ping", {}), /restarting/);
+  h.timers.fire(1000);
+  await nextTurn();
+  assert.equal(h.client.respawnTimer, null);
+  assert.equal(h.client.child, null);
+  assert.equal(h.forks.length, 1);
+  await h.client.request("ping", {});
+  assert.equal(h.forks.length, 2);
+});

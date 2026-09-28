@@ -15,7 +15,16 @@ function createTimers() {
     timers,
     active: () => timers.filter((timer) => !timer.cleared && !timer.fired),
     setTimeout(callback, ms) {
-      const timer = { callback, ms, cleared: false, fired: false, unref() {} };
+      const timer = {
+        callback,
+        ms,
+        cleared: false,
+        fired: false,
+        unrefed: false,
+        unref() {
+          this.unrefed = true;
+        },
+      };
       timers.push(timer);
       return timer;
     },
@@ -91,7 +100,12 @@ function createHarness() {
     require(name) {
       if (name === "fs") return { existsSync: () => true };
       if (name === "./debugLogger")
-        return { debug: (message, meta) => logs.push({ message, meta }) };
+        return Object.fromEntries(
+          ["debug", "warn"].map((level) => [
+            level,
+            (message, meta) => logs.push({ level, message, meta }),
+          ])
+        );
       if (name === "./modelDirUtils") return { getModelsDirForService: () => "/models" };
       if (name === "./onnxWorkerClient") return client;
       return require(name);
@@ -123,6 +137,7 @@ test("an extract arms an idle unload that releases the speaker session, then the
   assert.ok(await h.speaker.extractEmbeddingFromSamples(SAMPLES));
   const [timer] = h.timers.active();
   assert.equal(timer.ms, 5 * 60 * 1000);
+  assert.equal(timer.unrefed, true);
   h.timers.fire(timer);
   await flush();
   const { sessions } = await h.client.request("ping", {});
@@ -136,6 +151,25 @@ test("each extract restarts the idle window", async () => {
   await h.speaker.extractEmbeddingFromSamples(SAMPLES);
   assert.equal(h.timers.timers.length, 2);
   assert.equal(h.timers.timers[0].cleared, true);
+  assert.equal(h.timers.active().length, 1);
+});
+
+test("extracts queued together leave a single idle timer", async () => {
+  const h = createHarness();
+  h.gateInference();
+  const first = h.speaker.extractEmbeddingFromSamples(SAMPLES);
+  const second = h.speaker.extractEmbeddingFromSamples(SAMPLES);
+  await flush();
+  h.releaseInference();
+  await Promise.all([first, second]);
+  assert.equal(h.timers.timers.length, 2);
+  assert.equal(h.timers.active().length, 1);
+});
+
+test("a failed extract still arms the idle unload", async () => {
+  const h = createHarness();
+  h.client.failNext = "speaker.extract";
+  await assert.rejects(h.speaker.extractEmbeddingFromSamples(SAMPLES), /worker unavailable/);
   assert.equal(h.timers.active().length, 1);
 });
 
@@ -214,7 +248,9 @@ test("a failed idle unload is logged and the next extract still reloads", async 
   h.client.failNext = "speaker.unload";
   h.timers.fire(h.timers.active()[0]);
   await flush();
-  assert.ok(h.logs.some((entry) => /idle unload failed/.test(entry.message)));
+  assert.ok(
+    h.logs.some((entry) => entry.level === "warn" && /idle unload failed/.test(entry.message))
+  );
   await h.speaker.extractEmbeddingFromSamples(SAMPLES);
   assert.equal(h.events.filter((event) => event === "speaker.load").length, 2);
 });
