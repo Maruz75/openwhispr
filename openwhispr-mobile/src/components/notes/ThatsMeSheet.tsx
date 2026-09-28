@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,10 +27,22 @@ export function ThatsMeSheet({
 }: ThatsMeSheetProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const [claimed, setClaimed] = useState(false);
+  // Two taps can land before the list re-renders. Once a claim has saved, a second one
+  // would fail against the new owner profile and undo the success state.
+  const claimedRef = useRef(false);
 
   useEffect(() => {
-    if (visible) setClaimed(false);
+    if (!visible) return;
+    claimedRef.current = false;
+    setClaimed(false);
   }, [visible]);
+
+  const claim = (speakerId: number): void => {
+    if (claimedRef.current) return;
+    if (!onClaim(speakerId)) return;
+    claimedRef.current = true;
+    setClaimed(true);
+  };
 
   return (
     <Modal
@@ -105,7 +117,7 @@ export function ThatsMeSheet({
                     ) : null}
                   </View>
                   <Pressable
-                    onPress={() => setClaimed(onClaim(candidate.speakerId))}
+                    onPress={() => claim(candidate.speakerId)}
                     accessibilityRole="button"
                     accessibilityLabel={`${candidate.name} is me`}
                     testID={`thats-me-${candidate.speakerId}`}

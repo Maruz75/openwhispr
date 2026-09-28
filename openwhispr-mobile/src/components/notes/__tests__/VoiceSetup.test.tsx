@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { VoiceSetupBanner } from '../VoiceSetupBanner';
 import { ThatsMeSheet } from '../ThatsMeSheet';
 
@@ -67,6 +67,21 @@ describe('ThatsMeSheet', () => {
     expect(getByText('Got it')).toBeTruthy();
     fireEvent.press(getByTestId('thats-me-done'));
     expect(baseProps.onClose).toHaveBeenCalled();
+  });
+
+  it("keeps the first claim when That's me is tapped twice before it re-renders", () => {
+    // The second call would fail: the first one already saved the owner profile.
+    const onClaim = jest.fn().mockReturnValueOnce(true).mockReturnValue(false);
+    const { getByTestId, getByText } = render(<ThatsMeSheet {...baseProps} onClaim={onClaim} />);
+    const button = getByTestId('thats-me-11');
+
+    act(() => {
+      fireEvent.press(button);
+      fireEvent.press(button);
+    });
+
+    expect(onClaim).toHaveBeenCalledTimes(1);
+    expect(getByText('Got it')).toBeTruthy();
   });
 
   it('stays on the list when the claim fails', () => {
