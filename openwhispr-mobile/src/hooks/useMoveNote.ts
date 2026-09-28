@@ -15,6 +15,7 @@ export interface UseMoveNoteOptions {
 
 export interface UseMoveNoteResult {
   open: (noteId: number) => void;
+  close: () => void;
   sheetProps: MoveToFolderSheetProps;
 }
 
@@ -86,6 +87,7 @@ export function useMoveNote({
 
   return {
     open,
+    close,
     sheetProps: {
       visible: movingNoteId != null,
       folders: targetFolders,

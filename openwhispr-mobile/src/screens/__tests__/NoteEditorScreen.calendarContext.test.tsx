@@ -1425,6 +1425,23 @@ describe('NoteEditorScreen meta row', () => {
 
     mockNotesState.spaces = [];
     rerender(<NoteEditorScreen />);
+    expect(queryByTestId('move-sheet')).toBeNull();
+
+    // It stays closed when the Space comes back.
+    mockNotesState.spaces = [{ id: 1, kind: 'private', name: 'Private' } as Space];
+    rerender(<NoteEditorScreen />);
+    expect(queryByTestId('move-sheet')).toBeNull();
+  });
+
+  it('closes the folder picker when another note opens', () => {
+    const { getByTestId, queryByTestId, rerender } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('note-meta-folder'));
+    expect(getByTestId('move-sheet')).toBeTruthy();
+
+    mockRouteNoteId = '8';
+    mockNote = note({ id: 8 });
+    mockNotesState.notes = [mockNote];
+    rerender(<NoteEditorScreen />);
 
     expect(queryByTestId('move-sheet')).toBeNull();
   });

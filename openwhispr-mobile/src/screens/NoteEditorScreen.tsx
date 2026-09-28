@@ -317,6 +317,11 @@ export default function NoteEditorScreen() {
     targetFolders,
     excludeFolderId: note?.folderId ?? null,
   });
+  const closeMove = move.close;
+  // A picker left open would move a note it no longer shows, or a team note as a personal one.
+  useEffect(() => {
+    closeMove();
+  }, [closeMove, noteId, isSpaceUnknown]);
   const attendeeLabel = formatAttendeeChipLabel(calendarParticipants);
   const meetingNotesContext = useMemo(
     () =>
@@ -1418,7 +1423,7 @@ export default function NoteEditorScreen() {
         participants={calendarParticipants}
         onClose={() => setAttendeesVisible(false)}
       />
-      {/* A Space that disappears mid-move would leave its note to be moved as personal. */}
+      {/* Hidden in the render where the Space disappears, before the picker is closed. */}
       {isSpaceUnknown ? null : <MoveToFolderSheet {...move.sheetProps} />}
       <TranscriptSheet
         visible={transcriptSheetVisible}

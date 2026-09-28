@@ -104,6 +104,17 @@ describe('useMoveNote', () => {
     expect(result.current.sheetProps.visible).toBe(false);
   });
 
+  it('closes without moving when the caller closes it', () => {
+    const { result } = renderHook(() =>
+      useMoveNote({ scopeSpaceId: null, targetFolders: [], excludeFolderId: null }),
+    );
+    act(() => result.current.open(7));
+    act(() => result.current.close());
+    expect(result.current.sheetProps.visible).toBe(false);
+    act(() => result.current.sheetProps.onPickFolder(5));
+    expect(mockState.moveNoteToFolder).not.toHaveBeenCalled();
+  });
+
   it('creates the new folder in the note’s space and moves the note into it', () => {
     mockState.createFolder.mockReturnValue(folder({ id: 9, spaceId: 2 }));
     const { result } = renderHook(() =>
