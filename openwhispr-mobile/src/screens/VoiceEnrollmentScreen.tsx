@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/ui/Text';
-import {
-  VoiceEnrollmentRecorder,
-  type VoiceEnrollmentMode,
-} from '@/components/notes/VoiceEnrollmentRecorder';
+import { Button } from '@/components/ui/Button';
+import { VoiceEnrollmentRecorder } from '@/components/notes/VoiceEnrollmentRecorder';
 import { useNotesStore } from '@/store/useNotesStore';
 import { SpeakerProfileOwnerAlreadyExistsError } from '@/data/local/notesRepository';
 import type {
@@ -16,18 +14,30 @@ import type {
 type SubmitInput = EnrollVoiceProfileInput | ReenrollVoiceProfileInput;
 
 export default function VoiceEnrollmentScreen() {
-  const params = useLocalSearchParams<{ owner?: string; profileId?: string }>();
+  const params = useLocalSearchParams<{ owner?: string; profileId?: string; noteId?: string }>();
   const router = useRouter();
-  const profileId = params.profileId ? Number(params.profileId) : null;
   const profiles = useNotesStore((state) => state.voiceProfiles);
+  // Teaching your voice when you already have a profile retrains that one, instead of a
+  // full read that ends in "already taught". Read once, so saving a new one mid-screen
+  // doesn't turn this into a retrain.
+  const [ownerProfileIdAtOpen] = useState(() =>
+    params.owner !== '0' && !params.profileId
+      ? (profiles.find((profile) => profile.isOwner === 1)?.id ?? null)
+      : null,
+  );
+  const profileId = params.profileId ? Number(params.profileId) : ownerProfileIdAtOpen;
+  const noteId = params.noteId ? Number(params.noteId) : null;
+  const [profilesLoaded, setProfilesLoaded] = useState(false);
   const loadVoiceProfiles = useNotesStore((state) => state.loadVoiceProfiles);
   const enrollVoiceProfile = useNotesStore((state) => state.enrollVoiceProfile);
   const reenrollVoiceProfile = useNotesStore((state) => state.reenrollVoiceProfile);
+  const relabelMeetingSpeakers = useNotesStore((state) => state.relabelMeetingSpeakers);
   const isDiarizerModelReady = useNotesStore((state) => state.isDiarizerModelReady);
   const downloadDiarizerModel = useNotesStore((state) => state.downloadDiarizerModel);
 
   useEffect(() => {
     loadVoiceProfiles();
+    setProfilesLoaded(true);
   }, [loadVoiceProfiles]);
 
   const existingProfile = useMemo(
@@ -36,15 +46,13 @@ export default function VoiceEnrollmentScreen() {
     [profileId, profiles],
   );
   const isOwner = existingProfile ? existingProfile.isOwner === 1 : params.owner !== '0';
-  const mode: VoiceEnrollmentMode = existingProfile ? 'retrain' : isOwner ? 'self' : 'other';
-  const title =
-    mode === 'self'
+  const title = existingProfile
+    ? isOwner
+      ? 'Retrain Your Voice'
+      : `Retrain ${existingProfile.displayName}'s Voice`
+    : isOwner
       ? 'Teach OpenWhispr your voice'
-      : mode === 'other'
-        ? "Add Someone's Voice"
-        : isOwner
-          ? 'Retrain Your Voice'
-          : `Retrain ${existingProfile?.displayName}'s Voice`;
+      : "Add Someone's Voice";
 
   const leave = useCallback(() => {
     if (router.canGoBack()) router.back();
@@ -65,16 +73,34 @@ export default function VoiceEnrollmentScreen() {
             "You've already taught OpenWhispr your voice",
             'Open it in Voice Profiles and choose Retrain Voice.',
           );
+          leave();
         }
         throw error;
       }
+      // Started from a meeting note: label that meeting with the new voice as well.
+      if (noteId != null) relabelMeetingSpeakers(noteId);
     },
-    [enrollVoiceProfile, existingProfile, reenrollVoiceProfile],
+    [
+      enrollVoiceProfile,
+      existingProfile,
+      leave,
+      noteId,
+      reenrollVoiceProfile,
+      relabelMeetingSpeakers,
+    ],
   );
 
-  // A retrain link names a profile that loads after the first render.
   if (profileId != null && !existingProfile) {
-    return <View className="flex-1 bg-systemBackground" />;
+    // Profiles load in the first effect; after that a missing one was deleted.
+    if (!profilesLoaded) return <View className="flex-1 bg-systemBackground" />;
+    return (
+      <View className="flex-1 gap-4 bg-systemBackground p-4" testID="voice-enrollment-missing">
+        <Text className="text-[15px] leading-5 text-secondaryLabel">
+          This voice profile no longer exists.
+        </Text>
+        <Button onPress={leave}>Back</Button>
+      </View>
+    );
   }
 
   return (
@@ -88,7 +114,6 @@ export default function VoiceEnrollmentScreen() {
           {title}
         </Text>
         <VoiceEnrollmentRecorder
-          mode={mode}
           isOwner={isOwner}
           profileId={existingProfile?.id}
           defaultDisplayName={existingProfile?.displayName ?? (isOwner ? 'Me' : '')}

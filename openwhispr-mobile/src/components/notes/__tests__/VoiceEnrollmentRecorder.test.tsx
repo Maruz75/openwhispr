@@ -3,9 +3,14 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { VoiceEnrollmentRecorder } from '../VoiceEnrollmentRecorder';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
 import {
+  VOICE_ENROLLMENT_DIARIZER_MODEL_REQUIRED,
   VOICE_ENROLLMENT_LOW_SNR,
+  VOICE_ENROLLMENT_STORAGE_FAILED,
   VoiceEnrollmentError,
 } from '@/services/diarization/VoiceprintService';
+import { SpeakerProfileOwnerAlreadyExistsError } from '@/data/local/notesRepository';
+import { MicPermissionError, showMicPermissionAlert } from '@/lib/permissions';
+import { Sentry } from '@/lib/sentry';
 
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
 jest.mock('@/components/ui/SystemIcon', () => ({ SystemIcon: () => null }));
@@ -37,6 +42,11 @@ jest.mock('@/components/ui/Button', () => {
   };
 });
 jest.mock('@/hooks/useAudioRecording', () => ({ useAudioRecording: jest.fn() }));
+jest.mock('@/lib/sentry', () => ({ Sentry: { captureException: jest.fn() } }));
+jest.mock('@/lib/permissions', () => ({
+  ...jest.requireActual('@/lib/permissions'),
+  showMicPermissionAlert: jest.fn(),
+}));
 
 const mockUseAudioRecording = useAudioRecording as jest.MockedFunction<typeof useAudioRecording>;
 const startRecording = jest.fn(async () => undefined);
@@ -45,7 +55,6 @@ const cancelRecording = jest.fn();
 
 const renderRecorder = (overrides: Partial<Parameters<typeof VoiceEnrollmentRecorder>[0]> = {}) => {
   const props = {
-    mode: 'self' as const,
     isOwner: true,
     isModelReady: jest.fn(async () => true),
     downloadModel: jest.fn(async () => undefined),
@@ -158,6 +167,7 @@ describe('VoiceEnrollmentRecorder', () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
     });
     expect(utils.getByTestId('voice-enrollment-checking')).toBeTruthy();
+    expect(utils.getByText(/waiting for the speaker model/i)).toBeTruthy();
     expect(utils.props.onSubmit).not.toHaveBeenCalled();
 
     await act(async () => finishDownload());
@@ -213,10 +223,37 @@ describe('VoiceEnrollmentRecorder', () => {
     );
   });
 
-  it('enables Done at 10 seconds and stops by itself at 30', async () => {
+  it('stops waiting on a stalled download, and Retry checks the kept recording once it lands', async () => {
+    let finishDownload: () => void = () => {};
+    const stalled = new Promise<void>((resolve) => (finishDownload = resolve));
+    const downloadModel = jest.fn(() => stalled);
+    const utils = renderRecorder({ isModelReady: jest.fn(async () => false), downloadModel });
+    await waitFor(() => expect(utils.getByTestId('voice-enrollment-download')).toBeTruthy());
+    fireEvent.press(utils.getByTestId('voice-enrollment-download'));
+    await recordFor(utils, 12);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(3 * 60 * 1000);
+    });
+    expect(utils.getByTestId('voice-enrollment-download-retry')).toBeTruthy();
+    expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-download-retry'));
+    });
+    await act(async () => finishDownload());
+
+    await waitFor(() => expect(utils.props.onSubmit).toHaveBeenCalledTimes(1));
+  });
+
+  it('keeps Done off until 11 seconds and stops by itself at 30', async () => {
     const utils = renderRecorder();
-    await recordFor(utils, 9);
+    await recordFor(utils, 10);
     expect(utils.getByTestId('voice-enrollment-stop').props.accessibilityState.disabled).toBe(true);
+    expect(utils.getByText('Keep reading')).toBeTruthy();
 
     await act(async () => {
       jest.advanceTimersByTime(1000);
@@ -224,21 +261,30 @@ describe('VoiceEnrollmentRecorder', () => {
     expect(utils.getByTestId('voice-enrollment-stop').props.accessibilityState.disabled).toBe(
       false,
     );
+    expect(utils.queryByText('Keep reading')).toBeNull();
 
     await act(async () => {
-      jest.advanceTimersByTime(20_000);
+      jest.advanceTimersByTime(19_000);
     });
     await waitFor(() => expect(stopRecordingRaw).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(utils.props.onSubmit).toHaveBeenCalledTimes(1));
   });
 
-  it('stops and submits once when Done and the 30 s limit coincide', async () => {
+  it('stops and submits once when the 30 s limit lands while Done is still stopping', async () => {
+    let finishStop: (uri: string) => void = () => {};
+    stopRecordingRaw.mockImplementationOnce(
+      () => new Promise<string>((resolve) => (finishStop = resolve)),
+    );
     const utils = renderRecorder();
     await recordFor(utils, 29);
     await act(async () => {
       fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+    // Still recording while the stop is in flight, so the auto-stop fires as well.
+    await act(async () => {
       jest.advanceTimersByTime(1000);
     });
+    await act(async () => finishStop('file://sample.wav'));
 
     await waitFor(() => expect(utils.props.onSubmit).toHaveBeenCalledTimes(1));
     expect(stopRecordingRaw).toHaveBeenCalledTimes(1);
@@ -279,9 +325,152 @@ describe('VoiceEnrollmentRecorder', () => {
     await waitFor(() =>
       expect(utils.getByText('Too much background noise. Try somewhere quieter.')).toBeTruthy(),
     );
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file://sample.wav', { idempotent: true });
+    expect(Sentry.captureException).not.toHaveBeenCalled();
     fireEvent.press(utils.getByTestId('voice-enrollment-try-again'));
     expect(utils.queryByTestId('voice-enrollment-error')).toBeNull();
     expect(utils.getByTestId('voice-enrollment-record')).toBeTruthy();
+  });
+
+  it('reports a failure it cannot explain', async () => {
+    const error = new VoiceEnrollmentError(VOICE_ENROLLMENT_STORAGE_FAILED, 'disk');
+    const utils = renderRecorder({
+      onSubmit: jest.fn(async () => {
+        throw error;
+      }),
+    });
+    await recordFor(utils, 12);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+
+    await waitFor(() => expect(utils.getByText(/something went wrong/i)).toBeTruthy());
+    expect(Sentry.captureException).toHaveBeenCalledWith(error, expect.anything());
+  });
+
+  it('deletes the sample and shows no failure when you already have a voice profile', async () => {
+    const utils = renderRecorder({
+      onSubmit: jest.fn(async () => {
+        throw new SpeakerProfileOwnerAlreadyExistsError();
+      }),
+    });
+    await recordFor(utils, 12);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+
+    await waitFor(() =>
+      expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file://sample.wav', {
+        idempotent: true,
+      }),
+    );
+    expect(utils.queryByTestId('voice-enrollment-error')).toBeNull();
+  });
+
+  it('keeps the read when the model turns out to be missing, and checks it after the download', async () => {
+    const onSubmit = jest
+      .fn()
+      .mockRejectedValueOnce(
+        new VoiceEnrollmentError(VOICE_ENROLLMENT_DIARIZER_MODEL_REQUIRED, 'x'),
+      )
+      .mockResolvedValueOnce(undefined);
+    const utils = renderRecorder({ onSubmit });
+    await recordFor(utils, 12);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+    await waitFor(() => expect(utils.getByTestId('voice-enrollment-download')).toBeTruthy());
+    expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-download'));
+    });
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    expect(onSubmit.mock.calls[1][0]).toEqual(
+      expect.objectContaining({
+        recordings: [{ uri: 'file://sample.wav', mimeType: 'audio/wav' }],
+      }),
+    );
+    expect(utils.props.downloadModel).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks the kept recording once when Retry is tapped twice', async () => {
+    const downloadModel = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue(undefined);
+    const utils = renderRecorder({ isModelReady: jest.fn(async () => false), downloadModel });
+    await waitFor(() => expect(utils.getByTestId('voice-enrollment-download')).toBeTruthy());
+    fireEvent.press(utils.getByTestId('voice-enrollment-download'));
+    await recordFor(utils, 12);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+    await waitFor(() => expect(utils.getByTestId('voice-enrollment-download-retry')).toBeTruthy());
+
+    await act(async () => {
+      const retry = utils.getByTestId('voice-enrollment-download-retry');
+      fireEvent.press(retry);
+      fireEvent.press(retry);
+    });
+
+    await waitFor(() => expect(utils.props.onSubmit).toHaveBeenCalledTimes(1));
+    expect(downloadModel).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a failed download from the read screen without checking anything', async () => {
+    const downloadModel = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue(undefined);
+    const utils = renderRecorder({ isModelReady: jest.fn(async () => false), downloadModel });
+    await waitFor(() => expect(utils.getByTestId('voice-enrollment-download')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-download'));
+    });
+    await waitFor(() =>
+      expect(utils.getByTestId('voice-enrollment-download-retry-inline')).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-download-retry-inline'));
+    });
+
+    expect(downloadModel).toHaveBeenCalledTimes(2);
+    expect(utils.queryByTestId('voice-enrollment-download-retry-inline')).toBeNull();
+    expect(utils.props.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('keeps the profile name on a retrain', async () => {
+    const utils = renderRecorder({ isOwner: false, profileId: 5, defaultDisplayName: 'Alice' });
+    await recordFor(utils, 12);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+
+    await waitFor(() =>
+      expect(utils.props.onSubmit).toHaveBeenCalledWith({
+        recordings: [{ uri: 'file://sample.wav', mimeType: 'audio/wav' }],
+        profileId: 5,
+        consentAccepted: true,
+        consentAcceptedAt: '2026-09-27T09:00:00.000Z',
+      }),
+    );
+    expect(utils.queryByTestId('voice-enrollment-name')).toBeNull();
+  });
+
+  it('points to Settings when iOS can no longer ask for the microphone', async () => {
+    startRecording.mockRejectedValueOnce(
+      new MicPermissionError('denied', { canAskAgain: false, nativePromptShown: false }),
+    );
+    const utils = renderRecorder();
+    await waitFor(() => expect(utils.getByTestId('voice-enrollment-record')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-record'));
+    });
+
+    expect(showMicPermissionAlert).toHaveBeenCalledTimes(1);
   });
 
   it('shows a failure and Try Again when the microphone cannot start', async () => {
@@ -295,6 +484,7 @@ describe('VoiceEnrollmentRecorder', () => {
     expect(utils.getByTestId('voice-enrollment-error')).toBeTruthy();
     expect(utils.getByText(/couldn't start the microphone/i)).toBeTruthy();
     expect(utils.getByTestId('voice-enrollment-try-again')).toBeTruthy();
+    expect(showMicPermissionAlert).not.toHaveBeenCalled();
   });
 
   it('cancels the recording and deletes it when you leave mid-read', async () => {
@@ -378,31 +568,38 @@ describe('VoiceEnrollmentRecorder', () => {
   });
 
   it.each([
-    ['returns no file', async () => null],
+    ['returns no file', async () => null, /interrupted/i],
     [
       'fails',
       async () => {
         throw new Error('stop failed');
       },
+      /something went wrong/i,
     ],
-  ])('deletes the sample and shows a failure when stopping %s', async (_label, stopResult) => {
-    stopRecordingRaw.mockImplementationOnce(stopResult);
-    mockUseAudioRecording.mockReturnValue({
-      ...mockUseAudioRecording(),
-      audioRecorder: { uri: 'file://partial.wav' } as ReturnType<
-        typeof useAudioRecording
-      >['audioRecorder'],
-    });
-    const utils = renderRecorder();
-    await recordFor(utils, 12);
-    await act(async () => {
-      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
-    });
+  ])(
+    'deletes the sample and shows a failure when stopping %s',
+    async (_label, stopResult, message) => {
+      stopRecordingRaw.mockImplementationOnce(stopResult);
+      mockUseAudioRecording.mockReturnValue({
+        ...mockUseAudioRecording(),
+        audioRecorder: { uri: 'file://partial.wav' } as ReturnType<
+          typeof useAudioRecording
+        >['audioRecorder'],
+      });
+      const utils = renderRecorder();
+      await recordFor(utils, 12);
+      await act(async () => {
+        fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+      });
 
-    expect(utils.getByTestId('voice-enrollment-error')).toBeTruthy();
-    expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file://partial.wav', { idempotent: true });
-    expect(utils.props.onSubmit).not.toHaveBeenCalled();
-  });
+      expect(utils.getByTestId('voice-enrollment-error')).toBeTruthy();
+      expect(utils.getByText(message)).toBeTruthy();
+      expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file://partial.wav', {
+        idempotent: true,
+      });
+      expect(utils.props.onSubmit).not.toHaveBeenCalled();
+    },
+  );
 
   it('starts one recording when the mic is tapped twice while it opens', async () => {
     let finishStart: () => void = () => {};
@@ -423,7 +620,7 @@ describe('VoiceEnrollmentRecorder', () => {
   });
 
   it("needs a name before recording someone else's voice", async () => {
-    const utils = renderRecorder({ mode: 'other', isOwner: false });
+    const utils = renderRecorder({ isOwner: false });
     await waitFor(() => expect(utils.getByTestId('voice-enrollment-record')).toBeTruthy());
     expect(utils.getByTestId('voice-enrollment-record').props.accessibilityState.disabled).toBe(
       true,

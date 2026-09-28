@@ -19,6 +19,7 @@ import {
   VOICE_ENROLLMENT_NO_USABLE_EMBEDDING,
   VOICE_ENROLLMENT_SPEECH_ANALYSIS_FAILED,
   VOICE_ENROLLMENT_STORAGE_FAILED,
+  VOICE_ENROLLMENT_NO_MEANINGFUL_SPEAKER,
   VOICE_ENROLLMENT_SHORT_SPEECH,
   VOICE_ENROLLMENT_TRANSCODE_FAILED,
   type EnrollVoiceProfileDeps,
@@ -207,6 +208,17 @@ describe('evaluateEnrollmentQuality', () => {
         diarization: diarization({ segments: [{ start: 0, end: 5, speakerId: 0 }] }),
       }),
     ).toMatchObject({ ok: false, code: VOICE_ENROLLMENT_SHORT_SPEECH, speechActivity });
+  });
+
+  it('keeps the level analysis when no single speaker was heard for long enough', () => {
+    const speechActivity = passingAnalysis;
+
+    expect(
+      evaluateEnrollmentQuality({
+        speechActivity,
+        diarization: diarization({ segments: [{ start: 0, end: 1, speakerId: 0 }] }),
+      }),
+    ).toMatchObject({ ok: false, code: VOICE_ENROLLMENT_NO_MEANINGFUL_SPEAKER, speechActivity });
   });
 
   it('accepts VAD-short analysis when diarization attributes enough single-speaker speech', () => {

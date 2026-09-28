@@ -17,7 +17,10 @@ export default function NotesLayout() {
         options={{ title: 'Voice Profiles', headerLargeTitle: false }}
       />
       <Stack.Screen name="voice-profile" options={{ title: 'Profile', headerLargeTitle: false }} />
-      <Stack.Screen name="voice-enrollment" options={{ title: '', headerLargeTitle: false }} />
+      <Stack.Screen
+        name="voice-enrollment"
+        options={{ title: 'Voice Sample', headerLargeTitle: false }}
+      />
     </Stack>
   );
 }

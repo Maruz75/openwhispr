@@ -1,5 +1,5 @@
 import { Alert } from 'react-native';
-import { render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import VoiceEnrollmentScreen from '../VoiceEnrollmentScreen';
 import { SpeakerProfileOwnerAlreadyExistsError } from '@/data/local/notesRepository';
 
@@ -12,11 +12,16 @@ const mockState = {
   loadVoiceProfiles: jest.fn(),
   enrollVoiceProfile: mockEnroll,
   reenrollVoiceProfile: jest.fn(),
+  relabelMeetingSpeakers: jest.fn(),
   isDiarizerModelReady: jest.fn(async () => true),
   downloadDiarizerModel: jest.fn(async () => undefined),
 };
 
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
+jest.mock('@/components/ui/Button', () => ({
+  Button: ({ onPress, children }: any) =>
+    require('react').createElement(require('react-native').Text, { onPress }, children),
+}));
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useRouter: () => ({ back: mockBack, canGoBack: () => true, replace: jest.fn() }),
@@ -40,6 +45,7 @@ beforeEach(() => {
   mockParams = {};
   mockRecorderProps = null;
   mockState.voiceProfiles = [];
+  mockState.loadVoiceProfiles.mockImplementation(() => undefined);
 });
 
 describe('VoiceEnrollmentScreen', () => {
@@ -47,14 +53,14 @@ describe('VoiceEnrollmentScreen', () => {
     mockParams = { owner: '1' };
     const { getByText } = render(<VoiceEnrollmentScreen />);
     expect(getByText('Teach OpenWhispr your voice')).toBeTruthy();
-    expect(mockRecorderProps).toMatchObject({ mode: 'self', isOwner: true });
+    expect(mockRecorderProps).toMatchObject({ isOwner: true, profileId: undefined });
   });
 
   it("adds someone else's voice", () => {
     mockParams = { owner: '0' };
     const { getByText } = render(<VoiceEnrollmentScreen />);
     expect(getByText("Add Someone's Voice")).toBeTruthy();
-    expect(mockRecorderProps).toMatchObject({ mode: 'other', isOwner: false });
+    expect(mockRecorderProps).toMatchObject({ isOwner: false, profileId: undefined });
   });
 
   it('retrains an existing profile', () => {
@@ -62,13 +68,44 @@ describe('VoiceEnrollmentScreen', () => {
     mockState.voiceProfiles = [{ id: 2, displayName: 'Me', isOwner: 1 }];
     const { getByText } = render(<VoiceEnrollmentScreen />);
     expect(getByText('Retrain Your Voice')).toBeTruthy();
-    expect(mockRecorderProps).toMatchObject({ mode: 'retrain', profileId: 2 });
+    expect(mockRecorderProps).toMatchObject({ isOwner: true, profileId: 2 });
   });
 
-  it('waits for the profile before choosing what to show', () => {
+  it('retrains your existing profile instead of starting a read that would be refused', () => {
+    mockParams = { owner: '1' };
+    mockState.voiceProfiles = [{ id: 4, displayName: 'Me', isOwner: 1 }];
+    const { getByText } = render(<VoiceEnrollmentScreen />);
+    expect(getByText('Retrain Your Voice')).toBeTruthy();
+    expect(mockRecorderProps).toMatchObject({ isOwner: true, profileId: 4 });
+  });
+
+  it('shows a profile that loads after the first render', () => {
     mockParams = { profileId: '2' };
-    render(<VoiceEnrollmentScreen />);
+    mockState.loadVoiceProfiles.mockImplementation(() => {
+      mockState.voiceProfiles = [{ id: 2, displayName: 'Alice', isOwner: 0 }];
+    });
+    const { getByText } = render(<VoiceEnrollmentScreen />);
+    expect(getByText("Retrain Alice's Voice")).toBeTruthy();
+    expect(mockRecorderProps).toMatchObject({ isOwner: false, profileId: 2 });
+  });
+
+  it('says so and offers Back when the profile was deleted', () => {
+    mockParams = { profileId: '2' };
+    const { getByTestId, getByText } = render(<VoiceEnrollmentScreen />);
+    expect(getByTestId('voice-enrollment-missing')).toBeTruthy();
     expect(mockRecorderProps).toBeNull();
+    fireEvent.press(getByText('Back'));
+    expect(mockBack).toHaveBeenCalled();
+  });
+
+  it('labels the meeting it was opened from once your voice is saved', async () => {
+    mockParams = { owner: '1', noteId: '7' };
+    mockEnroll.mockResolvedValueOnce({ id: 3 });
+    render(<VoiceEnrollmentScreen />);
+
+    await mockRecorderProps.onSubmit({});
+
+    expect(mockState.relabelMeetingSpeakers).toHaveBeenCalledWith(7);
   });
 
   it('explains when you already taught it your voice', async () => {
@@ -86,6 +123,9 @@ describe('VoiceEnrollmentScreen', () => {
         'Open it in Voice Profiles and choose Retrain Voice.',
       ),
     );
+    // Reading again would only be refused again.
+    expect(mockBack).toHaveBeenCalled();
+    expect(mockState.relabelMeetingSpeakers).not.toHaveBeenCalled();
     alertSpy.mockRestore();
   });
 });

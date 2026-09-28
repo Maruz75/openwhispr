@@ -3,22 +3,39 @@ import {
   VOICE_ENROLLMENT_LOW_SNR,
   VOICE_ENROLLMENT_LOW_SPEECH_RATIO,
   VOICE_ENROLLMENT_MULTIPLE_SPEAKERS,
+  VOICE_ENROLLMENT_NO_MEANINGFUL_SPEAKER,
   VOICE_ENROLLMENT_NO_SPEECH,
+  VOICE_ENROLLMENT_PROFILE_NOT_FOUND,
   VOICE_ENROLLMENT_SHORT_SPEECH,
   VoiceEnrollmentError,
 } from '@/services/diarization/VoiceprintService';
-import { voiceEnrollmentFailureMessage } from '../voiceEnrollmentMessages';
+import {
+  VOICE_ENROLLMENT_UNEXPLAINED_FAILURE,
+  voiceEnrollmentFailureMessage,
+} from '../voiceEnrollmentMessages';
 
 const failure = (code: ConstructorParameters<typeof VoiceEnrollmentError>[0]) =>
   voiceEnrollmentFailureMessage(new VoiceEnrollmentError(code, 'raw service text'));
 
 describe('voiceEnrollmentFailureMessage', () => {
   it('asks for the whole script when too little speech was heard', () => {
-    expect(failure(VOICE_ENROLLMENT_NO_SPEECH)).toBe(
-      "We didn't hear enough. Read the whole script.",
-    );
     expect(failure(VOICE_ENROLLMENT_SHORT_SPEECH)).toBe(
       "We didn't hear enough. Read the whole script.",
+    );
+    expect(failure(VOICE_ENROLLMENT_NO_MEANINGFUL_SPEAKER)).toBe(
+      "We couldn't pick out your voice. Read the whole script with your phone close by.",
+    );
+  });
+
+  it('points at the microphone when nothing was heard at all', () => {
+    expect(failure(VOICE_ENROLLMENT_NO_SPEECH)).toBe(
+      "We couldn't hear you. Check that nothing is covering the microphone, then try again.",
+    );
+  });
+
+  it('says so when the profile being retrained was deleted', () => {
+    expect(failure(VOICE_ENROLLMENT_PROFILE_NOT_FOUND)).toBe(
+      'This voice profile was deleted. Go back to Voice Profiles to add it again.',
     );
   });
 
@@ -36,7 +53,10 @@ describe('voiceEnrollmentFailureMessage', () => {
 
   describe('when the recording was quiet', () => {
     const levelFailure = (
-      code: typeof VOICE_ENROLLMENT_LOW_SPEECH_RATIO | typeof VOICE_ENROLLMENT_SHORT_SPEECH,
+      code:
+        | typeof VOICE_ENROLLMENT_LOW_SPEECH_RATIO
+        | typeof VOICE_ENROLLMENT_SHORT_SPEECH
+        | typeof VOICE_ENROLLMENT_NO_MEANINGFUL_SPEAKER,
       peakDb: number,
     ) =>
       voiceEnrollmentFailureMessage(
@@ -65,6 +85,7 @@ describe('voiceEnrollmentFailureMessage', () => {
       // Levels logged from a simulator read through a Mac mic at 29% input volume.
       expect(levelFailure(VOICE_ENROLLMENT_LOW_SPEECH_RATIO, -22.6)).toBe(quiet);
       expect(levelFailure(VOICE_ENROLLMENT_SHORT_SPEECH, -22.6)).toBe(quiet);
+      expect(levelFailure(VOICE_ENROLLMENT_NO_MEANINGFUL_SPEAKER, -22.6)).toBe(quiet);
     });
 
     it('keeps the pause and length messages when the voice was loud enough', () => {
@@ -78,7 +99,7 @@ describe('voiceEnrollmentFailureMessage', () => {
   });
 
   it('falls back to a general message for anything else', () => {
-    const general = 'Something went wrong checking your voice. Try again.';
+    const general = VOICE_ENROLLMENT_UNEXPLAINED_FAILURE;
     expect(failure(VOICE_ENROLLMENT_DIARIZATION_FAILED)).toBe(general);
     expect(voiceEnrollmentFailureMessage(new Error('boom'))).toBe(general);
     expect(voiceEnrollmentFailureMessage(null)).toBe(general);

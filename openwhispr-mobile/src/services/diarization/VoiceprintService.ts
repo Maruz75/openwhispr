@@ -265,11 +265,14 @@ export const evaluateEnrollmentQuality = (
     .map(([speakerId]) => Number(speakerId));
 
   if (meaningfulSpeakerIds.length === 0) {
-    return failQuality(
-      VOICE_ENROLLMENT_NO_MEANINGFUL_SPEAKER,
-      `No speaker had at least ${meaningfulSpeakerMs}ms of attributed speech.`,
-      speakerDurationsMs,
-    );
+    return {
+      ...failQuality(
+        VOICE_ENROLLMENT_NO_MEANINGFUL_SPEAKER,
+        `No speaker had at least ${meaningfulSpeakerMs}ms of attributed speech.`,
+        speakerDurationsMs,
+      ),
+      speechActivity: speechQuality.speechActivity,
+    };
   }
   if (meaningfulSpeakerIds.length > 1) {
     return failQuality(
