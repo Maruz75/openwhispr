@@ -1376,6 +1376,7 @@ describe('NoteEditorScreen meta row', () => {
   });
   afterEach(() => {
     mockNotesState.folders = [];
+    mockNotesState.spaces = [];
   });
 
   it('shows the attendees and folder of a calendar meeting', () => {
@@ -1412,6 +1413,20 @@ describe('NoteEditorScreen meta row', () => {
     const { queryByTestId, queryByText } = render(<NoteEditorScreen />);
     expect(queryByTestId('note-meta-folder')).toBeNull();
     expect(queryByText('Meetings')).toBeNull();
+  });
+
+  it('closes the folder picker if the note’s Space disappears while it is open', () => {
+    mockNote = note({ spaceId: 1 });
+    mockNotesState.notes = [mockNote];
+    mockNotesState.spaces = [{ id: 1, kind: 'private', name: 'Private' } as Space];
+    const { getByTestId, queryByTestId, rerender } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('note-meta-folder'));
+    expect(getByTestId('move-sheet')).toBeTruthy();
+
+    mockNotesState.spaces = [];
+    rerender(<NoteEditorScreen />);
+
+    expect(queryByTestId('move-sheet')).toBeNull();
   });
 
   it('dates a note pulled before its creation time synced by its last edit, not the pull', () => {

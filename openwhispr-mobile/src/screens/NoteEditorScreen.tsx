@@ -1418,7 +1418,8 @@ export default function NoteEditorScreen() {
         participants={calendarParticipants}
         onClose={() => setAttendeesVisible(false)}
       />
-      <MoveToFolderSheet {...move.sheetProps} />
+      {/* A Space that disappears mid-move would leave its note to be moved as personal. */}
+      {isSpaceUnknown ? null : <MoveToFolderSheet {...move.sheetProps} />}
       <TranscriptSheet
         visible={transcriptSheetVisible}
         blocks={transcriptBlocks}
