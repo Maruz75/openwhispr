@@ -106,6 +106,29 @@ test("outside edit mode the fields are shown, Cc only when it has addresses", as
   assert.match(render({ ...FIELDS, cc: ["sam@acme.test"] }), /sam@acme\.test/);
 });
 
+test("outside edit mode a non-ASCII domain also shows its punycode form", async (t) => {
+  installBrowserGlobals(t);
+  const { EmailApprovalFields } = await loadFields(t);
+  const markup = renderToStaticMarkup(
+    React.createElement(EmailApprovalFields, {
+      fields: { ...FIELDS, to: ["a@müller.de"], cc: ["b@müller.de"] },
+      editing: false,
+      disabled: false,
+      onChange() {},
+    })
+  );
+  // recipientLabel's punycode annotation, same form the approval card's
+  // destinationLabel uses, so a single-script look-alike domain can't pass
+  // as the real one on the card either.
+  assert.match(markup, /a@müller\.de \(xn--mller-kva\.de\)/);
+  assert.match(markup, /b@müller\.de \(xn--mller-kva\.de\)/);
+});
+
+test("in edit mode To and Cc show the raw address, not its punycode form", async (t) => {
+  const { container } = await mountEditor(t, { ...FIELDS, to: ["a@müller.de"], cc: [] });
+  assert.equal(field(container, "toLabel").value, "a@müller.de");
+});
+
 async function mountEditor(t, initial = FIELDS) {
   let root = null;
   // Registered before installBrowserGlobals's cleanup, which removes window.

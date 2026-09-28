@@ -1,7 +1,7 @@
 // Gmail send connector (spec §5.1), the second approval connector. The
 // model only prepares; the card's Send commits exactly what the card shows,
 // rebuilt and re-checked here.
-const { isValidEmailAddress, bareEmailAddress } = require("./emailCompose");
+const { isValidEmailAddress, bareEmailAddress, recipientLabel } = require("./emailCompose");
 const { buildRawMessage } = require("./gmailMime");
 
 const MAX_RECIPIENTS = 50;
@@ -36,11 +36,14 @@ function normalizeRecipients({ to, cc } = {}) {
 }
 
 // What the card header and the receipt show: recipients only, never the
-// subject or body.
+// subject or body. The shown address carries its punycode form when its
+// domain isn't ASCII (recipientLabel), same as the email_draft tool and
+// emailConnector.js, so a single-script look-alike domain doesn't pass as
+// the real one; the raw address is what fields and the message still carry.
 function destinationLabel(to, cc = []) {
   const all = [...to, ...cc];
   if (all.length === 0) return "";
-  return all.length > 1 ? `${all[0]} +${all.length - 1}` : all[0];
+  return all.length > 1 ? `${recipientLabel(all[0])} +${all.length - 1}` : recipientLabel(all[0]);
 }
 
 // Plan 3 Task 1 checked the #sent/<id> link (spec §10).
@@ -117,6 +120,26 @@ function cardFields(payload, edits) {
 }
 
 function createGmailConnector({ api, auth, credentials }) {
+  // The bound login's credential, read locally with no refresh and no
+  // network call — the same identity check auth.getAccessToken makes
+  // before it ever refreshes. Used only to size-check a message before
+  // prepare or commit touch Google at all: a body that is already too
+  // large to send is refused without a token refresh in between. Null
+  // when the binding is stale (reconnect, disconnect, none at all), in
+  // which case getAccessToken(binding) fails the same way, also without
+  // any network call.
+  function boundCredential(binding) {
+    const entry = credentials.read(binding?.ownerAccountId ?? null, "gmail");
+    if (
+      !entry ||
+      entry.generation !== binding?.generation ||
+      entry.credential.sub !== binding?.accountId
+    ) {
+      return null;
+    }
+    return entry.credential;
+  }
+
   // Gmail refusing a token it just issued means the login itself is gone.
   function refusedAgain(binding) {
     return { ok: false, outcome: "failed", errorCode: auth.markReconnect(binding).errorCode };
@@ -195,18 +218,36 @@ function createGmailConnector({ api, auth, credentials }) {
       if (characterCount(subject) > MAX_SUBJECT_LENGTH) return prepareFailed("too_long");
       const body = typeof args?.body === "string" ? args.body : "";
 
+      // The 1 MB cap is checked before any network call, including a token
+      // refresh: the bound login's stored email (no refresh) builds the
+      // message for sizing whenever the binding is still live.
+      const boundEmail = boundCredential(binding)?.email ?? null;
+      if (boundEmail) {
+        const sizeCheck = buildRawMessage({
+          from: boundEmail,
+          to: recipients.to,
+          cc: recipients.cc,
+          subject,
+          body,
+        });
+        if (!sizeCheck.ok) return prepareFailed(sizeCheck.errorCode);
+      }
+
       const access = await auth.getAccessToken(binding);
       if (!access.ok) return prepareFailed(access.errorCode);
       const { email } = access.credential;
-      // Built now only to apply the 1 MB cap; commit builds it again from the card.
-      const built = buildRawMessage({
-        from: email,
-        to: recipients.to,
-        cc: recipients.cc,
-        subject,
-        body,
-      });
-      if (!built.ok) return prepareFailed(built.errorCode);
+      // A stale binding (boundEmail null) still needs the size check, now
+      // that a token was fetched under the login it actually resolved to.
+      if (!boundEmail) {
+        const built = buildRawMessage({
+          from: email,
+          to: recipients.to,
+          cc: recipients.cc,
+          subject,
+          body,
+        });
+        if (!built.ok) return prepareFailed(built.errorCode);
+      }
 
       const fields = { to: recipients.to, cc: recipients.cc, subject, body };
       return {
@@ -244,24 +285,51 @@ function createGmailConnector({ api, auth, credentials }) {
       }
       if (characterCount(fields.subject) > MAX_SUBJECT_LENGTH) return commitFailed("too_long");
 
+      // The 1 MB cap is checked before any network call, including a token
+      // refresh: the bound login's stored email (no refresh) builds the
+      // message that will actually be sent, whenever the binding is still
+      // live, so an oversized edited body never reaches auth.getAccessToken.
+      const boundEmail = boundCredential(binding)?.email ?? null;
+      let built = boundEmail
+        ? buildRawMessage({
+            from: boundEmail,
+            to: recipients.to,
+            cc: recipients.cc,
+            subject: fields.subject,
+            body: fields.body,
+          })
+        : null;
+      if (built && !built.ok) return commitFailed(built.errorCode);
+
       const access = await auth.getAccessToken(binding);
       if (!access.ok) return commitFailed(access.errorCode);
-      const built = buildRawMessage({
-        from: access.credential.email,
-        to: recipients.to,
-        cc: recipients.cc,
-        subject: fields.subject,
-        body: fields.body,
-      });
-      if (!built.ok) return commitFailed(built.errorCode);
+      // A stale binding (boundEmail null) still needs the size check, now
+      // that a token was fetched under the login it actually resolved to.
+      if (!built) {
+        built = buildRawMessage({
+          from: access.credential.email,
+          to: recipients.to,
+          cc: recipients.cc,
+          subject: fields.subject,
+          body: fields.body,
+        });
+        if (!built.ok) return commitFailed(built.errorCode);
+      }
 
       const sent = await sendWithRefresh(built.raw, binding, access);
       const { result } = sent;
       const { email } = sent.access.credential;
-      if (result.ok) return { state: "sent", url: sentMessageUrl(email, result.id) };
+      const label = destinationLabel(recipients.to, recipients.cc);
+      if (result.ok)
+        return { state: "sent", url: sentMessageUrl(email, result.id), destinationLabel: label };
       if (result.outcome === "failed") return commitFailed(result.errorCode);
       // Gmail has no idempotency key, so an uncertain send is never repeated.
-      return { state: "unknown", errorCode: result.errorCode, checkUrl: sentFolderUrl(email) };
+      return {
+        state: "unknown",
+        errorCode: result.errorCode,
+        checkUrl: sentFolderUrl(email),
+        destinationLabel: label,
+      };
     },
 
     authorize: (options) => auth.authorize(options),

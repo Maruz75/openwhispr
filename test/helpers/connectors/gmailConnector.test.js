@@ -200,6 +200,31 @@ test("prepare enforces Gmail's caps before anything is sent", async () => {
   assert.deepEqual(google.calls, []);
 });
 
+test("an oversized body never refreshes a stale token, at prepare or at commit", async () => {
+  // A stale (expired) token whose refresh is scripted to succeed: if the
+  // size cap were checked only after auth.getAccessToken, an oversized
+  // body would still cost a refresh call before being refused.
+  const expiredCredential = { ...CONNECTED, expiresAt: NOW - 1 };
+  const bigBody = "x".repeat(800_000);
+
+  const prepareCase = await setupGmail({ [TOKEN]: [REFRESHED] }, { credential: expiredCredential });
+  const prepared = await prepareCase.connector.prepare("send", { ...JOSH, body: bigBody }, BOUND);
+  assert.equal(prepared.status, "failed");
+  assert.equal(prepared.errorCode, "too_long");
+  assert.deepEqual(prepareCase.google.calls, [], "prepare: no token refresh and no send");
+
+  const fresh = await setupGmail();
+  const { payload } = await prepareJosh(fresh.connector);
+  const commitCase = await setupGmail(
+    { [TOKEN]: [REFRESHED], [SEND]: [SENT] },
+    { credential: expiredCredential }
+  );
+  const committed = await commitCase.connector.commit("send", payload, { body: bigBody }, BOUND);
+  assert.equal(committed.state, "failed");
+  assert.equal(committed.errorCode, "too_long");
+  assert.deepEqual(commitCase.google.calls, [], "commit: no token refresh and no send");
+});
+
 test("a login that needs reconnecting, or that Google says is gone, fails prepare with reconnect_needed", async () => {
   const flagged = await setupGmail({}, { credential: { ...CONNECTED, needsReconnect: true } });
   const refused = await flagged.connector.prepare("send", JOSH, BOUND);
@@ -234,7 +259,11 @@ test("Send posts the message once, as the connected address, and links to it in 
 
   const result = await connector.commit("send", prepared.payload, {}, BOUND);
 
-  assert.deepEqual(result, { state: "sent", url: SENT_URL });
+  assert.deepEqual(result, {
+    state: "sent",
+    url: SENT_URL,
+    destinationLabel: "josh@acme.test +1",
+  });
   assert.deepEqual(
     google.calls.map((call) => call.path),
     [SEND],
@@ -290,6 +319,7 @@ test("edits that break a rule at Send are refused without calling Google", async
     [{ cc: people(50) }, "too_many_recipients"],
     [{ subject: "Q3\r\nBcc: spy@evil.test" }, "invalid_message"],
     [{ subject: "x".repeat(251) }, "too_long"],
+    [{ body: "x".repeat(800_000) }, "too_long"],
   ]) {
     const label = JSON.stringify(edits).slice(0, 60);
     const result = await connector.commit("send", prepared.payload, edits, BOUND);
@@ -309,7 +339,11 @@ test("a 401 refreshes the same login once and sends the same message once more",
 
   const result = await connector.commit("send", prepared.payload, {}, BOUND);
 
-  assert.deepEqual(result, { state: "sent", url: SENT_URL });
+  assert.deepEqual(result, {
+    state: "sent",
+    url: SENT_URL,
+    destinationLabel: "josh@acme.test",
+  });
   const sends = hits(google, SEND);
   assert.deepEqual(
     sends.map((call) => call.authorization),
@@ -488,6 +522,18 @@ test("recipient helpers de-duplicate, keep To over Cc, and build Gmail links", a
   assert.deepEqual(normalizeRecipients({}), { to: [], cc: [], invalid: [] });
   assert.equal(destinationLabel(["a@x.test"], []), "a@x.test");
   assert.equal(destinationLabel(["a@x.test", "b@x.test"], ["c@x.test"]), "a@x.test +2");
+  // A single-script look-alike of apple.com: isValidEmailAddress lets it
+  // through (one script, not a mix), so the card must show its ASCII form
+  // rather than the raw address alone.
+  assert.equal(
+    destinationLabel(["a@аррӏе.com"], []),
+    "a@аррӏе.com (xn--80ak6aa92e.com)",
+    "a non-ASCII domain shows its punycode form"
+  );
+  assert.equal(
+    destinationLabel(["a@аррӏе.com", "b@x.test"], []),
+    "a@аррӏе.com (xn--80ak6aa92e.com) +1"
+  );
   assert.equal(
     sentMessageUrl("you+tag@example.test", "msg-1"),
     "https://mail.google.com/mail/?authuser=you%2Btag%40example.test#sent/msg-1"

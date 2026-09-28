@@ -209,7 +209,11 @@ test("Send commits exactly the card's fields, and the receipt holds recipients o
     ALLOWED
   );
 
-  assert.deepEqual(result, { state: "sent", url: SENT_URL });
+  assert.deepEqual(result, {
+    state: "sent",
+    url: SENT_URL,
+    destinationLabel: "lee@acme.test +1",
+  });
   const message = decodeMessage(hits(google, SEND)[0].json.raw);
   assert.equal(header(message, "From"), "From: you@example.test");
   assert.equal(header(message, "To"), "To: lee@acme.test");
@@ -219,7 +223,9 @@ test("Send commits exactly the card's fields, and the receipt holds recipients o
   assert.equal(message.body, "Revenue is up 12%.");
   const row = log.rows.get(prepared.actionId);
   assert.equal(row.state, "sent");
-  assert.equal(row.destinationLabel, "josh@acme.test +1");
+  // The receipt follows what was actually sent (lee@ + ana@), not the
+  // card's original prepared recipients (josh@ + ana@).
+  assert.equal(row.destinationLabel, "lee@acme.test +1");
   assert.doesNotMatch(JSON.stringify([...log.rows.values()]), /Q3 numbers|Revenue/);
 });
 

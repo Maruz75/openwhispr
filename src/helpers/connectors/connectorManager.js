@@ -36,16 +36,28 @@ function failedResult(result) {
 
 // Anything other than a recognized outcome may still have reached the
 // provider, so it is "unknown", never "failed".
+//
+// destinationLabel is optional: only a connector whose commit can change
+// who the receipt names (Gmail's edited To/Cc) returns one, for "sent" and
+// "unknown" only. When it's absent the receipt keeps the label prepare
+// wrote (Slack: the destination is fixed once prepared).
 function normalizeCommitResult(result) {
   switch (result?.state) {
     case "sent":
-      return { state: "sent", ...stringFields({ url: result.url }) };
+      return {
+        state: "sent",
+        ...stringFields({ url: result.url, destinationLabel: result.destinationLabel }),
+      };
     case "failed":
       return failedResult(result);
     case "unknown":
       return {
         state: "unknown",
-        ...stringFields({ checkUrl: result.checkUrl, errorCode: result.errorCode }),
+        ...stringFields({
+          checkUrl: result.checkUrl,
+          errorCode: result.errorCode,
+          destinationLabel: result.destinationLabel,
+        }),
       };
     default:
       return { state: "unknown" };
@@ -617,6 +629,11 @@ function createConnectorManager({
         state: result.state,
         resultUrl: result.url || result.checkUrl || null,
         errorCode: result.errorCode || null,
+        // Only when the connector's commit named one (Gmail, edited
+        // recipients): the row otherwise keeps the label prepare wrote.
+        ...(typeof result.destinationLabel === "string"
+          ? { destinationLabel: result.destinationLabel }
+          : {}),
       })
     );
     logger.info(

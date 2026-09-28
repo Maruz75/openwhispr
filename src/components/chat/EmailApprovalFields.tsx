@@ -1,6 +1,10 @@
 import { useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { bareEmailAddress, isValidEmailAddress } from "../../helpers/connectors/emailCompose";
+import {
+  bareEmailAddress,
+  isValidEmailAddress,
+  recipientLabel,
+} from "../../helpers/connectors/emailCompose";
 
 /** An email card's fields, exactly as Send commits them. */
 export interface EmailFields {
@@ -135,9 +139,15 @@ function EmailFieldsEditor({
 
 function EmailFieldsView({ fields }: { fields: EmailFields }): ReactElement {
   const { t } = useTranslation();
+  // Display only: a non-ASCII domain also shows the punycode form it
+  // routes to (recipientLabel), same as destinationLabel and the tool
+  // step, so a single-script look-alike domain doesn't pass as the real
+  // one. Editing still reads and writes the raw address.
   const rows: Array<[string, string]> = [
-    ["toLabel", fields.to.join(", ")],
-    ...(fields.cc.length > 0 ? [["ccLabel", fields.cc.join(", ")] as [string, string]] : []),
+    ["toLabel", fields.to.map(recipientLabel).join(", ")],
+    ...(fields.cc.length > 0
+      ? [["ccLabel", fields.cc.map(recipientLabel).join(", ")] as [string, string]]
+      : []),
     ["subjectLabel", fields.subject],
   ];
   return (

@@ -1671,12 +1671,42 @@ test("a commit result keeps only its state's fields, typed, and its receipt stil
     ],
     [{ state: "unknown", checkUrl: ["x"] }, { state: "unknown" }],
     [{ state: "not_sent", reason: "cancelled" }, { state: "unknown" }],
+    // A connector-named destinationLabel (Gmail, after Send edited the
+    // recipients) overwrites the receipt's prepared label, for sent and
+    // unknown only; a non-string one is dropped like any other malformed
+    // field, and the receipt then keeps the prepared label ("#eng").
+    [
+      { state: "sent", url: "https://example.test/p/3", destinationLabel: "lee@acme.test +1" },
+      { state: "sent", url: "https://example.test/p/3", destinationLabel: "lee@acme.test +1" },
+      "lee@acme.test +1",
+    ],
+    [
+      {
+        state: "unknown",
+        checkUrl: "https://mail.test/#sent",
+        destinationLabel: "lee@acme.test +1",
+      },
+      {
+        state: "unknown",
+        checkUrl: "https://mail.test/#sent",
+        destinationLabel: "lee@acme.test +1",
+      },
+      "lee@acme.test +1",
+    ],
+    [
+      { state: "sent", url: "https://example.test/p/4", destinationLabel: ["not", "a", "string"] },
+      { state: "sent", url: "https://example.test/p/4" },
+      "#eng",
+    ],
   ];
-  for (const [committed, expected] of cases) {
+  for (const [committed, expected, rowLabel = "#eng"] of cases) {
     const { manager, log } = await setup({ commit: async () => committed });
     const { actionId } = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
     assert.deepEqual(await manager.commit(actionId, {}, ALLOWED), expected);
     assert.equal(log.rows.get(actionId).state, expected.state);
+    // Every case above has no destinationLabel of its own (Slack's shape):
+    // the receipt keeps prepare's "#eng" unless the case names a new one.
+    assert.equal(log.rows.get(actionId).destinationLabel, rowLabel);
   }
 });
 
