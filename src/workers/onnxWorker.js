@@ -38,7 +38,8 @@ let speakerSession = null;
 let speakerInputName = null;
 let textSession = null;
 let textTokenizer = null;
-let textQueue = Promise.resolve();
+// One queue per session, keyed by method prefix ("text.", "speaker.").
+const sessionQueues = { text: Promise.resolve(), speaker: Promise.resolve() };
 
 function log(level, message, extra) {
   if (!logStream) return;
@@ -222,6 +223,14 @@ async function speakerExtract({ samplesBuffer }) {
   return { embeddingBuffer: data.buffer };
 }
 
+async function speakerUnload() {
+  if (speakerSession) await speakerSession.release();
+  speakerSession = null;
+  speakerInputName = null;
+  log("info", "speaker session unloaded");
+  return { ok: true };
+}
+
 function buildTextTokenizer(tokenizerData) {
   const tokenToId = new Map();
   for (const [token, id] of Object.entries(tokenizerData.model.vocab)) {
@@ -352,6 +361,7 @@ const handlers = {
   ping: () => ({ ok: true, sessions: { speaker: !!speakerSession, text: !!textSession } }),
   "speaker.load": speakerLoad,
   "speaker.extract": speakerExtract,
+  "speaker.unload": speakerUnload,
   "text.load": textLoad,
   "text.embed": textEmbed,
   "text.unload": textUnload,
@@ -369,10 +379,11 @@ async function dispatch({ id, method, payload }) {
   }
   try {
     let result;
-    if (method.startsWith("text.")) {
+    const session = method.split(".")[0];
+    if (session in sessionQueues) {
       // Message callbacks overlap; never release a session during native inference.
-      const operation = textQueue.then(() => handler(payload || {}));
-      textQueue = operation.catch(() => {});
+      const operation = sessionQueues[session].then(() => handler(payload || {}));
+      sessionQueues[session] = operation.catch(() => {});
       result = await operation;
     } else {
       result = await handler(payload || {});

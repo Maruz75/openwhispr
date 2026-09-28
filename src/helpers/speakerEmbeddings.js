@@ -11,11 +11,16 @@ const MIN_SEGMENT_SAMPLES = SAMPLE_RATE * MIN_SEGMENT_SECONDS;
 const MAX_EMBEDDING_SECONDS = 8;
 const MAX_EMBEDDING_SAMPLES = SAMPLE_RATE * MAX_EMBEDDING_SECONDS;
 const MODEL_FILE = "3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx";
+// Live meetings extract every few seconds, so this only fires once a meeting and its
+// post-meeting diarization are done; the unload lets the idle ONNX worker exit.
+const IDLE_UNLOAD_MS = 5 * 60 * 1000;
 
 class SpeakerEmbeddings {
   constructor() {
     this.loadPromise = null;
     this.loadedGeneration = null;
+    this.operationQueue = Promise.resolve();
+    this.idleTimer = null;
   }
 
   getModelPath() {
@@ -55,21 +60,65 @@ class SpeakerEmbeddings {
     return this.loadPromise;
   }
 
-  async _extractEmbeddingFromSamples(samples) {
-    await this._ensureLoaded();
+  _enqueue(operation) {
+    const result = this.operationQueue.then(operation);
+    this.operationQueue = result.catch(() => {});
+    return result;
+  }
 
-    const samplesBuffer = samples.buffer.slice(
-      samples.byteOffset,
-      samples.byteOffset + samples.byteLength
-    );
+  _clearIdleTimer() {
+    if (this.idleTimer !== null) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+  }
 
-    // No transfer-list: MessagePortMain can't transfer ArrayBuffers, so the samples are cloned.
-    const { embeddingBuffer } = await onnxWorkerClient.request("speaker.extract", {
-      samplesBuffer,
+  _armIdleTimer() {
+    this._clearIdleTimer();
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      this.unload().catch((err) =>
+        debugLogger.debug("speaker-embeddings idle unload failed", { error: err?.message })
+      );
+    }, IDLE_UNLOAD_MS);
+    this.idleTimer?.unref?.();
+  }
+
+  _extractEmbeddingFromSamples(samples) {
+    // Cleared up front so a queued extract keeps the idle unload from firing ahead of it.
+    this._clearIdleTimer();
+    return this._enqueue(async () => {
+      try {
+        await this._ensureLoaded();
+
+        const samplesBuffer = samples.buffer.slice(
+          samples.byteOffset,
+          samples.byteOffset + samples.byteLength
+        );
+
+        // No transfer-list: MessagePortMain can't transfer ArrayBuffers, so the samples are cloned.
+        const { embeddingBuffer } = await onnxWorkerClient.request("speaker.extract", {
+          samplesBuffer,
+        });
+
+        if (!embeddingBuffer) return null;
+        return new Float32Array(embeddingBuffer);
+      } finally {
+        this._armIdleTimer();
+      }
     });
+  }
 
-    if (!embeddingBuffer) return null;
-    return new Float32Array(embeddingBuffer);
+  unload() {
+    return this._enqueue(async () => {
+      // Inside the queue: an extract ahead of this unload re-arms the timer as it finishes.
+      this._clearIdleTimer();
+      try {
+        await onnxWorkerClient.request("speaker.unload", {});
+      } finally {
+        this.loadPromise = null;
+        this.loadedGeneration = null;
+      }
+      await onnxWorkerClient.releaseIfIdle();
+    });
   }
 
   async extractEmbeddingFromSamples(samples) {

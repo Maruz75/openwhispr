@@ -183,6 +183,8 @@ test("speaker embeddings reload after the shared worker restarts", async () => {
   const context = vm.createContext({
     module: { exports: {} },
     process: {},
+    setTimeout: () => ({ unref() {} }),
+    clearTimeout() {},
     require(name) {
       if (name === "fs") return { existsSync: () => true };
       if (name === "./debugLogger") return { debug() {} };
@@ -367,4 +369,16 @@ test("unloading text keeps the worker alive while diarization holds a speaker se
   const { sessions } = await h.client.request("ping", {});
   assert.equal(sessions.speaker, true);
   assert.equal(sessions.text, false);
+});
+
+test("the worker exits once the speaker session unloads after the text session", async () => {
+  const h = createIntegratedHarness();
+  await h.client.request("speaker.load", { modelPath: "speaker" });
+  await h.embeddings.embedText("");
+  await h.embeddings.unload();
+  assert.equal(h.workers[0].child.killed, false);
+  await h.client.request("speaker.unload", {});
+  assert.equal(await h.client.releaseIfIdle(), true);
+  assert.equal(h.workers[0].child.killed, true);
+  assert.deepEqual(h.events, ["speaker.create", "text.create", "text.release", "speaker.release"]);
 });

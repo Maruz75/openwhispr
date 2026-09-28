@@ -133,23 +133,43 @@ function createHarness({ killExitCode = 0 } = {}) {
   };
 }
 
-test("unloading unused text does not spawn a worker", async () => {
-  const h = createHarness();
-  await h.client.request("text.unload", {});
-  assert.equal(h.client.child, null);
-  assert.equal(h.forks.length, 0);
-});
+for (const method of ["text.unload", "speaker.unload"]) {
+  test(`${method} without a loaded session does not spawn a worker`, async () => {
+    const h = createHarness();
+    await h.client.request(method, {});
+    assert.equal(h.client.child, null);
+    assert.equal(h.forks.length, 0);
+  });
 
-test("unloading after worker exit succeeds without restarting it", async () => {
-  const h = createHarness();
-  await h.client.request("ping", {});
-  const generation = h.client.generation;
-  h.forks[0].emit("exit", 0);
-  assert.equal(h.client.generation, generation + 1);
-  await h.client.request("text.unload", {});
-  assert.equal(h.client.child, null);
-  assert.equal(h.forks.length, 1);
-});
+  test(`${method} after worker exit succeeds without restarting it`, async () => {
+    const h = createHarness();
+    await h.client.request("ping", {});
+    const generation = h.client.generation;
+    h.forks[0].emit("exit", 0);
+    assert.equal(h.client.generation, generation + 1);
+    await h.client.request(method, {});
+    assert.equal(h.client.child, null);
+    assert.equal(h.forks.length, 1);
+  });
+
+  test(`${method} resolves while the worker is shutting down`, async () => {
+    const h = createHarness();
+    await h.client.request("ping", {});
+    const stopping = h.client.stop();
+    assert.equal((await h.client.request(method, {})).ok, true);
+    h.forks[0].emit("exit", 0);
+    await stopping;
+  });
+
+  test(`${method} resolves while a crash respawn is pending`, async () => {
+    const h = createHarness();
+    await h.client.request("ping", {});
+    h.forks[0].emit("exit", 1);
+    assert.ok(h.client.respawnTimer);
+    assert.equal((await h.client.request(method, {})).ok, true);
+    assert.equal(h.forks.length, 1);
+  });
+}
 
 test("releasing an idle worker kills it without counting a crash, and the next request respawns it", async () => {
   const h = createHarness({ killExitCode: 15 });
@@ -204,24 +224,6 @@ test("releasing does nothing without a worker", async () => {
   const h = createHarness();
   assert.equal(await h.client.releaseIfIdle(), false);
   assert.equal(h.forks.length, 0);
-});
-
-test("text unload resolves while the worker is shutting down", async () => {
-  const h = createHarness();
-  await h.client.request("ping", {});
-  const stopping = h.client.stop();
-  assert.equal((await h.client.request("text.unload", {})).ok, true);
-  h.forks[0].emit("exit", 0);
-  await stopping;
-});
-
-test("text unload resolves while a crash respawn is pending", async () => {
-  const h = createHarness();
-  await h.client.request("ping", {});
-  h.forks[0].emit("exit", 1);
-  assert.ok(h.client.respawnTimer);
-  assert.equal((await h.client.request("text.unload", {})).ok, true);
-  assert.equal(h.forks.length, 1);
 });
 
 test("a request timeout kills the worker so the crash path respawns it", async () => {

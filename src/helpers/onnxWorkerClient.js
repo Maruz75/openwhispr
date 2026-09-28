@@ -7,6 +7,7 @@ const MAX_PENDING_REQUESTS = 1000;
 const RESPAWN_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
 const MAX_RESPAWN_ATTEMPTS = 5;
 const SHUTDOWN_TIMEOUT_MS = 5000;
+const UNLOAD_METHODS = new Set(["text.unload", "speaker.unload"]);
 
 // Forked via the asar-virtual path: Electron redirects the unpacked file read
 // while module resolution stays inside app.asar (onnxruntime-common is asar-only).
@@ -180,7 +181,7 @@ class OnnxWorkerClient {
     }
   }
 
-  // Exits the worker once no session is loaded, so an idle text unload also frees
+  // Exits the worker once no session is loaded, so an idle unload also frees
   // the onnxruntime arena. Detaches before the kill so a racing request spawns fresh.
   async releaseIfIdle() {
     if (!this.child || this.shuttingDown || this.pending.size) return false;
@@ -205,9 +206,9 @@ class OnnxWorkerClient {
   }
 
   async request(method, payload, transferList) {
-    // Releasing text must never start a worker just to free an absent session; a
-    // worker that is shutting down takes its session with it.
-    if (method === "text.unload" && (!this.child || this.shuttingDown)) return { ok: true };
+    // An unload must never start a worker just to free an absent session; a
+    // worker that is shutting down takes its sessions with it.
+    if (UNLOAD_METHODS.has(method) && (!this.child || this.shuttingDown)) return { ok: true };
     if (this.shuttingDown) {
       throw new WorkerCrashedError("worker shutting down");
     }
