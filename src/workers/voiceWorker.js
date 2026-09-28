@@ -9,6 +9,7 @@ const {
 } = require("../helpers/voiceTurnEndpointer");
 const { createSmartTurnSession } = require("./smartTurnSession");
 const { createPreparedSpeech } = require("./preparedSpeech");
+const { trimSilence } = require("./trimSilence");
 
 const VAD_SAMPLE_RATE = 16000;
 const FALLBACK_SILENCE_SECONDS = 0.5;
@@ -69,7 +70,7 @@ const preparedSpeech = createPreparedSpeech({
         enableExternalBuffer: false,
         ...ttsRequestExtras,
       });
-      return new Float32Array(audio.samples);
+      return trimSilence(audio.samples, audio.sampleRate);
     }),
   onError: (error) => log("warn", "speech preparation failed", { error: error?.message }),
 });
@@ -169,7 +170,7 @@ function speak({ utteranceId, chunkIndex, text }) {
         if (cancelledUtterances.has(utteranceId)) return 0;
         if (info.samples?.length) {
           if (firstAudioMs === null) firstAudioMs = Date.now() - started;
-          const samples = new Float32Array(info.samples);
+          const samples = trimSilence(info.samples, tts.sampleRate);
           streamedSamples += samples.length;
           emit("tts-audio", { utteranceId, chunkIndex, samples });
         }
@@ -180,7 +181,7 @@ function speak({ utteranceId, chunkIndex, text }) {
     // Non-streaming models may report the audio only in the result.
     if (streamedSamples === 0 && audio.samples?.length) {
       firstAudioMs = Date.now() - started;
-      const samples = new Float32Array(audio.samples);
+      const samples = trimSilence(audio.samples, audio.sampleRate);
       emit("tts-audio", { utteranceId, chunkIndex, samples });
     }
     return {
