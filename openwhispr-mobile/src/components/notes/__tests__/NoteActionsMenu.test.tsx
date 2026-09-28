@@ -7,7 +7,7 @@ jest.mock('@react-native-menu/menu', () => ({
     onPressAction,
     children,
   }: {
-    actions: { id: string; title: string }[];
+    actions: { id: string; title: string; attributes?: { disabled?: boolean } }[];
     onPressAction: (event: { nativeEvent: { event: string } }) => void;
     children?: React.ReactNode;
   }) => {
@@ -19,6 +19,7 @@ jest.mock('@react-native-menu/menu', () => ({
           <Pressable
             key={action.id}
             testID={`menu-${action.id}`}
+            accessibilityState={{ disabled: !!action.attributes?.disabled }}
             onPress={() => onPressAction({ nativeEvent: { event: action.id } })}
           >
             <Text>{action.title}</Text>
@@ -64,6 +65,18 @@ describe('NoteActionsMenu', () => {
     expect(getByText('View Transcript')).toBeTruthy();
     fireEvent.press(getByTestId('menu-__view_transcript'));
     expect(onViewTranscript).toHaveBeenCalled();
+  });
+
+  it('lets the caller decide when Ask is available, even without note body content', () => {
+    const { getByTestId, rerender } = render(
+      <NoteActionsMenu {...baseProps} hasContent={false} onAskNote={jest.fn()} />,
+    );
+    expect(getByTestId('menu-__ask_note').props.accessibilityState.disabled).toBe(false);
+
+    rerender(
+      <NoteActionsMenu {...baseProps} hasContent={false} onAskNote={jest.fn()} askNoteDisabled />,
+    );
+    expect(getByTestId('menu-__ask_note').props.accessibilityState.disabled).toBe(true);
   });
 
   it('has no transcript item for a note without a transcript', () => {

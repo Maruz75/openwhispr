@@ -76,7 +76,8 @@ export function NoteActionsMenu({
             title: 'Ask about this note',
             image: 'message',
             imageColor: iconColor,
-            attributes: { disabled: !hasContent || askNoteDisabled },
+            // Chat also reads the generated notes, so the caller decides when there is context.
+            attributes: { disabled: askNoteDisabled },
           },
         ]
       : []),

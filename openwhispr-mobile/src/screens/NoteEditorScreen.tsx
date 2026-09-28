@@ -1127,7 +1127,7 @@ export default function NoteEditorScreen() {
             onRunAction={handleRunAction}
             onManageActions={handleManageActions}
             onAskNote={chatEnabled && !showAskPill ? handleAskNote : undefined}
-            askNoteDisabled={isChatProcessing}
+            askNoteDisabled={isChatProcessing || !chatContextText.trim()}
             onCopyGeneratedNote={note?.enhancedContent ? handleCopyGeneratedNote : undefined}
             onViewTranscript={usesSegmentTranscript ? handleViewTranscript : undefined}
             onShare={() => setShareVisible(true)}
@@ -1399,7 +1399,7 @@ export default function NoteEditorScreen() {
         draft={chatDraft}
         isProcessing={isChatProcessing}
         error={chatError}
-        canSend={!contentEmpty}
+        canSend={!!chatContextText.trim()}
         suggestions={chatSuggestions}
         onDraftChange={setChatDraft}
         onSend={handleSendChat}

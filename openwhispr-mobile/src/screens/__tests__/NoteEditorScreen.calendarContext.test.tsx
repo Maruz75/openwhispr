@@ -242,11 +242,13 @@ jest.mock('@/components/notes/NoteActionsMenu', () => ({
     actions,
     onRunAction,
     onAskNote,
+    askNoteDisabled,
     onViewTranscript,
   }: {
     actions: Action[];
     onRunAction: (action: Action) => void;
     onAskNote?: () => void;
+    askNoteDisabled?: boolean;
     onViewTranscript?: () => void;
   }) =>
     (() => {
@@ -262,7 +264,11 @@ jest.mock('@/components/notes/NoteActionsMenu', () => ({
               <MockText>{action.name}</MockText>
             </MockPressable>
           ))}
-          {onAskNote ? <MockText>Ask about this note</MockText> : null}
+          {onAskNote ? (
+            <MockText testID="menu-ask-note" accessibilityState={{ disabled: !!askNoteDisabled }}>
+              Ask about this note
+            </MockText>
+          ) : null}
           {onViewTranscript ? (
             <MockPressable testID="menu-view-transcript" onPress={onViewTranscript}>
               <MockText>View Transcript</MockText>
@@ -658,6 +664,35 @@ describe('NoteEditorScreen note chat', () => {
     expect(queryByTestId(PILL)).toBeNull();
     expect(getByTestId('chat-suggestion-Summarize')).toBeTruthy();
     expect(queryByTestId('chat-suggestion-Key decisions')).toBeNull();
+  });
+
+  it('lets you ask about a plain note that only has generated notes', () => {
+    mockNote = note({
+      noteType: 'personal',
+      diarizationEnabled: 0,
+      calendarEventId: null,
+      participants: null,
+      content: '',
+      enhancedContent: '## Summary',
+    });
+    mockNotesState.notes = [mockNote];
+    mockSegments = [];
+    const { getByTestId } = render(<NoteEditorScreen />);
+    expect(getByTestId('menu-ask-note').props.accessibilityState.disabled).toBe(false);
+  });
+
+  it('disables Ask on an empty plain note', () => {
+    mockNote = note({
+      noteType: 'personal',
+      diarizationEnabled: 0,
+      calendarEventId: null,
+      participants: null,
+      content: '',
+    });
+    mockNotesState.notes = [mockNote];
+    mockSegments = [];
+    const { getByTestId } = render(<NoteEditorScreen />);
+    expect(getByTestId('menu-ask-note').props.accessibilityState.disabled).toBe(true);
   });
 
   it('offers note-worded shortcuts for an uploaded recording', () => {
