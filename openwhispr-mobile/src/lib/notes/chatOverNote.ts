@@ -44,7 +44,8 @@ export interface NoteChatContextArgs {
   sourceText: string;
 }
 
-// Generated notes go first: they are the densest summary, and truncation keeps the head.
+// The note goes first and the generated notes last. A long context keeps its head and tail, so it
+// loses the middle of the transcript, never the typed notes that lead the note or the summary.
 export const buildNoteChatContext = ({
   generatedNotes,
   sourceText,
@@ -53,10 +54,7 @@ export const buildNoteChatContext = ({
   const source = sourceText.trim();
   if (!generated) return source;
 
-  return [
-    `Generated notes:\n${generated}`,
-    source ? `Original notes and transcript:\n${source}` : '',
-  ]
+  return [source ? `Note content:\n${source}` : '', `Generated notes:\n${generated}`]
     .filter(Boolean)
     .join('\n\n');
 };

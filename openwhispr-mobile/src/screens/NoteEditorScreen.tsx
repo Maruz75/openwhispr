@@ -70,6 +70,7 @@ import { promptLocalModelFallback } from '@/lib/privateMode';
 import {
   getLocalReasoningReadiness,
   getLocalReasoningUnavailableMessage,
+  isLocalContextLimitError,
   isLocalReasoningRequired,
   shouldUseLocalReasoning,
 } from '@/lib/localReasoning';
@@ -820,14 +821,27 @@ export default function NoteEditorScreen() {
         setChatMessages((current) => [...current, userMessage]);
       }
 
-      try {
-        const response = await ReasoningService.chatOverNote({
-          context,
+      const askAbout = (chatContext: string) =>
+        ReasoningService.chatOverNote({
+          context: chatContext,
           question: trimmedQuestion,
           history,
           signal: controller.signal,
           routing: { isPrivateNote: note?.isPrivate === 1, allowCloudFallback: allowRemoteContent },
         });
+      const sourceContext = actionInputRef.current.trim();
+      try {
+        let response;
+        try {
+          response = await askAbout(context);
+        } catch (error) {
+          // The generated notes can push an on-device request past its limit; the note alone
+          // still fits wherever it did before they were added.
+          if (!isLocalContextLimitError(error) || !sourceContext || sourceContext === context) {
+            throw error;
+          }
+          response = await askAbout(sourceContext);
+        }
         if (controller.signal.aborted) return;
         setChatMessages((current) => [
           ...current,

@@ -7,7 +7,7 @@ import { generateNoteTitle } from '@/utils/generateTitle';
 import { buildMeetingNotesInput } from '@/lib/notes/meetingNotesInput';
 import { formatTranscriptForExport } from '@/lib/diarization/transcriptDisplay';
 import { makeContentHash } from '@/lib/utils';
-import { clearLocalReasoningReadinessCache } from '@/lib/localReasoning';
+import { clearLocalReasoningReadinessCache, LocalReasoningError } from '@/lib/localReasoning';
 import { extractCorrections } from '@/lib/correctionLearner';
 import type { Action, Note, Segment, Speaker } from '@/data/types';
 import type { Folder, Space } from '@/data';
@@ -686,6 +686,36 @@ describe('NoteEditorScreen note chat', () => {
     expect((ReasoningService.chatOverNote as jest.Mock).mock.calls[0][0].question).toBe(
       'What are the next steps from the meeting above that I need to do?',
     );
+  });
+
+  it('asks about the note and its generated notes', async () => {
+    mockNote = note({ enhancedContent: '## Summary\n- Launch Friday' });
+    mockNotesState.notes = [mockNote];
+    (ReasoningService.chatOverNote as jest.Mock).mockResolvedValue({ text: 'Answer', model: 'x' });
+    const { getByTestId } = render(<NoteEditorScreen />);
+    await act(async () => {
+      fireEvent.press(getByTestId('chat-suggestion-List action items'));
+    });
+    await waitFor(() => expect(ReasoningService.chatOverNote).toHaveBeenCalledTimes(1));
+    const { context } = (ReasoningService.chatOverNote as jest.Mock).mock.calls[0][0];
+    expect(context).toContain('Alice owns the launch checklist.');
+    expect(context).toContain('Generated notes:\n## Summary\n- Launch Friday');
+  });
+
+  it('asks about the note alone when the generated notes push it past the on-device limit', async () => {
+    mockNote = note({ enhancedContent: '## Summary\n- Launch Friday' });
+    mockNotesState.notes = [mockNote];
+    (ReasoningService.chatOverNote as jest.Mock)
+      .mockRejectedValueOnce(new LocalReasoningError('LOCAL_CONTEXT_LIMIT', 'Too large'))
+      .mockResolvedValueOnce({ text: 'Answer', model: 'x' });
+    const { getByTestId } = render(<NoteEditorScreen />);
+    await act(async () => {
+      fireEvent.press(getByTestId('chat-suggestion-List action items'));
+    });
+    await waitFor(() => expect(ReasoningService.chatOverNote).toHaveBeenCalledTimes(2));
+    const retry = (ReasoningService.chatOverNote as jest.Mock).mock.calls[1][0];
+    expect(retry.context).toContain('Alice owns the launch checklist.');
+    expect(retry.context).not.toContain('Launch Friday');
   });
 });
 
