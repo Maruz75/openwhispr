@@ -664,8 +664,9 @@ export default function NoteEditorScreen() {
   const runSelectedAction = useCallback(
     (action: Parameters<typeof runAction>[0], routing?: ReasoningRoutingOptions) => {
       if (processingState === 'processing') return;
-      // The action replaces the generated notes; a queued edit saving later would overwrite them.
-      discardEnhancedSave();
+      // Save a queued edit now: it must not land on top of the new notes later, and it must
+      // survive an action that fails.
+      flushEnhancedSave();
       const inputText =
         usesSegmentTranscriptRef.current && isDefaultGenerateNotesAction(action)
           ? generatedMeetingInputRef.current
@@ -680,7 +681,7 @@ export default function NoteEditorScreen() {
         },
       });
     },
-    [discardEnhancedSave, note?.isPrivate, processingState, runAction],
+    [flushEnhancedSave, note?.isPrivate, processingState, runAction],
   );
 
   const runActionWithRouting = useCallback(

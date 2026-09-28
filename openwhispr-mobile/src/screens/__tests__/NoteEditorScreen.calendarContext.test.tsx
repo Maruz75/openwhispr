@@ -1189,13 +1189,12 @@ describe('NoteEditorScreen replacing generated notes', () => {
     expect(ReasoningService.processText).not.toHaveBeenCalled();
   });
 
-  it('drops an unsaved edit so it cannot overwrite the new notes', async () => {
-    const { getByTestId } = render(<NoteEditorScreen />);
-    fireEvent.press(getByTestId('enhanced-edit'));
-    fireEvent.changeText(getByTestId('enhanced-editor'), '## Edited');
-
+  const runActionOverEdit = async (): Promise<ReturnType<typeof render>> => {
+    const screen = render(<NoteEditorScreen />);
+    fireEvent.press(screen.getByTestId('enhanced-edit'));
+    fireEvent.changeText(screen.getByTestId('enhanced-editor'), '## Edited');
     await act(async () => {
-      fireEvent.press(getByTestId('run-action-1'));
+      fireEvent.press(screen.getByTestId('run-action-1'));
     });
     await pressReplace();
     await waitFor(() => expect(ReasoningService.processText).toHaveBeenCalledTimes(1));
@@ -1203,9 +1202,27 @@ describe('NoteEditorScreen replacing generated notes', () => {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 900));
     });
+    return screen;
+  };
+  const savedEnhanced = (): unknown[] =>
+    mockUpdateNote.mock.calls
+      .map(([, updates]) => updates.enhancedContent)
+      .filter((value) => value !== undefined);
 
-    const savedEnhanced = mockUpdateNote.mock.calls.map(([, updates]) => updates.enhancedContent);
-    expect(savedEnhanced).not.toContain('## Edited');
+  it('saves an unsaved edit before the action, so it cannot overwrite the new notes', async () => {
+    await runActionOverEdit();
+
+    const saved = savedEnhanced();
+    expect(saved[0]).toBe('## Edited');
+    expect(saved.filter((value) => value === '## Edited')).toHaveLength(1);
+  });
+
+  it('keeps an unsaved edit when the action fails', async () => {
+    (ReasoningService.processText as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+
+    await runActionOverEdit();
+
+    expect(savedEnhanced()).toEqual(['## Edited']);
   });
 });
 
