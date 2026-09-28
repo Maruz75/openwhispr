@@ -1439,6 +1439,11 @@
         "createLink": "إنشاء رابط",
         "copyLink": "نسخ الرابط",
         "copied": "تم النسخ",
+        "replaceLink": {
+          "title": "استبدال رابط المشاركة؟",
+          "description": "لا يتوفر الرابط الحالي على هذا الجهاز، لذا يتطلب نسخه إنشاء رابط جديد. سيتوقف الرابط القديم عن العمل، بما في ذلك الروابط في رسائل الدعوة. أعد إرسال كل دعوة حتى يظل بإمكان المدعوين فتح الملاحظة.",
+          "confirm": "استبدال الرابط"
+        },
         "export": "تصدير",
         "owner": "المالك",
         "editor": "يمكنه التعديل",
@@ -1792,7 +1797,35 @@
       "conversationWillAppear": "ستظهر المحادثة هنا...",
       "linkedEvent": "الحدث المرتبط",
       "noFolder": "بدون مجلد",
-      "participants": "المشاركون"
+      "participants": "المشاركون",
+      "table": {
+        "actions": "إجراءات الجدول",
+        "insertRowAbove": "إدراج صف أعلى",
+        "insertRowBelow": "إدراج صف أسفل",
+        "insertColumnLeft": "إدراج عمود إلى اليسار",
+        "insertColumnRight": "إدراج عمود إلى اليمين",
+        "deleteRow": "حذف الصف",
+        "deleteColumn": "حذف العمود",
+        "deleteTable": "حذف الجدول"
+      },
+      "format": {
+        "toolbar": "التنسيق",
+        "withShortcut": "{{action}} ({{shortcut}})",
+        "bold": "غامق",
+        "italic": "مائل",
+        "strike": "يتوسطه خط",
+        "code": "تعليمات برمجية",
+        "textStyle": "نمط النص",
+        "paragraph": "نص عادي",
+        "heading1": "عنوان 1",
+        "heading2": "عنوان 2",
+        "heading3": "عنوان 3",
+        "bulletList": "قائمة نقطية",
+        "orderedList": "قائمة مرقمة",
+        "taskList": "قائمة مهام",
+        "blockquote": "اقتباس",
+        "table": "إدراج جدول"
+      }
     },
     "participants": {
       "attendee": "حاضر",

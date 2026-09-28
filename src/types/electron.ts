@@ -842,6 +842,14 @@ export interface ScreenRecordingAccessResult {
 
 export type CloudReasonPurpose = "cleanup" | "assistant" | "translation" | "noteFormatting";
 
+// Orukeet's audio language estimate, reported for the backend's per-user gate.
+export interface SttDetectedLanguageFields {
+  sttDetectedLanguage?: string;
+  sttDetectedLanguageConfidence?: number;
+  sttDetectedLanguageAudioSeconds?: number;
+  sttDetectedLanguageStatus?: "detected" | "unknown";
+}
+
 export interface ScreenContextImage {
   mediaType: string;
   /** Base64 image bytes, no data-URL prefix. */
@@ -2378,7 +2386,7 @@ declare global {
           analyticsOccurredAt?: string;
           // Why a managed-streaming user's dictation went batch (rollout metric).
           streamingFallbackReason?: string;
-        }
+        } & SttDetectedLanguageFields
       ) => Promise<
         {
           success: boolean;
@@ -2406,7 +2414,7 @@ declare global {
           language?: string;
           locale?: string;
           streamingFallbackReason?: string;
-        }
+        } & SttDetectedLanguageFields
       ) => Promise<{
         success: boolean;
         text?: string;
@@ -2436,7 +2444,7 @@ declare global {
           analyticsOccurredAt?: string;
           analyticsWordCount?: number;
           analyticsCounterVersion?: number;
-        }
+        } & SttDetectedLanguageFields
       ) => Promise<{
         success: boolean;
         wordsUsed?: number;

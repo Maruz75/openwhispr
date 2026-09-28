@@ -133,6 +133,8 @@ const NOTE_PUSH_ACK_FIELDS: ReadonlyArray<keyof Note> = [
   'deletedAt',
 ];
 
+const pushRejectedKey = (localId: number): string => `note.pushRejected.${localId}`;
+
 export class LocalNotesRepository implements NotesRepository {
   private readonly database: NotesDb;
 
@@ -844,8 +846,7 @@ export class LocalNotesRepository implements NotesRepository {
     if (local.pendingSync === 1) return;
 
     if (remote.deleted_at) {
-      this.deleteNoteChildrenAndAudio(local.id);
-      this.database.delete(notes).where(eq(notes.id, local.id)).run();
+      this.hardDeleteNote(local.id);
       return;
     }
 
@@ -889,6 +890,8 @@ export class LocalNotesRepository implements NotesRepository {
       })
       .where(eq(notes.id, local.id))
       .run();
+
+    this.clearSyncState(pushRejectedKey(local.id));
 
     // Rebuild the transcript when the server sent a different one. Normally
     // gated on !hasDirtyTranscript (un-pushed local edits are authoritative
@@ -1030,13 +1033,20 @@ export class LocalNotesRepository implements NotesRepository {
       )
       .where(eq(notes.id, pushed.id))
       .run();
+    if (unchanged) this.clearSyncState(pushRejectedKey(pushed.id));
   }
 
   markNoteTerminal(localId: number): void {
     // Clear pendingSync so the row stops re-attempting; preserve the local state
     // so the user still sees their attempted change. They can edit it to fix and
     // retry — that will re-flag pending.
-    this.database.update(notes).set({ pendingSync: 0 }).where(eq(notes.id, localId)).run();
+    this.database.transaction((tx) => {
+      tx.insert(syncState)
+        .values({ key: pushRejectedKey(localId), value: '1' })
+        .onConflictDoUpdate({ target: syncState.key, set: { value: '1' } })
+        .run();
+      tx.update(notes).set({ pendingSync: 0 }).where(eq(notes.id, localId)).run();
+    });
   }
 
   dropNotePushAttempt(localId: number): void {
@@ -1044,11 +1054,17 @@ export class LocalNotesRepository implements NotesRepository {
     // whatever it was before — the next pull carries the truth. Clearing
     // cloud_updated_at alongside pendingSync means that pull re-seeds the sync
     // base instead of leaving a base this device can no longer trust.
-    this.database
-      .update(notes)
-      .set({ pendingSync: 0, cloudUpdatedAt: null })
-      .where(eq(notes.id, localId))
-      .run();
+    this.database.transaction((tx) => {
+      // A cleared queue flag alone must never be mistaken for uploaded content.
+      tx.insert(syncState)
+        .values({ key: pushRejectedKey(localId), value: '1' })
+        .onConflictDoUpdate({ target: syncState.key, set: { value: '1' } })
+        .run();
+      tx.update(notes)
+        .set({ pendingSync: 0, cloudUpdatedAt: null })
+        .where(eq(notes.id, localId))
+        .run();
+    });
   }
 
   parkNoteConflict(localId: number, serverNote: RemoteNote): void {
@@ -1125,10 +1141,8 @@ export class LocalNotesRepository implements NotesRepository {
       // "Use server's copy" must mean accepting that, not resurrecting a
       // zombie local row that still points remoteId at a gone server note —
       // the delta-cursor pull may never re-deliver that tombstone once our
-      // watermark has moved past it. Mirrors applyRemoteNote's own tombstone
-      // path (deleteNoteChildrenAndAudio + hard delete).
-      this.deleteNoteChildrenAndAudio(local.id);
-      this.database.delete(notes).where(eq(notes.id, local.id)).run();
+      // watermark has moved past it. Mirrors applyRemoteNote's tombstone path.
+      this.hardDeleteNote(local.id);
       return;
     }
     // Bypasses applyRemoteNote's pendingSync/conflict guards on purpose — the
@@ -1144,7 +1158,12 @@ export class LocalNotesRepository implements NotesRepository {
     this.database.delete(folders).where(eq(folders.id, localId)).run();
   }
 
+  isNotePushRejected(localId: number): boolean {
+    return this.getSyncState(pushRejectedKey(localId)) !== null;
+  }
+
   hardDeleteNote(localId: number): void {
+    this.clearSyncState(pushRejectedKey(localId));
     this.deleteNoteChildrenAndAudio(localId);
     this.database.delete(notes).where(eq(notes.id, localId)).run();
   }

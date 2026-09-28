@@ -3311,7 +3311,35 @@
       "conversationWillAppear": "Gespräch wird hier angezeigt...",
       "linkedEvent": "Verknüpftes Ereignis",
       "noFolder": "Kein Ordner",
-      "participants": "Teilnehmer"
+      "participants": "Teilnehmer",
+      "table": {
+        "actions": "Tabellenaktionen",
+        "insertRowAbove": "Zeile oberhalb einfügen",
+        "insertRowBelow": "Zeile unterhalb einfügen",
+        "insertColumnLeft": "Spalte links einfügen",
+        "insertColumnRight": "Spalte rechts einfügen",
+        "deleteRow": "Zeile löschen",
+        "deleteColumn": "Spalte löschen",
+        "deleteTable": "Tabelle löschen"
+      },
+      "format": {
+        "toolbar": "Formatierung",
+        "withShortcut": "{{action}} ({{shortcut}})",
+        "bold": "Fett",
+        "italic": "Kursiv",
+        "strike": "Durchgestrichen",
+        "code": "Code",
+        "textStyle": "Textstil",
+        "paragraph": "Normaler Text",
+        "heading1": "Überschrift 1",
+        "heading2": "Überschrift 2",
+        "heading3": "Überschrift 3",
+        "bulletList": "Aufzählung",
+        "orderedList": "Nummerierte Liste",
+        "taskList": "Checkliste",
+        "blockquote": "Zitat",
+        "table": "Tabelle einfügen"
+      }
     },
     "participants": {
       "attendee": "Teilnehmer",
@@ -4163,6 +4191,11 @@
         "createLink": "Link erstellen",
         "copyLink": "Link kopieren",
         "copied": "Kopiert",
+        "replaceLink": {
+          "title": "Freigabelink ersetzen?",
+          "description": "Dieses Gerät hat den aktuellen Link nicht, daher wird zum Kopieren ein neuer erstellt. Der alte Link funktioniert dann nicht mehr, auch nicht in Einladungs-E-Mails. Sende jede Einladung erneut, damit Eingeladene die Notiz weiterhin öffnen können.",
+          "confirm": "Link ersetzen"
+        },
         "export": "Exportieren",
         "owner": "Eigentümer",
         "editor": "Kann bearbeiten",

@@ -2968,7 +2968,35 @@
       "conversationWillAppear": "对话将显示在这里...",
       "linkedEvent": "关联日程",
       "noFolder": "无文件夹",
-      "participants": "参与者"
+      "participants": "参与者",
+      "table": {
+        "actions": "表格操作",
+        "insertRowAbove": "在上方插入行",
+        "insertRowBelow": "在下方插入行",
+        "insertColumnLeft": "在左侧插入列",
+        "insertColumnRight": "在右侧插入列",
+        "deleteRow": "删除行",
+        "deleteColumn": "删除列",
+        "deleteTable": "删除表格"
+      },
+      "format": {
+        "toolbar": "格式",
+        "withShortcut": "{{action}}（{{shortcut}}）",
+        "bold": "粗体",
+        "italic": "斜体",
+        "strike": "删除线",
+        "code": "代码",
+        "textStyle": "文本样式",
+        "paragraph": "正文",
+        "heading1": "标题 1",
+        "heading2": "标题 2",
+        "heading3": "标题 3",
+        "bulletList": "项目符号列表",
+        "orderedList": "编号列表",
+        "taskList": "清单",
+        "blockquote": "引用",
+        "table": "插入表格"
+      }
     },
     "participants": {
       "attendee": "位参会者",
@@ -4034,6 +4062,11 @@
         "createLink": "创建链接",
         "copyLink": "复制链接",
         "copied": "已复制",
+        "replaceLink": {
+          "title": "替换分享链接？",
+          "description": "此设备上没有当前链接，因此复制时需要创建新链接。旧链接将失效，包括邀请邮件中的链接。请重新发送每个邀请，以便受邀者仍能打开此笔记。",
+          "confirm": "替换链接"
+        },
         "export": "导出",
         "owner": "所有者",
         "editor": "可编辑",

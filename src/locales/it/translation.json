@@ -2968,7 +2968,35 @@
       "conversationWillAppear": "La conversazione apparirà qui...",
       "linkedEvent": "Evento collegato",
       "noFolder": "Nessuna cartella",
-      "participants": "Partecipanti"
+      "participants": "Partecipanti",
+      "table": {
+        "actions": "Azioni tabella",
+        "insertRowAbove": "Inserisci riga sopra",
+        "insertRowBelow": "Inserisci riga sotto",
+        "insertColumnLeft": "Inserisci colonna a sinistra",
+        "insertColumnRight": "Inserisci colonna a destra",
+        "deleteRow": "Elimina riga",
+        "deleteColumn": "Elimina colonna",
+        "deleteTable": "Elimina tabella"
+      },
+      "format": {
+        "toolbar": "Formattazione",
+        "withShortcut": "{{action}} ({{shortcut}})",
+        "bold": "Grassetto",
+        "italic": "Corsivo",
+        "strike": "Barrato",
+        "code": "Codice",
+        "textStyle": "Stile testo",
+        "paragraph": "Testo normale",
+        "heading1": "Titolo 1",
+        "heading2": "Titolo 2",
+        "heading3": "Titolo 3",
+        "bulletList": "Elenco puntato",
+        "orderedList": "Elenco numerato",
+        "taskList": "Elenco di controllo",
+        "blockquote": "Citazione",
+        "table": "Inserisci tabella"
+      }
     },
     "participants": {
       "attendee": "partecipante",
@@ -4034,6 +4062,11 @@
         "createLink": "Crea link",
         "copyLink": "Copia link",
         "copied": "Copiato",
+        "replaceLink": {
+          "title": "Sostituire il link di condivisione?",
+          "description": "Questo dispositivo non ha il link attuale, quindi copiarlo significa crearne uno nuovo. Il vecchio link smetterà di funzionare, anche nelle email di invito. Reinvia ogni invito affinché le persone invitate possano continuare ad aprire la nota.",
+          "confirm": "Sostituisci link"
+        },
         "export": "Esporta",
         "owner": "Proprietario",
         "editor": "Può modificare",

@@ -226,6 +226,9 @@ export class SyncedNotesRepository implements NotesRepository {
   dropNotePushAttempt(localId: number): void {
     this.local.dropNotePushAttempt(localId);
   }
+  isNotePushRejected(localId: number): boolean {
+    return this.local.isNotePushRejected(localId);
+  }
   parkNoteConflict(localId: number, serverNote: RemoteNote): void {
     this.local.parkNoteConflict(localId, serverNote);
   }

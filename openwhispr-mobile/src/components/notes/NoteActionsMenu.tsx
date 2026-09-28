@@ -16,7 +16,7 @@ interface NoteActionsMenuProps {
   processing: boolean;
   onRunAction: (action: Action) => void;
   onManageActions: () => void;
-  onAskNote: () => void;
+  onAskNote?: () => void;
   askNoteDisabled?: boolean;
   onCopyGeneratedNote?: () => void;
   onCopyTranscript?: () => void;
@@ -69,13 +69,17 @@ export function NoteActionsMenu({
       image: 'slider.horizontal.3',
       imageColor: iconColor,
     },
-    {
-      id: ASK_NOTE_ID,
-      title: 'Ask about this note',
-      image: 'message',
-      imageColor: iconColor,
-      attributes: { disabled: !hasContent || askNoteDisabled },
-    },
+    ...(onAskNote
+      ? [
+          {
+            id: ASK_NOTE_ID,
+            title: 'Ask about this note',
+            image: 'message',
+            imageColor: iconColor,
+            attributes: { disabled: !hasContent || askNoteDisabled },
+          },
+        ]
+      : []),
     ...(onCopyGeneratedNote
       ? [
           {
@@ -102,7 +106,6 @@ export function NoteActionsMenu({
       title: 'Share',
       image: 'square.and.arrow.up',
       imageColor: iconColor,
-      attributes: { disabled: !hasContent },
     },
     {
       id: PRIVACY_ID,
@@ -130,7 +133,7 @@ export function NoteActionsMenu({
       return;
     }
     if (id === ASK_NOTE_ID) {
-      onAskNote();
+      onAskNote?.();
       return;
     }
     if (id === COPY_GENERATED_NOTE_ID) {
