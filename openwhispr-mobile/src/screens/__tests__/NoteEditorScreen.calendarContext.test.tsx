@@ -9,7 +9,7 @@ import { formatTranscriptForExport } from '@/lib/diarization/transcriptDisplay';
 import { makeContentHash } from '@/lib/utils';
 import { clearLocalReasoningReadinessCache, LocalReasoningError } from '@/lib/localReasoning';
 import { extractCorrections } from '@/lib/correctionLearner';
-import type { Action, Note, Segment, Speaker } from '@/data/types';
+import type { Action, Note, Segment, Speaker, SpeakerProfile } from '@/data/types';
 import type { Folder, Space } from '@/data';
 import type { UserConfig } from '@/types';
 
@@ -25,6 +25,7 @@ const mockAddLearnedWords = jest.fn();
 const mockUpdateConfig = jest.fn(async (updates: Record<string, unknown>) => {
   mockConfigState.config = { ...mockConfigState.config, ...updates };
 });
+const mockClaimSpeakerAsMe = jest.fn();
 
 let mockNote: Note;
 let mockRouteNoteId = '7';
@@ -56,6 +57,9 @@ const mockNotesState = {
   moveNoteToSpace: jest.fn(),
   createFolder: jest.fn(),
   getSpaceFolders: jest.fn(() => [] as Folder[]),
+  voiceProfiles: [] as SpeakerProfile[],
+  meetingSpeakerEmbeddingsByNoteId: {} as Record<number, Record<string, number[]>>,
+  claimSpeakerAsMe: mockClaimSpeakerAsMe,
 };
 
 const mockActionsState = {
@@ -97,6 +101,12 @@ jest.mock('expo-router', () => ({
 
 jest.mock('expo-clipboard', () => ({
   setStringAsync: jest.fn(async () => undefined),
+}));
+
+jest.mock('@/lib/transcriptAudio', () => ({
+  ...jest.requireActual('@/lib/transcriptAudio'),
+  isManagedMeetingAudioUri: (noteId: number, uri?: string | null) =>
+    uri === `managed://meeting-${noteId}.wav`,
 }));
 
 jest.mock('@/store/useNotesStore', () => ({
@@ -524,6 +534,9 @@ beforeEach(() => {
   mockSpeakers = [speaker()];
   mockConfigState.config.autoGenerateNoteTitle = false;
   mockConfigState.config.appleLocalIntelligenceEnabled = true;
+  mockConfigState.config.voiceProfilePromptDismissedAt = undefined;
+  mockNotesState.voiceProfiles = [];
+  mockNotesState.meetingSpeakerEmbeddingsByNoteId = {};
   mockUpdateConfig.mockClear();
   (ReasoningService.processText as jest.Mock).mockResolvedValue({
     text: 'Generated calendar-aware notes',
@@ -1599,5 +1612,92 @@ describe('NoteEditorScreen clearing generated notes', () => {
     fireEvent.changeText(getByTestId('enhanced-editor'), '## Rewritten');
     fireEvent.press(getByTestId('enhanced-done'));
     expect(mockUpdateNote).toHaveBeenLastCalledWith(7, { enhancedContent: '## Rewritten' });
+  });
+});
+
+describe('NoteEditorScreen voice setup', () => {
+  let alertSpy: jest.SpyInstance;
+  const longSegments = (): Segment[] => [
+    segment({
+      id: 20,
+      speakerLabel: 'speaker_0',
+      startMs: 0,
+      endMs: 15000,
+      text: 'I will own the launch.',
+    }),
+  ];
+
+  beforeEach(() => {
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    mockNote = note({ sourceFile: 'managed://meeting-7.wav', transcriptionStatus: 'done' });
+    mockNotesState.notes = [mockNote];
+    mockSegments = longSegments();
+    mockSpeakers = [speaker()];
+    mockNotesState.meetingSpeakerEmbeddingsByNoteId = { 7: { speaker_0: [0.1, 0.2] } };
+  });
+  afterEach(() => alertSpy.mockRestore());
+
+  it('offers voice setup on a meeting recorded on this device', () => {
+    const { getByTestId } = render(<NoteEditorScreen />);
+    expect(getByTestId('voice-setup-banner')).toBeTruthy();
+  });
+
+  it('does not offer it on a meeting recorded elsewhere, or once you have a profile', () => {
+    mockNote = note({ sourceFile: null });
+    mockNotesState.notes = [mockNote];
+    const { queryByTestId, rerender } = render(<NoteEditorScreen />);
+    expect(queryByTestId('voice-setup-banner')).toBeNull();
+
+    mockNote = note({ sourceFile: 'managed://meeting-7.wav' });
+    mockNotesState.notes = [mockNote];
+    mockNotesState.voiceProfiles = [{ id: 1, isOwner: 1 } as SpeakerProfile];
+    rerender(<NoteEditorScreen />);
+    expect(queryByTestId('voice-setup-banner')).toBeNull();
+  });
+
+  it('hides the banner for good when dismissed', () => {
+    const { getByTestId } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('voice-setup-banner-dismiss'));
+    expect(mockUpdateConfig).toHaveBeenCalledWith({
+      voiceProfilePromptDismissedAt: expect.any(String),
+    });
+  });
+
+  it('makes the tapped speaker your voice', () => {
+    const { getByTestId, getByText } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('voice-setup-banner-set-up'));
+    fireEvent.press(getByTestId('thats-me-10'));
+
+    expect(mockClaimSpeakerAsMe).toHaveBeenCalledWith(7, 10);
+    expect(getByText('Got it')).toBeTruthy();
+  });
+
+  it('explains and keeps the script offer when the sample is gone', () => {
+    mockClaimSpeakerAsMe.mockImplementationOnce(() => {
+      throw new Error("This meeting's voice sample is no longer available.");
+    });
+    const { getByTestId, queryByText } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('voice-setup-banner-set-up'));
+    fireEvent.press(getByTestId('thats-me-10'));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Couldn't save your voice",
+      'Read a short script instead to teach OpenWhispr your voice.',
+    );
+    expect(queryByText('Got it')).toBeNull();
+    expect(getByTestId('thats-me-read-script')).toBeTruthy();
+  });
+
+  it('closes the sheet when another note opens', () => {
+    const { getByTestId, queryByTestId, rerender } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('voice-setup-banner-set-up'));
+    expect(getByTestId('thats-me-sheet')).toBeTruthy();
+
+    mockRouteNoteId = '8';
+    mockNote = note({ id: 8, sourceFile: 'managed://meeting-8.wav' });
+    mockNotesState.notes = [mockNote];
+    rerender(<NoteEditorScreen />);
+
+    expect(queryByTestId('thats-me-sheet')).toBeNull();
   });
 });

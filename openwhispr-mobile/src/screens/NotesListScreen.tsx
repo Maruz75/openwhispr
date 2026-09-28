@@ -18,10 +18,8 @@ import { groupNotesByDate } from '@/lib/groupNotesByDate';
 import { safeHaptics } from '@/lib/utils';
 import { confirmDestructive } from '@/lib/alerts';
 import { SyncStatusLabel } from '@/components/notes/SyncStatusLabel';
-import { VoiceProfilePromptCard } from '@/components/notes/VoiceProfilePromptCard';
 import { useManualSyncRefresh } from '@/hooks/useManualSyncRefresh';
 import { useMoveNote } from '@/hooks/useMoveNote';
-import { useConfigStore } from '@/store/useConfigStore';
 
 export default function NotesListScreen() {
   const params = useLocalSearchParams<{ folderId?: string; spaceId?: string }>();
@@ -50,8 +48,6 @@ export default function NotesListScreen() {
     voiceProfiles,
     loadVoiceProfiles,
   } = useNotesStore();
-  const config = useConfigStore((s) => s.config);
-  const updateConfig = useConfigStore((s) => s.updateConfig);
 
   const [newFolderVisible, setNewFolderVisible] = useState(false);
 
@@ -224,23 +220,10 @@ export default function NotesListScreen() {
     [handleCompose],
   );
 
-  const hasOwnerProfile = voiceProfiles.some((profile) => profile.isOwner === 1);
-  const showVoiceProfilePrompt = !hasOwnerProfile && !config?.voiceProfilePromptDismissedAt;
-
   const openVoiceProfiles = useCallback(() => {
     safeHaptics('selection');
     router.push('/(tabs)/(notes)/voice-profiles');
   }, []);
-
-  const openOwnerEnrollment = useCallback(() => {
-    safeHaptics('selection');
-    router.push('/(tabs)/(notes)/voice-enrollment?owner=1');
-  }, []);
-
-  const dismissVoiceProfilePrompt = useCallback(() => {
-    safeHaptics('light');
-    updateConfig({ voiceProfilePromptDismissedAt: new Date().toISOString() });
-  }, [updateConfig]);
 
   return (
     <View className="flex-1 bg-systemBackground">
@@ -261,11 +244,6 @@ export default function NotesListScreen() {
       >
         <Text className="mb-2 text-[15px] text-tertiaryLabel">{`${totalCount} ${totalCount === 1 ? 'Note' : 'Notes'}`}</Text>
         <SyncStatusLabel />
-        <VoiceProfilePromptCard
-          visible={showVoiceProfilePrompt && !searchQuery}
-          onEnroll={openOwnerEnrollment}
-          onDismiss={dismissVoiceProfilePrompt}
-        />
 
         <View className="mb-2">
           <GroupedList>

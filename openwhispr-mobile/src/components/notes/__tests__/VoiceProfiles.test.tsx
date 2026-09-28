@@ -3,7 +3,6 @@ import * as FileSystem from 'expo-file-system/legacy';
 import type { SpeakerProfile } from '@/data/types';
 import { VoiceProfileList } from '../VoiceProfileList';
 import { VoiceEnrollmentRecorder } from '../VoiceEnrollmentRecorder';
-import { VoiceProfilePromptCard } from '../VoiceProfilePromptCard';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
 
 jest.mock('@/components/ui/Text', () => ({ Text: require('react-native').Text }));
@@ -104,22 +103,6 @@ describe('VoiceProfileList', () => {
 
     expect(queryByTestId('voice-profile-enroll-owner')).toBeNull();
     expect(getByTestId('voice-profile-enroll-speaker')).toBeTruthy();
-  });
-});
-
-describe('VoiceProfilePromptCard', () => {
-  it('shows only when no owner profile prompt is visible and supports dismiss', () => {
-    const onDismiss = jest.fn();
-    const { queryByTestId, rerender, getByTestId } = render(
-      <VoiceProfilePromptCard visible={false} onEnroll={() => {}} onDismiss={onDismiss} />,
-    );
-
-    expect(queryByTestId('voice-profile-prompt-card')).toBeNull();
-
-    rerender(<VoiceProfilePromptCard visible onEnroll={() => {}} onDismiss={onDismiss} />);
-    fireEvent.press(getByTestId('voice-profile-prompt-dismiss'));
-
-    expect(onDismiss).toHaveBeenCalled();
   });
 });
 
