@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
 import { SettingsPanelRow } from "../ui/SettingsSection";
 import { RecentActions } from "./RecentActions";
 import { ensureConnectorStatus, useConnectorStatusStore } from "../../stores/connectorStatusStore";
-import type { ConnectorStatus } from "../../types/connectors";
+import type { ConnectorRowSpec } from "./connectorRows";
 
 type RowPhase = "idle" | "connecting" | "disconnecting";
 
@@ -29,13 +29,10 @@ const ROW_ERRORS = new Set([
 ]);
 
 export interface ConnectorLoginRowProps {
-  connectorId: "slack" | "gmail";
+  row: ConnectorRowSpec;
   isPaid: boolean;
   blockedByOrg: boolean;
   onUpgrade: () => void;
-  /** Values for `connectors.<id>.connectedAs`. */
-  accountSummary: (status: ConnectorStatus) => Record<string, string>;
-  icon: ReactNode;
 }
 
 /**
@@ -44,13 +41,12 @@ export interface ConnectorLoginRowProps {
  * `connectors.<connectorId>.*`.
  */
 export function ConnectorLoginRow({
-  connectorId,
+  row,
   isPaid,
   blockedByOrg,
   onUpgrade,
-  accountSummary,
-  icon,
 }: ConnectorLoginRowProps): ReactElement | null {
+  const { id: connectorId, icon, accountSummary, connectingDetail: ConnectingDetail } = row;
   const { t } = useTranslation();
   const status = useConnectorStatusStore((state) => state.statuses[connectorId]);
   const [phase, setPhase] = useState<RowPhase>("idle");
@@ -137,6 +133,9 @@ export function ConnectorLoginRow({
           <p className="text-xs text-muted-foreground/70 mt-0.5 leading-relaxed" dir="auto">
             {summary}
           </p>
+          {phase === "connecting" && ConnectingDetail && (
+            <ConnectingDetail connectorId={connectorId} />
+          )}
           {grantKept && (
             <p role="status" className="text-xs text-muted-foreground mt-1" dir="auto">
               {copy("grantKept")}

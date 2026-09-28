@@ -488,3 +488,36 @@ test("a connected Gmail row names the account", async (t) => {
   );
   assert.ok(buttonWithText(container, "connectors.gmail.disconnect"));
 });
+
+test("every CONNECTOR_ROWS entry renders after the email row, in list order", async (t) => {
+  let root = null;
+  t.after(async () => {
+    if (root) await React.act(async () => root.unmount());
+  });
+  installBrowserGlobals(t, { window: { electronAPI: {} } });
+  setPlan(t, { usageState: usage(true) });
+  const container = installInteractiveDom(t);
+  const vite = await createRendererServer(t, {
+    cachePrefix: "openwhispr-connectors-section-row-order-test-",
+    noExternal: ["react-i18next"],
+    mockModules: MOCKS,
+  });
+  const [{ ConnectorsSection }, { CONNECTOR_ROWS }] = await Promise.all([
+    vite.ssrLoadModule("/components/ConnectorsSection.tsx"),
+    vite.ssrLoadModule("/components/connectors/connectorRows.tsx"),
+  ]);
+  root = createRoot(container);
+  await React.act(async () => root.render(createElement(ConnectorsSection, { onUpgrade() {} })));
+
+  assert.ok(CONNECTOR_ROWS.length > 0, "there is at least one row to check");
+  const markup = container.textContent;
+  const emailIndex = markup.indexOf("connectors.email.title");
+  assert.ok(emailIndex >= 0, "the email row renders");
+  let previousIndex = emailIndex;
+  for (const row of CONNECTOR_ROWS) {
+    const index = markup.indexOf(`connectors.${row.id}.title`);
+    assert.ok(index >= 0, `the ${row.id} row renders`);
+    assert.ok(index > previousIndex, `the ${row.id} row renders after the previous row`);
+    previousIndex = index;
+  }
+});

@@ -19,7 +19,7 @@ import { hasConnectorPlan } from "../../utils/connectorEligibility";
 import { gmailSendStatus, resolveEmailDraftTarget } from "../../utils/emailDraftTarget";
 import {
   ensureConnectorStatus,
-  isConnectorReady,
+  readyConnectorIds,
   useConnectorStatusStore,
 } from "../../stores/connectorStatusStore";
 import {
@@ -384,22 +384,21 @@ export function useChatStreaming({
             settings.isSignedIn &&
             hasConnectorPlan(getUsageState(), readIsSubscribed()) &&
             isConnectorsAllowed(usePolicyStore.getState());
-          // The first send in a window must not miss a connected Slack.
+          // The first send in a window must not miss a connector that is already connected.
           if (connectorsAvailable) await ensureConnectorStatus();
-          const slackReady = connectorsAvailable && isConnectorReady("slack");
           const connectors = connectorsAvailable
             ? {
                 emailDraftTarget: resolveEmailDraftTarget({
                   ...settings,
                   gmailStatus: gmailSendStatus(useConnectorStatusStore.getState().statuses.gmail),
                 }),
-                slackReady,
+                readyConnectorIds: readyConnectorIds(),
               }
             : undefined;
           connectorsOffered = connectors !== undefined;
           // Triggers ride in the tool description, so a snippet edit rebuilds the registry.
           const snippetKey = settings.snippets.map((s) => s.trigger).join("|");
-          const cacheKey = `${settings.isSignedIn}-${calendarConnected}-${settings.cloudBackupEnabled}-${scopeKey}-${webSearchEnabled}-${snippetKey}-${connectors?.emailDraftTarget ?? "no-connectors"}-${slackReady}`;
+          const cacheKey = `${settings.isSignedIn}-${calendarConnected}-${settings.cloudBackupEnabled}-${scopeKey}-${webSearchEnabled}-${snippetKey}-${connectors?.emailDraftTarget ?? "no-connectors"}-${connectors?.readyConnectorIds.join(",") ?? ""}`;
           if (toolRegistryRef.current?.key === cacheKey) {
             registry = toolRegistryRef.current.registry;
           } else {
@@ -433,10 +432,7 @@ export function useChatStreaming({
         // The user's dictionary rides on every conversation so replies use their
         // jargon — same suffix the dictation prompts carry.
         let systemPrompt = appendDictionarySuffix(
-          getAgentSystemPrompt(
-            registry?.getAll().map((t) => t.name),
-            combinedContext || undefined
-          ),
+          getAgentSystemPrompt(registry?.getAll(), combinedContext || undefined),
           getDictionaryHintWords(settings),
           settings.uiLanguage
         );

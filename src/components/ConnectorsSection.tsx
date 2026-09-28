@@ -5,8 +5,8 @@ import { Button } from "./ui/button";
 import { SettingsPanel, SettingsPanelRow } from "./ui/SettingsSection";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { RecentActions } from "./connectors/RecentActions";
-import { GmailConnectorRow } from "./connectors/GmailConnectorRow";
-import { SlackConnectorRow } from "./connectors/SlackConnectorRow";
+import { ConnectorLoginRow } from "./connectors/ConnectorLoginRow";
+import { CONNECTOR_ROWS } from "./connectors/connectorRows";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useConnectorStatusStore } from "../stores/connectorStatusStore";
 import { usePolicyStore } from "../stores/policyStore";
@@ -134,8 +134,15 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
 
         {showActions && <RecentActions connectorId="email" />}
       </SettingsPanelRow>
-      <GmailConnectorRow isPaid={isPaid} blockedByOrg={blockedByOrg} onUpgrade={onUpgrade} />
-      <SlackConnectorRow isPaid={isPaid} blockedByOrg={blockedByOrg} onUpgrade={onUpgrade} />
+      {CONNECTOR_ROWS.map((row) => (
+        <ConnectorLoginRow
+          key={row.id}
+          row={row}
+          isPaid={isPaid}
+          blockedByOrg={blockedByOrg}
+          onUpgrade={onUpgrade}
+        />
+      ))}
     </SettingsPanel>
   );
 }

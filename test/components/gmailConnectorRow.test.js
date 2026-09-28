@@ -83,13 +83,17 @@ async function renderGmailRow(
       `,
     },
   });
-  const { GmailConnectorRow } = await vite.ssrLoadModule(
-    "/components/connectors/GmailConnectorRow.tsx"
-  );
+  const [{ ConnectorLoginRow }, { CONNECTOR_ROWS }] = await Promise.all([
+    vite.ssrLoadModule("/components/connectors/ConnectorLoginRow.tsx"),
+    vite.ssrLoadModule("/components/connectors/connectorRows.tsx"),
+  ]);
+  const row = CONNECTOR_ROWS.find((entry) => entry.id === "gmail");
   const { createRoot } = require("react-dom/client");
   root = createRoot(container);
   await React.act(async () =>
-    root.render(React.createElement(GmailConnectorRow, { isPaid, blockedByOrg, onUpgrade() {} }))
+    root.render(
+      React.createElement(ConnectorLoginRow, { row, isPaid, blockedByOrg, onUpgrade() {} })
+    )
   );
   // Let the status load from the mount effect commit.
   await React.act(async () => {});
