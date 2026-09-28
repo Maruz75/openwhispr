@@ -8,6 +8,8 @@ const MAX_NOTE_ATTENDEES = 200;
 // RFC 5321's address limit, and a generous display name.
 const MAX_ATTENDEE_EMAIL_LENGTH = 320;
 const MAX_ATTENDEE_NAME_LENGTH = 200;
+// Calendar event ids are well under this (Graph's are the longest, ~150).
+const MAX_EVENT_ID_LENGTH = 1024;
 
 function isNonEmptyString(value) {
   return typeof value === "string" && value.length > 0;
@@ -221,13 +223,17 @@ function registerConnectorIpc({
   if (noteAttendees) {
     // A note's attendees, minus the user and rooms, for the note chat's
     // context. They go to the model, so the org switch applies here too.
-    ipcMain.handle("connector-note-attendees", async (event, participants) => {
+    ipcMain.handle("connector-note-attendees", async (event, participants, calendarEventId) => {
       if (!Array.isArray(participants)) return { attendees: [] };
       const attendees = sanitizeNoteAttendees(participants);
-      if (attendees.length === 0) return { attendees: [] };
+      const eventId =
+        isNonEmptyString(calendarEventId) && calendarEventId.length <= MAX_EVENT_ID_LENGTH
+          ? calendarEventId
+          : null;
+      if (attendees.length === 0 && !eventId) return { attendees: [] };
       const refusal = policyRefusal(await getPolicyState(event));
       if (refusal) return { attendees: [], unavailableReason: refusal };
-      return { attendees: await noteAttendees(attendees) };
+      return { attendees: await noteAttendees(attendees, eventId) };
     });
   }
 }

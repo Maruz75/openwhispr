@@ -1273,8 +1273,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   connectorRecentActions: (connectorId, limit) =>
     ipcRenderer.invoke("connector-recent-actions", connectorId, limit),
   connectorFindContacts: (query) => ipcRenderer.invoke("connector-find-contacts", query),
-  connectorNoteAttendees: (participants) =>
-    ipcRenderer.invoke("connector-note-attendees", participants),
+  connectorNoteAttendees: (participants, calendarEventId) =>
+    ipcRenderer.invoke("connector-note-attendees", participants, calendarEventId),
   connectorConnect: (connectorId) => ipcRenderer.invoke("connector-connect", connectorId),
   connectorDisconnect: (connectorId) => ipcRenderer.invoke("connector-disconnect", connectorId),
   onConnectorStatusChanged: (callback) => {

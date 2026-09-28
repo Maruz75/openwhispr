@@ -3863,7 +3863,7 @@
       "update_dictionaryName": "Wörterbuch aktualisieren",
       "update_snippetsName": "Snippets aktualisieren",
       "search_notesStatus": "Notizen werden durchsucht...",
-      "email_draftStatus": "E-Mail-Entwurf wird geöffnet...",
+      "email_draftStatus": "E-Mail wird vorbereitet...",
       "find_contactStatus": "Kontakte werden gesucht...",
       "slack_send_messageStatus": "Slack-Nachricht wird vorbereitet...",
       "web_searchStatus": "Websuche...",
@@ -4081,6 +4081,8 @@
         "addressHint": "Adressen mit Kommas trennen.",
         "invalidAddress": "{{address}} ist keine vollständige E-Mail-Adresse wie name@example.com.",
         "missingTo": "Füge unter „An“ mindestens eine Adresse hinzu.",
+        "tooManyRecipients": "Eine E-Mail kann an höchstens {{max}} Adressen gehen, An und Cc zusammen.",
+        "subjectTooLong": "Der Betreff darf höchstens {{max}} Zeichen lang sein.",
         "unknown": "Konnte nicht bestätigt werden. Bitte den Ordner „Gesendet“ prüfen."
       },
       "openIn": {

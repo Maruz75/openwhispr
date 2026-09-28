@@ -6099,9 +6099,12 @@ class IPCHandlers {
           searchContacts(this.databaseManager.getContactLookupSources(), query),
         // The Gmail login sends as the user, so its address is theirs too,
         // even when it isn't one of their calendar accounts.
-        noteAttendees: async (participants) => {
+        noteAttendees: async (participants, calendarEventId) => {
           const sources = this.databaseManager.getContactLookupSources();
           const gmail = (await this.connectorManager.status()).find(({ id }) => id === "gmail");
+          const calendarEvent = calendarEventId
+            ? this.databaseManager.getCalendarEventById(calendarEventId)
+            : null;
           return personAttendees(
             {
               ...sources,
@@ -6110,7 +6113,8 @@ class IPCHandlers {
                 ...(gmail?.accountLabel ? [gmail.accountLabel] : []),
               ],
             },
-            participants
+            participants,
+            { organizerEmail: calendarEvent?.organizer_email ?? null }
           );
         },
       });

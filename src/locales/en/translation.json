@@ -3863,7 +3863,7 @@
       "update_dictionaryName": "Update dictionary",
       "update_snippetsName": "Update snippets",
       "search_notesStatus": "Searching notes...",
-      "email_draftStatus": "Opening an email draft...",
+      "email_draftStatus": "Preparing an email...",
       "find_contactStatus": "Looking up contacts...",
       "slack_send_messageStatus": "Preparing a Slack message...",
       "web_searchStatus": "Searching the web...",
@@ -4081,6 +4081,8 @@
         "addressHint": "Separate addresses with commas.",
         "invalidAddress": "{{address}} isn't a full email address like name@example.com.",
         "missingTo": "Add at least one address to To.",
+        "tooManyRecipients": "An email can go to at most {{max}} addresses, To and Cc together.",
+        "subjectTooLong": "Keep the subject to {{max}} characters or fewer.",
         "unknown": "Couldn't confirm it was sent. Check your Sent folder."
       },
       "openIn": {

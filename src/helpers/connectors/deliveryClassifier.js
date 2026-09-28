@@ -26,6 +26,19 @@ function classifyTransportError(error) {
   return PRE_CONNECT_CODES.has(errorCode(error)) ? "failed" : "unknown";
 }
 
+// The code a failed request reports: never its message, which can quote the
+// URL. Electron's net.fetch carries "net::ERR_…" in the message only.
+function transportErrorCode(error) {
+  return errorCode(error) ?? (error?.name === "TimeoutError" ? "timeout" : "network_error");
+}
+
+// Retry-After in seconds. An HTTP-date (or anything else) is no wait to honour.
+function retryAfterMs(header) {
+  if (header === null || header === undefined || header === "") return null;
+  const seconds = Number(header);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
+}
+
 // A 4xx is the provider refusing the request. A 5xx (or anything unexpected)
 // may come after the provider acted, so it must not be reported as not sent.
 function classifyHttpStatus(status) {
@@ -40,4 +53,10 @@ function classifyProviderError(code, definiteRejections) {
   return typeof code === "string" && definiteRejections.has(code) ? "failed" : "unknown";
 }
 
-module.exports = { classifyTransportError, classifyHttpStatus, classifyProviderError };
+module.exports = {
+  classifyTransportError,
+  classifyHttpStatus,
+  classifyProviderError,
+  transportErrorCode,
+  retryAfterMs,
+};

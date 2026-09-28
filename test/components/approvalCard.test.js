@@ -154,21 +154,24 @@ test("an email card shows who it's from, To, Cc, Subject and Body, with Send ena
   assert.match(markup, /sam@acme\.test/);
   assert.match(markup, /Q3 numbers/);
   assert.match(markup, /Numbers attached\./);
-  assert.doesNotMatch(markup, /role="alert"/);
+  assert.match(markup, /aria-live="polite"[^>]*><\/p>/, "the reason region is empty");
   assert.doesNotMatch(markup, /<button[^>]*disabled/);
 });
 
-test("an email card with a bad or missing recipient disables Send and says why", async (t) => {
-  for (const [to, cc, problem] of [
+test("an email card with a bad or missing recipient, or past Gmail's limits, disables Send and says why", async (t) => {
+  const many = Array.from({ length: 51 }, (_, index) => `p${index}@acme.test`);
+  for (const [to, cc, problem, subject = "Q3 numbers"] of [
     [["Josh <josh@acme.test>"], [], "invalidAddress"],
     [["josh"], [], "invalidAddress"],
     [["josh@acme.test"], ["sam@acme"], "invalidAddress"],
     [[], ["sam@acme.test"], "missingTo"],
+    [many, [], "tooManyRecipients"],
+    [["josh@acme.test"], [], "subjectTooLong", "x".repeat(251)],
   ]) {
-    const markup = await renderCard(t, emailEntry({ ...EMAIL_PREVIEW.fields, to, cc }));
+    const markup = await renderCard(t, emailEntry({ ...EMAIL_PREVIEW.fields, to, cc, subject }));
     assert.match(
       markup,
-      new RegExp(`role="alert"[^>]*>connectors\\.approval\\.email\\.${problem}<`),
+      new RegExp(`aria-live="polite"[^>]*>connectors\\.approval\\.email\\.${problem}<`),
       JSON.stringify({ to, cc })
     );
     assert.match(markup, /<button[^>]*disabled=""[^>]*>connectors\.approval\.send</);

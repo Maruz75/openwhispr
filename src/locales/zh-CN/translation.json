@@ -3694,7 +3694,7 @@
       "update_dictionaryName": "更新词典",
       "update_snippetsName": "更新片段",
       "search_notesStatus": "正在搜索笔记...",
-      "email_draftStatus": "正在打开邮件草稿...",
+      "email_draftStatus": "正在准备邮件...",
       "find_contactStatus": "正在查找联系人...",
       "slack_send_messageStatus": "正在准备 Slack 消息...",
       "web_searchStatus": "正在搜索网页...",
@@ -3912,6 +3912,8 @@
         "addressHint": "多个地址请用逗号分隔。",
         "invalidAddress": "{{address}} 不是完整的电子邮件地址（例如 name@example.com）。",
         "missingTo": "请在收件人中至少添加一个地址。",
+        "tooManyRecipients": "一封邮件最多可发送给 {{max}} 个地址（收件人和抄送合计）。",
+        "subjectTooLong": "主题不能超过 {{max}} 个字符。",
         "unknown": "无法确认是否已发送，请检查“已发送”文件夹。"
       },
       "openIn": {

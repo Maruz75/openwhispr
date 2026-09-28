@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type ReactElement } from "react";
+import { useId, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
 import {
@@ -8,8 +8,17 @@ import {
   type ApprovalEntry,
 } from "../../stores/connectorApprovalStore";
 import { connectorErrorText } from "../../utils/connectorErrorCopy";
-import { recipientsLabel } from "../../helpers/connectors/emailCompose";
-import { EmailApprovalFields, emailFieldProblems, toEmailFields } from "./EmailApprovalFields";
+import {
+  MAX_EMAIL_RECIPIENTS,
+  MAX_EMAIL_SUBJECT_LENGTH,
+  recipientsLabel,
+} from "../../helpers/connectors/emailCompose";
+import {
+  emailFieldProblems,
+  hasEmailFieldProblem,
+  toEmailFields,
+} from "../../utils/emailApprovalFields";
+import { EmailApprovalFields } from "./EmailApprovalFields";
 
 // The draft lives in the store, so edit mode only changes how it is shown:
 // Send always commits exactly what the card displays.
@@ -31,8 +40,20 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
     ((emailFields && recipientsLabel(emailFields.to, emailFields.cc)) || preview.destinationLabel);
   const problems = emailFields ? emailFieldProblems(emailFields) : null;
   // Send commits exactly what the card shows, so it waits until every
-  // address on it is one the email can go to.
-  const sendBlocked = Boolean(problems && (problems.missingTo || problems.invalid.length > 0));
+  // address on it is one the email can go to, within Gmail's limits.
+  const sendBlocked = Boolean(problems && hasEmailFieldProblem(problems));
+  const problemsId = useId();
+  const problemText = !problems
+    ? null
+    : problems.invalid.length > 0
+      ? t("connectors.approval.email.invalidAddress", { address: problems.invalid[0] })
+      : problems.missingTo
+        ? t("connectors.approval.email.missingTo")
+        : problems.tooManyRecipients
+          ? t("connectors.approval.email.tooManyRecipients", { max: MAX_EMAIL_RECIPIENTS })
+          : problems.subjectTooLong
+            ? t("connectors.approval.email.subjectTooLong", { max: MAX_EMAIL_SUBJECT_LENGTH })
+            : null;
 
   // Send and Cancel remove the button that had focus; the card keeps it, so
   // keyboard and screen-reader users land on the result.
@@ -90,13 +111,19 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
             fields={emailFields}
             editing={showEditor}
             disabled={entry.state !== "pending"}
+            problems={problems}
+            problemsId={problemsId}
             onChange={(patch) => updateApprovalDraft(entry.key, { fields: patch })}
           />
-          {entry.state === "pending" && problems && sendBlocked && (
-            <p role="alert" className="mt-2 text-xs text-destructive">
-              {problems.invalid.length > 0
-                ? t("connectors.approval.email.invalidAddress", { address: problems.invalid[0] })
-                : t("connectors.approval.email.missingTo")}
+          {/* Polite and always present, so a screen reader hears each new
+              reason without being interrupted on every keystroke. */}
+          {entry.state === "pending" && (
+            <p
+              id={problemsId}
+              aria-live="polite"
+              className="mt-2 text-xs text-destructive empty:mt-0"
+            >
+              {problemText}
             </p>
           )}
         </div>

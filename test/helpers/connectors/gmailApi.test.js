@@ -132,10 +132,17 @@ test("a 403 is failed, with its code chosen by Gmail's reason", async () => {
 });
 
 test("other 4xx are failed; every 5xx is unknown because Gmail may have sent it", async () => {
-  for (const status of [404, 409, 413]) {
+  for (const status of [404, 409]) {
     const { result } = await send([httpStatus(status)]);
     assert.deepEqual(result, { ok: false, outcome: "failed", errorCode: `http_${status}`, status });
   }
+  // A 413 is a message Gmail found too large, with its own copy.
+  assert.deepEqual((await send([httpStatus(413)])).result, {
+    ok: false,
+    outcome: "failed",
+    errorCode: "too_long",
+    status: 413,
+  });
   for (const status of [500, 502, 503, 504]) {
     const { result, google } = await send([httpStatus(status), json({ id: "msg-1" })]);
     assert.deepEqual(result, {

@@ -45,8 +45,12 @@ const field = (root, labelKey) =>
     (element) => element.getAttribute?.("aria-label") === `connectors.approval.email.${labelKey}`
   );
 
-const alertText = (root) =>
-  findElement(root, (element) => element.getAttribute?.("role") === "alert")?.textContent ?? null;
+// The card's polite region naming what blocks Send; empty when nothing does.
+const problemText = (root) =>
+  findElement(
+    root,
+    (element) => element.getAttribute?.("aria-live") === "polite" && element.getAttribute("id")
+  )?.textContent || null;
 
 const PROPOSED = {
   to: ["josh@acme.test"],
@@ -155,11 +159,18 @@ test("a bad or display-name address, or an empty To, blocks Send with the reason
     await React.act(async () => type(field(container, labelKey), value));
     const send = button(container, "connectors.approval.send");
     if (reason) {
-      assert.equal(alertText(container), `connectors.approval.email.${reason}`, value);
+      assert.equal(problemText(container), `connectors.approval.email.${reason}`, value);
+      const input = field(container, labelKey);
+      assert.equal(input.getAttribute("aria-invalid"), "true", `${value}: the field says so`);
+      const describedBy = input.getAttribute("aria-describedby");
+      assert.ok(
+        findElement(container, (element) => element.getAttribute?.("id") === describedBy),
+        `${value}: the field points at the reason`
+      );
       assert.notEqual(send.getAttribute("disabled"), null, `${value}: Send is disabled`);
       await React.act(async () => click(send));
     } else {
-      assert.equal(alertText(container), null, value);
+      assert.equal(problemText(container), null, value);
       assert.equal(send.getAttribute("disabled"), null, `${value}: Send is enabled`);
     }
   }

@@ -1090,6 +1090,26 @@ test("a reconnect main reports while preparing reads the same as one the store k
   assert.deepEqual(context.releases, ["email_draft"]);
 });
 
+test("a prepare call main rejects gives the slot back and tells the model not to retry", async (t) => {
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: () => Promise.reject(new Error("Error invoking remote method")),
+      },
+    },
+  });
+  await setGmailStatus();
+  const { createEmailDraftTool } = await loadEmail();
+  const context = gmailContext("m25", "call-25");
+
+  const result = await createEmailDraftTool("gmailSend").execute(GMAIL_DRAFT, context);
+
+  assert.equal(result.data.status, "unavailable");
+  assert.equal(result.data.reason, "connectors_unavailable");
+  assert.doesNotMatch(JSON.stringify(result), /remote method/);
+  assert.deepEqual(context.releases, ["email_draft"]);
+});
+
 test("with Gmail chosen, names and bad addresses still come back as questions", async (t) => {
   let prepared = 0;
   installBrowserGlobals(t, {

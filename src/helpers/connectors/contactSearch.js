@@ -1,4 +1,5 @@
 const { parseEventTime } = require("../calendarAvailability");
+const { isValidEmailAddress } = require("./emailCompose");
 
 // Rooms, resources, groups and holiday calendars Google lists as attendees.
 const NON_PERSON_ADDRESS = /@(?:[^@]+\.)?calendar\.google\.com$/i;
@@ -47,26 +48,33 @@ function isPersonAddress(email) {
   return typeof email === "string" && email.includes("@") && !NON_PERSON_ADDRESS.test(email);
 }
 
-// A display name is one line for the model's attendee list.
+// A display name is one line for the model's attendee list, and never holds
+// angle brackets, so it can't pass itself off as another "Name <address>".
 function attendeeName(value) {
   if (typeof value !== "string") return null;
-  const name = value.replace(/[\p{Cc}\s]+/gu, " ").trim();
+  const name = value.replace(/[\p{Cc}\s<>]+/gu, " ").trim();
   return name || null;
 }
 
 /**
  * A note's attendees who are other people: never the user (flagged self, or
- * one of their addresses), a room or resource, or a non-person calendar
- * address. De-duplicated case-insensitively, in the note's order.
+ * one of their addresses), a room or resource, a non-person calendar address
+ * or anything that isn't a valid address. The meeting's organizer, when
+ * known, comes last: Outlook and Apple calendars leave them out of the
+ * attendees. De-duplicated case-insensitively, in the note's order.
  */
-function personAttendees(sources, attendees) {
+function personAttendees(sources, attendees, { organizerEmail = null } = {}) {
   const excluded = excludedAddresses(sources);
   const seen = new Set();
   const people = [];
-  for (const attendee of Array.isArray(attendees) ? attendees : []) {
+  const all = [
+    ...(Array.isArray(attendees) ? attendees : []),
+    ...(organizerEmail ? [{ email: organizerEmail, displayName: null }] : []),
+  ];
+  for (const attendee of all) {
     if (!attendee || attendee.self === true || attendee.resource === true) continue;
     const email = typeof attendee.email === "string" ? attendee.email.trim() : "";
-    if (!isPersonAddress(email)) continue;
+    if (!isPersonAddress(email) || !isValidEmailAddress(email)) continue;
     const key = email.toLowerCase();
     if (excluded.has(key) || seen.has(key)) continue;
     seen.add(key);

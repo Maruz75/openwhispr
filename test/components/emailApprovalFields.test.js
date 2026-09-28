@@ -5,9 +5,6 @@ const { renderToStaticMarkup } = require("react-dom/server");
 const { createRendererServer, installBrowserGlobals } = require("../lib/rendererTestHarness");
 const { installInteractiveDom, findElement } = require("../lib/interactiveDom");
 
-// A right-to-left override, which can make one domain read as another.
-const RLO = String.fromCodePoint(0x202e);
-
 const FIELDS = {
   to: ["josh@acme.test", "dana@acme.test"],
   cc: [],
@@ -41,48 +38,6 @@ const field = (root, labelKey) =>
     root,
     (element) => element.getAttribute?.("aria-label") === `connectors.approval.email.${labelKey}`
   );
-
-test("To and Cc are read as the comma-separated addresses the user typed, empty entries dropped", async (t) => {
-  const { parseAddressList } = await loadFields(t);
-  assert.deepEqual(parseAddressList(" josh@acme.test, ,dana@acme.test ,"), [
-    "josh@acme.test",
-    "dana@acme.test",
-  ]);
-  assert.deepEqual(parseAddressList("   "), []);
-  // Kept as typed, so the card can name it.
-  assert.deepEqual(parseAddressList("Josh <josh@acme.test>, sam"), [
-    "Josh <josh@acme.test>",
-    "sam",
-  ]);
-});
-
-test("Send is blocked by an empty To and by any address that isn't bare and valid", async (t) => {
-  const { emailFieldProblems } = await loadFields(t);
-  assert.deepEqual(emailFieldProblems(FIELDS), { invalid: [], missingTo: false });
-  assert.deepEqual(emailFieldProblems({ ...FIELDS, to: [] }), { invalid: [], missingTo: true });
-  assert.deepEqual(
-    emailFieldProblems({
-      ...FIELDS,
-      to: ["Josh <josh@acme.test>", "josh@acme.test"],
-      cc: ["sam", `evil@acme.test${RLO}`, "dana@acme"],
-    }),
-    {
-      invalid: ["Josh <josh@acme.test>", "sam", `evil@acme.test${RLO}`, "dana@acme"],
-      missingTo: false,
-    }
-  );
-});
-
-test("a draft's fields map is read as an email, with anything missing left empty", async (t) => {
-  const { toEmailFields } = await loadFields(t);
-  assert.deepEqual(toEmailFields(FIELDS), FIELDS);
-  assert.deepEqual(toEmailFields({ to: "josh@acme.test", subject: ["x"] }), {
-    to: [],
-    cc: [],
-    subject: "",
-    body: "",
-  });
-});
 
 test("outside edit mode the fields are shown, Cc only when it has addresses", async (t) => {
   installBrowserGlobals(t);

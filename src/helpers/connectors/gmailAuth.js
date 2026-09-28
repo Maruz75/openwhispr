@@ -2,6 +2,7 @@
 // gmailOAuth.js (Gabriel Stein). Plan 3 adds the granted-scope and verified-
 // email checks, the refresh bound to one login, and revoking the grant.
 const { describeError } = require("./errorSummary");
+const { createBoundLogin } = require("./boundLogin");
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 // gmail.send is Google's only sensitive (not restricted) Gmail scope. Any
@@ -137,8 +138,6 @@ function createGmailAuth({
   logger = null,
   now = Date.now,
 }) {
-  const refreshes = new Map();
-
   function oauthClient() {
     const { clientId, clientSecret } = getClientCredentials() ?? {};
     return nonEmptyString(clientId) && nonEmptyString(clientSecret)
@@ -263,30 +262,6 @@ function createGmailAuth({
     });
   }
 
-  // Flags the login the binding names, and only it, as needing a reconnect.
-  // A reconnect or disconnect that landed first wins, and nothing is
-  // written to it.
-  function markReconnect(binding) {
-    const entry = credentials.read(binding?.ownerAccountId ?? null, "gmail");
-    if (!sameLogin(entry, binding)) return { ok: false, errorCode: "connection_changed" };
-    try {
-      credentials.save(
-        binding.ownerAccountId,
-        "gmail",
-        { ...entry.credential, needsReconnect: true },
-        binding.generation
-      );
-    } catch (error) {
-      if (error.code === "connection_changed" || error.code === "signed_out") {
-        return { ok: false, errorCode: "connection_changed" };
-      }
-      // A real write failure (disk, permission, encryption). Google's answer
-      // still stands: the login is gone, though the flag wasn't recorded.
-      logger?.warn("gmail reconnect flag save failed", describeError(error), "connectors");
-    }
-    return { ok: false, errorCode: "reconnect_needed" };
-  }
-
   async function requestRefresh(refreshToken) {
     const client = oauthClient();
     if (!client) return { ok: false, errorCode: "not_configured" };
@@ -307,11 +282,8 @@ function createGmailAuth({
     return tokens ? { ok: true, tokens } : { ok: false, errorCode: "bad_response" };
   }
 
-  const stillBound = (binding) =>
-    sameLogin(credentials.read(binding.ownerAccountId, "gmail"), binding);
-
   async function refresh(binding, credential) {
-    if (!credential.refreshToken) return markReconnect(binding);
+    if (!credential.refreshToken) return login.markReconnect(binding);
     let result = await requestRefresh(credential.refreshToken);
     // Network errors, 5xx, temporarily_unavailable and unreadable answers
     // may pass. Google refresh tokens aren't single-use, so asking again is
@@ -320,33 +292,34 @@ function createGmailAuth({
       !result.ok &&
       !result.refused &&
       !CLIENT_REFUSED.has(result.errorCode) &&
-      stillBound(binding)
+      login.stillBound(binding)
     ) {
       result = await requestRefresh(credential.refreshToken);
     }
     if (!result.ok) {
       // A reconnect or disconnect that landed while the request was out
       // always wins: nothing is written for the old login.
-      if (!stillBound(binding)) return { ok: false, errorCode: "connection_changed" };
+      if (!login.stillBound(binding)) return { ok: false, errorCode: "connection_changed" };
       // Google's OAuth error codes name no user or token.
       logger?.warn(
         "gmail token refresh failed",
         { errorName: "GoogleOAuthError", errorCode: result.errorCode },
         "connectors"
       );
-      if (OAUTH_LOGIN_GONE.has(result.errorCode)) return markReconnect(binding);
-      if (CLIENT_REFUSED.has(result.errorCode))
+      if (OAUTH_LOGIN_GONE.has(result.errorCode)) return login.markReconnect(binding);
+      if (CLIENT_REFUSED.has(result.errorCode)) {
         return { ok: false, errorCode: "gmail_unavailable" };
+      }
       // A Workspace admin restricted the app after it was connected.
       if (DOMAIN_POLICY_ERRORS.has(result.errorCode)) {
         return { ok: false, errorCode: "domain_policy" };
       }
       // Any other refusal (invalid_scope, …) won't change on its own; signing
       // in again is the one way forward.
-      if (result.refused) return markReconnect(binding);
+      if (result.refused) return login.markReconnect(binding);
       return { ok: false, errorCode: "network" };
     }
-    const next = {
+    return login.saveRefreshed(binding, {
       ...credential,
       accessToken: result.tokens.accessToken,
       expiresAt: result.tokens.expiresAt,
@@ -354,37 +327,17 @@ function createGmailAuth({
       refreshToken: result.tokens.refreshToken ?? credential.refreshToken,
       scope: result.tokens.scope ?? credential.scope,
       needsReconnect: false,
-    };
-    // Saved before use, and only into the slot and generation this refresh
-    // started from: a reconnect or disconnect that landed meanwhile wins.
-    try {
-      credentials.save(binding.ownerAccountId, "gmail", next, binding.generation);
-    } catch (error) {
-      if (error.code === "connection_changed" || error.code === "signed_out") {
-        return { ok: false, errorCode: "connection_changed" };
-      }
-      logger?.warn("gmail token save failed", describeError(error), "connectors");
-      return { ok: false, errorCode: "credential_save_failed" };
-    }
-    return { ok: true, token: next.accessToken, credential: next };
+    });
   }
 
-  async function getAccessToken(binding, { forceRefresh = false } = {}) {
-    const entry = credentials.read(binding?.ownerAccountId ?? null, "gmail");
-    if (!sameLogin(entry, binding)) return { ok: false, errorCode: "connection_changed" };
-    const { credential } = entry;
-    if (credential.needsReconnect) return { ok: false, errorCode: "reconnect_needed" };
-    const fresh = credential.expiresAt - EXPIRY_SKEW_MS > now();
-    if (fresh && !forceRefresh) return { ok: true, token: credential.accessToken, credential };
-    // Concurrent callers for one login share one refresh.
-    const key = `${binding.ownerAccountId}:${binding.generation}`;
-    let pending = refreshes.get(key);
-    if (!pending) {
-      pending = refresh(binding, credential).finally(() => refreshes.delete(key));
-      refreshes.set(key, pending);
-    }
-    return pending;
-  }
+  const login = createBoundLogin({
+    connectorId: "gmail",
+    credentials,
+    sameLogin,
+    isFresh: (credential) => credential.expiresAt - EXPIRY_SKEW_MS > now(),
+    refresh,
+    logger,
+  });
 
   // Revoking the refresh token ends the whole grant, access tokens included.
   // An expired access token can't be revoked (400 invalid_token), so it is
@@ -406,7 +359,14 @@ function createGmailAuth({
     };
   }
 
-  return { authorize, getAccessToken, markReconnect, revoke, statusOf, isConfigured };
+  return {
+    authorize,
+    getAccessToken: login.getAccessToken,
+    markReconnect: login.markReconnect,
+    revoke,
+    statusOf,
+    isConfigured,
+  };
 }
 
 module.exports = {

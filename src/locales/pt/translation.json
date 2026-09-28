@@ -3694,7 +3694,7 @@
       "update_dictionaryName": "Atualizar dicionário",
       "update_snippetsName": "Atualizar snippets",
       "search_notesStatus": "Pesquisando notas...",
-      "email_draftStatus": "Abrindo um rascunho de e-mail...",
+      "email_draftStatus": "Preparando um e-mail...",
       "find_contactStatus": "Procurando contatos...",
       "slack_send_messageStatus": "Preparando uma mensagem do Slack...",
       "web_searchStatus": "Pesquisando na web...",
@@ -3912,6 +3912,8 @@
         "addressHint": "Separe os endereços com vírgulas.",
         "invalidAddress": "{{address}} não é um endereço de e-mail completo como nome@exemplo.com.",
         "missingTo": "Adicione pelo menos um endereço em Para.",
+        "tooManyRecipients": "Um e-mail pode ir para no máximo {{max}} endereços, somando Para e Cc.",
+        "subjectTooLong": "O assunto pode ter no máximo {{max}} caracteres.",
         "unknown": "Não foi possível confirmar o envio. Verifique sua pasta de enviados."
       },
       "openIn": {

@@ -774,6 +774,8 @@
         "addressHint": "افصل بين العناوين بفواصل.",
         "invalidAddress": "{{address}} ليس عنوان بريد إلكتروني كاملًا مثل name@example.com.",
         "missingTo": "أضف عنوانًا واحدًا على الأقل في حقل «إلى».",
+        "tooManyRecipients": "يمكن إرسال البريد الإلكتروني إلى {{max}} عنوانًا كحد أقصى، في حقلي إلى ونسخة معًا.",
+        "subjectTooLong": "اجعل الموضوع {{max}} حرفًا أو أقل.",
         "unknown": "تعذّر تأكيد الإرسال. تحقق من مجلد البريد المُرسل."
       },
       "openIn": {
@@ -1488,7 +1490,7 @@
       "update_dictionaryName": "تحديث القاموس",
       "update_snippetsName": "تحديث المقتطفات",
       "search_notesStatus": "جاري البحث في الملاحظات...",
-      "email_draftStatus": "جارٍ فتح مسودة بريد إلكتروني...",
+      "email_draftStatus": "جارٍ تحضير بريد إلكتروني...",
       "find_contactStatus": "جارٍ البحث عن جهات الاتصال...",
       "slack_send_messageStatus": "جارٍ تحضير رسالة Slack...",
       "web_searchStatus": "جاري البحث في الويب...",

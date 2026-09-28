@@ -3694,7 +3694,7 @@
       "update_dictionaryName": "更新字典",
       "update_snippetsName": "更新片段",
       "search_notesStatus": "正在搜尋筆記...",
-      "email_draftStatus": "正在開啟郵件草稿...",
+      "email_draftStatus": "正在準備郵件...",
       "find_contactStatus": "正在尋找聯絡人...",
       "slack_send_messageStatus": "正在準備 Slack 訊息...",
       "web_searchStatus": "正在搜尋網頁...",
@@ -3912,6 +3912,8 @@
         "addressHint": "多個地址請以逗號分隔。",
         "invalidAddress": "{{address}} 不是完整的電子郵件地址（例如 name@example.com）。",
         "missingTo": "請在收件者中至少新增一個地址。",
+        "tooManyRecipients": "一封郵件最多可寄給 {{max}} 個地址（收件者和副本合計）。",
+        "subjectTooLong": "主旨不能超過 {{max}} 個字元。",
         "unknown": "無法確認是否已傳送，請檢查「寄件備份」資料夾。"
       },
       "openIn": {

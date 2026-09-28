@@ -552,20 +552,22 @@ test("a held verdict that throws on the deadline fallback fails closed", async (
 function registerNoteAttendees(policies) {
   const ipcMain = fakeIpcMain();
   const received = [];
+  const eventIds = [];
   return load().then(({ registerConnectorIpc }) => {
     registerConnectorIpc({
       ipcMain,
       manager: fakeManager(),
       getPolicyState: async () => policies.shift(),
       getAccountScope: () => SCOPE,
-      noteAttendees: (list) => {
+      noteAttendees: (list, eventId) => {
         received.push(list);
+        eventIds.push(eventId);
         return list
           .filter((attendee) => !attendee.self)
           .map(({ email, displayName }) => ({ name: displayName, email }));
       },
     });
-    return { handler: ipcMain.handlers.get("connector-note-attendees"), received };
+    return { handler: ipcMain.handlers.get("connector-note-attendees"), received, eventIds };
   });
 }
 
@@ -632,6 +634,21 @@ test("a note's attendee list is cut at 200, and a malformed or empty one skips t
   assert.deepEqual(await handler({}, []), { attendees: [] });
   assert.deepEqual(await handler({}, [{ displayName: "No address" }]), { attendees: [] });
   assert.equal(received.length, 1);
+  assert.equal(policies.length, 0);
+});
+
+test("a note's calendar event reaches the filter, even with no participants, and a malformed id doesn't", async () => {
+  const policies = ["allowed", "allowed"];
+  const { handler, received, eventIds } = await registerNoteAttendees(policies);
+
+  await handler({}, [], "event-1");
+  await handler({}, [{ email: "dana@example.com" }], { id: "event-1" });
+  // Neither participants nor a usable id: no lookup at all.
+  assert.deepEqual(await handler({}, [], "x".repeat(1025)), { attendees: [] });
+  assert.deepEqual(await handler({}, [], ""), { attendees: [] });
+
+  assert.deepEqual(eventIds, ["event-1", null]);
+  assert.deepEqual(received[0], []);
   assert.equal(policies.length, 0);
 });
 

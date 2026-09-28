@@ -43,6 +43,7 @@ const EMAIL_ADDRESS_PATTERN =
 // (cоrp with a Cyrillic о). A label written in one script (münchen, пример) is
 // allowed; recipientLabel shows its punycode so a whole-script look-alike
 // (аррӏе) stands out.
+const IPV4_HOST = /^\d{1,3}(\.\d{1,3}){3}$/;
 const HIDDEN_CHARACTER = /[\p{Cc}\p{Cf}\p{Cs}\p{Default_Ignorable_Code_Point}]/u;
 const LOOKALIKE_SCRIPTS = [
   /\p{Script=Latin}/u,
@@ -77,7 +78,11 @@ export function isValidEmailAddress(value) {
     return false;
   }
   const domain = value.split("@")[1];
-  return !domain.split(".").some(mixesLookalikeScripts) && asciiDomain(domain) !== null;
+  if (domain.split(".").some(mixesLookalikeScripts)) return false;
+  const ascii = asciiDomain(domain);
+  // The URL parser reads a numeric domain (0x7f.01) as an IPv4 address, so
+  // the card would show one domain and the message go to another.
+  return ascii !== null && !IPV4_HOST.test(ascii);
 }
 
 // How a recipient is shown to the user and the model: a non-ASCII domain also
@@ -87,6 +92,11 @@ export function recipientLabel(address) {
   const ascii = /[^\x00-\x7F]/.test(domain) ? asciiDomain(domain) : null;
   return ascii ? `${address} (${ascii})` : address;
 }
+
+// Gmail's limits for one email, checked by the card before Send and by main
+// again at Send.
+export const MAX_EMAIL_RECIPIENTS = 50;
+export const MAX_EMAIL_SUBJECT_LENGTH = 250;
 
 // What an email card's header and receipt name: the first recipient, and how
 // many more. Never the subject or body.

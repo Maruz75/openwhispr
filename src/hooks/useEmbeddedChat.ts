@@ -17,6 +17,8 @@ interface UseEmbeddedChatOptions {
   noteOwnedByUser?: boolean;
   /** The signed-in user's OpenWhispr address, never listed as an attendee. */
   selfEmail?: string | null;
+  /** The note's calendar event, whose organizer main adds to the attendees. */
+  noteCalendarEventId?: string | null;
 }
 
 interface NoteConversationItem {
@@ -47,6 +49,7 @@ export function useEmbeddedChat({
   noteParticipants,
   noteOwnedByUser = true,
   selfEmail = null,
+  noteCalendarEventId = null,
 }: UseEmbeddedChatOptions): UseEmbeddedChatReturn {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [noteConversations, setNoteConversations] = useState<NoteConversationItem[]>([]);
@@ -91,6 +94,7 @@ export function useEmbeddedChat({
     noteContext,
     allowConnectors: true,
     noteAttendees,
+    noteCalendarEventId,
     onStreamComplete: (_id, content, toolCalls) => {
       persistence.saveAssistantMessage(content, toolCalls);
     },

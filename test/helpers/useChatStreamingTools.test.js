@@ -479,14 +479,16 @@ const NOTE_ATTENDEES = [
 // filter answers with `answer` and records what it was asked.
 async function renderNoteChat(t, hookOptions, { answer, subscribed = true } = {}) {
   const lookups = [];
+  const eventIds = [];
   const rendered = await renderChatStreaming(
     t,
     { noteContext: "Note ID: 7\nTitle: Kickoff", noteAttendees: NOTE_ATTENDEES, ...hookOptions },
     {
       subscribed,
       electronAPI: {
-        connectorNoteAttendees: async (participants) => {
+        connectorNoteAttendees: async (participants, calendarEventId) => {
           lookups.push(participants);
+          eventIds.push(calendarEventId);
           if (answer instanceof Error) throw answer;
           return answer ?? { attendees: [{ name: "Dana Wu", email: "dana@example.com" }] };
         },
@@ -502,7 +504,7 @@ async function renderNoteChat(t, hookOptions, { answer, subscribed = true } = {}
       })();
     }
   );
-  return { ...rendered, lookups, prompts };
+  return { ...rendered, lookups, eventIds, prompts };
 }
 
 test("a note chat with connectors lists the note's attendees and how to read 'everyone'", async (t) => {
@@ -515,6 +517,19 @@ test("a note chat with connectors lists the note's attendees and how to read 'ev
   assert.match(prompts[0], /"everyone"/);
   assert.match(prompts[0], /find_contact/);
   assert.match(prompts[0], /Title: Kickoff/);
+});
+
+test("a meeting note's calendar event goes with the lookup, so main can add its organizer", async (t) => {
+  const { captured, lookups, eventIds, prompts } = await renderNoteChat(
+    t,
+    { ...CONNECTOR_SURFACE, noteAttendees: [], noteCalendarEventId: "event-1" },
+    { answer: { attendees: [{ name: null, email: "lee@example.com" }] } }
+  );
+  await captured.sendToAI("Draft a follow-up to everyone", []);
+
+  assert.deepEqual(lookups, [[]], "an organizer-only meeting is still looked up");
+  assert.deepEqual(eventIds, ["event-1"]);
+  assert.match(prompts[0], /- lee@example\.com/);
 });
 
 test("a chat that offers no connector tools never looks up or lists attendees", async (t) => {

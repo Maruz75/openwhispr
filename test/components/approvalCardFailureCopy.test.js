@@ -144,7 +144,7 @@ test("a Gmail card speaks Gmail: its failures, a bad address, and where to check
   );
   assert.match(
     badAddress,
-    /role="alert"[^>]*>Josh &lt;josh@acme\.test&gt; isn&#x27;t a full email address like name@example\.com\.</
+    /aria-live="polite"[^>]*>Josh &lt;josh@acme\.test&gt; isn&#x27;t a full email address like name@example\.com\.</
   );
 
   const unknown = render(gmailCard({ state: "unknown", url: "https://mail.google.test/#sent" }));

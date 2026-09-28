@@ -216,14 +216,29 @@ function normalizeBinding(binding) {
 // What each declared editable type accepts. A "line" goes into a header
 // (an email's subject), so CR or LF would let it add headers such as Bcc.
 const EDIT_TYPES = {
-  addresses: (value) => (Array.isArray(value) ? value.filter(isString) : undefined),
-  line: (value) => (isString(value) && !/[\r\n]/.test(value) ? value : undefined),
-  text: (value) => (isString(value) ? value : undefined),
+  addresses: (value) => Array.isArray(value) && value.every(isString),
+  line: (value) => isString(value) && !/[\r\n]/.test(value),
+  text: isString,
 };
 
+// A declaration naming a type that doesn't exist would drop that field's
+// edits; it is a build fault, caught when the manager is created.
+function assertEditableTypes(connectors) {
+  for (const connector of connectors) {
+    for (const [action, spec] of Object.entries(connector.actions ?? {})) {
+      for (const [field, type] of Object.entries(spec?.editable ?? {})) {
+        if (!Object.hasOwn(EDIT_TYPES, type)) {
+          throw new Error(`${connector.id}.${action}.${field}: unknown editable type "${type}"`);
+        }
+      }
+    }
+  }
+}
+
 // The card's edits reach the connector only as the action declares them:
-// exactly the declared fields, each of its declared type. An action with no
-// declaration keeps the original title and body.
+// exactly the declared fields. A declared field of the wrong type returns
+// null, so Send refuses instead of sending the prepared value in its place.
+// An action with no declaration keeps the original title and body.
 function sanitizeEdits(edits, editable) {
   const source = edits && typeof edits === "object" ? edits : {};
   if (!editable || typeof editable !== "object") {
@@ -231,9 +246,9 @@ function sanitizeEdits(edits, editable) {
   }
   const clean = {};
   for (const [field, type] of Object.entries(editable)) {
-    const accept = Object.hasOwn(EDIT_TYPES, type) ? EDIT_TYPES[type] : null;
-    const value = accept && Object.hasOwn(source, field) ? accept(source[field]) : undefined;
-    if (value !== undefined) clean[field] = value;
+    if (!Object.hasOwn(source, field) || source[field] === undefined) continue;
+    if (!EDIT_TYPES[type](source[field])) return null;
+    clean[field] = source[field];
   }
   return clean;
 }
@@ -279,6 +294,7 @@ function createConnectorManager({
   onStatusChanged = () => {},
   randomId = () => crypto.randomBytes(16).toString("hex"),
 }) {
+  assertEditableTypes(connectors);
   const byId = new Map(connectors.map((connector) => [connector.id, connector]));
 
   // Writes before a side effect gate it: without a durable row, a crash
@@ -587,6 +603,10 @@ function createConnectorManager({
     // overwrite the in-flight row.
     if (entry.state !== "pending") return { state: "not_sent", reason: "not_pending" };
 
+    const connector = byId.get(entry.connectorId);
+    const cleanEdits = sanitizeEdits(edits, connector.actions[entry.action]?.editable);
+    if (!cleanEdits) return withdrawPending(actionId, "invalid_edit");
+
     const refusal = policyRefusal(policyState);
     // A policy lookup that timed out or went offline says nothing about this
     // action: leave it pending so the user can press Send again.
@@ -597,7 +617,6 @@ function createConnectorManager({
     // Another account (or none) must not send what this one prepared.
     if (entry.accountId !== accountId) return withdrawPending(actionId, "account_changed");
 
-    const connector = byId.get(entry.connectorId);
     const begun = pendingActions.beginCommit(actionId, await currentBinding(connector));
     if (!begun.ok) {
       if (begun.reason === "expired" || begun.reason === "connection_changed") {
@@ -626,12 +645,7 @@ function createConnectorManager({
     let result;
     try {
       result = normalizeCommitResult(
-        await connector.commit(
-          entry.action,
-          entry.payload,
-          sanitizeEdits(edits, connector.actions[entry.action]?.editable),
-          { binding: entry.binding }
-        )
+        await connector.commit(entry.action, entry.payload, cleanEdits, { binding: entry.binding })
       );
     } catch (error) {
       logger.warn(

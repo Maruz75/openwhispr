@@ -2943,9 +2943,13 @@ declare global {
       connectorFindContacts?: (
         query: string
       ) => Promise<{ contacts: ContactMatch[]; hasMore?: boolean; unavailableReason?: string }>;
-      /** A note's participants minus the user and rooms (main applies find_contact's exclusions). */
+      /**
+       * A note's participants, plus its calendar event's organizer, minus the
+       * user and rooms (main applies find_contact's exclusions).
+       */
       connectorNoteAttendees?: (
-        participants: CalendarAttendee[]
+        participants: CalendarAttendee[],
+        calendarEventId?: string | null
       ) => Promise<{ attendees: NoteAttendee[]; unavailableReason?: string }>;
       connectorConnect?: (connectorId: string) => Promise<ConnectorConnectResult>;
       connectorDisconnect?: (connectorId: string) => Promise<ConnectorDisconnectResult>;

@@ -3738,7 +3738,7 @@
       "update_dictionaryName": "Обновить словарь",
       "update_snippetsName": "Обновить сниппеты",
       "search_notesStatus": "Поиск в заметках...",
-      "email_draftStatus": "Открытие черновика письма...",
+      "email_draftStatus": "Подготовка письма...",
       "find_contactStatus": "Поиск контактов...",
       "slack_send_messageStatus": "Подготовка сообщения Slack...",
       "web_searchStatus": "Поиск в интернете...",
@@ -3956,6 +3956,8 @@
         "addressHint": "Разделяйте адреса запятыми.",
         "invalidAddress": "{{address}} — не полный адрес электронной почты вида name@example.com.",
         "missingTo": "Добавьте хотя бы один адрес в поле «Кому».",
+        "tooManyRecipients": "Письмо можно отправить не более чем на {{max}} адресов в полях «Кому» и «Копия» вместе.",
+        "subjectTooLong": "Тема должна быть не длиннее {{max}} символов.",
         "unknown": "Не удалось подтвердить отправку. Проверьте папку «Отправленные»."
       },
       "openIn": {

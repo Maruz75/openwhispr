@@ -2,8 +2,12 @@
 // failed/unknown classification. `failed` needs evidence that Google did not
 // act; anything that may have reached Gmail and sent the email is `unknown`,
 // because Gmail has no idempotency key and a retry could send it twice.
-const { classifyTransportError, classifyHttpStatus } = require("./deliveryClassifier");
-const { describeError } = require("./errorSummary");
+const {
+  classifyTransportError,
+  classifyHttpStatus,
+  transportErrorCode,
+  retryAfterMs,
+} = require("./deliveryClassifier");
 const { MAX_RAW_BYTES } = require("./gmailMime");
 
 const GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
@@ -22,22 +26,6 @@ const FORBIDDEN_REASONS = new Map([
   ["domainPolicy", "domain_policy"],
   ["insufficientPermissions", "reconnect_needed"],
 ]);
-
-function retryAfterMs(header) {
-  if (header === null || header === undefined || header === "") return null;
-  const seconds = Number(header);
-  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
-}
-
-// Electron's net.fetch rejects with "net::ERR_…" in the message and no code.
-// Only the code is kept; the message can quote the URL.
-function transportCode(error) {
-  const { errorName, errorCode } = describeError(error);
-  if (errorCode) return errorCode;
-  if (errorName === "TimeoutError") return "timeout";
-  const match = /net::(ERR_[A-Z_]+)/.exec(String(error?.message ?? ""));
-  return match ? match[1] : "network_error";
-}
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -80,7 +68,7 @@ function createGmailApi({
         failure: {
           ok: false,
           outcome: classifyTransportError(error),
-          errorCode: transportCode(error),
+          errorCode: transportErrorCode(error),
         },
       };
     }
@@ -115,6 +103,8 @@ function createGmailApi({
           : { ok: false, outcome: "unknown", errorCode: "bad_response", status };
     } else if (status === 400) {
       result = failed("invalid_message");
+    } else if (status === 413) {
+      result = failed("too_long");
     } else if (status === 401) {
       // The connector refreshes the same login and retries once.
       result = failed("unauthorized");

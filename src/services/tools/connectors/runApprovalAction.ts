@@ -15,7 +15,11 @@ export async function runApprovalAction(
   options: { unknownGuidance?: string } = {}
 ): Promise<ToolResult> {
   if (!context) return unavailableResult("no_chat_context");
-  const prepared = await window.electronAPI?.connectorPrepare?.(connectorId, action, args);
+  // A rejected IPC call reads as unavailable, so the caller's turn slot is
+  // given back and the model is told not to retry.
+  const prepared = await window.electronAPI
+    ?.connectorPrepare?.(connectorId, action, args)
+    .catch(() => undefined);
   if (!prepared) return unavailableResult("connectors_unavailable");
   if (prepared.status !== "ready") return prepareFailureResult(prepared, connectorId);
 

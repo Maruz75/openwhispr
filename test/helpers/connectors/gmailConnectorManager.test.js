@@ -238,19 +238,20 @@ test("Send commits exactly the card's fields, and the receipt holds recipients o
 });
 
 test("edits that would add a header never reach Gmail", async () => {
-  // The card's Subject is one line, so the manager drops a subject with a
-  // line break and the card's own subject goes out.
+  // The card's Subject is one line, so the manager refuses a subject with a
+  // line break: nothing goes out, not even under the prepared subject.
   const subjectEdit = await setup({ credential: CONNECTED, script: { [SEND]: [SENT] } });
   const first = await subjectEdit.manager.prepare("gmail", "send", EMAIL, ALLOWED);
-  const sent = await subjectEdit.manager.commit(
-    first.actionId,
-    { subject: "Hi\r\nBcc: spy@evil.test" },
-    ALLOWED
+  assert.deepEqual(
+    await subjectEdit.manager.commit(
+      first.actionId,
+      { subject: "Hi\r\nBcc: spy@evil.test" },
+      ALLOWED
+    ),
+    { state: "not_sent", reason: "invalid_edit" }
   );
-  assert.equal(sent.state, "sent");
-  const message = decodeMessage(hits(subjectEdit.google, SEND)[0].json.raw);
-  assert.equal(header(message, "Subject"), "Subject: Q3 numbers");
-  assert.equal(header(message, "Bcc"), null);
+  assert.equal(hits(subjectEdit.google, SEND).length, 0);
+  assert.equal(subjectEdit.log.rows.get(first.actionId).state, "cancelled");
 
   // An address with a line break reaches the connector, which refuses it.
   const addressEdit = await setup({ credential: CONNECTED, script: { [SEND]: [SENT] } });

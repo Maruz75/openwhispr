@@ -1,11 +1,15 @@
 // Gmail send connector (spec §5.1), the second approval connector. The
 // model only prepares; the card's Send commits exactly what the card shows,
 // rebuilt and re-checked here.
-const { isValidEmailAddress, bareEmailAddress, recipientsLabel } = require("./emailCompose");
+const {
+  isValidEmailAddress,
+  bareEmailAddress,
+  recipientsLabel,
+  MAX_EMAIL_RECIPIENTS: MAX_RECIPIENTS,
+  MAX_EMAIL_SUBJECT_LENGTH: MAX_SUBJECT_LENGTH,
+} = require("./emailCompose");
 const { buildRawMessage } = require("./gmailMime");
 
-const MAX_RECIPIENTS = 50;
-const MAX_SUBJECT_LENGTH = 250;
 const LINE_BREAK = /[\r\n]/;
 const TRANSPORT_CODE = /^(E[A-Z0-9_]+|ERR_[A-Z0-9_]+|UND_ERR_[A-Z0-9_]+|timeout|network_error)$/;
 

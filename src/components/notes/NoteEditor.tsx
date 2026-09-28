@@ -402,6 +402,7 @@ export default function NoteEditor({
     noteParticipants: note.participants,
     noteOwnedByUser: ownsNote(note, user?.id),
     selfEmail: user?.email ?? null,
+    noteCalendarEventId: note.calendar_event_id,
   });
   const titleRef = useRef<HTMLDivElement>(null);
   const prevNoteIdRef = useRef<number>(note.id);

@@ -549,58 +549,63 @@ test("edits are reduced to string title and body", async () => {
 const EMAIL_EDITABLE = { to: "addresses", cc: "addresses", subject: "line", body: "text" };
 
 async function commitEdits(editable, edits) {
-  const { manager, fake } = await setup({
+  const { manager, fake, log } = await setup({
     actions: { post: { kind: "approval", ...(editable ? { editable } : {}) } },
   });
   const { actionId } = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
-  await manager.commit(actionId, edits, ALLOWED);
-  return fake.calls.commit[0].edits;
+  const result = await manager.commit(actionId, edits, ALLOWED);
+  return { edits: fake.calls.commit[0]?.edits, result, row: log.rows.get(actionId) };
 }
 
-test("a declared action receives exactly its declared fields, each of its declared type", async () => {
-  assert.deepEqual(
-    await commitEdits(EMAIL_EDITABLE, {
-      to: ["josh@acme.test", 7, null, "dana@acme.test"],
-      cc: "sam@acme.test",
-      subject: "Q3 numbers",
-      body: "Numbers attached.",
-      title: "Not declared",
-      bcc: ["evil@attacker.test"],
-    }),
-    {
-      to: ["josh@acme.test", "dana@acme.test"],
-      subject: "Q3 numbers",
-      body: "Numbers attached.",
-    }
-  );
-});
-
-test("a line field containing CR or LF is dropped, so it can't add a header", async () => {
-  for (const subject of ["Q3\r\nBcc: evil@attacker.test", "Q3\nBcc: x", "Q3\rx"]) {
-    assert.deepEqual(
-      await commitEdits(EMAIL_EDITABLE, { to: ["josh@acme.test"], subject, body: "Hi" }),
-      { to: ["josh@acme.test"], body: "Hi" },
-      JSON.stringify(subject)
-    );
-  }
+test("a declared action receives exactly its declared fields", async () => {
+  const { edits } = await commitEdits(EMAIL_EDITABLE, {
+    to: ["josh@acme.test", "dana@acme.test"],
+    subject: "Q3 numbers",
+    body: "Numbers attached.",
+    title: "Not declared",
+    bcc: ["evil@attacker.test"],
+  });
+  assert.deepEqual(edits, {
+    to: ["josh@acme.test", "dana@acme.test"],
+    subject: "Q3 numbers",
+    body: "Numbers attached.",
+  });
   // An empty line is still a line; the connector decides whether it may be empty.
-  assert.deepEqual(await commitEdits(EMAIL_EDITABLE, { subject: "" }), { subject: "" });
+  assert.deepEqual((await commitEdits(EMAIL_EDITABLE, { subject: "" })).edits, { subject: "" });
+  assert.deepEqual((await commitEdits(EMAIL_EDITABLE, "not an object")).edits, {});
 });
 
-test("address lists must be arrays, and an unknown declared type keeps nothing", async () => {
-  assert.deepEqual(
-    await commitEdits(EMAIL_EDITABLE, { to: "josh@acme.test", cc: { 0: "a@b.test" } }),
-    {}
+test("a declared field of the wrong type refuses Send instead of sending the prepared value", async () => {
+  for (const edits of [
+    { subject: "Q3\r\nBcc: evil@attacker.test" },
+    { subject: "Q3\nBcc: x" },
+    { subject: "Q3\rx" },
+    { to: "josh@acme.test" },
+    { cc: { 0: "a@b.test" } },
+    { to: ["josh@acme.test", 7] },
+    { body: 42 },
+  ]) {
+    const { edits: sent, result, row } = await commitEdits(EMAIL_EDITABLE, edits);
+    assert.equal(sent, undefined, `${JSON.stringify(edits)}: the connector never commits`);
+    assert.deepEqual(result, { state: "not_sent", reason: "invalid_edit" });
+    assert.equal(row.state, "cancelled");
+    assert.equal(row.errorCode, "invalid_edit");
+  }
+});
+
+test("an unknown editable type is a build fault, caught when the manager is created", async () => {
+  await assert.rejects(
+    setup({ actions: { post: { kind: "approval", editable: { body: "html" } } } }),
+    /fake\.post\.body: unknown editable type "html"/
   );
-  assert.deepEqual(await commitEdits({ body: "html" }, { body: "<b>hi</b>" }), {});
-  assert.deepEqual(await commitEdits(EMAIL_EDITABLE, "not an object"), {});
 });
 
 test("a body-only declaration (Slack's) drops the title; no declaration keeps title and body", async () => {
-  assert.deepEqual(await commitEdits({ body: "text" }, { title: "T", body: "B", to: ["x"] }), {
-    body: "B",
-  });
-  assert.deepEqual(await commitEdits(null, { title: "T", body: "B", to: ["x"] }), {
+  assert.deepEqual(
+    (await commitEdits({ body: "text" }, { title: "T", body: "B", to: ["x"] })).edits,
+    { body: "B" }
+  );
+  assert.deepEqual((await commitEdits(null, { title: "T", body: "B", to: ["x"] })).edits, {
     title: "T",
     body: "B",
   });

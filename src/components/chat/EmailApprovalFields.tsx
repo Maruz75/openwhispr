@@ -1,56 +1,11 @@
 import { useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { recipientLabel } from "../../helpers/connectors/emailCompose";
 import {
-  bareEmailAddress,
-  isValidEmailAddress,
-  recipientLabel,
-} from "../../helpers/connectors/emailCompose";
-
-/** An email card's fields, exactly as Send commits them. */
-export interface EmailFields {
-  to: string[];
-  cc: string[];
-  subject: string;
-  body: string;
-}
-
-/**
- * The addresses in a comma-separated To or Cc input, in order. Each is kept
- * as typed, so a bad one is named on the card instead of silently dropped.
- */
-export function parseAddressList(text: string): string[] {
-  return text
-    .split(",")
-    .map((part) => part.trim())
-    .filter((part) => part !== "");
-}
-
-/**
- * What blocks Send. A display-name form ("Josh <josh@acme.com>") counts as
- * invalid too: main would send to the bare address, which isn't what the
- * card shows.
- */
-export function emailFieldProblems(fields: EmailFields): { invalid: string[]; missingTo: boolean } {
-  const invalid = [...fields.to, ...fields.cc].filter(
-    (address) =>
-      bareEmailAddress(address) !== address.normalize("NFC") || !isValidEmailAddress(address)
-  );
-  return { invalid, missingTo: fields.to.length === 0 };
-}
-
-/** The email layout's fields, read from a draft's generic fields map. */
-export function toEmailFields(fields: Record<string, string | string[]>): EmailFields {
-  const list = (value: string | string[] | undefined): string[] =>
-    Array.isArray(value) ? value : [];
-  const text = (value: string | string[] | undefined): string =>
-    typeof value === "string" ? value : "";
-  return {
-    to: list(fields.to),
-    cc: list(fields.cc),
-    subject: text(fields.subject),
-    body: text(fields.body),
-  };
-}
+  parseAddressList,
+  type EmailFieldProblems,
+  type EmailFields,
+} from "../../utils/emailApprovalFields";
 
 // A subject is one header line. A pasted line break becomes a space here,
 // so the card never shows a subject main would refuse to send.
@@ -65,16 +20,39 @@ interface EmailApprovalFieldsProps {
   fields: EmailFields;
   editing: boolean;
   disabled: boolean;
+  /** What blocks Send, and the id of the text that says why. */
+  problems: EmailFieldProblems | null;
+  problemsId: string;
   onChange: (patch: Partial<EmailFields>) => void;
+}
+
+// Which fields a problem is about, for aria-invalid.
+function invalidFields(
+  fields: EmailFields,
+  problems: EmailFieldProblems | null
+): { to: boolean; cc: boolean; subject: boolean } {
+  const hasInvalid = (list: string[]): boolean =>
+    Boolean(problems && list.some((address) => problems.invalid.includes(address)));
+  const tooMany = Boolean(problems?.tooManyRecipients);
+  return {
+    to: hasInvalid(fields.to) || Boolean(problems?.missingTo) || tooMany,
+    cc: hasInvalid(fields.cc) || tooMany,
+    subject: Boolean(problems?.subjectTooLong),
+  };
 }
 
 // Mounted only while editing, so every edit session starts from the draft.
 function EmailFieldsEditor({
   fields,
   disabled,
+  problems,
+  problemsId,
   onChange,
 }: Omit<EmailApprovalFieldsProps, "editing">): ReactElement {
   const { t } = useTranslation();
+  const invalid = invalidFields(fields, problems);
+  const validity = (isInvalid: boolean): { "aria-invalid"?: true; "aria-describedby"?: string } =>
+    isInvalid ? { "aria-invalid": true, "aria-describedby": problemsId } : {};
   // To and Cc are edited as text: re-joining the parsed list on every
   // keystroke would swallow the comma the user just typed.
   const [toText, setToText] = useState(() => fields.to.join(", "));
@@ -86,6 +64,7 @@ function EmailFieldsEditor({
         <span className={LABEL_CLASS}>{t("connectors.approval.email.toLabel")}</span>
         <input
           aria-label={t("connectors.approval.email.toLabel")}
+          {...validity(invalid.to)}
           type="text"
           className={FIELD_CLASS}
           dir="auto"
@@ -101,6 +80,7 @@ function EmailFieldsEditor({
         <span className={LABEL_CLASS}>{t("connectors.approval.email.ccLabel")}</span>
         <input
           aria-label={t("connectors.approval.email.ccLabel")}
+          {...validity(invalid.cc)}
           type="text"
           className={FIELD_CLASS}
           dir="auto"
@@ -117,6 +97,7 @@ function EmailFieldsEditor({
         <span className={LABEL_CLASS}>{t("connectors.approval.email.subjectLabel")}</span>
         <input
           aria-label={t("connectors.approval.email.subjectLabel")}
+          {...validity(invalid.subject)}
           type="text"
           className={FIELD_CLASS}
           dir="auto"
@@ -174,10 +155,18 @@ export function EmailApprovalFields({
   fields,
   editing,
   disabled,
+  problems,
+  problemsId,
   onChange,
 }: EmailApprovalFieldsProps): ReactElement {
   return editing ? (
-    <EmailFieldsEditor fields={fields} disabled={disabled} onChange={onChange} />
+    <EmailFieldsEditor
+      fields={fields}
+      disabled={disabled}
+      problems={problems}
+      problemsId={problemsId}
+      onChange={onChange}
+    />
   ) : (
     <EmailFieldsView fields={fields} />
   );
