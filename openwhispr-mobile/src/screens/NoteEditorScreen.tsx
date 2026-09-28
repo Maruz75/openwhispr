@@ -40,6 +40,7 @@ import { ConflictBanner } from '@/components/notes/ConflictBanner';
 import { VoiceSetupBanner } from '@/components/notes/VoiceSetupBanner';
 import { ThatsMeSheet } from '@/components/notes/ThatsMeSheet';
 import { shouldOfferVoiceSetup, voiceSetupCandidates } from '@/lib/notes/voiceSetupPrompt';
+import { SpeakerProfileOwnerAlreadyExistsError } from '@/data/local/notesRepository';
 import { NoteChatSheet } from '@/components/notes/NoteChatSheet';
 import { isDictationAgentEnabled } from '@/lib/dictationAgent';
 import { SpeakerTranscript } from '@/components/notes/SpeakerTranscript';
@@ -149,7 +150,10 @@ export default function NoteEditorScreen() {
   const voiceProfiles = useNotesStore((s) => s.voiceProfiles);
   const meetingSpeakerEmbeddings = useNotesStore((s) => s.meetingSpeakerEmbeddingsByNoteId);
   const claimSpeakerAsMe = useNotesStore((s) => s.claimSpeakerAsMe);
-  const voiceSetupDismissed = useConfigStore((s) => !!s.config?.voiceProfilePromptDismissedAt);
+  // Until the config loads, treat the banner as dismissed so it can't flash.
+  const voiceSetupDismissed = useConfigStore(
+    (s) => !s.config || !!s.config.voiceSetupBannerDismissedAt,
+  );
   const updateConfig = useConfigStore((s) => s.updateConfig);
   const note = useMemo<Note | null>(() => {
     if (Number.isNaN(noteId)) return null;
@@ -322,23 +326,25 @@ export default function NoteEditorScreen() {
     [speakers, transcriptSegments],
   );
   const [voiceSetupVisible, setVoiceSetupVisible] = useState(false);
-  const showVoiceSetupBanner = shouldOfferVoiceSetup({
-    isOnDeviceMeeting:
-      note?.noteType === 'meeting' && isManagedMeetingAudioUri(note.id, note.sourceFile),
-    transcriptStatus,
-    speakers,
-    hasOwnerProfile: voiceProfiles.some((profile) => profile.isOwner === 1),
-    dismissed: voiceSetupDismissed,
-  });
+  const readScriptAfterSheetRef = useRef(false);
   const voiceCandidates = useMemo(
     () =>
       voiceSetupCandidates({
         segments: transcriptSegments,
         speakers,
         embeddingsByLabel: note ? meetingSpeakerEmbeddings[note.id] : undefined,
+        profileIds: new Set(voiceProfiles.map((profile) => profile.id)),
       }),
-    [meetingSpeakerEmbeddings, note, speakers, transcriptSegments],
+    [meetingSpeakerEmbeddings, note, speakers, transcriptSegments, voiceProfiles],
   );
+  const showVoiceSetupBanner = shouldOfferVoiceSetup({
+    isOnDeviceMeeting:
+      note?.noteType === 'meeting' && isManagedMeetingAudioUri(note.id, note.sourceFile),
+    transcriptStatus,
+    hasOwnerProfile: voiceProfiles.some((profile) => profile.isOwner === 1),
+    dismissed: voiceSetupDismissed,
+    candidateCount: voiceCandidates.length,
+  });
   useEffect(() => {
     setVoiceSetupVisible(false);
   }, [noteId]);
@@ -481,25 +487,45 @@ export default function NoteEditorScreen() {
         claimSpeakerAsMe(note.id, speakerId);
         safeHaptics('success');
         return true;
-      } catch {
-        Alert.alert(
-          "Couldn't save your voice",
-          'Read a short script instead to teach OpenWhispr your voice.',
-        );
+      } catch (error) {
+        if (error instanceof SpeakerProfileOwnerAlreadyExistsError) {
+          Alert.alert(
+            "You've already taught OpenWhispr your voice",
+            'Open it in Voice Profiles and choose Retrain Voice.',
+          );
+        } else {
+          Alert.alert(
+            "Couldn't save your voice",
+            'Read a short script instead to teach OpenWhispr your voice.',
+          );
+        }
         return false;
       }
     },
     [claimSpeakerAsMe, note],
   );
 
+  const openVoiceScript = useCallback(() => {
+    router.push(`/(tabs)/(notes)/voice-enrollment?owner=1&noteId=${noteId}`);
+  }, [noteId, router]);
+
+  // iOS drops a push made while a page sheet is still sliding away, so it waits for the
+  // sheet's onDismiss; Android's Modal has no onDismiss.
   const handleReadVoiceScript = useCallback(() => {
     setVoiceSetupVisible(false);
-    router.push('/(tabs)/(notes)/voice-enrollment?owner=1');
-  }, [router]);
+    if (Platform.OS === 'ios') readScriptAfterSheetRef.current = true;
+    else openVoiceScript();
+  }, [openVoiceScript]);
+
+  const handleVoiceSetupDismissed = useCallback(() => {
+    if (!readScriptAfterSheetRef.current) return;
+    readScriptAfterSheetRef.current = false;
+    openVoiceScript();
+  }, [openVoiceScript]);
 
   const dismissVoiceSetup = useCallback(() => {
     safeHaptics('light');
-    updateConfig({ voiceProfilePromptDismissedAt: new Date().toISOString() }).catch(() => {});
+    updateConfig({ voiceSetupBannerDismissedAt: new Date().toISOString() });
   }, [updateConfig]);
 
   const maybeLearnCorrections = useCallback(
@@ -1570,6 +1596,7 @@ export default function NoteEditorScreen() {
         onClaim={handleClaimVoice}
         onReadScript={handleReadVoiceScript}
         onClose={() => setVoiceSetupVisible(false)}
+        onDismissed={handleVoiceSetupDismissed}
       />
     </View>
   );

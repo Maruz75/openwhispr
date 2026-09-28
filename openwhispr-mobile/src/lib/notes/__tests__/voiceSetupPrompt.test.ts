@@ -1,5 +1,9 @@
 import type { Segment, Speaker } from '@/data/types';
-import { shouldOfferVoiceSetup, voiceSetupCandidates } from '../voiceSetupPrompt';
+import {
+  formatSpeakingTime,
+  shouldOfferVoiceSetup,
+  voiceSetupCandidates,
+} from '../voiceSetupPrompt';
 
 const speaker = (overrides: Partial<Speaker> = {}): Speaker =>
   ({
@@ -44,14 +48,14 @@ const offer = (overrides: Partial<Parameters<typeof shouldOfferVoiceSetup>[0]> =
   shouldOfferVoiceSetup({
     isOnDeviceMeeting: true,
     transcriptStatus: 'done',
-    speakers: [speaker()],
     hasOwnerProfile: false,
     dismissed: false,
+    candidateCount: 1,
     ...overrides,
   });
 
 describe('shouldOfferVoiceSetup', () => {
-  it('offers setup on a finished on-device meeting with an unnamed speaker', () => {
+  it('offers setup on a finished on-device meeting with a speaker you can claim', () => {
     expect(offer()).toBe(true);
   });
 
@@ -68,10 +72,8 @@ describe('shouldOfferVoiceSetup', () => {
     expect(offer({ dismissed: true })).toBe(false);
   });
 
-  it('needs at least one speaker that is still unnamed and unlinked', () => {
-    expect(offer({ speakers: [speaker({ displayName: 'Alice' })] })).toBe(false);
-    expect(offer({ speakers: [speaker({ profileId: 3 })] })).toBe(false);
-    expect(offer({ speakers: [] })).toBe(false);
+  it('stays hidden when no speaker can be claimed, such as after a restart', () => {
+    expect(offer({ candidateCount: 0 })).toBe(false);
   });
 });
 
@@ -98,9 +100,14 @@ describe('voiceSetupCandidates', () => {
     }),
   ];
   const embeddingsByLabel = { speaker_0: [0.1, 0.2], speaker_1: [0.3, 0.4] };
+  const profileIds = new Set<number>([4]);
+  const candidates = (
+    overrides: Partial<Parameters<typeof voiceSetupCandidates>[0]> = {},
+  ): ReturnType<typeof voiceSetupCandidates> =>
+    voiceSetupCandidates({ segments, speakers, embeddingsByLabel, profileIds, ...overrides });
 
   it('lists speakers with 10 s of speech and a sample, longest speaker first', () => {
-    expect(voiceSetupCandidates({ segments, speakers, embeddingsByLabel })).toEqual([
+    expect(candidates()).toEqual([
       {
         speakerId: 11,
         name: 'Speaker 2',
@@ -118,18 +125,50 @@ describe('voiceSetupCandidates', () => {
 
   it('leaves out speakers under 10 s of speech', () => {
     const short = [segment({ speakerLabel: 'speaker_0', startMs: 0, endMs: 9999 })];
-    expect(voiceSetupCandidates({ segments: short, speakers, embeddingsByLabel })).toEqual([]);
+    expect(candidates({ segments: short })).toEqual([]);
   });
 
   it('leaves out speakers without a sample from this meeting', () => {
-    expect(
-      voiceSetupCandidates({ segments, speakers, embeddingsByLabel: { speaker_1: [] } }),
-    ).toEqual([]);
-    expect(voiceSetupCandidates({ segments, speakers, embeddingsByLabel: undefined })).toEqual([]);
+    expect(candidates({ embeddingsByLabel: { speaker_1: [] } })).toEqual([]);
+    expect(candidates({ embeddingsByLabel: undefined })).toEqual([]);
   });
 
   it('leaves out speakers already linked to a voice profile', () => {
     const linked = [speaker({ id: 11, speakerLabel: 'speaker_1', profileId: 4 })];
-    expect(voiceSetupCandidates({ segments, speakers: linked, embeddingsByLabel })).toEqual([]);
+    expect(candidates({ speakers: linked })).toEqual([]);
+  });
+
+  it('lists a speaker whose voice profile was deleted, so it can be claimed again', () => {
+    const orphaned = [
+      speaker({ id: 11, speakerLabel: 'speaker_1', sortOrder: 1, displayName: 'Me', profileId: 9 }),
+    ];
+    expect(candidates({ speakers: orphaned }).map((candidate) => candidate.speakerId)).toEqual([
+      11,
+    ]);
+  });
+
+  it('lists a speaker you already named, by that name', () => {
+    const named = [speaker({ id: 11, speakerLabel: 'speaker_1', displayName: 'Chad' })];
+    expect(candidates({ speakers: named }).map((candidate) => candidate.name)).toEqual(['Chad']);
+  });
+
+  it('leaves out a sample that could never match anyone', () => {
+    expect(candidates({ embeddingsByLabel: { speaker_0: [0, 0], speaker_1: [NaN, 1] } })).toEqual(
+      [],
+    );
+  });
+
+  it('names speakers the way the transcript does, even when an earlier one is left out', () => {
+    const [only] = candidates({ embeddingsByLabel: { speaker_1: [0.3, 0.4] } });
+    expect(only.name).toBe('Speaker 2');
+  });
+});
+
+describe('formatSpeakingTime', () => {
+  it('reads as a duration', () => {
+    expect(formatSpeakingTime(12_000)).toBe('12 sec');
+    expect(formatSpeakingTime(59_400)).toBe('59 sec');
+    expect(formatSpeakingTime(65_000)).toBe('1 min');
+    expect(formatSpeakingTime(28 * 60_000)).toBe('28 min');
   });
 });

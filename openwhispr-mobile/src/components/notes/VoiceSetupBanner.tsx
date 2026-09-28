@@ -21,7 +21,7 @@ export function VoiceSetupBanner({ onSetUp, onDismiss }: VoiceSetupBannerProps):
       <View className="min-w-0 flex-1">
         <Text className="text-[15px] font-semibold text-label">Teach OpenWhispr your voice</Text>
         <Text className="text-[13px] leading-[18px] text-secondaryLabel">
-          Your next meetings will label you as Me instead of Speaker 1.
+          Your next on-device meetings will label you as Me.
         </Text>
       </View>
       <Pressable
@@ -36,7 +36,7 @@ export function VoiceSetupBanner({ onSetUp, onDismiss }: VoiceSetupBannerProps):
       <Pressable
         onPress={onDismiss}
         accessibilityRole="button"
-        accessibilityLabel="Dismiss"
+        accessibilityLabel="Dismiss voice setup"
         testID="voice-setup-banner-dismiss"
         hitSlop={8}
         className="h-11 w-8 items-center justify-center"

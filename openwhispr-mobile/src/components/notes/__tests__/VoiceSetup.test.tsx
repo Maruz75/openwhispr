@@ -1,4 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { AccessibilityInfo } from 'react-native';
 import { VoiceSetupBanner } from '../VoiceSetupBanner';
 import { ThatsMeSheet } from '../ThatsMeSheet';
 
@@ -29,7 +30,10 @@ describe('VoiceSetupBanner', () => {
     );
 
     expect(getByText('Teach OpenWhispr your voice')).toBeTruthy();
-    expect(getByText('Your next meetings will label you as Me instead of Speaker 1.')).toBeTruthy();
+    expect(getByText('Your next on-device meetings will label you as Me.')).toBeTruthy();
+    expect(getByTestId('voice-setup-banner-dismiss').props.accessibilityLabel).toBe(
+      'Dismiss voice setup',
+    );
     fireEvent.press(getByTestId('voice-setup-banner-set-up'));
     fireEvent.press(getByTestId('voice-setup-banner-dismiss'));
 
@@ -54,17 +58,20 @@ describe('ThatsMeSheet', () => {
 
     expect(getByText('Which speaker is you?')).toBeTruthy();
     expect(getByText('Speaker 2')).toBeTruthy();
-    expect(getByText('Spoke for 1:05')).toBeTruthy();
+    expect(getByText('Spoke for 1 min')).toBeTruthy();
+    expect(getByText('Spoke for 12 sec')).toBeTruthy();
     expect(getByText('“Let us ship on Friday.”')).toBeTruthy();
   });
 
-  it('claims the tapped speaker and confirms', () => {
+  it('claims the tapped speaker and confirms, out loud too', () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
     const { getByTestId, getByText } = render(<ThatsMeSheet {...baseProps} />);
 
     fireEvent.press(getByTestId('thats-me-11'));
 
     expect(baseProps.onClaim).toHaveBeenCalledWith(11);
     expect(getByText('Got it')).toBeTruthy();
+    expect(announce).toHaveBeenCalledWith(expect.stringContaining('Got it'));
     fireEvent.press(getByTestId('thats-me-done'));
     expect(baseProps.onClose).toHaveBeenCalled();
   });
@@ -102,19 +109,29 @@ describe('ThatsMeSheet', () => {
     expect(queryByTestId('thats-me-11')).toBeNull();
     expect(
       getByText(
-        'No speaker in this meeting has a long enough voice sample. Read a short script instead; it takes about 20 seconds.',
+        "There's no voice sample from this meeting to use. Read a short script instead; it takes about 20 seconds.",
       ),
     ).toBeTruthy();
     fireEvent.press(getByTestId('thats-me-read-script'));
     expect(baseProps.onReadScript).toHaveBeenCalled();
   });
 
-  it('shows the privacy note that the tap agrees to', () => {
-    const { getByText } = render(<ThatsMeSheet {...baseProps} />);
-    expect(
-      getByText(
-        'Your voice profile stays on this device and is only used to recognize you in meetings you record. You can delete it in Voice Profiles.',
-      ),
-    ).toBeTruthy();
+  it('shows the privacy note that the tap agrees to above the speakers', () => {
+    const { getByText, toJSON } = render(<ThatsMeSheet {...baseProps} />);
+    const note =
+      "We'll use your voice from this meeting to make a voice profile. It stays on this device and is only used to recognize you in meetings you record. You can delete it in Voice Profiles.";
+    expect(getByText(note)).toBeTruthy();
+    // Visible before any speaker, so it's on screen when you tap That's me.
+    const rendered = JSON.stringify(toJSON());
+    expect(rendered.indexOf(note)).toBeLessThan(rendered.indexOf('Speaker 2'));
+  });
+
+  it('tells the screen once the sheet has finished closing', () => {
+    const onDismissed = jest.fn();
+    const { UNSAFE_getByType } = render(<ThatsMeSheet {...baseProps} onDismissed={onDismissed} />);
+
+    UNSAFE_getByType(require('react-native').Modal).props.onDismiss();
+
+    expect(onDismissed).toHaveBeenCalledTimes(1);
   });
 });
