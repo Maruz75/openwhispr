@@ -16,8 +16,12 @@ import { usePolicyStore } from "../../stores/policyStore";
 import { getUsageState } from "../../lib/usageStore";
 import { readIsSubscribed } from "../../lib/subscriptionFlag";
 import { hasConnectorPlan } from "../../utils/connectorEligibility";
-import { resolveEmailDraftTarget } from "../../utils/emailDraftTarget";
-import { ensureConnectorStatus, isConnectorReady } from "../../stores/connectorStatusStore";
+import { gmailSendStatus, resolveEmailDraftTarget } from "../../utils/emailDraftTarget";
+import {
+  ensureConnectorStatus,
+  isConnectorReady,
+  useConnectorStatusStore,
+} from "../../stores/connectorStatusStore";
 import {
   appendDictionarySuffix,
   appendPlainTextResponseSuffix,
@@ -357,7 +361,13 @@ export function useChatStreaming({
           if (connectorsAvailable) await ensureConnectorStatus();
           const slackReady = connectorsAvailable && isConnectorReady("slack");
           const connectors = connectorsAvailable
-            ? { emailDraftTarget: resolveEmailDraftTarget(settings), slackReady }
+            ? {
+                emailDraftTarget: resolveEmailDraftTarget({
+                  ...settings,
+                  gmailStatus: gmailSendStatus(useConnectorStatusStore.getState().statuses.gmail),
+                }),
+                slackReady,
+              }
             : undefined;
           // Triggers ride in the tool description, so a snippet edit rebuilds the registry.
           const snippetKey = settings.snippets.map((s) => s.trigger).join("|");

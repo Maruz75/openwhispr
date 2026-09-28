@@ -3930,7 +3930,8 @@
         "gmail": "Gmail",
         "outlookWork": "Outlook (lavoro o scuola)",
         "outlookPersonal": "Outlook.com",
-        "mailto": "App di posta predefinita"
+        "mailto": "App di posta predefinita",
+        "gmailSend": "Invia dalla chat (Gmail)"
       }
     },
     "slack": {
@@ -4040,7 +4041,8 @@
       },
       "unknownSent": {
         "gmail": "Impossibile confermare l'invio dell'email a {{destination}}. Controlla la cartella Posta inviata di Gmail."
-      }
+      },
+      "gmailDraftLimit": "Si possono preparare solo {{count}} email per richiesta."
     }
   },
   "calendar": {

@@ -53,7 +53,7 @@ const TOOL_INSTRUCTIONS: Record<string, string> = {
   find_contact:
     "Use find_contact to look up a person's email address by name before drafting an email to them.",
   email_draft:
-    "Use email_draft to open a pre-filled email draft for the user to review and send themselves; it never sends.",
+    "Use email_draft to draft an email to full email addresses; its description says whether the user sends it from a card in the chat or from their own email app.",
   slack_send_message:
     "Use slack_send_message to post to a Slack channel or person as the user; the user approves each message on a card before it is sent. For a person, pass their name, @handle or email address.",
 };
@@ -82,7 +82,7 @@ const CONNECTOR_TOOL_NAMES = ["find_contact", "email_draft", "slack_send_message
 // Each result that must not be retried says so in its own guidance, so the
 // rule needs no list of statuses (and grows with no new connector).
 const CONNECTOR_TOOL_RULES =
-  "Follow the guidance and message in each connector result, including when not to retry. When a result leaves it unclear who or what the user meant (a needs_clarification result that lists candidates, or find_contact finding no one or several people), ask the user before acting.";
+  "Follow the guidance and message in each connector result, including when not to retry. When a result leaves it unclear who or what the user meant (a needs_clarification result that lists candidates, or find_contact finding no one or several people), ask the user before acting. Never say an email or message was sent unless the result's status is sent.";
 
 export function getAgentSystemPrompt(availableTools?: string[], noteContext?: string): string {
   let prompt = resolvePrompt("chatAgent", { agentName: null });

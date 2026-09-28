@@ -3930,7 +3930,8 @@
         "gmail": "Gmail",
         "outlookWork": "Outlook（職場または学校）",
         "outlookPersonal": "Outlook.com",
-        "mailto": "既定のメールアプリ"
+        "mailto": "既定のメールアプリ",
+        "gmailSend": "チャットから送信（Gmail）"
       }
     },
     "slack": {
@@ -4040,7 +4041,8 @@
       },
       "unknownSent": {
         "gmail": "{{destination}} 宛てのメールが送信されたか確認できませんでした。Gmailの送信済みフォルダを確認してください。"
-      }
+      },
+      "gmailDraftLimit": "1回のリクエストで準備できるメールは{{count}}件までです。"
     }
   },
   "calendar": {

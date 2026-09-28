@@ -4099,7 +4099,8 @@
         "gmail": "Gmail",
         "outlookWork": "Outlook (professionnel ou scolaire)",
         "outlookPersonal": "Outlook.com",
-        "mailto": "Application de messagerie par défaut"
+        "mailto": "Application de messagerie par défaut",
+        "gmailSend": "Envoyer depuis le chat (Gmail)"
       }
     },
     "slack": {
@@ -4209,7 +4210,8 @@
       },
       "unknownSent": {
         "gmail": "Impossible de confirmer l'envoi de l'e-mail à {{destination}}. Vérifiez le dossier Messages envoyés de Gmail."
-      }
+      },
+      "gmailDraftLimit": "Seuls {{count}} e-mails peuvent être préparés par demande."
     }
   },
   "notesView": {

@@ -3974,7 +3974,8 @@
         "gmail": "Gmail",
         "outlookWork": "Outlook (рабочий или учебный)",
         "outlookPersonal": "Outlook.com",
-        "mailto": "Почтовое приложение по умолчанию"
+        "mailto": "Почтовое приложение по умолчанию",
+        "gmailSend": "Отправлять из чата (Gmail)"
       }
     },
     "slack": {
@@ -4084,7 +4085,8 @@
       },
       "unknownSent": {
         "gmail": "Не удалось подтвердить отправку письма для {{destination}}. Проверьте папку «Отправленные» в Gmail."
-      }
+      },
+      "gmailDraftLimit": "Лимит писем на один запрос: {{count}}."
     }
   },
   "calendar": {

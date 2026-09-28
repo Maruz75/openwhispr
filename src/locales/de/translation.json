@@ -4099,7 +4099,8 @@
         "gmail": "Gmail",
         "outlookWork": "Outlook (geschäftlich oder Schule)",
         "outlookPersonal": "Outlook.com",
-        "mailto": "Standard-E-Mail-App"
+        "mailto": "Standard-E-Mail-App",
+        "gmailSend": "Aus dem Chat senden (Gmail)"
       }
     },
     "slack": {
@@ -4209,7 +4210,8 @@
       },
       "unknownSent": {
         "gmail": "Konnte nicht bestätigen, dass die E-Mail an {{destination}} gesendet wurde. Prüfe den Gmail-Ordner „Gesendet“."
-      }
+      },
+      "gmailDraftLimit": "Pro Anfrage können nur {{count}} E-Mails vorbereitet werden."
     }
   },
   "notesView": {

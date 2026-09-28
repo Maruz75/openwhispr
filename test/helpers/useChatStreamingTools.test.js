@@ -392,3 +392,79 @@ test("a replaced send that ends leaves the newer send cancellable", async (t) =>
   assert.equal(await settlesWithin(second), "settled");
   assert.deepEqual(cancelled, opened);
 });
+
+// The Gmail connector's status as main reports it.
+const GMAIL = {
+  id: "gmail",
+  connected: true,
+  configured: true,
+  accountLabel: "you@example.test",
+  workspaceLabel: null,
+  needsReconnect: false,
+};
+
+// Renders a connector surface whose status load answers with `statuses`, and
+// captures each send's offered tools (with descriptions). `duringStream` runs
+// inside the stream, while the turn's tools can still run.
+async function renderWithStatuses(t, statuses, { electronAPI = {}, duringStream } = {}) {
+  const rendered = await renderChatStreaming(t, CONNECTOR_SURFACE, {
+    electronAPI: {
+      connectorStatus: async () => statuses,
+      onConnectorStatusChanged: () => () => {},
+      ...electronAPI,
+    },
+  });
+  const sends = [];
+  rendered.reasoningService.processTextStreamingCloud.mock.mockImplementation(
+    (_messages, config) => {
+      sends.push(config);
+      return (async function* () {
+        await duringStream?.(config);
+        yield { type: "done", finishReason: "stop" };
+      })();
+    }
+  );
+  return { ...rendered, sends };
+}
+
+const emailDraftDescription = (config) =>
+  config.tools.find((tool) => tool.name === "email_draft").description;
+
+test("a connected Gmail turns email_draft into a card the user sends from the chat", async (t) => {
+  const { captured, sends } = await renderWithStatuses(t, [GMAIL]);
+  await captured.sendToAI("Email Josh the Q3 numbers", []);
+  assert.match(emailDraftDescription(sends[0]), /card in the chat/);
+});
+
+test("without Gmail, Automatic keeps the compose window", async (t) => {
+  const { captured, sends } = await renderWithStatuses(t, [{ ...GMAIL, connected: false }]);
+  await captured.sendToAI("Email Josh the Q3 numbers", []);
+  assert.match(emailDraftDescription(sends[0]), /This never sends email/);
+});
+
+test("a Gmail login that needs reconnecting asks for a reconnect instead of opening a compose window", async (t) => {
+  const calls = { prepare: 0, runDirect: 0 };
+  let result;
+  const { captured, sends } = await renderWithStatuses(t, [{ ...GMAIL, needsReconnect: true }], {
+    electronAPI: {
+      connectorPrepare: async () => {
+        calls.prepare += 1;
+      },
+      connectorRunDirect: async () => {
+        calls.runDirect += 1;
+      },
+    },
+    duringStream: async (config) => {
+      result = await config.executeToolCall(
+        "email_draft",
+        JSON.stringify({ to: ["josh@acme.test"], subject: "Q3", body: "Numbers." }),
+        "srv-gmail"
+      );
+    },
+  });
+  await captured.sendToAI("Email Josh the Q3 numbers", []);
+
+  assert.match(emailDraftDescription(sends[0]), /card in the chat/);
+  assert.equal(JSON.parse(result.data).reason, "reconnect_needed");
+  assert.deepEqual(calls, { prepare: 0, runDirect: 0 });
+});

@@ -876,3 +876,306 @@ test("the system prompt adds connector rules only when a connector tool is prese
   assert.match(withSlack, /Use slack_send_message/);
   assert.match(withSlack, /needs_clarification/);
 });
+
+// ---- email_draft with Gmail chosen (the gmailSend target) ----
+
+const loadStatus = () => import("../../src/stores/connectorStatusStore.ts");
+
+const GMAIL_DRAFT = { to: ["josh@acme.test"], cc: [], subject: "Q3", body: "Numbers attached." };
+const GMAIL_PREVIEW = {
+  verbKey: "email",
+  destinationLabel: "josh@acme.test",
+  accountLabel: "you@example.test",
+  body: "Numbers attached.",
+  fields: { to: ["josh@acme.test"], cc: [], subject: "Q3", body: "Numbers attached." },
+};
+
+// Records every hold, claim and release, so a test can see what the turn kept.
+function gmailContext(messageId, toolCallId, { slotsLeft = 3 } = {}) {
+  const context = {
+    messageId,
+    toolCallId,
+    signal: new AbortController().signal,
+    holds: 0,
+    claims: [],
+    releases: [],
+    onApprovalRequested() {},
+    onHoldDelivery() {
+      context.holds += 1;
+    },
+    claimTurnSlot(key, limit) {
+      context.claims.push([key, limit]);
+      if (slotsLeft === 0) return false;
+      slotsLeft -= 1;
+      return true;
+    },
+    releaseTurnSlot(key) {
+      context.releases.push(key);
+    },
+  };
+  return context;
+}
+
+// A connected Gmail in the renderer's status store (the tool reads it live).
+async function setGmailStatus(overrides = {}) {
+  const { useConnectorStatusStore } = await loadStatus();
+  useConnectorStatusStore.setState({
+    loaded: true,
+    statuses: {
+      gmail: {
+        id: "gmail",
+        connected: true,
+        configured: true,
+        accountLabel: "you@example.test",
+        workspaceLabel: null,
+        needsReconnect: false,
+        ...overrides,
+      },
+    },
+  });
+}
+
+// Starts a Gmail email_draft call and waits for its card to appear.
+async function startGmailCard(t, electronAPI, messageId, toolCallId) {
+  const calls = { prepare: [], runDirect: 0 };
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async (...args) => {
+          calls.prepare.push(args);
+          return { status: "ready", actionId: `a-${toolCallId}`, preview: GMAIL_PREVIEW };
+        },
+        connectorRunDirect: async () => {
+          calls.runDirect += 1;
+        },
+        connectorCancel: async () => ({ cancelled: true }),
+        ...electronAPI,
+      },
+    },
+  });
+  await setGmailStatus();
+  const [{ createEmailDraftTool }, approvals] = await Promise.all([loadEmail(), loadApprovals()]);
+  approvals.useConnectorApprovalStore.setState({ entries: {} });
+  const context = gmailContext(messageId, toolCallId);
+  const key = approvals.approvalKey(messageId, toolCallId);
+  const pending = createEmailDraftTool("gmailSend").execute(GMAIL_DRAFT, context);
+  // Stop waiting if the call ends without showing a card.
+  let settled = false;
+  pending.then(
+    () => (settled = true),
+    () => (settled = true)
+  );
+  while (!settled && !approvals.useConnectorApprovalStore.getState().entries[key]) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.ok(approvals.useConnectorApprovalStore.getState().entries[key], "the Gmail card is shown");
+  return { approvals, key, pending, context, calls };
+}
+
+test("with Gmail chosen, email_draft prepares a Gmail send and reports what the user sent", async (t) => {
+  await useEnglish();
+  const { approvals, key, pending, context, calls } = await startGmailCard(
+    t,
+    {
+      connectorCommit: async () => ({
+        state: "sent",
+        url: "https://mail.google.com/mail/?authuser=you%40example.test#sent/m1",
+      }),
+    },
+    "m20",
+    "call-20"
+  );
+  await approvals.approveAction(key);
+  const result = await pending;
+
+  assert.deepEqual(calls.prepare, [["gmail", "send", GMAIL_DRAFT]]);
+  assert.equal(calls.runDirect, 0, "no compose window opens");
+  assert.equal(result.data.status, "sent");
+  assert.equal(result.data.destination, "josh@acme.test");
+  assert.match(result.data.url, /#sent\/m1$/);
+  assert.ok(context.holds >= 1, "the card stays in the panel, never pasted at the caret");
+  assert.deepEqual(context.releases, [], "a sent email keeps its slot");
+});
+
+test("a Gmail email that may have gone out keeps its slot and points at the Sent folder", async (t) => {
+  await useEnglish();
+  const { approvals, key, pending, context } = await startGmailCard(
+    t,
+    {
+      connectorCommit: async () => ({
+        state: "unknown",
+        checkUrl: "https://mail.google.com/mail/?authuser=you%40example.test#sent",
+      }),
+    },
+    "m21",
+    "call-21"
+  );
+  await approvals.approveAction(key);
+  const result = await pending;
+
+  assert.equal(result.data.status, "unknown");
+  assert.match(result.data.guidance, /Gmail Sent folder/);
+  assert.match(result.data.guidance, /Do not retry/);
+  assert.equal(
+    result.displayText,
+    "Couldn't confirm the email to josh@acme.test was sent. Check your Gmail Sent folder."
+  );
+  assert.deepEqual(context.releases, []);
+});
+
+test("a cancelled Gmail card gives its slot back", async (t) => {
+  const { approvals, key, pending, context } = await startGmailCard(t, {}, "m22", "call-22");
+  approvals.cancelApproval(key);
+  const result = await pending;
+
+  assert.equal(result.data.status, "cancelled_by_user");
+  assert.deepEqual(context.claims, [["email_draft", 3]]);
+  assert.deepEqual(context.releases, ["email_draft"]);
+});
+
+test("a Gmail login that needs reconnecting stops before any card or compose window", async (t) => {
+  await useEnglish();
+  const calls = { prepare: 0, runDirect: 0 };
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => {
+          calls.prepare += 1;
+        },
+        connectorRunDirect: async () => {
+          calls.runDirect += 1;
+        },
+      },
+    },
+  });
+  await setGmailStatus({ needsReconnect: true });
+  const { createEmailDraftTool } = await loadEmail();
+  const context = gmailContext("m23", "call-23");
+
+  const result = await createEmailDraftTool("gmailSend").execute(GMAIL_DRAFT, context);
+
+  assert.equal(result.data.status, "unavailable");
+  assert.equal(result.data.reason, "reconnect_needed");
+  assert.match(result.data.guidance, /reconnect Gmail under Settings → Integrations → Connectors/);
+  assert.match(result.data.guidance, /Don't retry/);
+  // The tool step names Gmail, not the generic "connectors unavailable".
+  assert.equal(result.displayText, "Gmail needs to be reconnected.");
+  assert.deepEqual(calls, { prepare: 0, runDirect: 0 });
+  assert.deepEqual(context.claims, [], "no slot is used for an email that can't be prepared");
+  assert.equal(context.holds, 1);
+});
+
+test("a reconnect main reports while preparing reads the same as one the store knew about", async (t) => {
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => ({
+          status: "failed",
+          errorCode: "reconnect_needed",
+          message: "Reconnect Gmail in Settings.",
+        }),
+      },
+    },
+  });
+  // The store hasn't heard yet: main found the login gone while preparing.
+  await setGmailStatus();
+  const { createEmailDraftTool } = await loadEmail();
+  const context = gmailContext("m24", "call-24");
+
+  const result = await createEmailDraftTool("gmailSend").execute(GMAIL_DRAFT, context);
+
+  assert.equal(result.data.status, "unavailable");
+  assert.equal(result.data.reason, "reconnect_needed");
+  assert.match(result.data.guidance, /reconnect Gmail/);
+  assert.deepEqual(context.releases, ["email_draft"]);
+});
+
+test("with Gmail chosen, names and bad addresses still come back as questions", async (t) => {
+  let prepared = 0;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => {
+          prepared += 1;
+        },
+      },
+    },
+  });
+  await setGmailStatus();
+  const { createEmailDraftTool } = await loadEmail();
+  const context = gmailContext("m25", "call-25");
+
+  const result = await createEmailDraftTool("gmailSend").execute(
+    { to: ["Josh"], cc: ["dana@"], subject: "Q3", body: "Hi" },
+    context
+  );
+
+  assert.equal(result.data.status, "needs_clarification");
+  assert.match(result.data.message, /"Josh"/);
+  assert.match(result.data.message, /"dana@"/);
+  assert.match(result.data.message, /find_contact/);
+  assert.equal(prepared, 0);
+  assert.deepEqual(context.claims, []);
+  assert.equal(context.holds, 1);
+});
+
+test("with Gmail chosen, a turn that used its three emails is refused before preparing", async (t) => {
+  await useEnglish();
+  let prepared = 0;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => {
+          prepared += 1;
+        },
+      },
+    },
+  });
+  await setGmailStatus();
+  const { createEmailDraftTool } = await loadEmail();
+
+  const result = await createEmailDraftTool("gmailSend").execute(
+    GMAIL_DRAFT,
+    gmailContext("m26", "call-26", { slotsLeft: 0 })
+  );
+
+  assert.equal(result.data.status, "not_sent");
+  assert.equal(result.data.reason, "draft_limit");
+  assert.match(result.data.guidance, /Only 3 emails can be prepared per request/);
+  assert.equal(result.displayText, "Only 3 emails can be prepared per request.");
+  assert.equal(prepared, 0);
+});
+
+test("the Gmail email_draft says the user sends it from a card; the compose one never sends", async () => {
+  const { createToolRegistry } = await loadRegistry();
+  const base = {
+    isSignedIn: true,
+    calendarConnected: false,
+    cloudBackupEnabled: false,
+    webSearchEnabled: false,
+  };
+  const description = (emailDraftTarget) =>
+    createToolRegistry({ ...base, connectors: { emailDraftTarget, slackReady: false } })
+      .getAll()
+      .find((tool) => tool.name === "email_draft").description;
+
+  assert.match(description("gmailSend"), /card in the chat/);
+  assert.match(description("gmailSend"), /nothing is sent until they press Send/);
+  assert.doesNotMatch(description("gmailSend"), /never sends/);
+  assert.match(description("gmail"), /This never sends email/);
+});
+
+test("the prompt never claims email_draft can't send, and forbids claiming a send that didn't happen", async (t) => {
+  installBrowserGlobals(t);
+  const vite = await createRendererServer(t, {
+    cachePrefix: "openwhispr-connector-prompts-gmail-test-",
+  });
+  const { getAgentSystemPrompt } = await vite.ssrLoadModule("/config/prompts.ts");
+
+  const prompt = getAgentSystemPrompt(["find_contact", "email_draft"]);
+
+  assert.doesNotMatch(prompt, /it never sends/);
+  assert.match(prompt, /card in the chat or from their own email app/);
+  assert.match(prompt, /Never say an email or message was sent unless the result's status is sent/);
+  assert.doesNotMatch(getAgentSystemPrompt(["search_notes"]), /Never say an email/);
+});

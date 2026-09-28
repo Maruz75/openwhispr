@@ -3930,7 +3930,8 @@
         "gmail": "Gmail",
         "outlookWork": "Outlook (trabalho ou escola)",
         "outlookPersonal": "Outlook.com",
-        "mailto": "Aplicativo de e-mail padrão"
+        "mailto": "Aplicativo de e-mail padrão",
+        "gmailSend": "Enviar pelo chat (Gmail)"
       }
     },
     "slack": {
@@ -4040,7 +4041,8 @@
       },
       "unknownSent": {
         "gmail": "Não foi possível confirmar o envio do e-mail para {{destination}}. Verifique a pasta Enviados do Gmail."
-      }
+      },
+      "gmailDraftLimit": "Só é possível preparar {{count}} e-mails por solicitação."
     }
   },
   "calendar": {

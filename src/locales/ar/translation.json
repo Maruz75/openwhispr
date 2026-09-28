@@ -792,7 +792,8 @@
         "gmail": "Gmail",
         "outlookWork": "Outlook (العمل أو المدرسة)",
         "outlookPersonal": "Outlook.com",
-        "mailto": "تطبيق البريد الافتراضي"
+        "mailto": "تطبيق البريد الافتراضي",
+        "gmailSend": "الإرسال من الدردشة (Gmail)"
       }
     },
     "slack": {
@@ -902,7 +903,8 @@
       },
       "unknownSent": {
         "gmail": "تعذّر تأكيد إرسال البريد الإلكتروني إلى {{destination}}. تحقق من مجلد البريد المُرسل في Gmail."
-      }
+      },
+      "gmailDraftLimit": "يمكن تجهيز {{count}} رسائل بريد إلكتروني فقط لكل طلب."
     }
   },
   "auth": {

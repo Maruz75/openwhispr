@@ -4099,7 +4099,8 @@
         "gmail": "Gmail",
         "outlookWork": "Outlook (work or school)",
         "outlookPersonal": "Outlook.com",
-        "mailto": "Default mail app"
+        "mailto": "Default mail app",
+        "gmailSend": "Send from chat (Gmail)"
       }
     },
     "slack": {
@@ -4209,7 +4210,8 @@
       },
       "unknownSent": {
         "gmail": "Couldn't confirm the email to {{destination}} was sent. Check your Gmail Sent folder."
-      }
+      },
+      "gmailDraftLimit": "Only {{count}} emails can be prepared per request."
     }
   },
   "notesView": {
