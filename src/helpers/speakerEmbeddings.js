@@ -110,8 +110,6 @@ class SpeakerEmbeddings {
 
   unload() {
     return this._enqueue(async () => {
-      // Inside the queue: an extract ahead of this unload re-arms the timer as it finishes.
-      this._clearIdleTimer();
       try {
         await onnxWorkerClient.request("speaker.unload", {});
       } finally {

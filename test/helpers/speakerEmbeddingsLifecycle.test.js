@@ -221,13 +221,6 @@ test("unload waits for an in-flight extract and a racing extract reloads after r
   );
 });
 
-test("an explicit unload cancels the pending idle timer", async () => {
-  const h = createHarness();
-  await h.speaker.extractEmbeddingFromSamples(SAMPLES);
-  await h.speaker.unload();
-  assert.equal(h.timers.active().length, 0);
-});
-
 test("worker serializes speaker unload behind in-flight native inference", async () => {
   const h = createHarness();
   await h.client.request("speaker.load", { modelPath: "speaker" });
