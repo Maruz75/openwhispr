@@ -368,6 +368,10 @@ export class SyncedNotesRepository implements NotesRepository {
     this.local.updateNoteMeta(noteId, updates);
   }
 
+  restoreMeetingRecordingPath(noteId: number, sourceFile: string): void {
+    this.local.restoreMeetingRecordingPath(noteId, sourceFile);
+  }
+
   updateNoteCalendarContext(noteId: number, updates: MeetingCalendarContextUpdate): void {
     const note = this.local.getNoteById(noteId);
     this.local.updateNoteCalendarContext(noteId, updates);

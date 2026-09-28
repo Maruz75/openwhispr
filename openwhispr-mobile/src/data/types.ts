@@ -429,6 +429,8 @@ export interface NotesRepository {
   setTranscriptionStatus(noteId: number, status: TranscriptionStatus): void;
   /** Update local-only meeting/diarization columns NoteUpdate cannot reach. */
   updateNoteMeta(noteId: number, updates: MeetingNoteUpdate): void;
+  /** Points a meeting with no recording path back at its recording, keeping its place in lists. */
+  restoreMeetingRecordingPath(noteId: number, sourceFile: string): void;
   /** Update selected calendar context; public notes mark pending sync, private notes stay local-only. */
   updateNoteCalendarContext(noteId: number, updates: MeetingCalendarContextUpdate): void;
 }

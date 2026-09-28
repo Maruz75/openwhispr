@@ -1,3 +1,7 @@
+jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///app/documents/',
+  deleteAsync: jest.fn().mockResolvedValue(undefined),
+}));
 import { eq } from 'drizzle-orm';
 import { notes, speakers, transcriptSegments } from '@/db/schema';
 import { serializeSegmentsForSync } from '@/lib/notes/remoteTranscript';
@@ -318,7 +322,7 @@ describe('applyRemoteNote transcript integration', () => {
     const { repo, db } = createMemoryRepository();
     repo.applyRemoteNote(remoteNote({ transcript: desktopRaw }), noFolder);
     const [note] = repo.getAllNotes();
-    const recording = 'file:///app/documents/meeting-1.wav';
+    const recording = `file:///app/documents/meeting-${note.id}.wav`;
     db.update(notes).set({ sourceFile: recording }).where(eq(notes.id, note.id)).run();
 
     repo.applyRemoteNote(remoteNote({ updated_at: '2026-07-09T11:00:00.000Z' }), noFolder);
@@ -332,6 +336,20 @@ describe('applyRemoteNote transcript integration', () => {
       noFolder,
     );
     expect(repo.getNoteById(note.id)?.sourceFile).toBe('https://cdn.example/a.wav');
+  });
+
+  it.each([
+    ['a file name another device stored', 'file-1.wav'],
+    ["a file this device doesn't manage", 'file:///app/documents/imported.wav'],
+  ])('clears %s when the pull echoes back a null source file', (_case, sourceFile) => {
+    const { repo, db } = createMemoryRepository();
+    repo.applyRemoteNote(remoteNote({ transcript: desktopRaw }), noFolder);
+    const [note] = repo.getAllNotes();
+    db.update(notes).set({ sourceFile }).where(eq(notes.id, note.id)).run();
+
+    repo.applyRemoteNote(remoteNote({ updated_at: '2026-07-09T11:00:00.000Z' }), noFolder);
+
+    expect(repo.getNoteById(note.id)?.sourceFile).toBeNull();
   });
 
   it('does not rebuild when the transcript is unchanged (segment ids stable)', () => {

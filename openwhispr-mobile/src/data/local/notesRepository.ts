@@ -874,7 +874,8 @@ export class LocalNotesRepository implements NotesRepository {
         // Device-local recordings push as null, so a null coming back must not erase the
         // path this device still plays and reprocesses from.
         sourceFile:
-          remote.source_file ?? (local.sourceFile?.startsWith('file://') ? local.sourceFile : null),
+          remote.source_file ??
+          (isManagedMeetingAudioUri(local.id, local.sourceFile) ? local.sourceFile : null),
         audioDurationSeconds: remote.audio_duration_seconds,
         calendarEventId: remote.calendar_event_id ?? null,
         participants: remote.participants ?? null,
@@ -1736,6 +1737,14 @@ export class LocalNotesRepository implements NotesRepository {
       .update(notes)
       .set({ ...updates, updatedAt: sql`datetime('now')` })
       .where(eq(notes.id, noteId))
+      .run();
+  }
+
+  restoreMeetingRecordingPath(noteId: number, sourceFile: string): void {
+    this.database
+      .update(notes)
+      .set({ sourceFile })
+      .where(and(eq(notes.id, noteId), isNull(notes.sourceFile)))
       .run();
   }
 
