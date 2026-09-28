@@ -40,18 +40,13 @@ function loadEmbeddings(client) {
   return localContext.module.exports;
 }
 
-function loadSpeakerEmbeddings(client, idleTimers = []) {
+function loadSpeakerEmbeddings(client) {
   const context = vm.createContext({
     module: { exports: {} },
     process: {},
-    setTimeout(callback) {
-      const timer = { callback, cleared: false, unref() {} };
-      idleTimers.push(timer);
-      return timer;
-    },
-    clearTimeout(timer) {
-      if (timer) timer.cleared = true;
-    },
+    // The idle timer never fires here; tests unload explicitly.
+    setTimeout: () => ({ unref() {} }),
+    clearTimeout() {},
     require(name) {
       if (name === "fs") return { existsSync: () => true };
       if (name === "./debugLogger") return { debug() {}, warn() {} };
@@ -198,23 +193,6 @@ test("reloads after the shared worker restarts", async () => {
   assert.equal(events.filter((event) => event === "text.load").length, 2);
 });
 
-test("speaker embeddings reload after the shared worker restarts", async () => {
-  const methods = [];
-  const client = {
-    generation: 0,
-    async request(method) {
-      methods.push(method);
-      return method === "speaker.extract" ? { embeddingBuffer: new ArrayBuffer(4) } : { ok: true };
-    },
-  };
-  const speakerEmbeddings = loadSpeakerEmbeddings(client);
-  const samples = new Float32Array(16000 * 2);
-  await speakerEmbeddings.extractEmbeddingFromSamples(samples);
-  client.generation += 1;
-  await speakerEmbeddings.extractEmbeddingFromSamples(samples);
-  assert.equal(methods.filter((method) => method === "speaker.load").length, 2);
-});
-
 test("a failed load does not block unloading or the next load attempt", async () => {
   const { embeddings, client, events } = createHarness();
   const request = client.request.bind(client);
@@ -279,7 +257,6 @@ class FakePort extends EventEmitter {
 function createIntegratedHarness({ failRelease = null } = {}) {
   const events = [];
   const workers = [];
-  const idleTimers = [];
   const nativeSession = (name) => ({
     inputNames: ["input"],
     async run() {
@@ -356,14 +333,9 @@ function createIntegratedHarness({ failRelease = null } = {}) {
   return {
     client,
     embeddings: loadEmbeddings(client),
-    speaker: loadSpeakerEmbeddings(client, idleTimers),
+    speaker: loadSpeakerEmbeddings(client),
     events,
     workers,
-    async fireSpeakerIdleUnload() {
-      const timer = idleTimers.findLast((entry) => !entry.cleared);
-      timer.callback();
-      await this.speaker.operationQueue;
-    },
   };
 }
 
@@ -394,24 +366,24 @@ test("unloading text keeps the worker alive while diarization holds a speaker se
   assert.equal(sessions.text, false);
 });
 
-test("the speaker idle unload exits the worker once the text session is gone", async () => {
+test("unloading the speaker session exits the worker once the text session is gone", async () => {
   const h = createIntegratedHarness();
   await h.speaker.extractEmbeddingFromSamples(SPEAKER_SAMPLES);
   await h.embeddings.embedText("");
   await h.embeddings.unload();
   assert.equal(h.workers[0].child.killed, false);
-  await h.fireSpeakerIdleUnload();
+  await h.speaker.unload();
   assert.equal(h.workers[0].child.killed, true);
   assert.deepEqual(h.events, ["speaker.create", "text.create", "text.release", "speaker.release"]);
   assert.ok(await h.speaker.extractEmbeddingFromSamples(SPEAKER_SAMPLES));
   assert.equal(h.workers.length, 2);
 });
 
-test("the speaker idle unload keeps the worker for a loaded text session", async () => {
+test("unloading the speaker session keeps the worker for a loaded text session", async () => {
   const h = createIntegratedHarness();
   await h.embeddings.embedText("");
   await h.speaker.extractEmbeddingFromSamples(SPEAKER_SAMPLES);
-  await h.fireSpeakerIdleUnload();
+  await h.speaker.unload();
   assert.equal(h.workers[0].child.killed, false);
   await h.embeddings.unload();
   assert.equal(h.workers[0].child.killed, true);

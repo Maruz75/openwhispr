@@ -7,7 +7,6 @@ const MAX_PENDING_REQUESTS = 1000;
 const RESPAWN_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
 const MAX_RESPAWN_ATTEMPTS = 5;
 const SHUTDOWN_TIMEOUT_MS = 5000;
-const UNLOAD_METHODS = new Set(["text.unload", "speaker.unload"]);
 
 // Forked via the asar-virtual path: Electron redirects the unpacked file read
 // while module resolution stays inside app.asar (onnxruntime-common is asar-only).
@@ -37,7 +36,7 @@ class OnnxWorkerClient {
     this.shuttingDown = false;
     this.gaveUp = false;
     this.spawnPromise = null;
-    this.respawnTimer = null;
+    this.backoffTimer = null;
     this.generation = 0;
     this.killedForTimeout = false;
   }
@@ -174,8 +173,8 @@ class OnnxWorkerClient {
       });
       // The next request respawns the worker; spawning here would leave an empty worker
       // running (e.g. after a crash during an unload) that nothing ever releases.
-      this.respawnTimer = setTimeout(() => {
-        this.respawnTimer = null;
+      this.backoffTimer = setTimeout(() => {
+        this.backoffTimer = null;
       }, delay);
     }
   }
@@ -207,7 +206,7 @@ class OnnxWorkerClient {
   async request(method, payload, transferList) {
     // An unload must never start a worker just to free an absent session; a
     // worker that is shutting down takes its sessions with it.
-    if (UNLOAD_METHODS.has(method) && (!this.child || this.shuttingDown)) return { ok: true };
+    if (method.endsWith(".unload") && (!this.child || this.shuttingDown)) return { ok: true };
     if (this.shuttingDown) {
       throw new WorkerCrashedError("worker shutting down");
     }
@@ -216,8 +215,8 @@ class OnnxWorkerClient {
       throw new WorkerCrashedError("worker unavailable");
     }
 
-    if (this.respawnTimer) {
-      throw new WorkerCrashedError("worker restarting");
+    if (this.backoffTimer) {
+      throw new WorkerCrashedError("worker in crash backoff");
     }
 
     if (this.pending.size >= MAX_PENDING_REQUESTS) {
@@ -259,9 +258,9 @@ class OnnxWorkerClient {
 
   async stop() {
     this.shuttingDown = true;
-    if (this.respawnTimer) {
-      clearTimeout(this.respawnTimer);
-      this.respawnTimer = null;
+    if (this.backoffTimer) {
+      clearTimeout(this.backoffTimer);
+      this.backoffTimer = null;
     }
     if (!this.child) return;
 

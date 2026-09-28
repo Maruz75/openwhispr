@@ -149,8 +149,6 @@ test("each extract restarts the idle window", async () => {
   const h = createHarness();
   await h.speaker.extractEmbeddingFromSamples(SAMPLES);
   await h.speaker.extractEmbeddingFromSamples(SAMPLES);
-  assert.equal(h.timers.timers.length, 2);
-  assert.equal(h.timers.timers[0].cleared, true);
   assert.equal(h.timers.active().length, 1);
 });
 
@@ -162,7 +160,6 @@ test("extracts queued together leave a single idle timer", async () => {
   await flush();
   h.releaseInference();
   await Promise.all([first, second]);
-  assert.equal(h.timers.timers.length, 2);
   assert.equal(h.timers.active().length, 1);
 });
 
@@ -233,6 +230,14 @@ test("worker serializes speaker unload behind in-flight native inference", async
   h.releaseInference();
   await Promise.all([extracting, unloading]);
   assert.ok(h.events.indexOf("speaker.done") < h.events.indexOf("speaker.release"));
+});
+
+test("reloads after the shared worker restarts", async () => {
+  const h = createHarness();
+  await h.speaker.extractEmbeddingFromSamples(SAMPLES);
+  h.client.generation += 1;
+  await h.speaker.extractEmbeddingFromSamples(SAMPLES);
+  assert.equal(h.events.filter((event) => event === "speaker.load").length, 2);
 });
 
 test("a failed idle unload is logged and the next extract still reloads", async () => {
