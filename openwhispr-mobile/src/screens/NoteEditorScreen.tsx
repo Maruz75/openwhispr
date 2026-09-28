@@ -27,7 +27,14 @@ import { useActionProcessing } from '@/hooks/useActionProcessing';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
 import { useSuperwallGate } from '@/hooks/useSuperwallGate';
 import { useUsageLimitRecovery } from '@/hooks/useUsageLimitRecovery';
-import { MarkdownRenderer } from '@/components/notes/MarkdownRenderer';
+import { EditableMarkdown } from '@/components/notes/EditableMarkdown';
+import {
+  defaultNoteBodyView,
+  getNoteBodyTabs,
+  NOTE_BODY_TAB_LABELS,
+  resolveNoteBodyView,
+  type NoteBodyView,
+} from '@/lib/notes/noteBodyTabs';
 import { NoteActionsMenu } from '@/components/notes/NoteActionsMenu';
 import { ConflictBanner } from '@/components/notes/ConflictBanner';
 import { NoteChatSheet } from '@/components/notes/NoteChatSheet';
@@ -84,7 +91,6 @@ import {
   groupTranscriptSegments,
   type TranscriptBlock,
 } from '@/lib/diarization/transcriptDisplay';
-type ViewMode = 'original' | 'enhanced';
 
 const NOTE_EDITOR_BOTTOM_PADDING = 180;
 const NOTE_EDITOR_KEYBOARD_BOTTOM_PADDING = 8;
@@ -155,7 +161,13 @@ export default function NoteEditorScreen() {
 
   const [title, setTitle] = useState(note?.title ?? '');
   const [content, setContent] = useState(note?.content ?? '');
-  const [viewMode, setViewMode] = useState<ViewMode>('original');
+  // The user's last tab pick; resolveNoteBodyView maps it onto the tabs this note has now.
+  const [viewMode, setViewMode] = useState<NoteBodyView>(() =>
+    defaultNoteBodyView({
+      isAudioTranscript: isAudioTranscriptNote(note),
+      hasEnhanced: !!note?.enhancedContent,
+    }),
+  );
   const [selection, setSelection] = useState<{ start: number; end: number }>({
     start: (note?.content ?? '').length,
     end: (note?.content ?? '').length,
@@ -207,7 +219,12 @@ export default function NoteEditorScreen() {
       originalTitleRef.current = note.title;
       originalContentRef.current = note.content;
       learnedBaselineRef.current = note.content;
-      setViewMode(note.enhancedContent ? 'enhanced' : 'original');
+      setViewMode(
+        defaultNoteBodyView({
+          isAudioTranscript: isAudioTranscriptNote(note),
+          hasEnhanced: !!note.enhancedContent,
+        }),
+      );
     }
     chatAbortRef.current?.abort();
     chatAbortRef.current = null;
@@ -338,7 +355,12 @@ export default function NoteEditorScreen() {
       originalTitleRef.current = refreshed.title;
       originalContentRef.current = refreshed.content;
       learnedBaselineRef.current = refreshed.content;
-      setViewMode(refreshed.enhancedContent ? 'enhanced' : 'original');
+      setViewMode(
+        defaultNoteBodyView({
+          isAudioTranscript: isAudioTranscriptNote(refreshed),
+          hasEnhanced: !!refreshed.enhancedContent,
+        }),
+      );
     }
   }, [noteId, resolveConflictUseServer, getNoteById]);
 
@@ -361,7 +383,8 @@ export default function NoteEditorScreen() {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         updateNote(noteId, updates);
-        if (typeof updates.content === 'string') {
+        // Meeting notes are typed, not dictated, so their edits aren't transcription corrections.
+        if (typeof updates.content === 'string' && !usesSegmentTranscriptRef.current) {
           maybeLearnCorrections(updates.content);
         }
       }, 800);
@@ -369,12 +392,50 @@ export default function NoteEditorScreen() {
     [noteId, updateNote, maybeLearnCorrections],
   );
 
+  // Edits to the generated notes save on their own debounce. The pending edit carries its note
+  // id, so a flush that runs after switching notes still writes to the note that was edited.
+  const pendingEnhancedRef = useRef<{ noteId: number; text: string } | null>(null);
+  const enhancedSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushEnhancedSave = useCallback(() => {
+    if (enhancedSaveTimeoutRef.current) clearTimeout(enhancedSaveTimeoutRef.current);
+    enhancedSaveTimeoutRef.current = null;
+    const pending = pendingEnhancedRef.current;
+    if (!pending) return;
+    pendingEnhancedRef.current = null;
+    updateNote(pending.noteId, { enhancedContent: pending.text });
+  }, [updateNote]);
+  const flushEnhancedSaveRef = useRef(flushEnhancedSave);
+  flushEnhancedSaveRef.current = flushEnhancedSave;
+
+  const discardEnhancedSave = useCallback(() => {
+    if (enhancedSaveTimeoutRef.current) clearTimeout(enhancedSaveTimeoutRef.current);
+    enhancedSaveTimeoutRef.current = null;
+    pendingEnhancedRef.current = null;
+  }, []);
+
+  const handleEnhancedChange = useCallback(
+    (text: string) => {
+      pendingEnhancedRef.current = { noteId, text };
+      if (enhancedSaveTimeoutRef.current) clearTimeout(enhancedSaveTimeoutRef.current);
+      enhancedSaveTimeoutRef.current = setTimeout(flushEnhancedSave, 800);
+    },
+    [flushEnhancedSave, noteId],
+  );
+
+  const handleEnhancedEditingChange = useCallback(
+    (editing: boolean) => {
+      if (!editing) flushEnhancedSave();
+    },
+    [flushEnhancedSave],
+  );
+
   useEffect(
     () => () => {
+      flushEnhancedSaveRef.current();
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       const titleChanged = titleRef.current !== originalTitleRef.current;
-      const contentChanged =
-        !usesSegmentTranscriptRef.current && contentRef.current !== originalContentRef.current;
+      const contentChanged = contentRef.current !== originalContentRef.current;
       if (!titleChanged && !contentChanged) return;
       updateNote(noteId, {
         ...(titleChanged ? { title: titleRef.current } : {}),
@@ -388,20 +449,17 @@ export default function NoteEditorScreen() {
   const handleTitleChange = useCallback(
     (text: string) => {
       setTitle(text);
-      debouncedSave(
-        usesSegmentTranscript ? { title: text } : { title: text, content: contentRef.current },
-      );
+      debouncedSave({ title: text, content: contentRef.current });
     },
-    [debouncedSave, usesSegmentTranscript],
+    [debouncedSave],
   );
 
   const handleContentChange = useCallback(
     (text: string) => {
-      if (usesSegmentTranscript) return;
       setContent(text);
       debouncedSave({ title: titleRef.current, content: text });
     },
-    [debouncedSave, usesSegmentTranscript],
+    [debouncedSave],
   );
 
   const handleEnhanceSuccess = useCallback(
@@ -516,7 +574,10 @@ export default function NoteEditorScreen() {
         const payload = {
           title: titleRef.current,
           content: buildNoteShareContent({
-            viewMode,
+            viewMode: resolveNoteBodyView(viewMode, {
+              usesSegmentTranscript,
+              hasEnhanced: !!note?.enhancedContent,
+            }),
             enhancedContent: note?.enhancedContent ?? null,
             usesSegmentTranscript,
             // Title-free: exportNote already leads the file with the title.
@@ -905,6 +966,9 @@ export default function NoteEditorScreen() {
     : '';
 
   const hasEnhanced = !!note?.enhancedContent;
+  const bodyTabInput = { usesSegmentTranscript, hasEnhanced };
+  const bodyTabs = getNoteBodyTabs(bodyTabInput);
+  const bodyView = resolveNoteBodyView(viewMode, bodyTabInput);
   const actionInputHash = makeContentHash(actionInputText);
   const generatedMeetingInputHash =
     usesSegmentTranscript && note?.calendarEventId
@@ -984,58 +1048,46 @@ export default function NoteEditorScreen() {
             />
           ) : null}
 
-          {hasEnhanced ? (
+          {bodyTabs.length > 1 ? (
             <View
               className="mb-4 flex-row bg-tertiarySystemFill p-0.5"
               style={{ borderRadius: 12, borderCurve: 'continuous' }}
             >
-              <Pressable
-                onPress={() => {
-                  safeHaptics('selection');
-                  setViewMode('original');
-                }}
-                className={
-                  'flex-1 items-center py-1.5 ' +
-                  (viewMode === 'original' ? 'bg-brand' : 'bg-transparent')
-                }
-                style={{ borderRadius: 10, borderCurve: 'continuous' }}
-              >
-                <Text
-                  className={
-                    'text-[13px] font-medium ' +
-                    (viewMode === 'original' ? 'text-white' : 'text-secondaryLabel')
-                  }
-                >
-                  {isAudioTranscript ? 'Transcript' : 'Original'}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  safeHaptics('selection');
-                  setViewMode('enhanced');
-                }}
-                className={
-                  'flex-1 flex-row items-center justify-center gap-1 py-1.5 ' +
-                  (viewMode === 'enhanced' ? 'bg-brand' : 'bg-transparent')
-                }
-                style={{ borderRadius: 10, borderCurve: 'continuous' }}
-              >
-                <Text
-                  className={
-                    'text-[13px] font-medium ' +
-                    (viewMode === 'enhanced' ? 'text-white' : 'text-secondaryLabel')
-                  }
-                >
-                  Enhanced
-                </Text>
-                {isStale ? (
-                  <View
-                    testID="enhanced-stale-indicator"
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: '#FF9500' }}
-                  />
-                ) : null}
-              </Pressable>
+              {bodyTabs.map((tab) => {
+                const active = bodyView === tab;
+                return (
+                  <Pressable
+                    key={tab}
+                    testID={`note-tab-${tab}`}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                    onPress={() => {
+                      safeHaptics('selection');
+                      setViewMode(tab);
+                    }}
+                    className={
+                      'flex-1 flex-row items-center justify-center gap-1 py-1.5 ' +
+                      (active ? 'bg-brand' : 'bg-transparent')
+                    }
+                    style={{ borderRadius: 10, borderCurve: 'continuous' }}
+                  >
+                    <Text
+                      className={
+                        'text-[13px] font-medium ' + (active ? 'text-white' : 'text-secondaryLabel')
+                      }
+                    >
+                      {NOTE_BODY_TAB_LABELS[tab]}
+                    </Text>
+                    {tab === 'enhanced' && isStale ? (
+                      <View
+                        testID="enhanced-stale-indicator"
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ backgroundColor: '#FF9500' }}
+                      />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
             </View>
           ) : null}
 
@@ -1044,14 +1096,12 @@ export default function NoteEditorScreen() {
           ) : null}
 
           <View className="relative">
-            {viewMode === 'enhanced' && hasEnhanced ? (
-              <MarkdownRenderer content={note!.enhancedContent!} selectable />
-            ) : usesSegmentTranscript ? (
-              <SpeakerTranscript
-                blocks={transcriptBlocks}
-                selectedSpeakerId={activeSpeakerId}
-                selectable
-                onSpeakerPress={handleSpeakerPress}
+            {bodyView === 'enhanced' ? (
+              <EditableMarkdown
+                content={note?.enhancedContent ?? ''}
+                editable={!isEnhancing}
+                onChange={handleEnhancedChange}
+                onEditingChange={handleEnhancedEditingChange}
               />
             ) : shouldShowTranscriptStatus ? (
               <View className="min-h-[180px] flex-row items-center gap-3">
@@ -1094,13 +1144,21 @@ export default function NoteEditorScreen() {
                   </Text>
                 )}
               </View>
-            ) : shouldRenderPlainEditor ? (
+            ) : bodyView === 'transcript' ? (
+              <SpeakerTranscript
+                blocks={transcriptBlocks}
+                selectedSpeakerId={activeSpeakerId}
+                selectable
+                onSpeakerPress={handleSpeakerPress}
+              />
+            ) : (
               <TextInput
+                testID="note-content-input"
                 value={content}
                 onChangeText={handleContentChange}
                 selection={selection}
                 onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
-                placeholder="Type or dictate…"
+                placeholder={usesSegmentTranscript ? 'Add your own notes…' : 'Type or dictate…'}
                 placeholderTextColor="rgba(0,0,0,0.2)"
                 multiline
                 editable={!isEnhancing}
@@ -1108,8 +1166,6 @@ export default function NoteEditorScreen() {
                 className="min-h-[300px] text-base leading-6 text-label"
                 style={{ fontFamily: AppFont.regular, opacity: isEnhancing ? 0.4 : 1 }}
               />
-            ) : (
-              <View className="min-h-[180px]" />
             )}
 
             {isEnhancing ? (

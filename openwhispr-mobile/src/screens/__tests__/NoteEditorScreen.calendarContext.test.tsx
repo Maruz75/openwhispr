@@ -8,6 +8,7 @@ import { buildMeetingNotesInput } from '@/lib/notes/meetingNotesInput';
 import { formatTranscriptForExport } from '@/lib/diarization/transcriptDisplay';
 import { makeContentHash } from '@/lib/utils';
 import { clearLocalReasoningReadinessCache } from '@/lib/localReasoning';
+import { extractCorrections } from '@/lib/correctionLearner';
 import type { Action, Note, Segment, Speaker } from '@/data/types';
 import type { UserConfig } from '@/types';
 
@@ -174,6 +175,10 @@ jest.mock('@/utils/generateTitle', () => ({
 
 jest.mock('@/lib/privateMode', () => ({
   promptLocalModelFallback: jest.fn(),
+}));
+
+jest.mock('@/lib/correctionLearner', () => ({
+  extractCorrections: jest.fn(() => []),
 }));
 
 jest.mock('@/components/ui/TabScreenHeader', () => ({
@@ -801,5 +806,138 @@ describe('NoteEditorScreen On-Device and provider routes', () => {
     await waitFor(() => expect(ReasoningService.chatOverNote).toHaveBeenCalledTimes(1));
     expect(alertSpy).not.toHaveBeenCalled();
     expect(mockRegisterSuperwallGate).not.toHaveBeenCalled();
+  });
+});
+
+describe('NoteEditorScreen body tabs', () => {
+  const plainNote = (overrides: Partial<Note> = {}): Note =>
+    note({
+      noteType: 'personal',
+      diarizationEnabled: 0,
+      calendarEventId: null,
+      participants: null,
+      ...overrides,
+    });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('shows Transcript and My notes on a meeting before notes are generated', () => {
+    const { getByTestId, queryByTestId, getByText } = render(<NoteEditorScreen />);
+    expect(getByTestId('note-tab-transcript')).toBeTruthy();
+    expect(getByTestId('note-tab-notes')).toBeTruthy();
+    expect(queryByTestId('note-tab-enhanced')).toBeNull();
+    expect(getByText('Alice can take the first pass.')).toBeTruthy();
+  });
+
+  it('shows Enhanced and My notes once notes are generated', () => {
+    mockNote = note({ enhancedContent: '## Summary' });
+    mockNotesState.notes = [mockNote];
+    const { getByTestId, queryByTestId, getByText } = render(<NoteEditorScreen />);
+    expect(getByTestId('note-tab-enhanced')).toBeTruthy();
+    expect(getByTestId('note-tab-notes')).toBeTruthy();
+    expect(queryByTestId('note-tab-transcript')).toBeNull();
+    expect(getByText('## Summary')).toBeTruthy();
+  });
+
+  it('shows no tabs on a plain note without generated notes', () => {
+    mockNote = plainNote();
+    mockNotesState.notes = [mockNote];
+    mockSegments = [];
+    const { queryByTestId, getByTestId } = render(<NoteEditorScreen />);
+    expect(queryByTestId('note-tab-notes')).toBeNull();
+    expect(getByTestId('note-content-input')).toBeTruthy();
+  });
+
+  it('shows the processing status, not an editor, while the transcript is still being made', () => {
+    mockNote = note({ transcriptionStatus: 'transcribing' });
+    mockNotesState.notes = [mockNote];
+    mockSegments = [];
+    const { getByText, queryByTestId } = render(<NoteEditorScreen />);
+    expect(getByText('Transcribing audio...')).toBeTruthy();
+    expect(queryByTestId('note-tab-notes')).toBeNull();
+    expect(queryByTestId('note-content-input')).toBeNull();
+  });
+
+  it('saves edits to the typed meeting notes without learning dictionary corrections', () => {
+    jest.useFakeTimers();
+    const { getByTestId } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('note-tab-notes'));
+    const input = getByTestId('note-content-input');
+    expect(input.props.value).toBe('Alice owns the launch checklist.');
+
+    fireEvent.changeText(input, 'Alice owns the launch checklist and the demo.');
+    act(() => {
+      jest.advanceTimersByTime(800);
+    });
+
+    expect(mockUpdateNote).toHaveBeenCalledWith(7, {
+      title: 'Customer Planning',
+      content: 'Alice owns the launch checklist and the demo.',
+    });
+    expect(extractCorrections).not.toHaveBeenCalled();
+  });
+
+  it('still learns dictionary corrections from plain note edits', () => {
+    jest.useFakeTimers();
+    mockNote = plainNote();
+    mockNotesState.notes = [mockNote];
+    mockSegments = [];
+    const { getByTestId } = render(<NoteEditorScreen />);
+    fireEvent.changeText(getByTestId('note-content-input'), 'Alice owns the launch checklists.');
+    act(() => {
+      jest.advanceTimersByTime(800);
+    });
+    expect(extractCorrections).toHaveBeenCalled();
+  });
+
+  it('switches from Transcript to Enhanced when generated notes arrive', () => {
+    const { rerender, getByText, queryByText } = render(<NoteEditorScreen />);
+    expect(getByText('Alice can take the first pass.')).toBeTruthy();
+
+    mockNote = note({ enhancedContent: '## Summary' });
+    mockNotesState.notes = [mockNote];
+    rerender(<NoteEditorScreen />);
+
+    expect(getByText('## Summary')).toBeTruthy();
+    expect(queryByText('Alice can take the first pass.')).toBeNull();
+  });
+
+  it('stays on My notes when generated notes arrive', () => {
+    const { rerender, getByTestId } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('note-tab-notes'));
+
+    mockNote = note({ enhancedContent: '## Summary' });
+    mockNotesState.notes = [mockNote];
+    rerender(<NoteEditorScreen />);
+
+    expect(getByTestId('note-content-input')).toBeTruthy();
+  });
+
+  it('saves edits to the generated notes when Done is pressed', () => {
+    mockNote = note({ enhancedContent: '## Summary' });
+    mockNotesState.notes = [mockNote];
+    const { getByTestId } = render(<NoteEditorScreen />);
+
+    fireEvent.press(getByTestId('enhanced-edit'));
+    fireEvent.changeText(getByTestId('enhanced-editor'), '## Summary\n- Launch Friday');
+    fireEvent.press(getByTestId('enhanced-done'));
+
+    expect(mockUpdateNote).toHaveBeenCalledWith(7, {
+      enhancedContent: '## Summary\n- Launch Friday',
+    });
+  });
+
+  it('saves an unfinished edit to the generated notes when the screen closes', () => {
+    mockNote = note({ enhancedContent: '## Summary' });
+    mockNotesState.notes = [mockNote];
+    const { getByTestId, unmount } = render(<NoteEditorScreen />);
+
+    fireEvent.press(getByTestId('enhanced-edit'));
+    fireEvent.changeText(getByTestId('enhanced-editor'), '## Summary\n- Draft');
+    unmount();
+
+    expect(mockUpdateNote).toHaveBeenCalledWith(7, { enhancedContent: '## Summary\n- Draft' });
   });
 });
