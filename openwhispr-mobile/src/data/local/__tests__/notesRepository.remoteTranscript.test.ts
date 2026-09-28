@@ -314,6 +314,26 @@ describe('applyRemoteNote transcript integration', () => {
     expect(seg[0].text).toBe('Only one line now.');
   });
 
+  it('keeps the recording this device holds when the pull echoes back a null source file', () => {
+    const { repo, db } = createMemoryRepository();
+    repo.applyRemoteNote(remoteNote({ transcript: desktopRaw }), noFolder);
+    const [note] = repo.getAllNotes();
+    const recording = 'file:///app/documents/meeting-1.wav';
+    db.update(notes).set({ sourceFile: recording }).where(eq(notes.id, note.id)).run();
+
+    repo.applyRemoteNote(remoteNote({ updated_at: '2026-07-09T11:00:00.000Z' }), noFolder);
+    expect(repo.getNoteById(note.id)?.sourceFile).toBe(recording);
+
+    repo.applyRemoteNote(
+      remoteNote({
+        source_file: 'https://cdn.example/a.wav',
+        updated_at: '2026-07-09T12:00:00.000Z',
+      }),
+      noFolder,
+    );
+    expect(repo.getNoteById(note.id)?.sourceFile).toBe('https://cdn.example/a.wav');
+  });
+
   it('does not rebuild when the transcript is unchanged (segment ids stable)', () => {
     const { repo } = createMemoryRepository();
     repo.applyRemoteNote(remoteNote({ transcript: desktopRaw }), noFolder);

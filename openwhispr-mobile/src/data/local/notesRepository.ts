@@ -871,7 +871,10 @@ export class LocalNotesRepository implements NotesRepository {
         content: remote.content,
         folderId: localFolderId,
         noteType: remote.note_type,
-        sourceFile: remote.source_file,
+        // Device-local recordings push as null, so a null coming back must not erase the
+        // path this device still plays and reprocesses from.
+        sourceFile:
+          remote.source_file ?? (local.sourceFile?.startsWith('file://') ? local.sourceFile : null),
         audioDurationSeconds: remote.audio_duration_seconds,
         calendarEventId: remote.calendar_event_id ?? null,
         participants: remote.participants ?? null,
