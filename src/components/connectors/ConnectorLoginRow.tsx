@@ -25,6 +25,7 @@ const ROW_ERRORS = new Set([
   "disconnect_failed",
   "permission_not_granted",
   "email_not_verified",
+  "domain_policy",
 ]);
 
 export interface ConnectorLoginRowProps {

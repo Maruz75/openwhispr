@@ -1244,6 +1244,10 @@ test("connect refuses on policy or no account, and reports flow errors by code",
       Object.assign(new Error("x"), { redirectCode: "token_exchange_failed" }),
       "token_exchange_failed",
     ],
+    // A Workspace admin block or org-restricted app (gmailAuth's own coded
+    // error, not the loopback flow's oauth_denied): kept as its own code
+    // rather than collapsed to connect_failed.
+    [Object.assign(new Error("domain_policy"), { code: "domain_policy" }), "domain_policy"],
     [new Error("GET https://slack.com/api/oauth.v2.access?code=secret failed"), "connect_failed"],
   ]) {
     const failing = await setup(

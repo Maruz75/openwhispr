@@ -123,6 +123,20 @@ test("Connect opens Gmail's own login and says when send permission was left unt
   assert.doesNotMatch(container.textContent, /connectors\.gmail\.errors\.connect_failed/);
 });
 
+test("a Google Workspace admin block says so, not the generic access-wasn't-allowed message", async (t) => {
+  const container = await renderGmailRow(t, {
+    status: DISCONNECTED,
+    electronAPI: {
+      connectorConnect: async () => ({ status: "failed", errorCode: "domain_policy" }),
+    },
+  });
+
+  await React.act(async () => click(button(container, "connectors.gmail.connect")));
+
+  assert.match(container.textContent, /connectors\.gmail\.errors\.domain_policy/);
+  assert.doesNotMatch(container.textContent, /connectors\.gmail\.errors\.oauth_denied/);
+});
+
 test("an unverified Google address gets its own message; an unknown failure the generic one", async (t) => {
   const answers = [
     { status: "failed", errorCode: "email_not_verified" },

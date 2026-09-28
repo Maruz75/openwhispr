@@ -4158,7 +4158,8 @@
         "policy_blocked": "Votre organisation a désactivé les connecteurs.",
         "policy_unavailable": "Impossible de vérifier les paramètres de votre organisation. Réessayez.",
         "permission_not_granted": "Gmail n'a pas été connecté car l'autorisation d'envoyer des e-mails n'a pas été accordée. Reconnectez-vous en laissant cette autorisation cochée.",
-        "email_not_verified": "Google n'a pas vérifié l'adresse e-mail de ce compte, Gmail n'a donc pas été connecté."
+        "email_not_verified": "Google n'a pas vérifié l'adresse e-mail de ce compte, Gmail n'a donc pas été connecté.",
+        "domain_policy": "L'administrateur Google de votre organisation a bloqué cette application. Demandez-lui d'autoriser OpenWhispr."
       },
       "browser": {
         "connectedTitle": "Gmail est connecté",

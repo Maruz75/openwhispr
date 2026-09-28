@@ -3989,7 +3989,8 @@
         "policy_blocked": "您的組織已關閉連接器。",
         "policy_unavailable": "無法檢查您的組織設定，請重試。",
         "permission_not_granted": "由於未授予傳送郵件的權限，Gmail 未連接。請重新連接並保持勾選該權限。",
-        "email_not_verified": "Google 尚未驗證此帳戶的電子郵件地址，因此 Gmail 未連接。"
+        "email_not_verified": "Google 尚未驗證此帳戶的電子郵件地址，因此 Gmail 未連接。",
+        "domain_policy": "你的機構的 Google 管理員已封鎖此應用程式。請他們允許 OpenWhispr。"
       },
       "browser": {
         "connectedTitle": "Gmail 已連接",

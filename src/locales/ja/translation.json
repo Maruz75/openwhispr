@@ -3989,7 +3989,8 @@
         "policy_blocked": "組織によってコネクタが無効にされています。",
         "policy_unavailable": "組織の設定を確認できませんでした。もう一度お試しください。",
         "permission_not_granted": "メール送信の権限が許可されなかったため、Gmailは接続されませんでした。もう一度接続し、その権限をオンのままにしてください。",
-        "email_not_verified": "このアカウントのメールアドレスがGoogleで確認されていないため、Gmailは接続されませんでした。"
+        "email_not_verified": "このアカウントのメールアドレスがGoogleで確認されていないため、Gmailは接続されませんでした。",
+        "domain_policy": "組織のGoogle管理者がこのアプリをブロックしています。OpenWhisprを許可するよう管理者に依頼してください。"
       },
       "browser": {
         "connectedTitle": "Gmailが接続されました",

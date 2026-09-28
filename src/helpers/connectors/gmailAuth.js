@@ -22,6 +22,11 @@ const OAUTH_LOGIN_GONE = new Set(["invalid_grant"]);
 // Google refused the OAuth client itself, or the build has none: a
 // configuration fault, not the user's login, and asking again won't help.
 const CLIENT_REFUSED = new Set(["invalid_client", "unauthorized_client", "not_configured"]);
+// Google's authorize redirect carries these as `error` when a Workspace
+// admin blocked the app, or the app is restricted to another org — distinct
+// from an ordinary user decline (e.g. "access_denied"), which stays
+// oauth_denied.
+const DOMAIN_POLICY_ERRORS = new Set(["admin_policy_enforced", "org_internal"]);
 
 // A complete GMAIL_* pair overrides the calendar's client, which lives in
 // the same Google Cloud project, so CI and release configs need no new
@@ -196,6 +201,15 @@ function createGmailAuth({
           needsReconnect: false,
         };
       },
+    }).catch((error) => {
+      // The loopback flow maps every provider `error` redirect to
+      // oauth_denied, keeping the raw value as providerError. A Workspace
+      // admin block or an org-restricted app gets its own code so Settings
+      // can say so instead of the generic "access wasn't allowed".
+      if (error?.code === "oauth_denied" && DOMAIN_POLICY_ERRORS.has(error.providerError)) {
+        throw codedError("domain_policy");
+      }
+      throw error;
     });
   }
 

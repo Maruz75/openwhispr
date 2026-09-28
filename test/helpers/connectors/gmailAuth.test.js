@@ -159,6 +159,35 @@ test("authorize hands the connect's cancel signal to the loopback flow", async (
   assert.equal(flows[0].options.signal, controller.signal);
 });
 
+test("a Workspace admin block or org-restricted app maps to domain_policy; other denials stay oauth_denied", async () => {
+  const { createGmailAuth } = await loadAuth();
+  for (const [providerError, expectedCode] of [
+    ["admin_policy_enforced", "domain_policy"],
+    ["org_internal", "domain_policy"],
+    ["access_denied", "oauth_denied"],
+  ]) {
+    const credentials = memoryCredentials(null, { connectorId: "gmail" });
+    const auth = createGmailAuth({
+      api: {},
+      credentials,
+      getClientCredentials: () => CLIENT,
+      OAuthFlowError: FakeFlowError,
+      now: () => NOW,
+      // Mirrors oauthLoopbackFlow.js: a provider `error` redirect rejects
+      // with code "oauth_denied" and the raw value as providerError.
+      runOAuthLoopbackFlow: async () => {
+        throw Object.assign(new Error(`OAuth error: ${providerError}`), {
+          code: "oauth_denied",
+          providerError,
+        });
+      },
+    });
+
+    await assert.rejects(auth.authorize(), (error) => error.code === expectedCode, providerError);
+    assert.equal(credentials.saves.length, 0, providerError);
+  }
+});
+
 test("without a complete Google client, authorize fails fast with not_configured", async () => {
   for (const client of [
     { clientId: null, clientSecret: null },

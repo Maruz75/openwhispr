@@ -250,6 +250,8 @@ const CONNECT_ERROR_CODES = new Set([
   // Google says the account's address isn't verified.
   "permission_not_granted",
   "email_not_verified",
+  // Gmail: a Workspace admin blocked the app, or it's restricted to another org.
+  "domain_policy",
 ]);
 
 // A revoke is best effort: nothing may hang on an unreachable provider.

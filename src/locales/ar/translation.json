@@ -851,7 +851,8 @@
         "policy_blocked": "أوقفت مؤسستك تشغيل الموصلات.",
         "policy_unavailable": "تعذّر التحقق من إعدادات مؤسستك. حاول مرة أخرى.",
         "permission_not_granted": "لم يتم ربط Gmail لأن إذن إرسال الرسائل الإلكترونية لم يُمنح. أعد الربط واترك هذا الإذن محددًا.",
-        "email_not_verified": "لم تتحقق Google من عنوان البريد الإلكتروني لهذا الحساب، لذلك لم يتم ربط Gmail."
+        "email_not_verified": "لم تتحقق Google من عنوان البريد الإلكتروني لهذا الحساب، لذلك لم يتم ربط Gmail.",
+        "domain_policy": "حظر مسؤول Google في مؤسستك هذا التطبيق. اطلب منه السماح بـ OpenWhispr."
       },
       "browser": {
         "connectedTitle": "تم توصيل Gmail",

@@ -4158,7 +4158,8 @@
         "policy_blocked": "Konnektoren wurden von deiner Organisation deaktiviert.",
         "policy_unavailable": "Die Einstellungen deiner Organisation konnten nicht geprüft werden. Versuche es erneut.",
         "permission_not_granted": "Gmail wurde nicht verbunden, da die Berechtigung zum Senden von E-Mails nicht erteilt wurde. Verbinde erneut und lass diese Berechtigung aktiviert.",
-        "email_not_verified": "Google hat die E-Mail-Adresse dieses Kontos nicht bestätigt, daher wurde Gmail nicht verbunden."
+        "email_not_verified": "Google hat die E-Mail-Adresse dieses Kontos nicht bestätigt, daher wurde Gmail nicht verbunden.",
+        "domain_policy": "Der Google-Administrator deiner Organisation hat diese App blockiert. Bitte ihn, OpenWhispr zuzulassen."
       },
       "browser": {
         "connectedTitle": "Gmail ist verbunden",

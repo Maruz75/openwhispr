@@ -3989,7 +3989,8 @@
         "policy_blocked": "Sua organização desativou os conectores.",
         "policy_unavailable": "Não foi possível verificar as configurações da sua organização. Tente novamente.",
         "permission_not_granted": "O Gmail não foi conectado porque a permissão para enviar e-mails não foi concedida. Conecte novamente e deixe essa permissão marcada.",
-        "email_not_verified": "O Google não verificou o endereço de e-mail desta conta, então o Gmail não foi conectado."
+        "email_not_verified": "O Google não verificou o endereço de e-mail desta conta, então o Gmail não foi conectado.",
+        "domain_policy": "O administrador do Google da sua organização bloqueou este app. Peça a ele para permitir o OpenWhispr."
       },
       "browser": {
         "connectedTitle": "O Gmail está conectado",

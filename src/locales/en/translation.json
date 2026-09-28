@@ -4158,7 +4158,8 @@
         "policy_blocked": "Connectors are turned off by your organization.",
         "policy_unavailable": "Couldn't check your organization's settings. Try again.",
         "permission_not_granted": "Gmail wasn't connected because permission to send email wasn't granted. Connect again and leave that permission ticked.",
-        "email_not_verified": "Google hasn't verified this account's email address, so Gmail wasn't connected."
+        "email_not_verified": "Google hasn't verified this account's email address, so Gmail wasn't connected.",
+        "domain_policy": "Your organization's Google admin blocked this app. Ask them to allow OpenWhispr."
       },
       "browser": {
         "connectedTitle": "Gmail is connected",
