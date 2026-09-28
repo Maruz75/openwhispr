@@ -462,6 +462,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     sendMic: (samples) => ipcRenderer.send("voice-conversation:mic", samples),
     keepModelWarm: (modelId) => ipcRenderer.invoke("voice-conversation:keep-model-warm", modelId),
     speak: (request) => ipcRenderer.invoke("voice-conversation:speak", request),
+    prepareSpeech: (texts) => ipcRenderer.invoke("voice-conversation:prepare-speech", texts),
     cancelSpeech: (utteranceId) =>
       ipcRenderer.invoke("voice-conversation:cancel-speech", { utteranceId }),
     stop: (sessionId) => ipcRenderer.invoke("voice-conversation:stop", sessionId),

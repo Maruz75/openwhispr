@@ -236,6 +236,13 @@ function registerVoiceConversationIpc({
     voiceWorker.request("speak", request)
   );
 
+  // A handful of short, fixed lines; anything else isn't what this is for.
+  ipcMain.handle("voice-conversation:prepare-speech", (_event, texts) => {
+    if (!session || !voiceWorker.running || !Array.isArray(texts)) return { queued: 0 };
+    const lines = texts.filter((text) => typeof text === "string" && text.length <= 200);
+    return voiceWorker.request("prepare-speech", { texts: lines.slice(0, 10) });
+  });
+
   ipcMain.handle("voice-conversation:get-readiness", async (_event, request = {}) => {
     const speechModel = resolveVoiceParakeetModel(request.parakeetModel, (name) =>
       parakeetManager.isModelDownloaded(name)

@@ -12,9 +12,13 @@ class FakeVoiceWorker extends EventEmitter {
     this.running = false;
     this.notified = [];
     this.configure = null;
+    this.requests = [];
   }
-  request(method) {
-    assert.equal(method, "configure");
+  request(method, payload) {
+    if (method !== "configure") {
+      this.requests.push({ method, payload });
+      return Promise.resolve({ queued: payload.texts.length });
+    }
     return new Promise((resolve, reject) => {
       this.configure = {
         resolve: () => {
@@ -283,4 +287,18 @@ test("readiness checks the BYOK provider's API key in the main process", async (
     if (saved === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = saved;
   }
+});
+
+test("prepared speech only reaches a running session's worker, and only short lines", async () => {
+  const prepare = (texts) => handlers.get("voice-conversation:prepare-speech")({}, texts);
+  voiceWorker.requests.length = 0;
+  assert.deepEqual(await prepare(["One moment."]), { queued: 0 }, "no session, no worker work");
+
+  await startSession();
+  await prepare(["One moment.", 42, "x".repeat(500)]);
+
+  assert.deepEqual(voiceWorker.requests, [
+    { method: "prepare-speech", payload: { texts: ["One moment."] } },
+  ]);
+  await stop();
 });

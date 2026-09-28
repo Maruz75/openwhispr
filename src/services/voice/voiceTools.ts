@@ -22,12 +22,21 @@ export function compactToolResultForVoice(toolName: string, data: unknown): unkn
 }
 
 // Voice conversation: English-only for now; needs translation before shipping.
+const FILLERS = {
+  web: "Let me look that up.",
+  notes: "Let me check your notes.",
+  calendar: "Let me check your calendar.",
+  other: "One moment.",
+};
+
+/** Every line voiceToolFiller can return, so a session can prepare their audio ahead. */
+export const VOICE_TOOL_FILLERS: readonly string[] = Object.values(FILLERS);
+
 export function voiceToolFiller(toolNames: string[]): string {
-  if (toolNames.includes("web_search")) return "Let me look that up.";
+  if (toolNames.includes("web_search")) return FILLERS.web;
   if (toolNames.some((name) => name === "search_notes" || name === "get_note")) {
-    return "Let me check your notes.";
+    return FILLERS.notes;
   }
-  if (toolNames.some((name) => name.startsWith("get_calendar")))
-    return "Let me check your calendar.";
-  return "One moment.";
+  if (toolNames.some((name) => name.startsWith("get_calendar"))) return FILLERS.calendar;
+  return FILLERS.other;
 }

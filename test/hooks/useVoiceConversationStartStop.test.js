@@ -41,6 +41,7 @@ async function mountVoiceConversation(t, { settings = {} } = {}) {
     errors: [],
     stopIds: [],
     spoken: [],
+    prepared: [],
     player: [],
   };
   const events = { emit: () => {} };
@@ -73,6 +74,10 @@ async function mountVoiceConversation(t, { settings = {} } = {}) {
     sendMic: () => {},
     keepModelWarm: async () => {},
     cancelSpeech: async () => {},
+    prepareSpeech: async (texts) => {
+      calls.prepared.push(...texts);
+      return { queued: texts.length };
+    },
     speak: async ({ text }) => {
       calls.spoken.push(text);
       return {};
@@ -414,4 +419,12 @@ test("a meeting recording that takes the mic ends the session with a translated 
   assert.equal(hook.current.state, "off");
   assert.equal(calls.micStops, 1);
   assert.deepEqual(calls.errors, ["voiceConversation.errors.endedForMeeting"]);
+});
+
+test("a session prepares the tool filler lines as soon as it is listening", async (t) => {
+  const { calls, startListening } = await mountVoiceConversation(t);
+  await startListening();
+
+  assert.ok(calls.prepared.includes("Let me check your calendar."));
+  assert.ok(calls.prepared.includes("One moment."));
 });

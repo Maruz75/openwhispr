@@ -10,7 +10,7 @@ import type {
   VoiceConversationEvent,
   VoiceTurnEndpoint,
 } from "../services/voice/types";
-import { voiceToolFiller } from "../services/voice/voiceTools";
+import { VOICE_TOOL_FILLERS, voiceToolFiller } from "../services/voice/voiceTools";
 import { resolveChatStreamingInference } from "../helpers/dictationAgentInference.js";
 import { findUnbackedActionClaim, UNBACKED_CLAIM_CORRECTION } from "../services/voice/actionClaims";
 
@@ -480,6 +480,8 @@ export function useVoiceConversation({ onUserTurn, onError }: VoiceConversationO
         micRef.current = mic;
         setState("listening");
         logger.info("Voice conversation started", info, "voice-conversation");
+        // The lines said while a tool runs play at once instead of after a synthesis.
+        void api.prepareSpeech([...VOICE_TOOL_FILLERS, UNBACKED_CLAIM_CORRECTION]).catch(() => {});
 
         // Keep a local voice model loaded for the whole session: warm it now so the
         // first turn skips the cold start, then beat llama-server's 5-minute idle stop.

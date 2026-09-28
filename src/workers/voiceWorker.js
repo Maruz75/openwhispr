@@ -8,6 +8,7 @@ const {
   withPreRoll,
 } = require("../helpers/voiceTurnEndpointer");
 const { createSmartTurnSession } = require("./smartTurnSession");
+const { createPreparedSpeech } = require("./preparedSpeech");
 
 const VAD_SAMPLE_RATE = 16000;
 const FALLBACK_SILENCE_SECONDS = 0.5;
@@ -51,6 +52,27 @@ let latestClassifyId = 0;
 let lastClassify = null;
 let ttsQueue = Promise.resolve();
 const cancelledUtterances = new Set();
+
+// One TTS instance, so every synthesis (answers and prepared lines) runs in order.
+function enqueueTts(run) {
+  const result = ttsQueue.then(run, run);
+  ttsQueue = result.catch(() => {});
+  return result;
+}
+
+const preparedSpeech = createPreparedSpeech({
+  synthesize: (text) =>
+    enqueueTts(async () => {
+      const audio = await tts.generateAsync({
+        text,
+        speed: 1.0,
+        enableExternalBuffer: false,
+        ...ttsRequestExtras,
+      });
+      return new Float32Array(audio.samples);
+    }),
+  onError: (error) => log("warn", "speech preparation failed", { error: error?.message }),
+});
 
 function loadSherpa() {
   if (!sherpa) sherpa = require("sherpa-onnx-node");
@@ -97,6 +119,7 @@ async function configure({
   const lib = loadSherpa();
   const started = Date.now();
   tts = await lib.OfflineTts.createAsync(ttsConfig);
+  preparedSpeech.clear();
   ttsRequestExtras = {
     sid: ttsGeneration.sid,
     generationConfig: new lib.GenerationConfig(ttsGeneration),
@@ -129,6 +152,11 @@ function speak({ utteranceId, chunkIndex, text }) {
     const started = Date.now();
     // Time spent behind earlier chunks (e.g. a cancelled answer's in-flight chunk).
     const queueWaitMs = started - receivedAt;
+    const prepared = preparedSpeech.get(text);
+    if (prepared) {
+      emit("tts-audio", { utteranceId, chunkIndex, samples: prepared });
+      return { queueWaitMs, firstAudioMs: 0, totalMs: 0, sampleRate: tts.sampleRate };
+    }
     let streamedSamples = 0;
     let firstAudioMs = null;
     const audio = await tts.generateAsync({
@@ -162,9 +190,8 @@ function speak({ utteranceId, chunkIndex, text }) {
       sampleRate: audio.sampleRate,
     };
   };
-  const result = ttsQueue.then(run, run);
-  ttsQueue = result.catch(() => {});
-  return result;
+  preparedSpeech.speakStarted();
+  return enqueueTts(run).finally(() => preparedSpeech.speakEnded());
 }
 
 const samplesToMs = (samples) => Math.round((samples / VAD_SAMPLE_RATE) * 1000);
@@ -250,6 +277,10 @@ function feedVad({ samples }) {
 const handlers = {
   configure,
   speak,
+  "prepare-speech": ({ texts }) => {
+    if (tts) preparedSpeech.prepare(texts);
+    return { queued: tts ? texts.length : 0 };
+  },
   cancel: ({ utteranceId }) => {
     cancelledUtterances.add(utteranceId);
     // Every chunk of the utterance is queued ahead of this cancel; once they drain, the id is dead.

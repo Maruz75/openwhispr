@@ -1821,6 +1821,8 @@ declare global {
         onHarnessDone: (callback: () => void) => () => void;
         sendMic: (samples: Float32Array) => void;
         keepModelWarm: (modelId: string) => Promise<{ warmed: boolean; reason?: string }>;
+        /** Synthesizes short lines ahead of time so they play without a wait. */
+        prepareSpeech: (texts: readonly string[]) => Promise<{ queued: number }>;
         speak: (request: { utteranceId: string; chunkIndex: number; text: string }) => Promise<{
           queueWaitMs?: number;
           firstAudioMs?: number | null;
