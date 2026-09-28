@@ -295,12 +295,16 @@ export default function NoteEditorScreen() {
     [note?.participants],
   );
   const noteSpace = spaces.find((space) => space.id === note?.spaceId);
+  // A Space missing from the list (access just revoked, or not synced yet) has no folders to offer,
+  // and its notes must never be moved into private folders.
+  const isSpaceUnknown = note?.spaceId != null && !noteSpace;
   const scopeSpaceId = noteSpace?.kind === 'team' ? noteSpace.id : null;
   const targetFolders = useMemo(
-    () => (scopeSpaceId != null ? getSpaceFolders(scopeSpaceId) : privateFolders),
+    () =>
+      isSpaceUnknown ? [] : scopeSpaceId != null ? getSpaceFolders(scopeSpaceId) : privateFolders,
     // spaceFolders re-reads a team space's folders after one is created from the move sheet.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [getSpaceFolders, privateFolders, scopeSpaceId, spaceFolders],
+    [getSpaceFolders, isSpaceUnknown, privateFolders, scopeSpaceId, spaceFolders],
   );
   const folderName = targetFolders.find((folder) => folder.id === note?.folderId)?.name ?? null;
   const move = useMoveNote({
@@ -1174,9 +1178,7 @@ export default function NoteEditorScreen() {
             attendeeLabel={attendeeLabel}
             folderLabel={folderName}
             onPressAttendees={() => setAttendeesVisible(true)}
-            onPressFolder={() => {
-              if (note) move.open(note.id);
-            }}
+            onPressFolder={note && !isSpaceUnknown ? () => move.open(note.id) : undefined}
           />
 
           {conflict ? (

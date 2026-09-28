@@ -8,7 +8,8 @@ interface NoteMetaRowProps {
   attendeeLabel: string | null;
   folderLabel: string | null;
   onPressAttendees: () => void;
-  onPressFolder: () => void;
+  /** Omitted when the note can't be moved; the folder chip is then hidden. */
+  onPressFolder?: () => void;
 }
 
 const CHIP = 'h-9 flex-row items-center gap-1.5 rounded-full bg-tertiarySystemFill px-3';
@@ -44,24 +45,26 @@ export function NoteMetaRow({
           ) : null}
         </View>
       ) : null}
-      <Pressable
-        testID="note-meta-folder"
-        accessibilityRole="button"
-        accessibilityLabel={folderLabel ? `Folder: ${folderLabel}. Move note` : 'Add to folder'}
-        onPress={onPressFolder}
-        className={CHIP}
-        style={{ borderCurve: 'continuous' }}
-      >
-        <SystemIcon
-          name={folderLabel ? 'folder' : 'folder.badge.plus'}
-          mdName={folderLabel ? 'Folder' : 'FolderPlus'}
-          size={14}
-          color="secondaryLabel"
-        />
-        <Text className="text-[14px] font-medium text-secondaryLabel">
-          {folderLabel ?? 'Add to folder'}
-        </Text>
-      </Pressable>
+      {onPressFolder ? (
+        <Pressable
+          testID="note-meta-folder"
+          accessibilityRole="button"
+          accessibilityLabel={folderLabel ? `Folder: ${folderLabel}. Move note` : 'Add to folder'}
+          onPress={onPressFolder}
+          className={CHIP}
+          style={{ borderCurve: 'continuous' }}
+        >
+          <SystemIcon
+            name={folderLabel ? 'folder' : 'folder.badge.plus'}
+            mdName={folderLabel ? 'Folder' : 'FolderPlus'}
+            size={14}
+            color="secondaryLabel"
+          />
+          <Text className="text-[14px] font-medium text-secondaryLabel">
+            {folderLabel ?? 'Add to folder'}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

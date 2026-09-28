@@ -1309,6 +1309,14 @@ describe('NoteEditorScreen meta row', () => {
     expect(queryByTestId('note-meta-attendees')).toBeNull();
   });
 
+  it('offers no folders for a note whose Space is not on this device', () => {
+    mockNote = note({ spaceId: 99 });
+    mockNotesState.notes = [mockNote];
+    const { queryByTestId, queryByText } = render(<NoteEditorScreen />);
+    expect(queryByTestId('note-meta-folder')).toBeNull();
+    expect(queryByText('Meetings')).toBeNull();
+  });
+
   it('dates a note pulled before its creation time synced by its last edit, not the pull', () => {
     mockNote = note({ createdAt: '2025-09-27 08:00:00', updatedAt: '2025-06-26T12:00:00.000Z' });
     mockNotesState.notes = [mockNote];

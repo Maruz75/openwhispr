@@ -72,6 +72,11 @@ describe('NoteMetaRow', () => {
     expect(getByText('Today 9:27 AM')).toBeTruthy();
   });
 
+  it('hides the folder chip for a note that cannot be moved', () => {
+    const { queryByTestId } = render(<NoteMetaRow {...props} onPressFolder={undefined} />);
+    expect(queryByTestId('note-meta-folder')).toBeNull();
+  });
+
   it('offers Add to folder for a note outside any folder', () => {
     const { getByText } = render(<NoteMetaRow {...props} folderLabel={null} />);
     expect(getByText('Add to folder')).toBeTruthy();
