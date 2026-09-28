@@ -60,7 +60,8 @@ export const MeetingRecordScreen = (): React.JSX.Element => {
   const recordingStartedAtRef = useRef<number | null>(null);
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
-  const keyboardHeight = useKeyboardHeight();
+  // Only the recording phase has a notes field to keep above the keyboard.
+  const keyboardHeight = useKeyboardHeight(phase === 'recording');
   const googleCalendarAccounts = useGoogleCalendarStore((s) => s.accounts);
   const loadGoogleCalendars = useGoogleCalendarStore((s) => s.load);
   const createMeetingNote = useNotesStore((s) => s.createMeetingNote);

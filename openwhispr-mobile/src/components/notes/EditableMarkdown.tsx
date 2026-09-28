@@ -62,7 +62,7 @@ export function EditableMarkdown({
           <Pressable
             testID="enhanced-done"
             accessibilityRole="button"
-            hitSlop={8}
+            hitSlop={12}
             onPress={() => setEditingState(false)}
           >
             <Text className="text-[15px] font-semibold text-link">Done</Text>
@@ -93,7 +93,7 @@ export function EditableMarkdown({
           <Pressable
             testID="enhanced-edit"
             accessibilityRole="button"
-            hitSlop={8}
+            hitSlop={12}
             onPress={() => setEditingState(true)}
           >
             <Text className="text-[15px] font-semibold text-link">Edit</Text>

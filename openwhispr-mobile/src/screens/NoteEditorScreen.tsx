@@ -306,7 +306,8 @@ export default function NoteEditorScreen() {
   const targetFolders = useMemo(
     () =>
       isSpaceUnknown ? [] : scopeSpaceId != null ? getSpaceFolders(scopeSpaceId) : privateFolders,
-    // spaceFolders re-reads a team space's folders after one is created from the move sheet.
+    // getSpaceFolders reads the repository, so the store's folder lists stand in as the signal to
+    // re-read: every folder reload (create, rename, move, sync) replaces them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [getSpaceFolders, isSpaceUnknown, privateFolders, scopeSpaceId, spaceFolders],
   );
@@ -779,19 +780,11 @@ export default function NoteEditorScreen() {
         runActionWithRouting(action).catch(() => {});
         return;
       }
-      Alert.alert(
+      confirmDestructive(
         'Replace enhanced notes?',
         'Running this action replaces the current enhanced notes, including any edits.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Replace',
-            style: 'destructive',
-            onPress: () => {
-              runActionWithRouting(action).catch(() => {});
-            },
-          },
-        ],
+        () => runActionWithRouting(action),
+        { destructiveLabel: 'Replace' },
       );
     },
     [note?.enhancedContent, runActionWithRouting],
