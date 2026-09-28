@@ -10,6 +10,9 @@ const {
   MAX_EMAIL_SUBJECT_LENGTH: MAX_SUBJECT_LENGTH,
   MAX_EMAIL_BODY_BYTES: MAX_BODY_BYTES,
 } = require("./emailCompose");
+const { createGmailApi } = require("./gmailApi");
+const { createGmailAuth, gmailClientCredentials, sharesCalendarGrant } = require("./gmailAuth");
+const { connectorResultPage } = require("./oauthResultPage");
 const { buildRawMessage } = require("./gmailMime");
 const { isTransportErrorCode } = require("./deliveryClassifier");
 
@@ -279,8 +282,40 @@ function createGmailConnector({ api, auth, credentials }) {
   };
 }
 
+// Built by createConnectors.js. One auth instance for every consumer, like
+// Slack's: sends that race a refresh share its single-flight map.
+function buildGmailConnector(deps) {
+  const api = createGmailApi({ fetchImpl: deps.fetch });
+  const auth = createGmailAuth({
+    api,
+    credentials: deps.credentials,
+    getClientCredentials: () => gmailClientCredentials(deps.env),
+    // Revoking Gmail must not disconnect that account's Google Calendar.
+    // `clientId` is the login's own issuing client (gmailAuth.js passes it
+    // through from the credential being revoked), not deps.env's current
+    // Gmail client id — a login issued under an older client must still be
+    // checked against the project it actually belongs to.
+    sharesGrant: (email, clientId) =>
+      sharesCalendarGrant({
+        gmailClientId: clientId,
+        calendarClientId: deps.env.GOOGLE_CALENDAR_CLIENT_ID,
+        // Read only once the projects match (sharesCalendarGrant calls it).
+        getCalendarEmails: () => deps.getGoogleCalendarAccounts().map((account) => account.email),
+        email,
+      }),
+    runOAuthLoopbackFlow: deps.runOAuthLoopbackFlow,
+    OAuthFlowError: deps.OAuthFlowError,
+    // Always the local page: the hosted callback page reads an unknown
+    // gmail_connected param as a website sign-in (Plan 2).
+    renderResultPage: connectorResultPage(deps, "gmail"),
+    logger: deps.logger,
+  });
+  return createGmailConnector({ api, auth, credentials: deps.credentials });
+}
+
 module.exports = {
   createGmailConnector,
+  buildGmailConnector,
   normalizeRecipients,
   sentMessageUrl,
   sentFolderUrl,

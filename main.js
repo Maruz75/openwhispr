@@ -474,17 +474,7 @@ function initializeCoreManagers() {
   const { createActionLog } = require("./src/helpers/connectors/actionLog");
   const { createCredentialStore } = require("./src/helpers/connectors/credentialStore");
   const { createConnectorCredentials } = require("./src/helpers/connectors/connectorCredentials");
-  const { createSlackApi } = require("./src/helpers/connectors/slackApi");
-  const { createSlackAuth } = require("./src/helpers/connectors/slackAuth");
-  const { createSlackDirectory } = require("./src/helpers/connectors/slackDirectory");
-  const { createSlackConnector } = require("./src/helpers/connectors/slackConnector");
-  const { createGmailApi } = require("./src/helpers/connectors/gmailApi");
-  const {
-    createGmailAuth,
-    gmailClientCredentials,
-    sharesCalendarGrant,
-  } = require("./src/helpers/connectors/gmailAuth");
-  const { createGmailConnector } = require("./src/helpers/connectors/gmailConnector");
+  const { createConnectors } = require("./src/helpers/connectors/createConnectors");
   const { renderOAuthResultPage } = require("./src/helpers/connectors/oauthResultPage");
   const { runOAuthLoopbackFlow, OAuthFlowError } = require("./src/helpers/oauthLoopbackFlow");
   const { broadcastToWindows } = require("./src/helpers/windowBroadcast");
@@ -506,82 +496,23 @@ function initializeCoreManagers() {
     }),
     getAccountId: getConnectorAccountId,
   });
-  const slackApi = createSlackApi({
-    fetchImpl: (url, init) => net.fetch(url, { ...init, useSessionCookies: false }),
-  });
-  const slackAuth = createSlackAuth({
-    api: slackApi,
-    credentials: connectorCredentials,
-    getClientId: () => process.env.SLACK_CLIENT_ID,
-    runOAuthLoopbackFlow,
-    OAuthFlowError,
-    renderResultPage: ({ ok }) =>
-      renderOAuthResultPage({
-        ok,
-        title: i18nMain.t(
-          ok ? "connectors.slack.browser.connectedTitle" : "connectors.slack.browser.failedTitle"
-        ),
-        body: i18nMain.t(
-          ok ? "connectors.slack.browser.connectedBody" : "connectors.slack.browser.failedBody"
-        ),
-      }),
-    // Shared by every consumer of Slack auth: its single-flight refresh map is
-    // per instance, so a second instance could spend the same single-use
-    // refresh token.
-    logger: debugLogger,
-  });
-  const gmailApi = createGmailApi({
-    fetchImpl: (url, init) => net.fetch(url, { ...init, useSessionCookies: false }),
-  });
-  // One instance for every consumer, like Slack's: sends that race a refresh
-  // share its single-flight map.
-  const gmailAuth = createGmailAuth({
-    api: gmailApi,
-    credentials: connectorCredentials,
-    getClientCredentials: () => gmailClientCredentials(process.env),
-    // Revoking Gmail must not disconnect that account's Google Calendar.
-    sharesGrant: (email, clientId) =>
-      sharesCalendarGrant({
-        gmailClientId: clientId,
-        calendarClientId: process.env.GOOGLE_CALENDAR_CLIENT_ID,
-        getCalendarEmails: () =>
-          (googleCalendarManager?.getAccounts() ?? []).map((account) => account.email),
-        email,
-      }),
-    runOAuthLoopbackFlow,
-    OAuthFlowError,
-    // Always the local page: the hosted callback page reads an unknown
-    // gmail_connected param as a website sign-in (Plan 2).
-    renderResultPage: ({ ok }) =>
-      renderOAuthResultPage({
-        ok,
-        title: i18nMain.t(
-          ok ? "connectors.gmail.browser.connectedTitle" : "connectors.gmail.browser.failedTitle"
-        ),
-        body: i18nMain.t(
-          ok ? "connectors.gmail.browser.connectedBody" : "connectors.gmail.browser.failedBody"
-        ),
-      }),
-    logger: debugLogger,
-  });
   connectorManager = createConnectorManager({
-    connectors: [
-      require("./src/helpers/connectors/emailConnector").createEmailConnector({
-        openExternal: (url) => require("./src/helpers/externalUrlOpener").openExternalUrl(url),
-        writeClipboard: (text, webContents) => clipboardManager.writeClipboard(text, webContents),
-      }),
-      createSlackConnector({
-        api: slackApi,
-        auth: slackAuth,
-        directory: createSlackDirectory({ api: slackApi }),
-        credentials: connectorCredentials,
-      }),
-      createGmailConnector({
-        api: gmailApi,
-        auth: gmailAuth,
-        credentials: connectorCredentials,
-      }),
-    ],
+    connectors: createConnectors({
+      fetch: (url, init) => net.fetch(url, { ...init, useSessionCookies: false }),
+      i18n: i18nMain,
+      runOAuthLoopbackFlow,
+      OAuthFlowError,
+      renderOAuthResultPage,
+      credentials: connectorCredentials,
+      logger: debugLogger,
+      env: process.env,
+      openExternal: (url) => require("./src/helpers/externalUrlOpener").openExternalUrl(url),
+      writeClipboard: (text, webContents) => clipboardManager.writeClipboard(text, webContents),
+      // Read only when revoking a Gmail login on the calendar's Google project;
+      // the calendar manager is created below.
+      getGoogleCalendarAccounts: () => googleCalendarManager?.getAccounts() ?? [],
+      broadcast: broadcastToWindows,
+    }),
     pendingActions: createPendingActions(),
     actionLog: createActionLog(databaseManager),
     logger: debugLogger,

@@ -1,5 +1,9 @@
 const { resolveTarget } = require("./targetResolution");
 const { isValidEmailAddress } = require("./emailCompose");
+const { createSlackApi } = require("./slackApi");
+const { createSlackAuth } = require("./slackAuth");
+const { createSlackDirectory } = require("./slackDirectory");
+const { connectorResultPage } = require("./oauthResultPage");
 
 // markdown_text's documented limit, applied to what Slack receives.
 const SLACK_MESSAGE_LIMIT = 12000;
@@ -345,8 +349,31 @@ function createSlackConnector({ api, auth, directory, credentials }) {
   };
 }
 
+// Built by createConnectors.js. One auth instance for every consumer: its
+// single-flight refresh map is per instance, so a second one could spend the
+// same single-use refresh token.
+function buildSlackConnector(deps) {
+  const api = createSlackApi({ fetchImpl: deps.fetch });
+  const auth = createSlackAuth({
+    api,
+    credentials: deps.credentials,
+    getClientId: () => deps.env.SLACK_CLIENT_ID,
+    runOAuthLoopbackFlow: deps.runOAuthLoopbackFlow,
+    OAuthFlowError: deps.OAuthFlowError,
+    renderResultPage: connectorResultPage(deps, "slack"),
+    logger: deps.logger,
+  });
+  return createSlackConnector({
+    api,
+    auth,
+    directory: createSlackDirectory({ api }),
+    credentials: deps.credentials,
+  });
+}
+
 module.exports = {
   createSlackConnector,
+  buildSlackConnector,
   escapeSpecials,
   formatMessage,
   SLACK_MESSAGE_LIMIT,
