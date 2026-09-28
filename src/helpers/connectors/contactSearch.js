@@ -52,12 +52,12 @@ function isPersonAddress(email) {
 // Invisible format characters (bidi overrides, zero-width joiners) go, and
 // so do angle brackets, their look-alikes and anything shaped like an
 // address, so a name can't pass itself off as another "Name <address>".
-const NAME_BREAKERS = /[\p{Cc}\s<>＜＞‹›«»〈〉《》⟨⟩]+/gu;
+const NAME_BREAKERS = /[\p{Cc}\s<>＜＞﹤﹥˂˃‹›«»〈〉《》⟨⟩]+/gu;
 function attendeeName(value) {
   if (typeof value !== "string") return null;
   const name = value
     .replace(/\p{Cf}/gu, "")
-    .replace(/\S*@\S*/g, " ")
+    .replace(/\S*[@＠﹫]\S*/g, " ")
     .replace(NAME_BREAKERS, " ")
     .trim();
   return name || null;
@@ -71,13 +71,18 @@ function attendeeName(value) {
  * attendees. De-duplicated case-insensitively, in the note's order.
  */
 function personAttendees(sources, attendees, { organizerEmail = null } = {}) {
+  const list = Array.isArray(attendees) ? attendees : [];
   const excluded = excludedAddresses(sources);
+  // A participant flagged as the user excludes that address everywhere, so
+  // it can't come back as an identified speaker or as the organizer.
+  for (const attendee of list) {
+    if (attendee?.self === true && typeof attendee.email === "string") {
+      excluded.add(attendee.email.trim().toLowerCase());
+    }
+  }
   const seen = new Set();
   const people = [];
-  const all = [
-    ...(Array.isArray(attendees) ? attendees : []),
-    ...(organizerEmail ? [{ email: organizerEmail, displayName: null }] : []),
-  ];
+  const all = [...list, ...(organizerEmail ? [{ email: organizerEmail, displayName: null }] : [])];
   for (const attendee of all) {
     if (!attendee || attendee.self === true || attendee.resource === true) continue;
     const email = typeof attendee.email === "string" ? attendee.email.trim() : "";

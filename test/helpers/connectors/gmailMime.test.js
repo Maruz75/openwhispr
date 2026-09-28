@@ -316,7 +316,8 @@ test("the largest email the card allows still fits the raw cap", async () => {
   const { buildRawMessage, MAX_RAW_BYTES } = await load();
   const { MAX_EMAIL_BODY_BYTES, MAX_EMAIL_RECIPIENTS, MAX_EMAIL_SUBJECT_LENGTH, emailBodyBytes } =
     await import("../../../src/helpers/connectors/emailCompose.js");
-  // Long local parts on internationalized domains, which grow in punycode.
+  // The longest local part (64 bytes, RFC 5321) on internationalized
+  // domains, which grow in punycode.
   const address = (index) =>
     `${String(index).padStart(2, "0")}${"l".repeat(62)}@${"ü".repeat(55)}.${"ü".repeat(55)}.${"ü".repeat(55)}.de`;
   const body = "é".repeat(MAX_EMAIL_BODY_BYTES / 2);

@@ -27,16 +27,17 @@ export function GmailConnectorRow({
       accountSummary={gmailAccountSummary}
       // Gmail's mark, like the calendar rows' brand marks: the generic
       // envelope is the "Email drafts" row just above.
+      brandIcon
       icon={
         <img
           src={gmailMark}
           alt=""
           aria-hidden="true"
-          width={16}
-          height={12}
+          width={20}
+          height={15}
           decoding="async"
           draggable={false}
-          className="h-3 w-4 shrink-0 select-none"
+          className="h-[15px] w-5 shrink-0 select-none"
         />
       }
     />

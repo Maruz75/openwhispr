@@ -235,7 +235,8 @@ test("a failed or unknown email still tells the model what the user changed", as
   assert.equal(unknown.finalText, "edited");
   assert.equal(unknown.status, "unknown");
   assert.equal(
-    "final" in approvalOutcomeResult({ state: "failed", errorCode: "x", message: "m" }, "#eng").data,
+    "final" in
+      approvalOutcomeResult({ state: "failed", errorCode: "x", message: "m" }, "#eng").data,
     false,
     "an unedited card adds nothing"
   );

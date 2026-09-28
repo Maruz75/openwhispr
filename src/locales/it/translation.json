@@ -3911,6 +3911,8 @@
         "bodyLabel": "Messaggio",
         "addressHint": "Separa gli indirizzi con una virgola.",
         "invalidAddress": "{{address}} non è un indirizzo email completo come nome@esempio.com.",
+        "invalidAddressAnnouncement": "Uno degli indirizzi non è un indirizzo email completo.",
+        "sendsTo": "Invio a {{addresses}}",
         "missingTo": "Aggiungi almeno un indirizzo in A.",
         "tooManyRecipients": "Un'email può andare al massimo a {{max}} indirizzi, tra A e Cc.",
         "subjectTooLong": "L'oggetto può contenere al massimo {{max}} caratteri.",
@@ -4037,7 +4039,7 @@
       "unknown": "Non confermato. Controlla se è andato a buon fine prima di riprovare.",
       "draftUnknown": "Non confermato: la bozza per {{destination}} potrebbe non essersi aperta. Controlla prima di riprovare.",
       "contactsFound": "Contatti trovati: {{total}}",
-      "draftLimit": "Si possono aprire solo {{count}} bozze per richiesta.",
+      "draftLimit": "Si possono aprire solo {{max}} bozze per richiesta.",
       "clipboardBusy": "Non aperta: il testo di un'altra bozza è ancora negli appunti.",
       "errors": {
         "open_failed": "Impossibile aprire l'app email.",
@@ -4076,7 +4078,7 @@
       "unknownSent": {
         "gmail": "Impossibile confermare l'invio dell'email a {{destination}}. Controlla la cartella Posta inviata di Gmail."
       },
-      "gmailDraftLimit": "Si possono preparare solo {{count}} email per richiesta."
+      "gmailDraftLimit": "Si possono preparare solo {{max}} email per richiesta."
     }
   },
   "calendar": {

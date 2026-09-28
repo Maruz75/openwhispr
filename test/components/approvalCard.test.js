@@ -169,12 +169,21 @@ test("an email card with a bad or missing recipient, or past Gmail's limits, dis
     [["josh@acme.test"], [], "subjectTooLong", "x".repeat(251)],
   ]) {
     const markup = await renderCard(t, emailEntry({ ...EMAIL_PREVIEW.fields, to, cc, subject }));
+    const reasonId = markup.match(
+      new RegExp(`<p id="([^"]+)"[^>]*>connectors\\.approval\\.email\\.${problem}<`)
+    )?.[1];
+    assert.ok(reasonId, `${JSON.stringify({ to, cc })}: the card says why`);
+    // The live region names the kind of problem, never a half-typed address.
+    const announced = problem === "invalidAddress" ? "invalidAddressAnnouncement" : problem;
     assert.match(
       markup,
-      new RegExp(`aria-live="polite"[^>]*>connectors\\.approval\\.email\\.${problem}<`),
-      JSON.stringify({ to, cc })
+      new RegExp(`aria-live="polite"[^>]*>connectors\\.approval\\.email\\.${announced}<`)
     );
-    assert.match(markup, /<button[^>]*disabled=""[^>]*>connectors\.approval\.send</);
+    // Still focusable, and it says why it can't send.
+    const send = markup.match(/<button[^>]*>connectors\.approval\.send</)?.[0] ?? "";
+    assert.match(send, /aria-disabled="true"/);
+    assert.match(send, new RegExp(`aria-describedby="${reasonId}"`));
+    assert.doesNotMatch(send, /\sdisabled=""/);
   }
 });
 

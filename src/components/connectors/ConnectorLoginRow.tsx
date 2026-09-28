@@ -36,6 +36,8 @@ export interface ConnectorLoginRowProps {
   /** Values for `connectors.<id>.connectedAs`. */
   accountSummary: (status: ConnectorStatus) => Record<string, string>;
   icon: ReactNode;
+  /** A full-colour brand mark sits on a white tile, like the calendar rows'. */
+  brandIcon?: boolean;
 }
 
 /**
@@ -50,6 +52,7 @@ export function ConnectorLoginRow({
   onUpgrade,
   accountSummary,
   icon,
+  brandIcon = false,
 }: ConnectorLoginRowProps): ReactElement | null {
   const { t } = useTranslation();
   const status = useConnectorStatusStore((state) => state.statuses[connectorId]);
@@ -129,7 +132,13 @@ export function ConnectorLoginRow({
   return (
     <SettingsPanelRow>
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-primary/5 dark:bg-primary/10 flex items-center justify-center shrink-0">
+        <div
+          className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+            brandIcon
+              ? "bg-white dark:bg-surface-raised shadow-[0_0_0_1px_rgba(0,0,0,0.04)] dark:shadow-none dark:border dark:border-white/10"
+              : "bg-primary/5 dark:bg-primary/10"
+          }`}
+        >
           {icon}
         </div>
         <div className="flex-1 min-w-0">
@@ -137,11 +146,10 @@ export function ConnectorLoginRow({
           <p className="text-xs text-muted-foreground/70 mt-0.5 leading-relaxed" dir="auto">
             {summary}
           </p>
-          {grantKept && (
-            <p role="status" className="text-xs text-muted-foreground mt-1" dir="auto">
-              {copy("grantKept")}
-            </p>
-          )}
+          {/* Mounted before the note arrives, so a screen reader announces it. */}
+          <div role="status" className="text-xs text-muted-foreground" dir="auto">
+            {grantKept && <p className="mt-1">{copy("grantKept")}</p>}
+          </div>
           {errorCode && (
             <p role="alert" className="text-xs text-destructive mt-1">
               {copy(`errors.${ROW_ERRORS.has(errorCode) ? errorCode : "connect_failed"}`)}

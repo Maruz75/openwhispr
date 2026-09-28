@@ -181,3 +181,20 @@ test("a connector's own copy wins, by exact code first, then by shared copy key"
     en.toolStatus.errors.gmail.network
   );
 });
+
+test("a code named after an object property gets the generic copy, not the property", async () => {
+  const { connectorErrorText } = await import("../../src/utils/connectorErrorCopy.ts");
+  const i18next = (await import("i18next")).default.createInstance();
+  await i18next.init({
+    lng: "en",
+    resources: { en: { translation: { connectors: en } } },
+    interpolation: { escapeValue: false },
+  });
+  for (const code of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+    assert.equal(
+      connectorErrorText(i18next.t, "approval", "gmail", code),
+      en.approval.errors.generic,
+      code
+    );
+  }
+});

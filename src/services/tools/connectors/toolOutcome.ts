@@ -21,10 +21,14 @@ export function needsClarificationResult(message: string, candidates: string[] =
   };
 }
 
-export function unavailableResult(reason: string, guidance: string = NO_RETRY): ToolResult {
+export function unavailableResult(
+  reason: string,
+  guidance: string = NO_RETRY,
+  edits: ApprovalEdits = {}
+): ToolResult {
   return {
     success: true,
-    data: { status: "unavailable", reason, guidance },
+    data: { status: "unavailable", reason, guidance, ...edits },
     displayText: i18n.t(
       reason === "policy_blocked" ? "connectors.policyOff" : "connectors.toolStatus.unavailable"
     ),
@@ -106,7 +110,7 @@ function unknownDisplayText(destination: string, connectorId?: string): string {
 
 // What the user changed on the card, so the model describes (or proposes
 // again) the email the user settled on, not the one it drafted.
-function userEdits({ finalText, final }: ApprovalEdits): ApprovalEdits {
+export function userEdits({ finalText, final }: ApprovalEdits): ApprovalEdits {
   return {
     ...(finalText !== undefined ? { finalText } : {}),
     ...(final !== undefined ? { final } : {}),

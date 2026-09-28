@@ -1,7 +1,6 @@
 // Gmail login and tokens (spec §5.1). The OAuth flow is ported from #1819's
 // gmailOAuth.js (Gabriel Stein). Plan 3 adds the granted-scope and verified-
 // email checks, the refresh bound to one login, and revoking the grant.
-const { describeError } = require("./errorSummary");
 const { createBoundLogin } = require("./boundLogin");
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -168,14 +167,39 @@ function createGmailAuth({
     }
   }
 
+  // Another OpenWhispr account on this device signed in to Gmail as the same
+  // Google user through the same Cloud project holds the same grant, so a
+  // revoke would sign it out too. The login being revoked may still be
+  // stored (Disconnect clears it afterwards); its token tells it apart. An
+  // unknown email counts as any Gmail login, and an unreadable store as
+  // shared, like the calendar check.
+  function grantHeldByAnotherLogin(token, email, clientId) {
+    const project = googleProjectOf(clientId);
+    const wanted = nonEmptyString(email) ? email.toLowerCase() : null;
+    try {
+      return credentials
+        .readAllAccounts("gmail")
+        .some(
+          (other) =>
+            other.refreshToken !== token &&
+            other.accessToken !== token &&
+            (!wanted || other.email?.toLowerCase() === wanted) &&
+            googleProjectOf(other.clientId ?? oauthClient()?.clientId) === project
+        );
+    } catch {
+      return true;
+    }
+  }
+
   // Best effort: the local login goes whatever Google answers. Erasing the
-  // device revokes even a shared grant, since the calendar goes with it.
+  // device revokes even a shared grant, since every login goes with it.
   // `clientId` is the client the login was issued to (a login saved before
   // it was recorded counts as the current one). Returns { kept: true } when
-  // a shared grant was left in place.
+  // a grant shared with a connected calendar was left in place.
   async function revokeToken(token, email, { erasingDevice = false, clientId = null } = {}) {
     if (!nonEmptyString(token)) return null;
-    if (!erasingDevice && grantIsShared(email, clientId ?? oauthClient()?.clientId ?? null)) {
+    const issuedTo = clientId ?? oauthClient()?.clientId ?? null;
+    if (!erasingDevice && grantIsShared(email, issuedTo)) {
       logger?.info?.(
         "gmail revoke skipped: grant shared with a connected calendar",
         {},
@@ -183,11 +207,16 @@ function createGmailAuth({
       );
       return { kept: true };
     }
-    try {
-      await api.revokeToken(token);
-    } catch (error) {
-      logger?.warn("gmail revoke failed", describeError(error), "connectors");
+    if (!erasingDevice && grantHeldByAnotherLogin(token, email, issuedTo)) {
+      logger?.info?.(
+        "gmail revoke skipped: grant shared with another account's Gmail login",
+        {},
+        "connectors"
+      );
+      return null;
     }
+    const revoked = await api.revokeToken(token);
+    if (!revoked.ok) logger?.warn("gmail revoke failed", {}, "connectors");
     return null;
   }
 
@@ -400,9 +429,5 @@ module.exports = {
   createGmailAuth,
   gmailClientCredentials,
   sharesCalendarGrant,
-  GMAIL_SCOPES,
-  GMAIL_SEND_SCOPE,
-  GMAIL_LOOPBACK,
-  OAUTH_LOGIN_GONE,
   EXPIRY_SKEW_MS,
 };

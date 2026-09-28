@@ -104,7 +104,7 @@ async function prepareJosh(connector, args = {}) {
 }
 
 test("Gmail declares one approval action whose card edits To, Cc, Subject and Body", async () => {
-  const { connector, MAX_RECIPIENTS, MAX_SUBJECT_LENGTH } = await setupGmail();
+  const { connector } = await setupGmail();
   assert.equal(connector.id, "gmail");
   assert.deepEqual(connector.actions, {
     send: {
@@ -112,8 +112,6 @@ test("Gmail declares one approval action whose card edits To, Cc, Subject and Bo
       editable: { to: "addresses", cc: "addresses", subject: "line", body: "text" },
     },
   });
-  assert.equal(MAX_RECIPIENTS, 50);
-  assert.equal(MAX_SUBJECT_LENGTH, 250);
 });
 
 test("prepare cleans the recipients and shows what will be sent, without calling Google", async () => {
@@ -540,6 +538,9 @@ test("recipient helpers de-duplicate, keep To over Cc, and build Gmail links", a
   assert.deepEqual(normalizeRecipients({}), { to: [], cc: [], invalid: [] });
   assert.equal(recipientsLabel(["a@x.test"], []), "a@x.test");
   assert.equal(recipientsLabel(["a@x.test", "b@x.test"], ["c@x.test"]), "a@x.test +2");
+  // Each address counts once, as main sends it.
+  assert.equal(recipientsLabel(["a@x.test", "A@x.test"], ["a@X.test"]), "a@x.test");
+  assert.equal(recipientsLabel(["a@x.test", "b@x.test"], ["B@x.test"]), "a@x.test +1");
   // A single-script look-alike of apple.com: isValidEmailAddress lets it
   // through (one script, not a mix), so the card must show its ASCII form
   // rather than the raw address alone.

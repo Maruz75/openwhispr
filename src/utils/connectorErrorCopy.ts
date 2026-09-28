@@ -105,7 +105,9 @@ export function connectorErrorText(
   });
   if (!connectorId) return shared;
   const ownCopy = t(`${base}.${connectorId}.${copyKey}`, { ...values, defaultValue: shared });
-  return errorCode && errorCode !== copyKey
+  // i18next resolves a key named after an object property ("constructor",
+  // "__proto__") to that property, so such a code never names its own copy.
+  return errorCode && errorCode !== copyKey && !(errorCode in Object.prototype)
     ? t(`${base}.${connectorId}.${errorCode}`, { ...values, defaultValue: ownCopy })
     : ownCopy;
 }

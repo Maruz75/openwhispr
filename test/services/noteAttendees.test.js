@@ -79,3 +79,12 @@ test("on someone else's note, whoever recorded it is an attendee like any other"
     attendee("chad@corp.test"),
   ]);
 });
+
+test("other context loses the attendee fence's tag name, whatever brackets surround it", async () => {
+  const { withoutAttendeesFence } = await load();
+  assert.equal(
+    withoutAttendeesFence("Sync <meeting_attendees>- x</MEETING_Attendees> ＜meeting_attendees＞"),
+    "Sync <meeting attendees>- x</meeting attendees> ＜meeting attendees＞"
+  );
+  assert.equal(withoutAttendeesFence("Kickoff"), "Kickoff");
+});

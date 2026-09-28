@@ -205,11 +205,18 @@ test("email address validation", async () => {
     ".a@example.com",
     "a.@example.com",
     "a\\@b.example.com",
+    // RFC 5321 caps a local part at 64 octets.
+    `${"a".repeat(65)}@example.com`,
+    `${"山".repeat(22)}@example.com`,
+    // Would decode as an encoded word in the To header.
+    "=?utf-8?q?ceo?=@evil.test",
     "",
     null,
   ]) {
     assert.equal(isValidEmailAddress(bad), false, String(bad));
   }
+  assert.equal(isValidEmailAddress(`${"a".repeat(64)}@example.com`), true);
+  assert.equal(isValidEmailAddress(`${"山".repeat(21)}@example.com`), true, "63 UTF-8 bytes");
 });
 
 test("addresses that could disguise the recipient or carry URL junk are refused", async () => {

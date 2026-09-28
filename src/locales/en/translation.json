@@ -4080,6 +4080,8 @@
         "bodyLabel": "Message",
         "addressHint": "Separate addresses with commas.",
         "invalidAddress": "{{address}} isn't a full email address like name@example.com.",
+        "invalidAddressAnnouncement": "One of the addresses isn't a full email address.",
+        "sendsTo": "Sends to {{addresses}}",
         "missingTo": "Add at least one address to To.",
         "tooManyRecipients": "An email can go to at most {{max}} addresses, To and Cc together.",
         "subjectTooLong": "Keep the subject to {{max}} characters or fewer.",
@@ -4206,7 +4208,7 @@
       "unknown": "Not confirmed. Check whether it went through before trying again.",
       "draftUnknown": "Not confirmed: the draft to {{destination}} may not have opened. Check before trying again.",
       "contactsFound": "Contacts found: {{total}}",
-      "draftLimit": "Only {{count}} drafts can open per request.",
+      "draftLimit": "Only {{max}} drafts can open per request.",
       "clipboardBusy": "Not opened: another draft's text is still on your clipboard.",
       "errors": {
         "open_failed": "Couldn't open your email app.",
@@ -4245,7 +4247,7 @@
       "unknownSent": {
         "gmail": "Couldn't confirm the email to {{destination}} was sent. Check your Gmail Sent folder."
       },
-      "gmailDraftLimit": "Only {{count}} emails can be prepared per request."
+      "gmailDraftLimit": "Only {{max}} emails can be prepared per request."
     }
   },
   "notesView": {

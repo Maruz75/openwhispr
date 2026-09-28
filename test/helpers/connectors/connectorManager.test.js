@@ -69,7 +69,10 @@ function fakeConnector(overrides = {}) {
   let binding = { accountId: "U1", workspaceId: "T1", generation: 1 };
   const connector = {
     id: "fake",
-    actions: { post: { kind: "approval" }, draft: { kind: "direct" } },
+    actions: {
+      post: { kind: "approval", editable: { title: "text", body: "text" } },
+      draft: { kind: "direct" },
+    },
     async getStatus() {
       return { connected: true, accountLabel: "chad" };
     },
@@ -537,10 +540,10 @@ test("an action is only reachable through its own kind", async () => {
   });
 });
 
-test("edits are reduced to string title and body", async () => {
+test("edits are reduced to the declared title and body", async () => {
   const { manager, fake } = await setup();
   const { actionId } = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
-  await manager.commit(actionId, { body: "b", title: 5, channel: "C999" }, ALLOWED);
+  await manager.commit(actionId, { body: "b", channel: "C999" }, ALLOWED);
   assert.deepEqual(fake.calls.commit[0].edits, { body: "b" });
 });
 
@@ -550,7 +553,7 @@ const EMAIL_EDITABLE = { to: "addresses", cc: "addresses", subject: "line", body
 
 async function commitEdits(editable, edits) {
   const { manager, fake, log } = await setup({
-    actions: { post: { kind: "approval", ...(editable ? { editable } : {}) } },
+    actions: { post: { kind: "approval", editable } },
   });
   const { actionId } = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
   const result = await manager.commit(actionId, edits, ALLOWED);
@@ -600,15 +603,23 @@ test("an unknown editable type is a build fault, caught when the manager is crea
   );
 });
 
-test("a body-only declaration (Slack's) drops the title; no declaration keeps title and body", async () => {
+test("an approval action without an editable declaration is a build fault", async () => {
+  for (const editable of [undefined, null, "body"]) {
+    await assert.rejects(
+      setup({ actions: { post: { kind: "approval", editable } } }),
+      /fake\.post: an approval action must declare editable/,
+      JSON.stringify(editable)
+    );
+  }
+  // A direct action has no card, so it declares nothing.
+  await setup({ actions: { draft: { kind: "direct" } } });
+});
+
+test("a body-only declaration (Slack's) drops the title", async () => {
   assert.deepEqual(
     (await commitEdits({ body: "text" }, { title: "T", body: "B", to: ["x"] })).edits,
     { body: "B" }
   );
-  assert.deepEqual((await commitEdits(null, { title: "T", body: "B", to: ["x"] })).edits, {
-    title: "T",
-    body: "B",
-  });
 });
 
 // An email-like card: the fields it shows are the fields it declares editable.
@@ -619,27 +630,8 @@ const EMAIL_ACTIONS = {
   },
 };
 
-test("a preview keeps its fields map of strings and string lists, and body stays required", async () => {
+test("a preview keeps its declared fields, each of its declared type, and body stays required", async () => {
   const preview = {
-    verbKey: "email",
-    destinationLabel: "josh@acme.test +1",
-    accountLabel: "you@example.test",
-    body: "Numbers attached.",
-    fields: {
-      to: ["josh@acme.test", 7, "dana@acme.test"],
-      cc: [],
-      subject: "Q3 numbers",
-      body: "Numbers attached.",
-      count: 2,
-      nested: { raw: "LEAK" },
-    },
-  };
-  const { manager } = await setup({
-    actions: EMAIL_ACTIONS,
-    prepare: async () => ({ status: "ready", payload: {}, preview }),
-  });
-  const prepared = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
-  assert.deepEqual(prepared.preview, {
     verbKey: "email",
     destinationLabel: "josh@acme.test +1",
     accountLabel: "you@example.test",
@@ -650,16 +642,35 @@ test("a preview keeps its fields map of strings and string lists, and body stays
       subject: "Q3 numbers",
       body: "Numbers attached.",
     },
-  });
-
-  for (const fields of [{ count: 2 }, {}, ["to"], "to", null]) {
-    const odd = await setup({
+  };
+  const prepareWith = async (fields) => {
+    const { manager, log } = await setup({
       actions: EMAIL_ACTIONS,
       prepare: async () => ({ status: "ready", payload: {}, preview: { ...preview, fields } }),
     });
-    const result = await odd.manager.prepare("fake", "post", { text: "x" }, ALLOWED);
+    return { result: await manager.prepare("fake", "post", { text: "x" }, ALLOWED), log };
+  };
+  assert.deepEqual((await prepareWith(preview.fields)).result.preview, preview);
+
+  // No fields: the plain layout.
+  for (const fields of [undefined, null, {}]) {
+    const { result } = await prepareWith(fields);
     assert.equal(result.status, "ready", JSON.stringify(fields));
     assert.equal("fields" in result.preview, false, JSON.stringify(fields));
+  }
+
+  // A field that isn't its declared type would only fail at Send: no card.
+  for (const fields of [
+    { ...preview.fields, to: ["josh@acme.test", 7] },
+    { ...preview.fields, subject: ["Q3"] },
+    { ...preview.fields, subject: "Q3\r\nBcc: evil@attacker.test" },
+    { ...preview.fields, body: 42 },
+    ["to"],
+    "to",
+  ]) {
+    const { result, log } = await prepareWith(fields);
+    assert.equal(result.errorCode, "invalid_result", JSON.stringify(fields));
+    assert.equal(log.rows.size, 0);
   }
 
   const { body, ...withoutBody } = preview;
@@ -681,9 +692,12 @@ test("a card field the action doesn't declare editable (a typo, say) means no ca
     body: "Hi",
     fields: { to: ["josh@acme.test"], subject: "Q3", body: "Hi" },
   };
-  for (const editable of [{ to: "addresses", subjct: "line", body: "text" }, undefined]) {
+  for (const editable of [
+    { to: "addresses", subjct: "line", body: "text" },
+    { title: "text", body: "text" },
+  ]) {
     const { manager, log } = await setup({
-      actions: { post: { kind: "approval", ...(editable ? { editable } : {}) } },
+      actions: { post: { kind: "approval", editable } },
       prepare: async () => ({ status: "ready", payload: {}, preview }),
     });
     const result = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
@@ -1126,6 +1140,43 @@ test("connecting another account revokes the login it replaced; the same account
     assert.deepEqual(revoked, revokesOld ? ["old"] : [], previous.user);
     assert.equal(credentials.read("acct-1", "fake").credential.accessToken, "new");
   }
+});
+
+test("connecting doesn't wait on revoking the login it replaced", async () => {
+  const credentials = memoryCredentials(
+    { accessToken: "old", user: "someone-else" },
+    {
+      connectorId: "fake",
+    }
+  );
+  const revoking = deferred();
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      async authorize() {
+        return { accessToken: "new", user: "me" };
+      },
+      revoke(credential) {
+        revoked.push(credential.accessToken);
+        return revoking.promise;
+      },
+      loginKey: (credential) => credential.user,
+    }),
+    undefined,
+    { credentials }
+  );
+
+  // Offline, the old login's revoke would hold Settings on "connecting"
+  // until its 5 s deadline.
+  let timer;
+  const outcome = await Promise.race([
+    manager.connect("fake", "allowed"),
+    new Promise((resolve) => (timer = setTimeout(() => resolve("still connecting"), 500))),
+  ]);
+  clearTimeout(timer);
+  assert.equal(outcome.status, "connected");
+  assert.deepEqual(revoked, ["old"], "the revoke has started");
+  revoking.resolve(null);
 });
 
 test("an account switch during the OAuth round trip saves nothing and revokes the new login", async () => {

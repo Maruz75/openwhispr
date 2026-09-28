@@ -45,11 +45,19 @@ const field = (root, labelKey) =>
     (element) => element.getAttribute?.("aria-label") === `connectors.approval.email.${labelKey}`
   );
 
-// The card's polite region naming what blocks Send; empty when nothing does.
+// The card's text naming what blocks Send (the fields and Send point at it);
+// empty when nothing does.
 const problemText = (root) =>
+  findElement(root, (element) => element.tagName === "P" && element.getAttribute?.("id"))
+    ?.textContent || null;
+
+// The polite region a screen reader hears: the kind of problem only.
+const announcement = (root) =>
   findElement(
     root,
-    (element) => element.getAttribute?.("aria-live") === "polite" && element.getAttribute("id")
+    (element) =>
+      element.getAttribute?.("aria-live") === "polite" &&
+      element.getAttribute("class") === "sr-only"
   )?.textContent || null;
 
 const PROPOSED = {
@@ -75,7 +83,7 @@ async function mountEmailCard(
       store.cancelApproval(key);
     }
   });
-  const calls = { commit: [] };
+  const calls = { commit: [], cancel: [] };
   installBrowserGlobals(t, {
     window: {
       electronAPI: {
@@ -94,7 +102,10 @@ async function mountEmailCard(
           calls.commit.push({ actionId, edits });
           return commitReply;
         },
-        connectorCancel: async () => ({ cancelled: true }),
+        connectorCancel: async (actionId, reason) => {
+          calls.cancel.push({ actionId, reason });
+          return { cancelled: true };
+        },
       },
     },
   });
@@ -177,11 +188,18 @@ test("a bad address, an empty To or Gmail's limits block Send with the reason on
         findElement(container, (element) => element.getAttribute?.("id") === describedBy),
         `${value}: the field points at the reason`
       );
-      assert.notEqual(send.getAttribute("disabled"), null, `${value}: Send is disabled`);
+      assert.equal(
+        announcement(container),
+        `connectors.approval.email.${reason === "invalidAddress" ? "invalidAddressAnnouncement" : reason}`,
+        value
+      );
+      assert.equal(send.getAttribute("aria-disabled"), "true", `${value}: Send is disabled`);
+      assert.equal(send.getAttribute("aria-describedby"), describedBy, `${value}: and says why`);
       await React.act(async () => click(send));
     } else {
       assert.equal(problemText(container), null, value);
-      assert.equal(send.getAttribute("disabled"), null, `${value}: Send is enabled`);
+      assert.equal(announcement(container), null, value);
+      assert.equal(send.getAttribute("aria-disabled"), null, `${value}: Send is enabled`);
     }
   }
   assert.deepEqual(calls.commit, [], "a blocked Send never commits");
@@ -260,4 +278,48 @@ test("Esc in an email field ends editing and keeps the edit", async (t) => {
   assert.equal(event.cancelBubble, true, "the panel never sees the Esc");
   assert.equal(field(container, "subjectLabel"), null, "edit mode ended");
   assert.equal(draftFields().subject, "Q3 (final)");
+});
+
+test("Esc on the Edit button, outside the fields, ends editing instead of cancelling the card", async (t) => {
+  const { container, draftFields, calls } = await mountEmailCard(t);
+  await React.act(async () => click(button(container, "connectors.approval.edit")));
+  await React.act(async () => type(field(container, "toLabel"), "dana@acme.test"));
+
+  // Focus stays on the button after clicking Edit; the panel's Esc would
+  // cancel the turn and withdraw the card with the edit.
+  const event = { cancelBubble: false };
+  await React.act(async () =>
+    dispatch(button(container, "connectors.approval.doneEditing"), "keydown", {
+      key: "Escape",
+      stopPropagation() {
+        event.cancelBubble = true;
+        this.cancelBubble = true;
+      },
+    })
+  );
+
+  assert.equal(event.cancelBubble, true, "the panel never sees the Esc");
+  assert.equal(field(container, "toLabel"), null, "edit mode ended");
+  assert.deepEqual(draftFields().to, ["dana@acme.test"]);
+  assert.deepEqual(calls.cancel, []);
+});
+
+test("a stripped display name shows the addresses the email will go to", async (t) => {
+  const { container, draftFields } = await mountEmailCard(t);
+  await React.act(async () => click(button(container, "connectors.approval.edit")));
+  const sendsTo = () =>
+    findElement(
+      container,
+      (element) =>
+        element.tagName === "P" && element.textContent === "connectors.approval.email.sendsTo"
+    );
+
+  await React.act(async () => type(field(container, "toLabel"), "josh@acme.test"));
+  assert.equal(sendsTo(), null, "plain addresses are shown as typed");
+
+  // "josh" reads as the start of Dana's name (Outlook's "Last, First"), so
+  // the card has to show that only Dana is left.
+  await React.act(async () => type(field(container, "toLabel"), "josh, Dana Lee <dana@acme.test>"));
+  assert.deepEqual(draftFields().to, ["dana@acme.test"]);
+  assert.ok(sendsTo(), "the resolved addresses are shown");
 });

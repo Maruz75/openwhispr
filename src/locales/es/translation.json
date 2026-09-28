@@ -3964,6 +3964,8 @@
         "bodyLabel": "Mensaje",
         "addressHint": "Separa las direcciones con comas.",
         "invalidAddress": "{{address}} no es una dirección de correo completa como nombre@ejemplo.com.",
+        "invalidAddressAnnouncement": "Una de las direcciones no es una dirección de correo completa.",
+        "sendsTo": "Se envía a {{addresses}}",
         "missingTo": "Agrega al menos una dirección en Para.",
         "tooManyRecipients": "Un correo puede ir a {{max}} direcciones como máximo, entre Para y CC.",
         "subjectTooLong": "El asunto debe tener {{max}} caracteres como máximo.",
@@ -4090,7 +4092,7 @@
       "unknown": "Sin confirmar. Comprueba si se completó antes de volver a intentarlo.",
       "draftUnknown": "Sin confirmar: puede que el borrador para {{destination}} no se haya abierto. Compruébalo antes de volver a intentarlo.",
       "contactsFound": "Contactos encontrados: {{total}}",
-      "draftLimit": "Solo se pueden abrir {{count}} borradores por solicitud.",
+      "draftLimit": "Solo se pueden abrir {{max}} borradores por solicitud.",
       "clipboardBusy": "No se abrió: el texto de otro borrador sigue en tu portapapeles.",
       "errors": {
         "open_failed": "No se pudo abrir tu aplicación de correo.",
@@ -4129,7 +4131,7 @@
       "unknownSent": {
         "gmail": "No se pudo confirmar que el correo para {{destination}} se envió. Revisa la carpeta Enviados de Gmail."
       },
-      "gmailDraftLimit": "Solo se pueden preparar {{count}} correos por solicitud."
+      "gmailDraftLimit": "Solo se pueden preparar {{max}} correos por solicitud."
     }
   },
   "calendar": {
