@@ -47,12 +47,14 @@ jest.mock('@/store/useConfigStore', () => ({
   useConfigStore: { subscribe: jest.fn(() => () => {}), getState: () => mockConfigState },
 }));
 
+const mockLoadVoiceProfiles = jest.fn();
 jest.mock('@/store/useNotesStore', () => ({
   useNotesStore: {
     getState: () => ({
       loadFolders: jest.fn(),
       loadSpaces: jest.fn(),
       loadNotes: jest.fn(),
+      loadVoiceProfiles: mockLoadVoiceProfiles,
     }),
   },
 }));
@@ -690,6 +692,8 @@ describe('subscription cache reset on account switch (fix round 1, Finding 4)', 
     requestSync('foreground');
     await flush();
     expect(notesRepository.wipeAllSyncableData).toHaveBeenCalled();
+    // The wipe removed user-1's voice profiles, so the store must drop them too.
+    expect(mockLoadVoiceProfiles).toHaveBeenCalled();
 
     // A second foreground trigger for user-2, past the 30s foreground
     // throttle. With the cache reset during the switch run above,
