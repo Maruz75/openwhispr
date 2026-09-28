@@ -933,11 +933,18 @@ class ReasoningService extends BaseReasoningService {
           const output = chunk.output;
           const displayText =
             typeof output === "string" ? output : output?.error ? String(output.error) : "Done";
+          // Mirror the cloud path: successful object outputs become metadata so
+          // tool-result cards (note cards) render on BYOK/local too.
+          const metadata =
+            output && typeof output === "object" && !("error" in output)
+              ? (output as ToolMetadata)
+              : undefined;
           yield {
             type: "tool_result",
             callId: chunk.toolCallId,
             toolName: chunk.toolName,
             displayText,
+            ...(metadata ? { metadata } : {}),
           };
         } else if (chunk.type === "abort") {
           canFlushFilteredText = false;
@@ -1110,7 +1117,7 @@ class ReasoningService extends BaseReasoningService {
       executeToolCall?: (
         name: string,
         args: string,
-        callId: string
+        toolCallId: string
       ) => Promise<ToolExecutionResult>;
       screenContext?: { data: string; mediaType: string };
     }
@@ -1128,7 +1135,7 @@ class ReasoningService extends BaseReasoningService {
       executeToolCall?: (
         name: string,
         args: string,
-        callId: string
+        toolCallId: string
       ) => Promise<ToolExecutionResult>;
       screenContext?: { data: string; mediaType: string };
     },

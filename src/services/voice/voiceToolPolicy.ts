@@ -98,7 +98,7 @@ export const isBlockedRepeat = (
 
 /**
  * Adapts createWriteOnceGuard for the OpenWhispr Cloud tool-call path, which
- * executes tools directly (registry.get(name).execute(args)) and gets back a
+ * executes tools directly (executeTool(registry.get(name), args, context)) and gets back a
  * ToolResult ({ success, data, displayText }) rather than the AI-SDK { error }
  * shape the guard above reads. A failed write still reports `ok: false`. A
  * repeat call never claims success on a write that actually failed: its
