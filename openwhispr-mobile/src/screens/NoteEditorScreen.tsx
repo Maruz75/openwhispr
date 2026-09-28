@@ -40,6 +40,7 @@ import { ConflictBanner } from '@/components/notes/ConflictBanner';
 import { NoteChatSheet } from '@/components/notes/NoteChatSheet';
 import { isDictationAgentEnabled } from '@/lib/dictationAgent';
 import { SpeakerTranscript } from '@/components/notes/SpeakerTranscript';
+import { TranscriptSheet } from '@/components/notes/TranscriptSheet';
 import { SpeakerRenameSheet } from '@/components/notes/SpeakerRenameSheet';
 import { SpeakerMergeSheet } from '@/components/notes/SpeakerMergeSheet';
 import { VoiceprintSuggestionSheet } from '@/components/notes/VoiceprintSuggestionSheet';
@@ -177,6 +178,7 @@ export default function NoteEditorScreen() {
   const [mergeSheetVisible, setMergeSheetVisible] = useState(false);
   const [suggestionSheetVisible, setSuggestionSheetVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
+  const [transcriptSheetVisible, setTranscriptSheetVisible] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatOverNoteMessage[]>([]);
   const [chatDraft, setChatDraft] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
@@ -229,6 +231,7 @@ export default function NoteEditorScreen() {
     chatAbortRef.current?.abort();
     chatAbortRef.current = null;
     setChatVisible(false);
+    setTranscriptSheetVisible(false);
     setChatMessages([]);
     setChatDraft('');
     setChatError(null);
@@ -591,13 +594,10 @@ export default function NoteEditorScreen() {
     );
   }, [note?.enhancedContent, transcriptBlocks, usesSegmentTranscript, viewMode]);
 
-  const handleCopyTranscript = useCallback(() => {
-    if (!transcriptText.trim()) return;
+  const handleViewTranscript = useCallback(() => {
     safeHaptics('light');
-    Clipboard.setStringAsync(transcriptText).catch(() => {
-      Alert.alert('Copy failed', 'Could not copy the transcript.');
-    });
-  }, [transcriptText]);
+    setTranscriptSheetVisible(true);
+  }, []);
 
   const handleCopyGeneratedNote = useCallback(() => {
     const generatedContent = note?.enhancedContent;
@@ -1009,6 +1009,42 @@ export default function NoteEditorScreen() {
     note?.enhancedAtContentHash !== generatedMeetingInputHash;
   const isEnhancing = processingState === 'processing';
 
+  // iOS only presents a modal above another when it is rendered inside it, so these follow the
+  // transcript sheet while it is open.
+  const speakerSheets = (
+    <>
+      <SpeakerRenameSheet
+        visible={renameSheetVisible}
+        initialName={activeSpeakerName}
+        suggestions={attendeeSpeakerSuggestions}
+        onCancel={() => setRenameSheetVisible(false)}
+        onSave={handleRenameSpeaker}
+      />
+      <SpeakerMergeSheet
+        visible={mergeSheetVisible}
+        sourceSpeaker={activeSpeaker}
+        speakers={speakers}
+        onCancel={() => setMergeSheetVisible(false)}
+        onMerge={handleMergeSpeaker}
+      />
+      <VoiceprintSuggestionSheet
+        visible={suggestionSheetVisible}
+        speakerName={activeSpeakerName}
+        onConfirm={handleConfirmSuggestion}
+        onReject={handleRejectSuggestion}
+        onRename={() => {
+          setSuggestionSheetVisible(false);
+          setRenameSheetVisible(true);
+        }}
+        onMerge={() => {
+          setSuggestionSheetVisible(false);
+          setMergeSheetVisible(true);
+        }}
+        onCancel={() => setSuggestionSheetVisible(false)}
+      />
+    </>
+  );
+
   return (
     <View className="flex-1 bg-systemBackground">
       <TabScreenHeader
@@ -1026,7 +1062,7 @@ export default function NoteEditorScreen() {
             onAskNote={chatEnabled && !showAskPill ? handleAskNote : undefined}
             askNoteDisabled={isChatProcessing}
             onCopyGeneratedNote={note?.enhancedContent ? handleCopyGeneratedNote : undefined}
-            onCopyTranscript={usesSegmentTranscript ? handleCopyTranscript : undefined}
+            onViewTranscript={usesSegmentTranscript ? handleViewTranscript : undefined}
             onShare={handleExport}
             onDelete={handleDelete}
           />
@@ -1294,35 +1330,17 @@ export default function NoteEditorScreen() {
         onClear={handleClearChat}
         onClose={handleCloseChat}
       />
-      <SpeakerRenameSheet
-        visible={renameSheetVisible}
-        initialName={activeSpeakerName}
-        suggestions={attendeeSpeakerSuggestions}
-        onCancel={() => setRenameSheetVisible(false)}
-        onSave={handleRenameSpeaker}
-      />
-      <SpeakerMergeSheet
-        visible={mergeSheetVisible}
-        sourceSpeaker={activeSpeaker}
-        speakers={speakers}
-        onCancel={() => setMergeSheetVisible(false)}
-        onMerge={handleMergeSpeaker}
-      />
-      <VoiceprintSuggestionSheet
-        visible={suggestionSheetVisible}
-        speakerName={activeSpeakerName}
-        onConfirm={handleConfirmSuggestion}
-        onReject={handleRejectSuggestion}
-        onRename={() => {
-          setSuggestionSheetVisible(false);
-          setRenameSheetVisible(true);
-        }}
-        onMerge={() => {
-          setSuggestionSheetVisible(false);
-          setMergeSheetVisible(true);
-        }}
-        onCancel={() => setSuggestionSheetVisible(false)}
-      />
+      <TranscriptSheet
+        visible={transcriptSheetVisible}
+        blocks={transcriptBlocks}
+        selectedSpeakerId={activeSpeakerId}
+        shareText={transcriptText}
+        onSpeakerPress={handleSpeakerPress}
+        onClose={() => setTranscriptSheetVisible(false)}
+      >
+        {transcriptSheetVisible ? speakerSheets : null}
+      </TranscriptSheet>
+      {transcriptSheetVisible ? null : speakerSheets}
     </View>
   );
 }

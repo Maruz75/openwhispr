@@ -233,10 +233,12 @@ jest.mock('@/components/notes/NoteActionsMenu', () => ({
     actions,
     onRunAction,
     onAskNote,
+    onViewTranscript,
   }: {
     actions: Action[];
     onRunAction: (action: Action) => void;
     onAskNote?: () => void;
+    onViewTranscript?: () => void;
   }) =>
     (() => {
       const { Pressable: MockPressable, Text: MockText, View: MockView } = require('react-native');
@@ -252,6 +254,11 @@ jest.mock('@/components/notes/NoteActionsMenu', () => ({
             </MockPressable>
           ))}
           {onAskNote ? <MockText>Ask about this note</MockText> : null}
+          {onViewTranscript ? (
+            <MockPressable testID="menu-view-transcript" onPress={onViewTranscript}>
+              <MockText>View Transcript</MockText>
+            </MockPressable>
+          ) : null}
         </MockView>
       );
     })(),
@@ -289,6 +296,27 @@ jest.mock('@/components/notes/SpeakerMergeSheet', () => ({
 
 jest.mock('@/components/notes/VoiceprintSuggestionSheet', () => ({
   VoiceprintSuggestionSheet: () => null,
+}));
+
+jest.mock('@/components/notes/TranscriptSheet', () => ({
+  TranscriptSheet: ({
+    visible,
+    shareText,
+    children,
+  }: {
+    visible: boolean;
+    shareText: string;
+    children?: React.ReactNode;
+  }) =>
+    (() => {
+      const { Text: MockText, View: MockView } = require('react-native');
+      return visible ? (
+        <MockView>
+          <MockText testID="transcript-sheet">{shareText}</MockText>
+          {children}
+        </MockView>
+      ) : null;
+    })(),
 }));
 
 jest.mock('@/components/notes/NoteChatSheet', () => ({
@@ -1003,5 +1031,38 @@ describe('NoteEditorScreen replacing generated notes', () => {
 
     const savedEnhanced = mockUpdateNote.mock.calls.map(([, updates]) => updates.enhancedContent);
     expect(savedEnhanced).not.toContain('## Edited');
+  });
+});
+
+describe('NoteEditorScreen transcript sheet', () => {
+  it('opens the full transcript from View Transcript', () => {
+    mockNote = note({ enhancedContent: '## Summary' });
+    mockNotesState.notes = [mockNote];
+    const { getByTestId, queryByTestId } = render(<NoteEditorScreen />);
+    expect(queryByTestId('transcript-sheet')).toBeNull();
+
+    fireEvent.press(getByTestId('menu-view-transcript'));
+
+    expect(getByTestId('transcript-sheet').props.children).toContain(
+      'Alice can take the first pass.',
+    );
+  });
+
+  it('offers View Transcript before notes are generated too', () => {
+    const { getByTestId } = render(<NoteEditorScreen />);
+    expect(getByTestId('menu-view-transcript')).toBeTruthy();
+  });
+
+  it('has no View Transcript on a plain note', () => {
+    mockNote = note({
+      noteType: 'personal',
+      diarizationEnabled: 0,
+      calendarEventId: null,
+      participants: null,
+    });
+    mockNotesState.notes = [mockNote];
+    mockSegments = [];
+    const { queryByTestId } = render(<NoteEditorScreen />);
+    expect(queryByTestId('menu-view-transcript')).toBeNull();
   });
 });
