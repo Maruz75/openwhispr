@@ -1531,6 +1531,18 @@ describe('NoteEditorScreen meta row', () => {
     expect(getByText(/^Jun 26, 2025/)).toBeTruthy();
     expect(queryByText(/^Sep 27, 2025/)).toBeNull();
   });
+
+  it('keeps that date after the note is edited on this device', () => {
+    mockNote = note({
+      createdAt: '2025-09-27 08:00:00',
+      updatedAt: '2025-09-28 10:00:00',
+      cloudUpdatedAt: '2025-06-26T12:00:00.000Z',
+    });
+    mockNotesState.notes = [mockNote];
+    const { getByText, queryByText } = render(<NoteEditorScreen />);
+    expect(getByText(/^Jun 26, 2025/)).toBeTruthy();
+    expect(queryByText(/^Sep 27, 2025/)).toBeNull();
+  });
 });
 
 describe('NoteEditorScreen clearing generated notes', () => {

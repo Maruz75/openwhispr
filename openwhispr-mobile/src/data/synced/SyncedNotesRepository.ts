@@ -217,8 +217,9 @@ export class SyncedNotesRepository implements NotesRepository {
     remoteId: string,
     serverUpdatedAt: string,
     cloudUpdatedAt?: string | null,
+    serverCreatedAt?: string,
   ): void {
-    this.local.markNotePushed(pushed, remoteId, serverUpdatedAt, cloudUpdatedAt);
+    this.local.markNotePushed(pushed, remoteId, serverUpdatedAt, cloudUpdatedAt, serverCreatedAt);
   }
   markNoteTerminal(localId: number): void {
     this.local.markNoteTerminal(localId);

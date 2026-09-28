@@ -1233,7 +1233,7 @@ export default function NoteEditorScreen() {
 
           <NoteMetaRow
             dateLabel={formatNoteMetaDate(
-              noteTakenAt(note?.createdAt, note?.updatedAt),
+              noteTakenAt(note?.createdAt, note?.cloudUpdatedAt ?? note?.updatedAt),
               new Date(),
             )}
             attendeeLabel={attendeeLabel}

@@ -1015,6 +1015,7 @@ export class LocalNotesRepository implements NotesRepository {
     remoteId: string,
     serverUpdatedAt: string,
     cloudUpdatedAt: string | null = serverUpdatedAt,
+    serverCreatedAt?: string,
   ): void {
     const current = this.getNoteById(pushed.id);
     // Forked or re-identified while the request was in flight: the ack names
@@ -1027,12 +1028,13 @@ export class LocalNotesRepository implements NotesRepository {
     // record the server revision so the follow-up push PATCHes the right base
     // instead of re-creating the note.
     const unchanged = NOTE_PUSH_ACK_FIELDS.every((field) => current[field] === pushed[field]);
+    const createdAt = serverCreatedAt ? { createdAt: serverCreatedAt } : {};
     this.database
       .update(notes)
       .set(
         unchanged
-          ? { remoteId, pendingSync: 0, updatedAt: serverUpdatedAt, cloudUpdatedAt }
-          : { remoteId, cloudUpdatedAt },
+          ? { remoteId, pendingSync: 0, updatedAt: serverUpdatedAt, cloudUpdatedAt, ...createdAt }
+          : { remoteId, cloudUpdatedAt, ...createdAt },
       )
       .where(eq(notes.id, pushed.id))
       .run();

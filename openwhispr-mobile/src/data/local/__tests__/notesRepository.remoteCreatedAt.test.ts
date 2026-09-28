@@ -41,6 +41,26 @@ describe('LocalNotesRepository pulled created_at', () => {
     expect(repo.getNoteById(pulled.id)?.createdAt).toBe('2026-06-01T09:00:00.000Z');
   });
 
+  it('repairs the creation time from the server’s reply to a push', () => {
+    const { repo } = createMemoryRepository();
+    repo.applyRemoteNote(remoteNote({ created_at: undefined }), () => null);
+    const [pulled] = repo.getAllNotes();
+    repo.updateNote(pulled.id, { title: 'Planning Sync, edited' });
+
+    repo.markNotePushed(
+      repo.getNoteById(pulled.id)!,
+      'remote-note-1',
+      '2026-09-28T10:00:00.000Z',
+      undefined,
+      '2026-06-01T09:00:00.000Z',
+    );
+
+    const pushed = repo.getNoteById(pulled.id)!;
+    expect(pushed.createdAt).toBe('2026-06-01T09:00:00.000Z');
+    expect(pushed.cloudUpdatedAt).toBe('2026-09-28T10:00:00.000Z');
+    expect(pushed.pendingSync).toBe(0);
+  });
+
   it('leaves the stored creation time alone when the server sends none', () => {
     const { repo } = createMemoryRepository();
     const local = repo.createNote('Planning Sync', '');

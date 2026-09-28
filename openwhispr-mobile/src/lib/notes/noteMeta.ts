@@ -10,16 +10,17 @@ const isSameDay = (a: Date, b: Date): boolean =>
 
 /**
  * When the note was taken. Notes pulled before `created_at` synced were stamped with the pull
- * time, which is later than their last edit, so the earlier of the two is the closer answer.
+ * time, which is later than their last edit on the server, so the earlier of the two is the
+ * closer answer. Pass the server's last edit: a local edit would move the date to the pull time.
  */
 export function noteTakenAt(
   createdAt: string | null | undefined,
-  updatedAt: string | null | undefined,
+  lastEditedAt: string | null | undefined,
 ): Date | null {
   const created = tryParseNoteTimestamp(createdAt);
-  const updated = tryParseNoteTimestamp(updatedAt);
-  if (!created || !updated) return created ?? updated;
-  return created < updated ? created : updated;
+  const lastEdited = tryParseNoteTimestamp(lastEditedAt);
+  if (!created || !lastEdited) return created ?? lastEdited;
+  return created < lastEdited ? created : lastEdited;
 }
 
 /**

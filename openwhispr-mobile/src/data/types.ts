@@ -294,12 +294,16 @@ export interface NotesRepository {
    * as `null` when serverUpdatedAt is itself a local-clock fallback (the server
    * response omitted its own updated_at) — cloudUpdatedAt must only ever hold a
    * genuine server ack, never a value guaranteed to mismatch on the next push.
+   *
+   * serverCreatedAt, when the response carries it, repairs a createdAt stamped
+   * with the pull time by builds that didn't sync created_at.
    */
   markNotePushed(
     pushed: Note,
     remoteId: string,
     serverUpdatedAt: string,
     cloudUpdatedAt?: string | null,
+    serverCreatedAt?: string,
   ): void;
   /** Clears pendingSync with no other changes — used when a push was permanently rejected (e.g. HTTP 400) and retrying would never succeed. */
   markNoteTerminal(localId: number): void;
