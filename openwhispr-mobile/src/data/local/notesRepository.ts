@@ -1590,6 +1590,51 @@ export class LocalNotesRepository implements NotesRepository {
     }
   }
 
+  createOwnerProfileForSpeaker(
+    speakerId: number,
+    profileInput: NewSpeakerProfile,
+    speakerPatch: Partial<Speaker>,
+  ): SpeakerProfile {
+    validateSpeakerProfileOwnerFlag(profileInput.isOwner);
+    this.validateSpeakerProfileEmbedding(profileInput.embedding);
+
+    let profile: SpeakerProfile;
+    try {
+      profile = this.database.transaction((tx) => {
+        const row = tx
+          .insert(speakerProfiles)
+          .values({
+            ...profileInput,
+            embedding: encodeSpeakerProfileEmbedding(profileInput.embedding),
+          })
+          .returning()
+          .get();
+        const mapped = this.mapSpeakerProfile(row);
+        tx.update(speakers)
+          .set({
+            ...speakerPatch,
+            profileId: mapped.id,
+            pendingSync: 1,
+            updatedAt: sql`datetime('now')`,
+          })
+          .where(eq(speakers.id, speakerId))
+          .run();
+        return mapped;
+      });
+    } catch (error) {
+      mapSpeakerProfileOwnerConstraint(error);
+    }
+
+    const row = this.database
+      .select({ noteId: speakers.noteId })
+      .from(speakers)
+      .where(eq(speakers.id, speakerId))
+      .get();
+    if (row) this.markNoteTranscriptDirty(row.noteId);
+
+    return profile;
+  }
+
   updateSpeakerProfile(id: number, updates: Partial<SpeakerProfile>): void {
     const { embedding, ...rest } = updates;
     delete rest.id;

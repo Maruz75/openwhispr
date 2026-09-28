@@ -911,17 +911,20 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
     const embedding = get().meetingSpeakerEmbeddingsByNoteId[noteId]?.[speaker.speakerLabel];
     if (!embedding?.length) throw new Error("This meeting's voice sample is no longer available.");
 
-    const profile = notesRepository.createSpeakerProfile({
-      displayName: 'Me',
-      isOwner: 1,
-      embedding,
-      sampleCount: 1,
-      consentAt: new Date().toISOString(),
-    });
-    notesRepository.updateSpeaker(speaker.id, {
-      ...buildRenameSpeakerPatch(speaker, profile.displayName),
-      profileId: profile.id,
-    });
+    // Both writes happen inside one repository transaction: a partial failure here would
+    // otherwise leave an orphaned owner profile (the single-owner constraint then blocks
+    // every future claim) with no speaker linked to it.
+    notesRepository.createOwnerProfileForSpeaker(
+      speaker.id,
+      {
+        displayName: 'Me',
+        isOwner: 1,
+        embedding,
+        sampleCount: 1,
+        consentAt: new Date().toISOString(),
+      },
+      buildRenameSpeakerPatch(speaker, 'Me'),
+    );
     set((state) => ({
       ...reloadVoiceProfiles(),
       transcriptRevision: state.transcriptRevision + 1,

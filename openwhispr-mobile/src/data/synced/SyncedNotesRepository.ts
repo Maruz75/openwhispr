@@ -335,6 +335,16 @@ export class SyncedNotesRepository implements NotesRepository {
   createSpeakerProfile(input: NewSpeakerProfile): SpeakerProfile {
     return this.local.createSpeakerProfile(input);
   }
+  createOwnerProfileForSpeaker(
+    speakerId: number,
+    profileInput: NewSpeakerProfile,
+    speakerPatch: Partial<Speaker>,
+  ): SpeakerProfile {
+    // Also writes the speaker row (see LocalNotesRepository), so nudge sync like updateSpeaker.
+    const profile = this.local.createOwnerProfileForSpeaker(speakerId, profileInput, speakerPatch);
+    requestSync('after-write');
+    return profile;
+  }
   updateSpeakerProfile(id: number, updates: Partial<SpeakerProfile>): void {
     this.local.updateSpeakerProfile(id, updates);
   }

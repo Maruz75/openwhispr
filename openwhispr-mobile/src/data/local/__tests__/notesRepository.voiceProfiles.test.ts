@@ -284,6 +284,68 @@ describe('LocalNotesRepository speaker profiles', () => {
     );
   });
 
+  it('creates the owner profile and links the speaker in one write', () => {
+    const { repo, db } = createMemoryRepository();
+    const note = createMeeting(db);
+    const spkr = createSpeaker(db, { noteId: note.id, speakerLabel: 'SPEAKER_00' });
+
+    const profile = repo.createOwnerProfileForSpeaker(
+      spkr.id,
+      {
+        displayName: 'Me',
+        isOwner: 1,
+        embedding: [0.1, 0.2],
+        sampleCount: 1,
+        consentAt: '2026-06-19T00:00:00.000Z',
+      },
+      { displayName: 'Me', speakerStatus: 'locked', speakerLocked: 1, speakerLockSource: 'user' },
+    );
+
+    expect(profile).toEqual(expect.objectContaining({ displayName: 'Me', isOwner: 1 }));
+    const speakerRow = db.select().from(speakers).where(eq(speakers.id, spkr.id)).get();
+    expect(speakerRow).toEqual(
+      expect.objectContaining({
+        displayName: 'Me',
+        speakerStatus: 'locked',
+        speakerLocked: 1,
+        speakerLockSource: 'user',
+        profileId: profile.id,
+        pendingSync: 1,
+      }),
+    );
+    expect(repo.getSpeakerProfiles()).toHaveLength(1);
+  });
+
+  it('rolls back the new owner profile when the same-transaction speaker write fails', () => {
+    const { repo, db } = createMemoryRepository();
+    const note = createMeeting(db);
+    const spkr = createSpeaker(db, { noteId: note.id, speakerLabel: 'SPEAKER_00' });
+
+    expect(() =>
+      repo.createOwnerProfileForSpeaker(
+        spkr.id,
+        {
+          displayName: 'Me',
+          isOwner: 1,
+          embedding: [0.1, 0.2],
+          sampleCount: 1,
+          consentAt: '2026-06-19T00:00:00.000Z',
+        },
+        // speaker_locked is NOT NULL at the DB level; forcing it to null makes the
+        // second write of the transaction fail so this proves the profile insert
+        // (the first write) is rolled back with it instead of left orphaned —
+        // otherwise the single-owner unique index would permanently block every
+        // future claim once the in-memory meeting sample is gone.
+        { speakerLocked: null } as unknown as Partial<Speaker>,
+      ),
+    ).toThrow();
+
+    expect(repo.getSpeakerProfiles()).toEqual([]);
+    expect(db.select().from(speakerProfiles).all()).toEqual([]);
+    const speakerRow = db.select().from(speakers).where(eq(speakers.id, spkr.id)).get();
+    expect(speakerRow).toEqual(expect.objectContaining({ profileId: null, displayName: null }));
+  });
+
   it('hard-deletes voice profiles during account-switch data wipe', () => {
     const { repo, db } = createMemoryRepository();
     repo.createSpeakerProfile({
