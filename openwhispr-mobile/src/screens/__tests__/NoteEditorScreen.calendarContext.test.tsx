@@ -1166,9 +1166,10 @@ describe('NoteEditorScreen body tabs', () => {
     mockNote = note({ transcriptionStatus: 'recording' });
     mockNotesState.notes = [mockNote];
     mockSegments = [];
-    const { getByTestId } = render(<NoteEditorScreen />);
+    const { getByTestId, getByText } = render(<NoteEditorScreen />);
     fireEvent.press(getByTestId('note-tab-notes'));
     expect(getByTestId('note-content-input').props.editable).toBe(false);
+    expect(getByText('You can edit these notes once the recording stops.')).toBeTruthy();
   });
 
   it('switches from Transcript to Enhanced when generated notes arrive', () => {

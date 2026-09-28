@@ -1,4 +1,5 @@
 import type { CalendarParticipant } from '@/data/calendarTypes';
+import { getHumanParticipants } from '@/lib/calendar/meetingContext';
 import { formatClockTime } from '@/lib/formatNoteRowTime';
 import { tryParseNoteTimestamp } from '@/lib/parseNoteTimestamp';
 
@@ -45,11 +46,12 @@ export function formatNoteMetaDate(timestamp: string | Date | null | undefined, 
   return `${day}, ${time}`;
 }
 
-/** People who haven't declined (rooms dropped), organizer first, otherwise in calendar order. */
+/**
+ * People who haven't declined, without rooms (flagged, or known by their address or name) or
+ * repeats, organizer first, otherwise in calendar order.
+ */
 export function sortAttendees(participants: CalendarParticipant[]): CalendarParticipant[] {
-  const people = participants.filter(
-    (participant) => !participant.resource && participant.responseStatus !== 'declined',
-  );
+  const people = getHumanParticipants(participants);
   return [
     ...people.filter((participant) => participant.organizer),
     ...people.filter((participant) => !participant.organizer),

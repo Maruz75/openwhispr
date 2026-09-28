@@ -58,15 +58,17 @@ export const buildNoteChatContext = ({
   const source = sourceText.trim();
   if (!generated) return source;
 
-  const cutGenerated =
-    source.length + generated.length > MAX_CONTEXT_CHARS &&
-    generated.length > GENERATED_NOTES_MAX_CHARS;
-  const notes = cutGenerated
-    ? `${generated.slice(0, GENERATED_NOTES_MAX_CHARS).trimEnd()}${GENERATED_NOTES_CUT_MARKER}`
-    : generated;
-  return [source ? `Note content:\n${source}` : '', `Generated notes:\n${notes}`]
-    .filter(Boolean)
-    .join('\n\n');
+  const withNotes = (notes: string): string =>
+    [source ? `Note content:\n${source}` : '', `Generated notes:\n${notes}`]
+      .filter(Boolean)
+      .join('\n\n');
+  const whole = withNotes(generated);
+  if (whole.length <= MAX_CONTEXT_CHARS || generated.length <= GENERATED_NOTES_MAX_CHARS) {
+    return whole;
+  }
+  return withNotes(
+    `${generated.slice(0, GENERATED_NOTES_MAX_CHARS).trimEnd()}${GENERATED_NOTES_CUT_MARKER}`,
+  );
 };
 
 interface BoundedContext {

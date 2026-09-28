@@ -63,12 +63,12 @@ export function VoiceProfileList({
             <Pressable
               onPress={onEnrollOwner}
               accessibilityRole="button"
-              accessibilityLabel="Enroll my voice"
+              accessibilityLabel="Enroll Me"
               testID="voice-profile-enroll-owner-empty"
               className="mt-1 h-10 items-center justify-center rounded-[10px] bg-brand px-4"
               style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1, borderCurve: 'continuous' })}
             >
-              <Text className="text-[15px] font-semibold text-white">Enroll my voice</Text>
+              <Text className="text-[15px] font-semibold text-white">Enroll Me</Text>
             </Pressable>
           </View>
         </GroupedList.Row>

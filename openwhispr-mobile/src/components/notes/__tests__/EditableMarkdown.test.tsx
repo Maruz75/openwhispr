@@ -53,6 +53,7 @@ describe('EditableMarkdown', () => {
       />,
     );
     fireEvent.press(getByTestId('enhanced-edit'));
+    expect(getByTestId('enhanced-editor').props.accessibilityLabel).toBe('Enhanced notes');
     fireEvent.changeText(getByTestId('enhanced-editor'), '## Summary\n- Launch Friday');
     expect(onChange).toHaveBeenCalledWith('## Summary\n- Launch Friday');
 

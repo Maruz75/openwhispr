@@ -85,6 +85,14 @@ describe('sortAttendees', () => {
     expect(sortAttendees([sam, kim])).toEqual([sam]);
     expect(formatAttendeeChipLabel([sam, kim])).toBe('Sam');
   });
+
+  it('drops rooms known only by their address or name, and repeated people', () => {
+    const sam = person({ displayName: 'Sam Lee', email: 'sam@x.com' });
+    const roomByEmail = person({ email: 'c_123@resource.calendar.google.com' });
+    const roomByName = person({ displayName: 'Huddle Room 2' });
+    const samAgain = person({ displayName: 'Sam', email: 'sam@x.com' });
+    expect(sortAttendees([sam, roomByEmail, roomByName, samAgain])).toEqual([sam]);
+  });
 });
 
 describe('markViewer', () => {

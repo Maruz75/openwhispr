@@ -39,7 +39,8 @@ export function AttendeesSheet({
           </GlassIconButton>
         </View>
         <ScrollView
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 24 }}
+          contentContainerClassName="px-6"
+          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         >
           <GroupedList>
             {people.map((participant, index) => {

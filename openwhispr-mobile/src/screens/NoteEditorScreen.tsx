@@ -1308,21 +1308,28 @@ export default function NoteEditorScreen() {
                 onEditingChange={handleEnhancedEditingChange}
               />
             ) : bodyView === 'notes' ? (
-              <TextInput
-                testID="note-content-input"
-                value={content}
-                onChangeText={handleContentChange}
-                selection={selection}
-                onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
-                placeholder={hasTypedMeetingNotes ? 'Add your own notes…' : 'Type or dictate…'}
-                placeholderTextColor="rgba(0,0,0,0.2)"
-                multiline
-                // The recording screen still writes these notes until the recording stops.
-                editable={!isEnhancing && transcriptStatus !== 'recording'}
-                textAlignVertical="top"
-                className="min-h-[300px] text-base leading-6 text-label"
-                style={{ fontFamily: AppFont.regular, opacity: isEnhancing ? 0.4 : 1 }}
-              />
+              <>
+                {transcriptStatus === 'recording' ? (
+                  <Text className="mb-2 text-[13px] text-secondaryLabel">
+                    You can edit these notes once the recording stops.
+                  </Text>
+                ) : null}
+                <TextInput
+                  testID="note-content-input"
+                  value={content}
+                  onChangeText={handleContentChange}
+                  selection={selection}
+                  onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+                  placeholder={hasTypedMeetingNotes ? 'Add your own notes…' : 'Type or dictate…'}
+                  placeholderTextColor="rgba(0,0,0,0.2)"
+                  multiline
+                  // The recording screen still writes these notes until the recording stops.
+                  editable={!isEnhancing && transcriptStatus !== 'recording'}
+                  textAlignVertical="top"
+                  className="min-h-[300px] text-base leading-6 text-label"
+                  style={{ fontFamily: AppFont.regular, opacity: isEnhancing ? 0.4 : 1 }}
+                />
+              </>
             ) : shouldShowTranscriptStatus ? (
               <View className="min-h-[180px] flex-row items-center gap-3">
                 <ActivityIndicator size="small" color={BRAND} />

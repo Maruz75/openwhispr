@@ -70,6 +70,7 @@ export function EditableMarkdown({
         </View>
         <TextInput
           testID="enhanced-editor"
+          accessibilityLabel="Enhanced notes"
           value={draft}
           onChangeText={(text) => {
             draftEditedRef.current = true;

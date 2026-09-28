@@ -53,4 +53,15 @@ describe('buildNoteChatContext', () => {
       generated,
     );
   });
+
+  it('caps the generated notes when their labels are what push the context over the limit', () => {
+    // Exactly 24,000 characters of text, plus the "Note content:" and "Generated notes:" labels.
+    const context = buildNoteChatContext({
+      generatedNotes: `## Summary\n${'y'.repeat(19_989)}`,
+      sourceText: 'x'.repeat(4_000),
+    });
+
+    expect(context).toContain('[...rest of the generated notes omitted...]');
+    expect(boundChatContext(context).truncated).toBe(false);
+  });
 });
