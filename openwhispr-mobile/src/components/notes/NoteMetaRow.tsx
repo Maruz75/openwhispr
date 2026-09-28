@@ -42,6 +42,8 @@ export function NoteMetaRow({
               <SystemIcon name="person.2" mdName="Users" size={14} color="secondaryLabel" />
               <Text
                 numberOfLines={1}
+                // A long name gives way in the middle, so the "+3" count stays visible.
+                ellipsizeMode="middle"
                 className="shrink text-[14px] font-medium text-secondaryLabel"
               >
                 {attendeeLabel}

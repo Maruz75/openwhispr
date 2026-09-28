@@ -558,3 +558,14 @@ it('exports an unfinished edit to the generated notes', () => {
     'md',
   );
 });
+
+it('exports only the title from a transcript that is still being made', () => {
+  mockNote = note({ noteType: 'meeting', transcriptionStatus: 'transcribing' });
+  mockNotesState.notes = [mockNote];
+  mockSegments = [];
+  const screen = render(<NoteEditorScreen />);
+  expect(screen.getByText('Transcribing audio...')).toBeTruthy();
+  fireEvent.press(screen.getByText('Share note'));
+  fireEvent.press(screen.getByText('Export Markdown'));
+  expect(exportNote).toHaveBeenCalledWith(expect.objectContaining({ content: '' }), 'md');
+});

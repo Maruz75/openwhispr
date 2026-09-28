@@ -21,7 +21,10 @@ export function noteTakenAt(
   return created < updated ? created : updated;
 }
 
-/** "Today 09:27", "Yesterday 14:05", "Sep 21, 09:27", or "Sep 21, 2025, 09:27", timed like the notes list. */
+/**
+ * "Today 09:27", "Yesterday 14:05", "Sep 21, 09:27", or "Sep 21, 2025, 09:27", with the time
+ * shown as the notes list shows it.
+ */
 export function formatNoteMetaDate(timestamp: string | Date | null | undefined, now: Date): string {
   const date = tryParseNoteTimestamp(timestamp);
   if (!date) return '';

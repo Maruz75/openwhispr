@@ -40,7 +40,7 @@ const person = (overrides: Partial<CalendarParticipant> = {}): CalendarParticipa
 
 describe('NoteMetaRow', () => {
   const props = {
-    dateLabel: 'Today 9:27 AM',
+    dateLabel: 'Today 09:27',
     attendeeLabel: 'Sam +3',
     folderLabel: 'Meetings',
     onPressAttendees: jest.fn(),
@@ -49,7 +49,7 @@ describe('NoteMetaRow', () => {
 
   it('shows the date, attendees and folder', () => {
     const { getByText } = render(<NoteMetaRow {...props} />);
-    expect(getByText('Today 9:27 AM')).toBeTruthy();
+    expect(getByText('Today 09:27')).toBeTruthy();
     expect(getByText('Sam +3')).toBeTruthy();
     expect(getByText('Meetings')).toBeTruthy();
   });
@@ -69,7 +69,7 @@ describe('NoteMetaRow', () => {
   it('hides the attendees chip when nobody attends', () => {
     const { queryByTestId, getByText } = render(<NoteMetaRow {...props} attendeeLabel={null} />);
     expect(queryByTestId('note-meta-attendees')).toBeNull();
-    expect(getByText('Today 9:27 AM')).toBeTruthy();
+    expect(getByText('Today 09:27')).toBeTruthy();
   });
 
   it('keeps long names to one line', () => {
@@ -80,7 +80,10 @@ describe('NoteMetaRow', () => {
         folderLabel="Quarterly planning and roadmap reviews"
       />,
     );
-    expect(getByText('Bartholomew-Alexander +12').props.numberOfLines).toBe(1);
+    expect(getByText('Bartholomew-Alexander +12').props).toMatchObject({
+      numberOfLines: 1,
+      ellipsizeMode: 'middle',
+    });
     expect(getByText('Quarterly planning and roadmap reviews').props.numberOfLines).toBe(1);
   });
 
