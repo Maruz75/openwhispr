@@ -223,25 +223,29 @@ function registerConnectorIpc({
   if (noteAttendees) {
     // A note's attendees, minus the user and rooms, for the note chat's
     // context. They go to the model, so the org switch applies here too.
-    ipcMain.handle(
-      "connector-note-attendees",
-      async (event, participants, calendarEventId, selfEmail) => {
-        if (!Array.isArray(participants)) return { attendees: [] };
-        const attendees = sanitizeNoteAttendees(participants);
-        const eventId =
-          isNonEmptyString(calendarEventId) && calendarEventId.length <= MAX_EVENT_ID_LENGTH
-            ? calendarEventId
-            : null;
-        if (attendees.length === 0 && !eventId) return { attendees: [] };
-        const refusal = policyRefusal(await getPolicyState(event));
-        if (refusal) return { attendees: [], unavailableReason: refusal };
-        const ownAddress =
-          isNonEmptyString(selfEmail) && selfEmail.length <= MAX_ATTENDEE_EMAIL_LENGTH
-            ? selfEmail.trim()
-            : null;
-        return { attendees: await noteAttendees(attendees, eventId, ownAddress) };
-      }
-    );
+    ipcMain.handle("connector-note-attendees", async (event, request) => {
+      if (!isPlainObject(request)) return { attendees: [] };
+      const participants = Array.isArray(request.participants)
+        ? sanitizeNoteAttendees(request.participants)
+        : [];
+      const noteId =
+        Number.isSafeInteger(request.noteId) && request.noteId > 0 ? request.noteId : null;
+      const calendarEventId =
+        isNonEmptyString(request.calendarEventId) &&
+        request.calendarEventId.length <= MAX_EVENT_ID_LENGTH
+          ? request.calendarEventId
+          : null;
+      if (participants.length === 0 && !calendarEventId && !noteId) return { attendees: [] };
+      const refusal = policyRefusal(await getPolicyState(event));
+      if (refusal) return { attendees: [], unavailableReason: refusal };
+      const selfEmail =
+        isNonEmptyString(request.selfEmail) && request.selfEmail.length <= MAX_ATTENDEE_EMAIL_LENGTH
+          ? request.selfEmail.trim()
+          : null;
+      return {
+        attendees: await noteAttendees({ noteId, participants, calendarEventId, selfEmail }),
+      };
+    });
   }
 }
 

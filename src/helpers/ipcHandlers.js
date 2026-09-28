@@ -6108,9 +6108,10 @@ class IPCHandlers {
         noteAttendees: createNoteAttendeesLookup({
           getContactLookupSources: () => this.databaseManager.getContactLookupSources(),
           getCalendarEventById: (id) => this.databaseManager.getCalendarEventById(id),
+          getSpeakerMappings: (noteId) => this.databaseManager.getSpeakerMappings(noteId),
+          getSpeakerProfiles: () => this.databaseManager.getSpeakerProfiles(),
           getGmailAddress: async () =>
-            (await this.connectorManager.status()).find(({ id }) => id === "gmail")?.accountLabel ??
-            null,
+            (await this.connectorManager.connectorStatus("gmail"))?.accountLabel ?? null,
         }),
       });
     }

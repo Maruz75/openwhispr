@@ -3892,9 +3892,9 @@
           "network": "無法連線到 Gmail，未傳送任何內容。",
           "rate_limited": "Gmail 忙碌中，請稍後再試。",
           "daily_limit": "已達 Gmail 每日傳送上限，未傳送任何內容。",
-          "domain_policy": "你的機構的 Google 管理員已封鎖此應用程式，未傳送任何內容。",
+          "domain_policy": "您機構的 Google 管理員已封鎖此應用程式，未傳送任何內容。",
           "invalid_recipients": "其中一個地址無效，未傳送任何內容。",
-          "too_many_recipients": "收件者過多（最多 50 位），未傳送任何內容。",
+          "too_many_recipients": "收件者過多（最多 {{max}} 位），未傳送任何內容。",
           "too_long": "主旨或內文對 Gmail 來說太長，未傳送任何內容。",
           "invalid_message": "Gmail 因格式錯誤拒絕了這封郵件，未傳送任何內容。",
           "gmail_unavailable": "目前無法透過 Gmail 傳送，未傳送任何內容。",
@@ -3914,6 +3914,7 @@
         "missingTo": "請在收件者中至少新增一個地址。",
         "tooManyRecipients": "一封郵件最多可寄給 {{max}} 個地址（收件者和副本合計）。",
         "subjectTooLong": "主旨不能超過 {{max}} 個字元。",
+        "bodyTooLong": "郵件內文過長，無法透過 Gmail 傳送。請縮短後再傳送。",
         "unknown": "無法確認是否已傳送，請檢查「寄件備份」資料夾。"
       },
       "openIn": {
@@ -3923,7 +3924,8 @@
     "policyOff": "您的組織已關閉連接器。",
     "email": {
       "title": "郵件草稿",
-      "description": "助理會在您的郵件應用程式中開啟預先填寫的草稿；連接 Gmail 後，則會顯示一張卡片，由您在聊天中傳送。在您按下傳送之前，不會傳送任何內容。",
+      "description": "助理會在您的郵件應用程式中開啟預先填寫的草稿，由您檢查並親自按下傳送。",
+      "descriptionSend": "助理會在聊天中顯示一張郵件卡片，只有在您按下傳送後才會透過您的 Gmail 寄出。",
       "proRequired": "升級到付費方案，讓助理為您草擬郵件。",
       "unavailable": "郵件草稿暫時無法使用。",
       "targetLabel": "在此撰寫郵件",
@@ -3933,7 +3935,8 @@
         "outlookWork": "Outlook（公司或學校）",
         "outlookPersonal": "Outlook.com",
         "mailto": "預設郵件應用程式",
-        "gmailSend": "在聊天中傳送（Gmail）"
+        "gmailSend": "在聊天中傳送（Gmail）",
+        "gmailSendConnectFirst": "在聊天中傳送（Gmail）· 請在下方連接 Gmail"
       }
     },
     "slack": {
@@ -3993,7 +3996,7 @@
         "policy_unavailable": "無法檢查您的組織設定，請重試。",
         "permission_not_granted": "由於未授予傳送郵件的權限，Gmail 未連接。請重新連接並保持勾選該權限。",
         "email_not_verified": "Google 尚未驗證此帳戶的電子郵件地址，因此 Gmail 未連接。",
-        "domain_policy": "你的機構的 Google 管理員已封鎖此應用程式。請他們允許 OpenWhispr。"
+        "domain_policy": "您機構的 Google 管理員已封鎖此應用程式。請他們允許 OpenWhispr。"
       },
       "browser": {
         "connectedTitle": "Gmail 已連接",
@@ -4059,7 +4062,7 @@
           "network": "無法連線到 Gmail。未傳送任何內容。",
           "rate_limited": "Gmail 忙碌中。",
           "daily_limit": "已達 Gmail 每日傳送上限。",
-          "domain_policy": "已被你的機構的 Google 管理員封鎖。",
+          "domain_policy": "已被您機構的 Google 管理員封鎖。",
           "invalid_recipients": "有地址無效。未傳送任何內容。",
           "too_many_recipients": "收件者過多。未傳送任何內容。",
           "too_long": "對 Gmail 來說太長。未傳送任何內容。",

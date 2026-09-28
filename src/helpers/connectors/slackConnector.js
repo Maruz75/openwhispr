@@ -340,6 +340,8 @@ function createSlackConnector({ api, auth, directory, credentials }) {
 
     authorize: (options) => auth.authorize(options),
     revoke: (credential) => auth.revoke(credential),
+    // Which Slack user, in which workspace, a login belongs to.
+    loginKey: (credential) => `${credential?.teamId}:${credential?.userId}`,
   };
 }
 

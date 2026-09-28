@@ -1,3 +1,4 @@
+import type { CalendarAttendee } from "./calendar";
 export type ConnectorPolicyState = "allowed" | "blocked" | "unavailable" | "signed_out";
 
 export type ConnectorCancelReason = "cancelled_by_user" | "conversation_ended" | "expired";
@@ -117,6 +118,17 @@ export interface ConnectorActionRecord {
 export interface NoteAttendee {
   name: string | null;
   email: string;
+}
+
+/** A note chat's meeting, for its attendee list (connector-note-attendees). */
+export interface NoteAttendeesRequest {
+  /** Its identified speakers are attendees too. */
+  noteId: number | null;
+  participants: CalendarAttendee[];
+  /** Its calendar event, whose organizer is an attendee too. */
+  calendarEventId: string | null;
+  /** The signed-in user's OpenWhispr address, never listed. */
+  selfEmail: string | null;
 }
 
 export interface ContactMatch {

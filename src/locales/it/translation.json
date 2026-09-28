@@ -3894,7 +3894,7 @@
           "daily_limit": "È stato raggiunto il limite di invio giornaliero di Gmail. Non è stato inviato nulla.",
           "domain_policy": "L'amministratore Google della tua organizzazione ha bloccato questa app. Non è stato inviato nulla.",
           "invalid_recipients": "Uno degli indirizzi non è valido. Non è stato inviato nulla.",
-          "too_many_recipients": "Troppi destinatari: al massimo 50. Non è stato inviato nulla.",
+          "too_many_recipients": "Troppi destinatari: al massimo {{max}}. Non è stato inviato nulla.",
           "too_long": "L'oggetto o il messaggio è troppo lungo per Gmail. Non è stato inviato nulla.",
           "invalid_message": "Gmail ha rifiutato l'email perché non valida. Non è stato inviato nulla.",
           "gmail_unavailable": "L'invio con Gmail non è disponibile al momento. Non è stato inviato nulla.",
@@ -3914,6 +3914,7 @@
         "missingTo": "Aggiungi almeno un indirizzo in A.",
         "tooManyRecipients": "Un'email può andare al massimo a {{max}} indirizzi, tra A e Cc.",
         "subjectTooLong": "L'oggetto può contenere al massimo {{max}} caratteri.",
+        "bodyTooLong": "Il messaggio è troppo lungo per Gmail. Accorcialo per inviarlo.",
         "unknown": "Impossibile confermare l'invio. Controlla la cartella Posta inviata."
       },
       "openIn": {
@@ -3923,7 +3924,8 @@
     "policyOff": "La tua organizzazione ha disattivato i connettori.",
     "email": {
       "title": "Bozze email",
-      "description": "L'assistente apre una bozza precompilata nella tua app di posta oppure, con Gmail connesso, mostra una scheda che invii dalla chat. Non viene inviato nulla finché non premi Invia.",
+      "description": "L'assistente apre una bozza precompilata nella tua app di posta. La rivedi e premi Invia tu stesso.",
+      "descriptionSend": "L'assistente mostra una scheda email nella chat. Viene inviata dal tuo Gmail solo quando premi Invia.",
       "proRequired": "Passa a un piano a pagamento per far scrivere all'assistente le bozze delle email.",
       "unavailable": "Le bozze email non sono disponibili al momento.",
       "targetLabel": "Crea bozze email in",
@@ -3933,7 +3935,8 @@
         "outlookWork": "Outlook (lavoro o scuola)",
         "outlookPersonal": "Outlook.com",
         "mailto": "App di posta predefinita",
-        "gmailSend": "Invia dalla chat (Gmail)"
+        "gmailSend": "Invia dalla chat (Gmail)",
+        "gmailSendConnectFirst": "Invia dalla chat (Gmail) · connetti Gmail qui sotto"
       }
     },
     "slack": {

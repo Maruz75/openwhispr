@@ -77,7 +77,11 @@ export function isValidEmailAddress(value) {
   ) {
     return false;
   }
-  const domain = value.split("@")[1];
+  const [local, domain] = value.split("@");
+  // An unquoted local part is a dot-atom: dots only between characters, and
+  // no backslash (which only a quoted local part may use). Mail servers
+  // refuse anything else.
+  if (/^\.|\.$|\.\.|\\/.test(local)) return false;
   if (domain.split(".").some(mixesLookalikeScripts)) return false;
   const ascii = asciiDomain(domain);
   // The URL parser reads a numeric domain (0x7f.01) as an IPv4 address, so
@@ -97,6 +101,15 @@ export function recipientLabel(address) {
 // again at Send.
 export const MAX_EMAIL_RECIPIENTS = 50;
 export const MAX_EMAIL_SUBJECT_LENGTH = 250;
+// A body this size, base64-encoded twice (MIME, then Gmail's raw) with the
+// largest headers the other limits allow, stays under the 1 MB raw message
+// cap, so the card can tell before Send what main will refuse.
+export const MAX_EMAIL_BODY_BYTES = 512 * 1024;
+
+// The body's size as sent: UTF-8, with every line break as CRLF.
+export function emailBodyBytes(body) {
+  return new TextEncoder().encode(body.replace(/\r\n|\r|\n/g, "\r\n")).length;
+}
 
 // What an email card's header and receipt name: the first recipient, and how
 // many more. Never the subject or body.

@@ -25,6 +25,13 @@ function createBoundLogin({ connectorId, credentials, sameLogin, isFresh, refres
     return sameLogin(read(binding), binding);
   }
 
+  // The bound login's stored credential, read locally with no refresh, or
+  // null when a reconnect, disconnect or account switch replaced it.
+  function boundCredential(binding) {
+    const entry = read(binding);
+    return sameLogin(entry, binding) ? entry.credential : null;
+  }
+
   // The provider said this login is gone; only the bound login is flagged.
   function markReconnect(binding) {
     const entry = read(binding);
@@ -78,7 +85,7 @@ function createBoundLogin({ connectorId, credentials, sameLogin, isFresh, refres
     return pending;
   }
 
-  return { stillBound, markReconnect, saveRefreshed, getAccessToken };
+  return { stillBound, boundCredential, markReconnect, saveRefreshed, getAccessToken };
 }
 
 module.exports = { createBoundLogin };

@@ -4063,7 +4063,7 @@
           "daily_limit": "Das tägliche Sendelimit von Gmail wurde erreicht. Es wurde nichts gesendet.",
           "domain_policy": "Der Google-Administrator deiner Organisation hat diese App blockiert. Es wurde nichts gesendet.",
           "invalid_recipients": "Eine der Adressen ist ungültig. Es wurde nichts gesendet.",
-          "too_many_recipients": "Zu viele Empfänger: höchstens 50. Es wurde nichts gesendet.",
+          "too_many_recipients": "Zu viele Empfänger: höchstens {{max}}. Es wurde nichts gesendet.",
           "too_long": "Betreff oder Nachricht sind zu lang für Gmail. Es wurde nichts gesendet.",
           "invalid_message": "Gmail hat die E-Mail als fehlerhaft abgelehnt. Es wurde nichts gesendet.",
           "gmail_unavailable": "Senden über Gmail ist gerade nicht verfügbar. Es wurde nichts gesendet.",
@@ -4083,6 +4083,7 @@
         "missingTo": "Füge unter „An“ mindestens eine Adresse hinzu.",
         "tooManyRecipients": "Eine E-Mail kann an höchstens {{max}} Adressen gehen, An und Cc zusammen.",
         "subjectTooLong": "Der Betreff darf höchstens {{max}} Zeichen lang sein.",
+        "bodyTooLong": "Die Nachricht ist zu lang für Gmail. Kürze sie, um sie zu senden.",
         "unknown": "Konnte nicht bestätigt werden. Bitte den Ordner „Gesendet“ prüfen."
       },
       "openIn": {
@@ -4092,7 +4093,8 @@
     "policyOff": "Konnektoren wurden von deiner Organisation deaktiviert.",
     "email": {
       "title": "E-Mail-Entwürfe",
-      "description": "Der Assistent öffnet einen vorausgefüllten Entwurf in deiner E-Mail-App oder zeigt bei verbundenem Gmail eine Karte, die du im Chat sendest. Nichts wird gesendet, bevor du auf Senden klickst.",
+      "description": "Der Assistent öffnet einen vorausgefüllten Entwurf in deiner E-Mail-App. Du prüfst ihn und klickst selbst auf Senden.",
+      "descriptionSend": "Der Assistent zeigt im Chat eine E-Mail-Karte. Sie wird erst über dein Gmail gesendet, wenn du auf Senden klickst.",
       "proRequired": "Upgrade auf einen kostenpflichtigen Plan, damit der Assistent E-Mails für dich entwirft.",
       "unavailable": "E-Mail-Entwürfe sind gerade nicht verfügbar.",
       "targetLabel": "E-Mails entwerfen in",
@@ -4102,7 +4104,8 @@
         "outlookWork": "Outlook (geschäftlich oder Schule)",
         "outlookPersonal": "Outlook.com",
         "mailto": "Standard-E-Mail-App",
-        "gmailSend": "Aus dem Chat senden (Gmail)"
+        "gmailSend": "Aus dem Chat senden (Gmail)",
+        "gmailSendConnectFirst": "Aus dem Chat senden (Gmail) · Gmail unten verbinden"
       }
     },
     "slack": {

@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { Mail } from "../icons";
+import gmailMark from "../../assets/icons/gmail.svg";
 import { ConnectorLoginRow } from "./ConnectorLoginRow";
 import type { ConnectorStatus } from "../../types/connectors";
 
@@ -25,7 +25,20 @@ export function GmailConnectorRow({
       blockedByOrg={blockedByOrg}
       onUpgrade={onUpgrade}
       accountSummary={gmailAccountSummary}
-      icon={<Mail className="w-4 h-4 text-primary" aria-hidden="true" />}
+      // Gmail's mark, like the calendar rows' brand marks: the generic
+      // envelope is the "Email drafts" row just above.
+      icon={
+        <img
+          src={gmailMark}
+          alt=""
+          aria-hidden="true"
+          width={16}
+          height={12}
+          decoding="async"
+          draggable={false}
+          className="h-3 w-4 shrink-0 select-none"
+        />
+      }
     />
   );
 }

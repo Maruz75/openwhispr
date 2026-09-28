@@ -90,20 +90,37 @@ function personAttendees(sources, attendees, { organizerEmail = null } = {}) {
   return people;
 }
 
+// The people speaker identification named in a note, with the address their
+// speaker profile carries: they were in the meeting even when the invite
+// didn't list them.
+function identifiedSpeakers(mappings, profiles) {
+  const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+  return mappings
+    .map((mapping) => byId.get(mapping.profile_id))
+    .filter((profile) => typeof profile?.email === "string" && profile.email !== "")
+    .map((profile) => ({ email: profile.email, displayName: profile.display_name ?? null }));
+}
+
 /**
- * The note chat's attendee lookup (connector-note-attendees). Besides the
- * stored exclusions, the user's OpenWhispr address and their Gmail login's
- * address are theirs too, even when neither is one of their calendar
- * accounts; both apply to the organizer as much as to the participants.
+ * The note chat's attendee lookup (connector-note-attendees): the note's
+ * participants, then the speakers identified in it, then its calendar
+ * event's organizer. Besides the stored exclusions, the user's OpenWhispr
+ * address and their Gmail login's address are theirs too, even when neither
+ * is one of their calendar accounts.
  */
 function createNoteAttendeesLookup({
   getContactLookupSources,
   getCalendarEventById,
+  getSpeakerMappings,
+  getSpeakerProfiles,
   getGmailAddress,
 }) {
-  return async (participants, calendarEventId, selfEmail) => {
+  return async ({ noteId, participants, calendarEventId, selfEmail }) => {
     const sources = getContactLookupSources();
     const gmailAddress = await getGmailAddress();
+    const speakers = noteId
+      ? identifiedSpeakers(getSpeakerMappings(noteId), getSpeakerProfiles())
+      : [];
     const calendarEvent = calendarEventId ? getCalendarEventById(calendarEventId) : null;
     return personAttendees(
       {
@@ -113,7 +130,7 @@ function createNoteAttendeesLookup({
           ...[selfEmail, gmailAddress].filter(Boolean),
         ],
       },
-      participants,
+      [...participants, ...speakers],
       { organizerEmail: calendarEvent?.organizer_email ?? null }
     );
   };

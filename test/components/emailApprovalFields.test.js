@@ -47,7 +47,6 @@ test("outside edit mode the fields are shown, Cc only when it has addresses", as
       React.createElement(EmailApprovalFields, {
         fields,
         editing: false,
-        disabled: false,
         onChange() {},
       })
     );
@@ -68,7 +67,6 @@ test("outside edit mode a non-ASCII domain also shows its punycode form", async 
     React.createElement(EmailApprovalFields, {
       fields: { ...FIELDS, to: ["a@müller.de"], cc: ["b@müller.de"] },
       editing: false,
-      disabled: false,
       onChange() {},
     })
   );
@@ -99,7 +97,6 @@ async function mountEditor(t, initial = FIELDS) {
     return React.createElement(EmailApprovalFields, {
       fields,
       editing: true,
-      disabled: false,
       onChange: (patch) => {
         patches.push(patch);
         setFields((current) => ({ ...current, ...patch }));

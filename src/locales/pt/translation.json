@@ -3894,7 +3894,7 @@
           "daily_limit": "O limite diário de envio do Gmail foi atingido. Nada foi enviado.",
           "domain_policy": "O administrador do Google da sua organização bloqueou este app. Nada foi enviado.",
           "invalid_recipients": "Um dos endereços não é válido. Nada foi enviado.",
-          "too_many_recipients": "Destinatários demais: no máximo 50. Nada foi enviado.",
+          "too_many_recipients": "Destinatários demais: no máximo {{max}}. Nada foi enviado.",
           "too_long": "O assunto ou a mensagem é longo demais para o Gmail. Nada foi enviado.",
           "invalid_message": "O Gmail recusou o e-mail por estar malformado. Nada foi enviado.",
           "gmail_unavailable": "O envio pelo Gmail não está disponível agora. Nada foi enviado.",
@@ -3914,6 +3914,7 @@
         "missingTo": "Adicione pelo menos um endereço em Para.",
         "tooManyRecipients": "Um e-mail pode ir para no máximo {{max}} endereços, somando Para e Cc.",
         "subjectTooLong": "O assunto pode ter no máximo {{max}} caracteres.",
+        "bodyTooLong": "A mensagem é longa demais para o Gmail. Encurte-a para enviar.",
         "unknown": "Não foi possível confirmar o envio. Verifique sua pasta de enviados."
       },
       "openIn": {
@@ -3923,7 +3924,8 @@
     "policyOff": "Sua organização desativou os conectores.",
     "email": {
       "title": "Rascunhos de e-mail",
-      "description": "O assistente abre um rascunho pré-preenchido no seu aplicativo de e-mail ou, com o Gmail conectado, mostra um cartão que você envia pelo chat. Nada é enviado até você apertar Enviar.",
+      "description": "O assistente abre um rascunho pré-preenchido no seu aplicativo de e-mail. Você revisa e aperta Enviar.",
+      "descriptionSend": "O assistente mostra um cartão de e-mail no chat. Ele só é enviado pelo seu Gmail quando você aperta Enviar.",
       "proRequired": "Atualize para um plano pago para que o assistente escreva rascunhos de e-mail para você.",
       "unavailable": "Os rascunhos de e-mail não estão disponíveis no momento.",
       "targetLabel": "Criar rascunhos de e-mail em",
@@ -3933,7 +3935,8 @@
         "outlookWork": "Outlook (trabalho ou escola)",
         "outlookPersonal": "Outlook.com",
         "mailto": "Aplicativo de e-mail padrão",
-        "gmailSend": "Enviar pelo chat (Gmail)"
+        "gmailSend": "Enviar pelo chat (Gmail)",
+        "gmailSendConnectFirst": "Enviar pelo chat (Gmail) · conecte o Gmail abaixo"
       }
     },
     "slack": {

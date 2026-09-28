@@ -80,7 +80,7 @@ import {
   serializeTranscriptSegments,
 } from "../../utils/transcriptSpeakerState";
 import NoteParticipants from "./NoteParticipants";
-import type { CalendarAttendee } from "../../types/calendar";
+import { parseNoteParticipants } from "../../utils/noteAttendees";
 import { observeFloatingChatLayout } from "./floatingChatLayout";
 import {
   NOTE_META_CHIP_CLASS,
@@ -393,13 +393,18 @@ export default function NoteEditor({
   >([]);
   const editorRef = useRef<Editor | null>(null);
 
+  const parsedParticipants = useMemo(
+    () => parseNoteParticipants(note.participants),
+    [note.participants]
+  );
+
   const embeddedChat = useEmbeddedChat({
     noteId: note.id,
     folderId: note.folder_id,
     noteTitle: note.title,
     noteContent: note.content,
     noteTranscript: note.transcript ?? undefined,
-    noteParticipants: note.participants,
+    noteParticipants: parsedParticipants,
     noteOwnedByUser: ownsNote(note, user?.id),
     selfEmail: user?.email ?? null,
     noteCalendarEventId: note.calendar_event_id,
@@ -444,14 +449,6 @@ export default function NoteEditor({
     () => buildKnownSpeakers(speakerProfiles, displaySegments, speakerMappings),
     [displaySegments, speakerMappings, speakerProfiles]
   );
-
-  const parsedParticipants = useMemo<CalendarAttendee[]>(() => {
-    try {
-      return note.participants ? JSON.parse(note.participants) : [];
-    } catch {
-      return [];
-    }
-  }, [note.participants]);
 
   const mentionPeople = useMemo(
     () =>

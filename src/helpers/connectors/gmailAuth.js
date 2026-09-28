@@ -20,9 +20,15 @@ const EXPIRY_SKEW_MS = 5 * 60 * 1000;
 // revoked at myaccount.google.com, a password change, or a Testing-status
 // project's 7-day expiry. Every other error keeps the login.
 const OAUTH_LOGIN_GONE = new Set(["invalid_grant"]);
-// Google refused the OAuth client itself, or the build has none: a
-// configuration fault, not the user's login, and asking again won't help.
-const CLIENT_REFUSED = new Set(["invalid_client", "unauthorized_client", "not_configured"]);
+// Google refused the OAuth client itself (or it was deleted), or the build
+// has none: a configuration fault, not the user's login, and neither asking
+// again nor signing in again helps.
+const CLIENT_REFUSED = new Set([
+  "invalid_client",
+  "unauthorized_client",
+  "deleted_client",
+  "not_configured",
+]);
 // The one refusal Google documents as worth asking again.
 const TRANSIENT_OAUTH_ERRORS = new Set(["temporarily_unavailable"]);
 // A Workspace admin blocked the app, or it is restricted to another org.
@@ -62,11 +68,13 @@ function googleProjectOf(clientId) {
  * the Gmail login's address; unknown (a grant refused before its identity
  * was read) counts as any connected calendar account.
  */
-function sharesCalendarGrant({ gmailClientId, calendarClientId, calendarEmails, email }) {
+function sharesCalendarGrant({ gmailClientId, calendarClientId, getCalendarEmails, email }) {
   const project = googleProjectOf(gmailClientId);
   if (!project || project !== googleProjectOf(calendarClientId)) return false;
   const wanted = nonEmptyString(email) ? email.toLowerCase() : null;
-  return (calendarEmails ?? []).some(
+  // Read only now: a separate project never needs the calendar database,
+  // whose failure would otherwise count as "shared" and skip the revoke.
+  return (getCalendarEmails() ?? []).some(
     (address) => nonEmptyString(address) && (!wanted || address.toLowerCase() === wanted)
   );
 }
@@ -379,6 +387,7 @@ function createGmailAuth({
 
   return {
     authorize,
+    boundCredential: login.boundCredential,
     getAccessToken: login.getAccessToken,
     markReconnect: login.markReconnect,
     revoke,

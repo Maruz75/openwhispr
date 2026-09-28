@@ -225,6 +225,23 @@ test("an oversized body never refreshes a stale token, at prepare or at commit",
   assert.deepEqual(commitCase.google.calls, [], "commit: no token refresh and no send");
 });
 
+test("a body past the card's limit is refused even when its raw message would fit", async () => {
+  const { MAX_EMAIL_BODY_BYTES } = await import("../../../src/helpers/connectors/emailCompose.js");
+  const justOver = "x".repeat(MAX_EMAIL_BODY_BYTES + 1);
+  const atLimit = "x".repeat(MAX_EMAIL_BODY_BYTES);
+
+  const { connector, google } = await setupGmail({ [SEND]: [SENT] });
+  const refused = await connector.prepare("send", { ...JOSH, body: justOver }, BOUND);
+  assert.equal(refused.errorCode, "too_long");
+  const { payload } = await prepareJosh(connector);
+  const committed = await connector.commit("send", payload, { body: justOver }, BOUND);
+  assert.equal(committed.errorCode, "too_long");
+  assert.equal(hits(google, SEND).length, 0);
+
+  // The card and main agree: at the limit, it sends.
+  assert.equal((await connector.commit("send", payload, { body: atLimit }, BOUND)).state, "sent");
+});
+
 test("a login that needs reconnecting, or that Google says is gone, fails prepare with reconnect_needed", async () => {
   const flagged = await setupGmail({}, { credential: { ...CONNECTED, needsReconnect: true } });
   const refused = await flagged.connector.prepare("send", JOSH, BOUND);

@@ -312,6 +312,26 @@ test("an empty body still builds a valid message", async () => {
   assert.equal(splitMessage(result.raw).body, "");
 });
 
+test("the largest email the card allows still fits the raw cap", async () => {
+  const { buildRawMessage, MAX_RAW_BYTES } = await load();
+  const { MAX_EMAIL_BODY_BYTES, MAX_EMAIL_RECIPIENTS, MAX_EMAIL_SUBJECT_LENGTH, emailBodyBytes } =
+    await import("../../../src/helpers/connectors/emailCompose.js");
+  // Long local parts on internationalized domains, which grow in punycode.
+  const address = (index) =>
+    `${String(index).padStart(2, "0")}${"l".repeat(62)}@${"ü".repeat(55)}.${"ü".repeat(55)}.${"ü".repeat(55)}.de`;
+  const body = "é".repeat(MAX_EMAIL_BODY_BYTES / 2);
+  assert.equal(emailBodyBytes(body), MAX_EMAIL_BODY_BYTES);
+
+  const built = buildRawMessage({
+    from: address(99),
+    to: Array.from({ length: MAX_EMAIL_RECIPIENTS }, (_, index) => address(index)),
+    subject: "😀".repeat(MAX_EMAIL_SUBJECT_LENGTH),
+    body,
+  });
+  assert.equal(built.ok, true);
+  assert.ok(built.bytes <= MAX_RAW_BYTES);
+});
+
 test("a message whose raw form passes 1 MB is refused as too_long", async () => {
   const { buildRawMessage, MAX_RAW_BYTES } = await load();
   assert.equal(MAX_RAW_BYTES, 1024 * 1024);

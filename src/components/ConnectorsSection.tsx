@@ -55,28 +55,40 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
   const targetOptions = EMAIL_DRAFT_TARGET_SETTINGS.filter(
     (option) => option !== "gmailSend" || gmail?.configured !== false
   );
-  // A saved Send from chat whose Gmail login is gone drafts as Automatic, so
-  // the picker says so. The saved choice is kept for when Gmail reconnects.
+  const currentTarget = resolveEmailDraftTarget({
+    emailDraftTarget,
+    gcalConnected,
+    mcalAccounts,
+    gmailStatus,
+  });
+  // Automatic and Send from chat both pick Gmail whenever it's connected, so
+  // a saved Send from chat whose Gmail login is gone drafts, and shows, as
+  // Automatic.
   const shownTarget =
-    emailDraftTarget === "gmailSend" &&
-    resolveEmailDraftTarget({ emailDraftTarget, gcalConnected, mcalAccounts, gmailStatus }) !==
-      "gmailSend"
-      ? "auto"
-      : emailDraftTarget;
-  const optionLabel = (option: EmailDraftTargetSetting): string =>
-    option === "auto"
-      ? t("connectors.email.autoResolved", {
-          target: t(`connectors.email.targets.${automaticTarget}`),
-        })
-      : t(`connectors.email.targets.${option}`);
+    emailDraftTarget === "gmailSend" && currentTarget !== "gmailSend" ? "auto" : emailDraftTarget;
+  // Send from chat needs a connected Gmail; until then it says where to connect.
+  const gmailSendUnavailable = gmailStatus !== "connected";
+  const optionLabel = (option: EmailDraftTargetSetting): string => {
+    if (option === "auto") {
+      return t("connectors.email.autoResolved", {
+        target: t(`connectors.email.targets.${automaticTarget}`),
+      });
+    }
+    if (option === "gmailSend" && gmailSendUnavailable) {
+      return t("connectors.email.targets.gmailSendConnectFirst");
+    }
+    return t(`connectors.email.targets.${option}`);
+  };
 
   const description = blockedByOrg
     ? t("connectors.policyOff")
     : !isPaid
       ? t("connectors.email.proRequired")
-      : connectorsAllowed
-        ? t("connectors.email.description")
-        : t("connectors.email.unavailable");
+      : !connectorsAllowed
+        ? t("connectors.email.unavailable")
+        : currentTarget === "gmailSend"
+          ? t("connectors.email.descriptionSend")
+          : t("connectors.email.description");
 
   return (
     <SettingsPanel>
@@ -105,7 +117,7 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
                   <SelectItem
                     key={option}
                     value={option}
-                    disabled={option === "gmailSend" && gmailStatus !== "connected"}
+                    disabled={option === "gmailSend" && gmailSendUnavailable}
                   >
                     {optionLabel(option)}
                   </SelectItem>

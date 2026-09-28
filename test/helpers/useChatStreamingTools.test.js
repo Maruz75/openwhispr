@@ -469,26 +469,29 @@ test("a Gmail login that needs reconnecting asks for a reconnect instead of open
   assert.deepEqual(calls, { prepare: 0, runDirect: 0 });
 });
 
-// A meeting note's participants as the note row stores them.
-const NOTE_ATTENDEES = [
-  { email: "dana@example.com", displayName: "Dana Wu", responseStatus: "accepted", self: false },
-  { email: "me@example.com", displayName: "Me", responseStatus: "accepted", self: true },
-];
+// A meeting note as the note chat passes it.
+const NOTE_MEETING = {
+  noteId: 7,
+  participants: [
+    { email: "dana@example.com", displayName: "Dana Wu", responseStatus: "accepted", self: false },
+    { email: "me@example.com", displayName: "Me", responseStatus: "accepted", self: true },
+  ],
+  calendarEventId: "event-1",
+  selfEmail: "me@openwhispr.test",
+};
 
 // A note chat whose system prompt is captured per send; main's attendee
 // filter answers with `answer` and records what it was asked.
 async function renderNoteChat(t, hookOptions, { answer, subscribed = true } = {}) {
   const lookups = [];
-  const eventIds = [];
   const rendered = await renderChatStreaming(
     t,
-    { noteContext: "Note ID: 7\nTitle: Kickoff", noteAttendees: NOTE_ATTENDEES, ...hookOptions },
+    { noteContext: "Note ID: 7\nTitle: Kickoff", noteMeeting: NOTE_MEETING, ...hookOptions },
     {
       subscribed,
       electronAPI: {
-        connectorNoteAttendees: async (participants, calendarEventId) => {
-          lookups.push(participants);
-          eventIds.push(calendarEventId);
+        connectorNoteAttendees: async (request) => {
+          lookups.push(request);
           if (answer instanceof Error) throw answer;
           return answer ?? { attendees: [{ name: "Dana Wu", email: "dana@example.com" }] };
         },
@@ -504,32 +507,23 @@ async function renderNoteChat(t, hookOptions, { answer, subscribed = true } = {}
       })();
     }
   );
-  return { ...rendered, lookups, eventIds, prompts };
+  return { ...rendered, lookups, prompts };
 }
 
 test("a note chat with connectors lists the note's attendees and how to read 'everyone'", async (t) => {
   const { captured, lookups, prompts } = await renderNoteChat(t, CONNECTOR_SURFACE);
   await captured.sendToAI("Draft a follow-up to everyone", []);
 
-  assert.deepEqual(lookups, [NOTE_ATTENDEES]);
+  // The whole meeting goes to main, which adds speakers and the organizer.
+  assert.deepEqual(lookups, [NOTE_MEETING]);
   assert.match(prompts[0], /Meeting attendees/);
-  assert.match(prompts[0], /- Dana Wu <dana@example\.com>/);
+  assert.match(
+    prompts[0],
+    /<meeting_attendees>\n- Dana Wu <dana@example\.com>\n<\/meeting_attendees>/
+  );
   assert.match(prompts[0], /"everyone"/);
   assert.match(prompts[0], /find_contact/);
   assert.match(prompts[0], /Title: Kickoff/);
-});
-
-test("a meeting note's calendar event goes with the lookup, so main can add its organizer", async (t) => {
-  const { captured, lookups, eventIds, prompts } = await renderNoteChat(
-    t,
-    { ...CONNECTOR_SURFACE, noteAttendees: [], noteCalendarEventId: "event-1" },
-    { answer: { attendees: [{ name: null, email: "lee@example.com" }] } }
-  );
-  await captured.sendToAI("Draft a follow-up to everyone", []);
-
-  assert.deepEqual(lookups, [[]], "an organizer-only meeting is still looked up");
-  assert.deepEqual(eventIds, ["event-1"]);
-  assert.match(prompts[0], /- lee@example\.com/);
 });
 
 test("a chat that offers no connector tools never looks up or lists attendees", async (t) => {
@@ -551,14 +545,13 @@ test("a free plan's note chat never looks up or lists attendees", async (t) => {
   assert.doesNotMatch(prompts[0], /Meeting attendees/);
 });
 
-test("a note without attendees skips the lookup and gets no block", async (t) => {
-  const { captured, lookups, prompts } = await renderNoteChat(
-    t,
-    { ...CONNECTOR_SURFACE, noteAttendees: [] },
-    { answer: { attendees: [] } }
-  );
+test("a chat that isn't about a note never looks up attendees", async (t) => {
+  const { captured, lookups, prompts } = await renderNoteChat(t, {
+    ...CONNECTOR_SURFACE,
+    noteMeeting: undefined,
+  });
   await captured.sendToAI("Draft a follow-up", []);
-  assert.deepEqual(lookups, [], "an empty note skips the lookup");
+  assert.deepEqual(lookups, []);
   assert.doesNotMatch(prompts[0], /Meeting attendees/);
 });
 

@@ -471,6 +471,7 @@ test("a refused OAuth client is a build fault: gmail_unavailable, login kept, on
   for (const [status, error] of [
     [401, "invalid_client"],
     [400, "unauthorized_client"],
+    [401, "deleted_client"],
   ]) {
     const warnings = [];
     const { auth, google, slot } = await setup({
@@ -695,7 +696,7 @@ test("a Gmail grant shares the calendar's only in the same Cloud project, for a 
     sharesCalendarGrant({
       gmailClientId: calendar,
       calendarClientId: calendar,
-      calendarEmails: ["You@Example.test"],
+      getCalendarEmails: () => ["You@Example.test"],
       email: "you@example.test",
       ...overrides,
     });
@@ -704,7 +705,17 @@ test("a Gmail grant shares the calendar's only in the same Cloud project, for a 
   assert.equal(shares({ gmailClientId: sameProject }), true, "another client of the same project");
   assert.equal(shares({ gmailClientId: otherProject }), false, "a separate project");
   assert.equal(shares({ email: "someone@example.test" }), false, "another Google account");
-  assert.equal(shares({ calendarEmails: [] }), false, "no calendar connected");
+  assert.equal(shares({ getCalendarEmails: () => [] }), false, "no calendar connected");
+  assert.equal(
+    shares({
+      gmailClientId: otherProject,
+      getCalendarEmails: () => {
+        throw new Error("Database not initialized");
+      },
+    }),
+    false,
+    "a separate project never reads the calendar database"
+  );
   assert.equal(shares({ email: undefined }), true, "an unknown address counts as any account");
   assert.equal(shares({ calendarClientId: undefined }), false, "no calendar client in the build");
   assert.equal(

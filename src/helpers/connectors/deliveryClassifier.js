@@ -18,7 +18,7 @@ function errorCode(error) {
   if (!error) return null;
   if (typeof error.code === "string") return error.code;
   if (typeof error.cause?.code === "string") return error.cause.code;
-  const match = /net::(ERR_[A-Z_]+)/.exec(String(error.message || ""));
+  const match = /net::(ERR_[A-Z0-9_]+)/.exec(String(error.message || ""));
   return match ? match[1] : null;
 }
 
@@ -30,6 +30,14 @@ function classifyTransportError(error) {
 // URL. Electron's net.fetch carries "net::ERR_…" in the message only.
 function transportErrorCode(error) {
   return errorCode(error) ?? (error?.name === "TimeoutError" ? "timeout" : "network_error");
+}
+
+// Whether a code came from transportErrorCode rather than from the provider:
+// Node's (ECONNRESET), Chromium's (ERR_CONNECTION_RESET), undici's
+// (UND_ERR_*), a timeout or an unnamed network error. Provider codes are
+// lower case, so they never match.
+function isTransportErrorCode(code) {
+  return /^(E[A-Z0-9_]+|UND_ERR_[A-Z0-9_]+|timeout|network_error)$/.test(code ?? "");
 }
 
 // Retry-After in seconds. An HTTP-date (or anything else) is no wait to honour.
@@ -58,5 +66,6 @@ module.exports = {
   classifyHttpStatus,
   classifyProviderError,
   transportErrorCode,
+  isTransportErrorCode,
   retryAfterMs,
 };

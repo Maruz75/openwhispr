@@ -295,7 +295,7 @@ test("hides the highlight instead of freezing it when no tab matches the selecti
   await unmount();
 });
 
-test("the note's chat gets the note's participants, as stored", async (t) => {
+test("the note's chat gets the note's participants, parsed once", async (t) => {
   t.after(() => {
     delete globalThis.__embeddedChatOptions;
   });
@@ -303,7 +303,10 @@ test("the note's chat gets the note's participants, as stored", async (t) => {
 
   await render(ENHANCEMENT);
 
-  assert.equal(globalThis.__embeddedChatOptions.noteParticipants, NOTE.participants);
+  assert.deepEqual(
+    globalThis.__embeddedChatOptions.noteParticipants,
+    JSON.parse(NOTE.participants)
+  );
   assert.equal(globalThis.__embeddedChatOptions.noteId, NOTE.id);
   await unmount();
 });

@@ -3894,7 +3894,7 @@
           "daily_limit": "Gmailの1日の送信上限に達しました。何も送信されていません。",
           "domain_policy": "組織のGoogle管理者がこのアプリをブロックしています。何も送信されていません。",
           "invalid_recipients": "無効なアドレスが含まれています。何も送信されていません。",
-          "too_many_recipients": "宛先が多すぎます（最大50件）。何も送信されていません。",
+          "too_many_recipients": "宛先が多すぎます（最大{{max}}件）。何も送信されていません。",
           "too_long": "件名または本文がGmailには長すぎます。何も送信されていません。",
           "invalid_message": "Gmailがメールの形式を拒否しました。何も送信されていません。",
           "gmail_unavailable": "現在Gmailで送信できません。何も送信されていません。",
@@ -3914,6 +3914,7 @@
         "missingTo": "宛先にアドレスを1つ以上入力してください。",
         "tooManyRecipients": "1通のメールの宛先は、宛先とCcを合わせて最大{{max}}件です。",
         "subjectTooLong": "件名は{{max}}文字以内にしてください。",
+        "bodyTooLong": "メッセージが長すぎて Gmail で送信できません。短くしてから送信してください。",
         "unknown": "送信されたか確認できませんでした。送信済みフォルダを確認してください。"
       },
       "openIn": {
@@ -3923,7 +3924,8 @@
     "policyOff": "組織によってコネクタが無効にされています。",
     "email": {
       "title": "メール下書き",
-      "description": "アシスタントがメールアプリに下書きを自動入力して開きます。Gmailを接続している場合は、チャットから送信するカードを表示します。送信を押すまで何も送信されません。",
+      "description": "アシスタントがメールアプリに下書きを自動入力して開きます。内容を確認し、自分で送信を押してください。",
+      "descriptionSend": "アシスタントがチャットにメールのカードを表示します。送信を押したときだけ、Gmail から送信されます。",
       "proRequired": "アシスタントにメールの下書きを作成させるには、有料プランへのアップグレードが必要です。",
       "unavailable": "現在メール下書きを利用できません。",
       "targetLabel": "メールを作成するアプリ",
@@ -3933,7 +3935,8 @@
         "outlookWork": "Outlook（職場または学校）",
         "outlookPersonal": "Outlook.com",
         "mailto": "既定のメールアプリ",
-        "gmailSend": "チャットから送信（Gmail）"
+        "gmailSend": "チャットから送信（Gmail）",
+        "gmailSendConnectFirst": "チャットから送信（Gmail）· 下で Gmail を接続"
       }
     },
     "slack": {

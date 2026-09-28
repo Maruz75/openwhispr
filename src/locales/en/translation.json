@@ -4063,7 +4063,7 @@
           "daily_limit": "Gmail's daily sending limit was reached. Nothing was sent.",
           "domain_policy": "Your organization's Google admin blocked this app. Nothing was sent.",
           "invalid_recipients": "One of the addresses isn't valid. Nothing was sent.",
-          "too_many_recipients": "Too many recipients: 50 at most. Nothing was sent.",
+          "too_many_recipients": "Too many recipients: {{max}} at most. Nothing was sent.",
           "too_long": "The subject or message is too long for Gmail. Nothing was sent.",
           "invalid_message": "Gmail refused the email as malformed. Nothing was sent.",
           "gmail_unavailable": "Sending with Gmail isn't available right now. Nothing was sent.",
@@ -4083,6 +4083,7 @@
         "missingTo": "Add at least one address to To.",
         "tooManyRecipients": "An email can go to at most {{max}} addresses, To and Cc together.",
         "subjectTooLong": "Keep the subject to {{max}} characters or fewer.",
+        "bodyTooLong": "The message is too long for Gmail. Shorten it to send.",
         "unknown": "Couldn't confirm it was sent. Check your Sent folder."
       },
       "openIn": {
@@ -4092,7 +4093,8 @@
     "policyOff": "Connectors are turned off by your organization.",
     "email": {
       "title": "Email drafts",
-      "description": "The assistant opens a pre-filled draft in your email app, or with Gmail connected, shows a card you send from the chat. Nothing is sent until you press Send.",
+      "description": "The assistant opens a pre-filled draft in your email app. You review it and press Send yourself.",
+      "descriptionSend": "The assistant shows an email card in the chat. It's sent from your Gmail only when you press Send.",
       "proRequired": "Upgrade to a paid plan to let the assistant draft emails for you.",
       "unavailable": "Email drafts aren't available right now.",
       "targetLabel": "Draft emails in",
@@ -4102,7 +4104,8 @@
         "outlookWork": "Outlook (work or school)",
         "outlookPersonal": "Outlook.com",
         "mailto": "Default mail app",
-        "gmailSend": "Send from chat (Gmail)"
+        "gmailSend": "Send from chat (Gmail)",
+        "gmailSendConnectFirst": "Send from chat (Gmail) · connect Gmail below"
       }
     },
     "slack": {

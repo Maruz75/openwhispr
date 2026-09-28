@@ -18,8 +18,8 @@ const LABEL_CLASS = "w-14 shrink-0 text-xs text-muted-foreground";
 
 interface EmailApprovalFieldsProps {
   fields: EmailFields;
+  /** True only while a pending card is being edited, so the inputs are never disabled. */
   editing: boolean;
-  disabled: boolean;
   /** What blocks Send, and the id of the text that says why. */
   problems: EmailFieldProblems | null;
   problemsId: string;
@@ -30,7 +30,7 @@ interface EmailApprovalFieldsProps {
 function invalidFields(
   fields: EmailFields,
   problems: EmailFieldProblems | null
-): { to: boolean; cc: boolean; subject: boolean } {
+): { to: boolean; cc: boolean; subject: boolean; body: boolean } {
   const hasInvalid = (list: string[]): boolean =>
     Boolean(problems && list.some((address) => problems.invalid.includes(address)));
   const tooMany = Boolean(problems?.tooManyRecipients);
@@ -38,13 +38,13 @@ function invalidFields(
     to: hasInvalid(fields.to) || Boolean(problems?.missingTo) || tooMany,
     cc: hasInvalid(fields.cc) || tooMany,
     subject: Boolean(problems?.subjectTooLong),
+    body: Boolean(problems?.bodyTooLong),
   };
 }
 
 // Mounted only while editing, so every edit session starts from the draft.
 function EmailFieldsEditor({
   fields,
-  disabled,
   problems,
   problemsId,
   onChange,
@@ -68,7 +68,6 @@ function EmailFieldsEditor({
           type="text"
           className={FIELD_CLASS}
           dir="auto"
-          disabled={disabled}
           value={toText}
           onChange={(event) => {
             setToText(event.target.value);
@@ -84,7 +83,6 @@ function EmailFieldsEditor({
           type="text"
           className={FIELD_CLASS}
           dir="auto"
-          disabled={disabled}
           value={ccText}
           onChange={(event) => {
             setCcText(event.target.value);
@@ -101,16 +99,15 @@ function EmailFieldsEditor({
           type="text"
           className={FIELD_CLASS}
           dir="auto"
-          disabled={disabled}
           value={fields.subject}
           onChange={(event) => onChange({ subject: singleLine(event.target.value) })}
         />
       </label>
       <textarea
         aria-label={t("connectors.approval.email.bodyLabel")}
+        {...validity(invalid.body)}
         className={`min-h-24 ${FIELD_CLASS}`}
         dir="auto"
-        disabled={disabled}
         value={fields.body}
         onChange={(event) => onChange({ body: event.target.value })}
       />
@@ -154,7 +151,6 @@ function EmailFieldsView({ fields }: { fields: EmailFields }): ReactElement {
 export function EmailApprovalFields({
   fields,
   editing,
-  disabled,
   problems,
   problemsId,
   onChange,
@@ -162,7 +158,6 @@ export function EmailApprovalFields({
   return editing ? (
     <EmailFieldsEditor
       fields={fields}
-      disabled={disabled}
       problems={problems}
       problemsId={problemsId}
       onChange={onChange}

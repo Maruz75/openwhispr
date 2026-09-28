@@ -70,6 +70,27 @@ test("a failed request reports its code, never its message", async () => {
   const timeout = new DOMException("The operation was aborted due to timeout", "TimeoutError");
   assert.equal(transportErrorCode(timeout), "timeout");
   assert.equal(transportErrorCode(new Error("something odd")), "network_error");
+  assert.equal(
+    transportErrorCode(new Error("net::ERR_HTTP2_PROTOCOL_ERROR")),
+    "ERR_HTTP2_PROTOCOL_ERROR",
+    "codes with digits are kept whole"
+  );
+});
+
+test("only the codes transportErrorCode produces count as transport codes", async () => {
+  const { isTransportErrorCode } = await load();
+  for (const code of [
+    "ENOTFOUND",
+    "ERR_CONNECTION_RESET",
+    "UND_ERR_SOCKET",
+    "timeout",
+    "network_error",
+  ]) {
+    assert.equal(isTransportErrorCode(code), true, code);
+  }
+  for (const code of ["invalid_grant", "rate_limited", "", null, undefined]) {
+    assert.equal(isTransportErrorCode(code), false, String(code));
+  }
 });
 
 test("Retry-After counts only as seconds", async () => {

@@ -53,7 +53,9 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
           ? t("connectors.approval.email.tooManyRecipients", { max: MAX_EMAIL_RECIPIENTS })
           : problems.subjectTooLong
             ? t("connectors.approval.email.subjectTooLong", { max: MAX_EMAIL_SUBJECT_LENGTH })
-            : null;
+            : problems.bodyTooLong
+              ? t("connectors.approval.email.bodyTooLong")
+              : null;
 
   // Send and Cancel remove the button that had focus; the card keeps it, so
   // keyboard and screen-reader users land on the result.
@@ -110,7 +112,6 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
           <EmailApprovalFields
             fields={emailFields}
             editing={showEditor}
-            disabled={entry.state !== "pending"}
             problems={problems}
             problemsId={problemsId}
             onChange={(patch) => updateApprovalDraft(entry.key, { fields: patch })}
@@ -187,6 +188,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
             {t("connectors.approval.failed", {
               message: connectorErrorText(t, "approval", entry.connectorId, entry.errorCode, {
                 destination,
+                max: MAX_EMAIL_RECIPIENTS,
               }),
             })}
           </p>

@@ -551,30 +551,37 @@ test("a held verdict that throws on the deadline fallback fails closed", async (
 
 function registerNoteAttendees(policies) {
   const ipcMain = fakeIpcMain();
-  const received = [];
-  const eventIds = [];
+  const requests = [];
   return load().then(({ registerConnectorIpc }) => {
     registerConnectorIpc({
       ipcMain,
       manager: fakeManager(),
       getPolicyState: async () => policies.shift(),
       getAccountScope: () => SCOPE,
-      noteAttendees: (list, eventId) => {
-        received.push(list);
-        eventIds.push(eventId);
-        return list
+      noteAttendees: (request) => {
+        requests.push(request);
+        return request.participants
           .filter((attendee) => !attendee.self)
           .map(({ email, displayName }) => ({ name: displayName, email }));
       },
     });
-    return { handler: ipcMain.handlers.get("connector-note-attendees"), received, eventIds };
+    const handler = ipcMain.handlers.get("connector-note-attendees");
+    return { handler, requests };
   });
 }
 
+const meeting = (overrides) => ({
+  noteId: null,
+  participants: [],
+  calendarEventId: null,
+  selfEmail: null,
+  ...overrides,
+});
+
 test("note attendees pass only well-formed fields to the filter, and follow the org policy", async () => {
   const policies = ["allowed", "blocked", "unavailable"];
-  const { handler, received } = await registerNoteAttendees(policies);
-  const list = [
+  const { handler, requests } = await registerNoteAttendees(policies);
+  const participants = [
     {
       email: "dana@example.com",
       displayName: "Dana",
@@ -591,64 +598,86 @@ test("note attendees pass only well-formed fields to the filter, and follow the 
     { email: `${"a".repeat(320)}@example.com` },
     { email: "lee@example.com", displayName: "x".repeat(201) },
   ];
+  const request = meeting({ noteId: 7, participants, selfEmail: " me@openwhispr.test " });
 
-  assert.deepEqual(await handler({}, list), {
+  assert.deepEqual(await handler({}, request), {
     attendees: [
       { name: "Dana", email: "dana@example.com" },
       { name: "Room", email: "room@corp.test" },
       { name: null, email: "lee@example.com" },
     ],
   });
-  assert.deepEqual(received, [
-    [
-      { email: "dana@example.com", displayName: "Dana", self: false, resource: false },
-      { email: "me@example.com", displayName: null, self: true, resource: false },
-      { email: "room@corp.test", displayName: "Room", self: false, resource: true },
-      { email: "lee@example.com", displayName: null, self: false, resource: false },
-    ],
+  assert.deepEqual(requests, [
+    {
+      noteId: 7,
+      participants: [
+        { email: "dana@example.com", displayName: "Dana", self: false, resource: false },
+        { email: "me@example.com", displayName: null, self: true, resource: false },
+        { email: "room@corp.test", displayName: "Room", self: false, resource: true },
+        { email: "lee@example.com", displayName: null, self: false, resource: false },
+      ],
+      calendarEventId: null,
+      selfEmail: "me@openwhispr.test",
+    },
   ]);
-  assert.deepEqual(await handler({}, list), { attendees: [], unavailableReason: "policy_blocked" });
-  assert.deepEqual(await handler({}, list), {
+  assert.deepEqual(await handler({}, request), {
+    attendees: [],
+    unavailableReason: "policy_blocked",
+  });
+  assert.deepEqual(await handler({}, request), {
     attendees: [],
     unavailableReason: "policy_unavailable",
   });
-  assert.equal(received.length, 1);
+  assert.equal(requests.length, 1);
 });
 
-test("a note's attendee list is cut at 200, and a malformed or empty one skips the policy lookup", async () => {
+test("a note's attendee list is cut at 200, and a request with nothing to look up skips the policy lookup", async () => {
   const policies = ["allowed"];
-  const { handler, received } = await registerNoteAttendees(policies);
+  const { handler, requests } = await registerNoteAttendees(policies);
   const many = Array.from({ length: 300 }, (_, index) => ({
     email: `person${index}@example.com`,
     displayName: null,
     self: false,
   }));
 
-  const { attendees } = await handler({}, many);
+  const { attendees } = await handler({}, meeting({ participants: many }));
 
   assert.equal(attendees.length, 200);
   assert.equal(attendees[199].email, "person199@example.com");
-  assert.equal(received[0].length, 200);
+  assert.equal(requests[0].participants.length, 200);
   // Nothing to filter: no policy lookup, no filter call.
-  assert.deepEqual(await handler({}, "not a list"), { attendees: [] });
-  assert.deepEqual(await handler({}, []), { attendees: [] });
-  assert.deepEqual(await handler({}, [{ displayName: "No address" }]), { attendees: [] });
-  assert.equal(received.length, 1);
+  for (const request of [
+    "not a request",
+    null,
+    [],
+    meeting({ participants: "not a list" }),
+    meeting({ participants: [{ displayName: "No address" }] }),
+    meeting({ noteId: 0 }),
+    meeting({ noteId: "7" }),
+    meeting({ calendarEventId: "x".repeat(1025) }),
+    meeting({ calendarEventId: "" }),
+  ]) {
+    assert.deepEqual(await handler({}, request), { attendees: [] }, JSON.stringify(request));
+  }
+  assert.equal(requests.length, 1);
   assert.equal(policies.length, 0);
 });
 
-test("a note's calendar event reaches the filter, even with no participants, and a malformed id doesn't", async () => {
+test("a note id or calendar event alone reaches the filter; malformed values don't", async () => {
   const policies = ["allowed", "allowed"];
-  const { handler, received, eventIds } = await registerNoteAttendees(policies);
+  const { handler, requests } = await registerNoteAttendees(policies);
 
-  await handler({}, [], "event-1");
-  await handler({}, [{ email: "dana@example.com" }], { id: "event-1" });
-  // Neither participants nor a usable id: no lookup at all.
-  assert.deepEqual(await handler({}, [], "x".repeat(1025)), { attendees: [] });
-  assert.deepEqual(await handler({}, [], ""), { attendees: [] });
+  await handler({}, meeting({ calendarEventId: "event-1" }));
+  await handler(
+    {},
+    meeting({
+      noteId: 9,
+      calendarEventId: { id: "event-1" },
+      selfEmail: `${"a".repeat(321)}@x.test`,
+    })
+  );
 
-  assert.deepEqual(eventIds, ["event-1", null]);
-  assert.deepEqual(received[0], []);
+  assert.deepEqual(requests, [meeting({ calendarEventId: "event-1" }), meeting({ noteId: 9 })]);
   assert.equal(policies.length, 0);
 });
 

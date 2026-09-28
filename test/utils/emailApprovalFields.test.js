@@ -17,6 +17,7 @@ const NO_PROBLEMS = {
   missingTo: false,
   tooManyRecipients: false,
   subjectTooLong: false,
+  bodyTooLong: false,
 };
 
 test("To and Cc are read as the addresses the user typed, empty entries dropped", async () => {
@@ -104,6 +105,17 @@ test("Send is blocked past Gmail's limits: 50 recipients, a 250-character subjec
   assert.equal(emailFieldProblems({ ...FIELDS, subject: "x".repeat(251) }).subjectTooLong, true);
   // Characters, not UTF-16 units, as main counts them.
   assert.equal(emailFieldProblems({ ...FIELDS, subject: "😀".repeat(250) }).subjectTooLong, false);
+});
+
+test("Send is blocked past the body size main allows, counting UTF-8 bytes and CRLF", async () => {
+  const { emailFieldProblems } = await load();
+  const { MAX_EMAIL_BODY_BYTES } = await import("../../src/helpers/connectors/emailCompose.js");
+  const tooLong = (body) => emailFieldProblems({ ...FIELDS, body }).bodyTooLong;
+
+  assert.equal(tooLong("a".repeat(MAX_EMAIL_BODY_BYTES)), false);
+  assert.equal(tooLong("a".repeat(MAX_EMAIL_BODY_BYTES + 1)), true);
+  assert.equal(tooLong("é".repeat(MAX_EMAIL_BODY_BYTES / 2 + 1)), true, "two bytes each");
+  assert.equal(tooLong("\n".repeat(MAX_EMAIL_BODY_BYTES / 2 + 1)), true, "sent as CRLF");
 });
 
 test("a draft's fields map is read as an email, with anything missing left empty", async () => {

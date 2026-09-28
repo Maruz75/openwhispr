@@ -24,6 +24,7 @@ import type {
   ConnectorStatus,
   ContactMatch,
   NoteAttendee,
+  NoteAttendeesRequest,
 } from "./connectors";
 
 export type LocalTranscriptionProvider = "whisper" | "nvidia" | "cohere";
@@ -2949,9 +2950,7 @@ declare global {
        * user and rooms (main applies find_contact's exclusions).
        */
       connectorNoteAttendees?: (
-        participants: CalendarAttendee[],
-        calendarEventId?: string | null,
-        selfEmail?: string | null
+        request: NoteAttendeesRequest
       ) => Promise<{ attendees: NoteAttendee[]; unavailableReason?: string }>;
       connectorConnect?: (connectorId: string) => Promise<ConnectorConnectResult>;
       connectorDisconnect?: (connectorId: string) => Promise<ConnectorDisconnectResult>;

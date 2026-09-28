@@ -544,9 +544,8 @@ function initializeCoreManagers() {
       sharesCalendarGrant({
         gmailClientId: clientId,
         calendarClientId: process.env.GOOGLE_CALENDAR_CLIENT_ID,
-        calendarEmails: (googleCalendarManager?.getAccounts() ?? []).map(
-          (account) => account.email
-        ),
+        getCalendarEmails: () =>
+          (googleCalendarManager?.getAccounts() ?? []).map((account) => account.email),
         email,
       }),
     runOAuthLoopbackFlow,

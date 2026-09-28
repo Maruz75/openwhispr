@@ -1,6 +1,8 @@
 import {
   bareEmailAddress,
+  emailBodyBytes,
   isValidEmailAddress,
+  MAX_EMAIL_BODY_BYTES,
   MAX_EMAIL_RECIPIENTS,
   MAX_EMAIL_SUBJECT_LENGTH,
 } from "../helpers/connectors/emailCompose";
@@ -19,6 +21,7 @@ export interface EmailFieldProblems {
   missingTo: boolean;
   tooManyRecipients: boolean;
   subjectTooLong: boolean;
+  bodyTooLong: boolean;
 }
 
 // Commas as typed in every locale (Arabic ، and the CJK fullwidth ， and 、),
@@ -67,6 +70,7 @@ export function emailFieldProblems(fields: EmailFields): EmailFieldProblems {
     missingTo: fields.to.length === 0,
     tooManyRecipients: recipients > MAX_EMAIL_RECIPIENTS,
     subjectTooLong: [...fields.subject].length > MAX_EMAIL_SUBJECT_LENGTH,
+    bodyTooLong: emailBodyBytes(fields.body) > MAX_EMAIL_BODY_BYTES,
   };
 }
 
@@ -75,7 +79,8 @@ export function hasEmailFieldProblem(problems: EmailFieldProblems): boolean {
     problems.invalid.length > 0 ||
     problems.missingTo ||
     problems.tooManyRecipients ||
-    problems.subjectTooLong
+    problems.subjectTooLong ||
+    problems.bodyTooLong
   );
 }
 

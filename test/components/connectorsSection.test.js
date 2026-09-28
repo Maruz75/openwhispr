@@ -389,9 +389,11 @@ test("Send from chat can be picked only while Gmail is connected", async (t) => 
   );
 });
 
-test("without a Gmail login, Send from chat is listed but can't be picked", async (t) => {
+test("without a Gmail login, Send from chat is listed but can't be picked, and says why", async (t) => {
   const container = await renderSection(t, { isPaid: true });
-  assert.equal(pickerOption(container, "gmailSend").getAttribute("data-disabled"), "true");
+  const option = pickerOption(container, "gmailSend");
+  assert.equal(option.getAttribute("data-disabled"), "true");
+  assert.equal(option.textContent, "connectors.email.targets.gmailSendConnectFirst");
   assert.match(
     container.textContent,
     /connectors\.email\.autoResolved\{"target":"connectors\.email\.targets\.outlookWork"\}/
@@ -403,7 +405,9 @@ test("a Gmail login that needs reconnecting can't be picked, but Automatic still
     isPaid: true,
     statuses: { gmail: { ...GMAIL, needsReconnect: true } },
   });
-  assert.equal(pickerOption(container, "gmailSend").getAttribute("data-disabled"), "true");
+  const option = pickerOption(container, "gmailSend");
+  assert.equal(option.getAttribute("data-disabled"), "true");
+  assert.equal(option.textContent, "connectors.email.targets.gmailSendConnectFirst");
   assert.match(
     container.textContent,
     /connectors\.email\.autoResolved\{"target":"connectors\.email\.targets\.gmailSend"\}/
@@ -445,6 +449,28 @@ test("a saved Send from chat shows while Gmail can send, and reads as Automatic 
         emailDraftTarget: "gmailSend",
       });
       assert.equal(shownTarget(container), expected);
+    });
+  }
+});
+
+test("the card's description follows where drafts actually go", async (t) => {
+  for (const [label, options, key] of [
+    ["Automatic with Gmail connected", { statuses: { gmail: GMAIL } }, "descriptionSend"],
+    [
+      "a compose target picked",
+      { statuses: { gmail: GMAIL }, emailDraftTarget: "mailto" },
+      "description",
+    ],
+    ["no Gmail login", {}, "description"],
+  ]) {
+    await t.test(label, async (st) => {
+      const container = await renderSection(st, { isPaid: true, ...options });
+      const other = key === "description" ? "descriptionSend" : "description";
+      assert.match(container.textContent, new RegExp(`connectors\\.email\\.${key}(?!Send)`));
+      assert.doesNotMatch(
+        container.textContent,
+        new RegExp(`connectors\\.email\\.${other}(?!Send)`)
+      );
     });
   }
 });

@@ -137,6 +137,20 @@ test("Connect saves the Google login under the account that started it", async (
   assert.equal(status.needsReconnect, false);
 });
 
+test("connecting another Google account revokes the old one's grant; reconnecting the same keeps it", async () => {
+  const other = await setup({
+    credential: CONNECTED,
+    script: { [TOKEN]: [exchangeFor({ sub: "sub-2", email: "other@example.test" })] },
+  });
+  assert.equal((await other.manager.connect("gmail", "allowed")).status, "connected");
+  assert.deepEqual(revoked(other.google), [{ token: "refresh-1" }]);
+
+  // Revoking the same account's old token would end the new login's grant.
+  const same = await setup({ credential: CONNECTED, script: { [TOKEN]: [exchangeFor()] } });
+  assert.equal((await same.manager.connect("gmail", "allowed")).status, "connected");
+  assert.deepEqual(revoked(same.google), []);
+});
+
 test("an unticked Gmail permission or an unverified address is revoked, saved nowhere, and reported", async () => {
   for (const [reply, errorCode] of [
     [

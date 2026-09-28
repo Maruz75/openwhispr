@@ -4063,7 +4063,7 @@
           "daily_limit": "La limite d'envoi quotidienne de Gmail est atteinte. Rien n'a été envoyé.",
           "domain_policy": "L'administrateur Google de votre organisation a bloqué cette application. Rien n'a été envoyé.",
           "invalid_recipients": "L'une des adresses n'est pas valide. Rien n'a été envoyé.",
-          "too_many_recipients": "Trop de destinataires : 50 au maximum. Rien n'a été envoyé.",
+          "too_many_recipients": "Trop de destinataires : {{max}} au maximum. Rien n'a été envoyé.",
           "too_long": "L'objet ou le message est trop long pour Gmail. Rien n'a été envoyé.",
           "invalid_message": "Gmail a refusé l'e-mail, mal formé. Rien n'a été envoyé.",
           "gmail_unavailable": "L'envoi avec Gmail n'est pas disponible pour le moment. Rien n'a été envoyé.",
@@ -4083,6 +4083,7 @@
         "missingTo": "Ajoutez au moins une adresse dans À.",
         "tooManyRecipients": "Un e-mail peut être envoyé à {{max}} adresses au maximum, À et Cc compris.",
         "subjectTooLong": "L'objet doit compter au plus {{max}} caractères.",
+        "bodyTooLong": "Le message est trop long pour Gmail. Raccourcissez-le pour l'envoyer.",
         "unknown": "Impossible de confirmer l'envoi. Vérifiez votre dossier Messages envoyés."
       },
       "openIn": {
@@ -4092,7 +4093,8 @@
     "policyOff": "Votre organisation a désactivé les connecteurs.",
     "email": {
       "title": "Brouillons d'e-mails",
-      "description": "L'assistant ouvre un brouillon pré-rempli dans votre application de messagerie ou, si Gmail est connecté, affiche une carte que vous envoyez depuis le chat. Rien n'est envoyé avant que vous appuyiez sur Envoyer.",
+      "description": "L'assistant ouvre un brouillon pré-rempli dans votre application de messagerie. Vous le vérifiez et appuyez vous-même sur Envoyer.",
+      "descriptionSend": "L'assistant affiche une carte d'e-mail dans le chat. Elle n'est envoyée depuis votre Gmail que lorsque vous appuyez sur Envoyer.",
       "proRequired": "Passez à un plan payant pour que l'assistant rédige des e-mails pour vous.",
       "unavailable": "Les brouillons d'e-mails ne sont pas disponibles pour le moment.",
       "targetLabel": "Rédiger les e-mails dans",
@@ -4102,7 +4104,8 @@
         "outlookWork": "Outlook (professionnel ou scolaire)",
         "outlookPersonal": "Outlook.com",
         "mailto": "Application de messagerie par défaut",
-        "gmailSend": "Envoyer depuis le chat (Gmail)"
+        "gmailSend": "Envoyer depuis le chat (Gmail)",
+        "gmailSendConnectFirst": "Envoyer depuis le chat (Gmail) · connectez Gmail ci-dessous"
       }
     },
     "slack": {

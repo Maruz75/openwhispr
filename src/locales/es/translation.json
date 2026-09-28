@@ -3947,7 +3947,7 @@
           "daily_limit": "Se alcanzó el límite diario de envío de Gmail. No se envió nada.",
           "domain_policy": "El administrador de Google de tu organización bloqueó esta app. No se envió nada.",
           "invalid_recipients": "Una de las direcciones no es válida. No se envió nada.",
-          "too_many_recipients": "Demasiados destinatarios: 50 como máximo. No se envió nada.",
+          "too_many_recipients": "Demasiados destinatarios: {{max}} como máximo. No se envió nada.",
           "too_long": "El asunto o el mensaje es demasiado largo para Gmail. No se envió nada.",
           "invalid_message": "Gmail rechazó el correo por estar mal formado. No se envió nada.",
           "gmail_unavailable": "El envío con Gmail no está disponible ahora. No se envió nada.",
@@ -3967,6 +3967,7 @@
         "missingTo": "Agrega al menos una dirección en Para.",
         "tooManyRecipients": "Un correo puede ir a {{max}} direcciones como máximo, entre Para y CC.",
         "subjectTooLong": "El asunto debe tener {{max}} caracteres como máximo.",
+        "bodyTooLong": "El mensaje es demasiado largo para Gmail. Acórtalo para enviarlo.",
         "unknown": "No se pudo confirmar el envío. Revisa tu carpeta de enviados."
       },
       "openIn": {
@@ -3976,7 +3977,8 @@
     "policyOff": "Tu organización ha desactivado los conectores.",
     "email": {
       "title": "Borradores de correo",
-      "description": "El asistente abre un borrador prellenado en tu aplicación de correo o, con Gmail conectado, muestra una tarjeta que envías desde el chat. No se envía nada hasta que pulsas Enviar.",
+      "description": "El asistente abre un borrador prellenado en tu aplicación de correo. Tú lo revisas y pulsas Enviar.",
+      "descriptionSend": "El asistente muestra una tarjeta de correo en el chat. Solo se envía desde tu Gmail cuando pulsas Enviar.",
       "proRequired": "Actualiza a un plan de pago para que el asistente redacte correos por ti.",
       "unavailable": "Los borradores de correo no están disponibles en este momento.",
       "targetLabel": "Redactar correos en",
@@ -3986,7 +3988,8 @@
         "outlookWork": "Outlook (trabajo o escuela)",
         "outlookPersonal": "Outlook.com",
         "mailto": "Aplicación de correo predeterminada",
-        "gmailSend": "Enviar desde el chat (Gmail)"
+        "gmailSend": "Enviar desde el chat (Gmail)",
+        "gmailSendConnectFirst": "Enviar desde el chat (Gmail) · conecta Gmail abajo"
       }
     },
     "slack": {

@@ -322,45 +322,97 @@ test("the meeting's organizer is an attendee too, after the note's own, under th
   ]);
 });
 
-test("the note chat's lookup also drops the user's OpenWhispr and Gmail addresses, organizer included", async () => {
+// The note chat's lookup over in-memory sources.
+async function noteLookup({ events = {}, mappings = {}, profiles = [], gmail = null } = {}) {
   const { createNoteAttendeesLookup } = await load();
-  const events = { "evt-1": { organizer_email: "Me@OpenWhispr.test" } };
-  const lookup = createNoteAttendeesLookup({
+  return createNoteAttendeesLookup({
     getContactLookupSources: () => SOURCES,
     getCalendarEventById: (id) => events[id] ?? null,
-    getGmailAddress: async () => "me.sends@gmail.test",
+    getSpeakerMappings: (noteId) => mappings[noteId] ?? [],
+    getSpeakerProfiles: () => profiles,
+    getGmailAddress: async () => gmail,
   });
-  const attendees = [
+}
+
+const request = (overrides) => ({
+  noteId: null,
+  participants: [],
+  calendarEventId: null,
+  selfEmail: null,
+  ...overrides,
+});
+
+test("the note chat's lookup also drops the user's OpenWhispr and Gmail addresses, organizer included", async () => {
+  const lookup = await noteLookup({
+    events: { "evt-1": { organizer_email: "Me@OpenWhispr.test" } },
+    gmail: "me.sends@gmail.test",
+  });
+  const participants = [
     { email: "dana@example.com", displayName: "Dana" },
     { email: "ME.SENDS@gmail.test", displayName: "Me (Gmail)" },
     { email: "chad@example.com", displayName: "Me (calendar)" },
   ];
 
   // The organizer is the user's OpenWhispr address: left out like the rest.
-  assert.deepEqual(await lookup(attendees, "evt-1", "me@openwhispr.test"), [
-    { name: "Dana", email: "dana@example.com" },
-  ]);
+  assert.deepEqual(
+    await lookup(
+      request({ participants, calendarEventId: "evt-1", selfEmail: "me@openwhispr.test" })
+    ),
+    [{ name: "Dana", email: "dana@example.com" }]
+  );
   // Without that address, the organizer is someone else and comes last.
-  assert.deepEqual(await lookup(attendees, "evt-1", null), [
+  assert.deepEqual(await lookup(request({ participants, calendarEventId: "evt-1" })), [
     { name: "Dana", email: "dana@example.com" },
     { name: null, email: "Me@OpenWhispr.test" },
   ]);
   // No event, or one that's gone: just the note's attendees.
-  for (const eventId of [null, "evt-missing"]) {
-    assert.deepEqual(await lookup(attendees, eventId, null), [
+  for (const calendarEventId of [null, "evt-missing"]) {
+    assert.deepEqual(await lookup(request({ participants, calendarEventId })), [
       { name: "Dana", email: "dana@example.com" },
     ]);
   }
 });
 
-test("the note chat's lookup works without a Gmail login", async () => {
-  const { createNoteAttendeesLookup } = await load();
-  const lookup = createNoteAttendeesLookup({
-    getContactLookupSources: () => ({}),
-    getCalendarEventById: () => null,
-    getGmailAddress: async () => null,
+test("speakers identified in the note are attendees too, after the invite's and before the organizer", async () => {
+  const lookup = await noteLookup({
+    events: { "evt-1": { organizer_email: "lee@example.com" } },
+    mappings: {
+      7: [
+        { speaker_id: "S1", profile_id: 1 },
+        { speaker_id: "S2", profile_id: 2 },
+        { speaker_id: "S3", profile_id: 3 },
+        { speaker_id: "S4", profile_id: null },
+      ],
+    },
+    profiles: [
+      { id: 1, display_name: "Kim Park", email: "kim@example.com" },
+      { id: 2, display_name: "Dana", email: "DANA@example.com" },
+      { id: 3, display_name: "No address", email: null },
+      { id: 4, display_name: "Another note's", email: "other@example.com" },
+    ],
   });
-  assert.deepEqual(await lookup([{ email: "dana@example.com" }], null, null), [
+
+  assert.deepEqual(
+    await lookup(
+      request({
+        noteId: 7,
+        participants: [{ email: "dana@example.com", displayName: "Dana" }],
+        calendarEventId: "evt-1",
+      })
+    ),
+    [
+      { name: "Dana", email: "dana@example.com" },
+      { name: "Kim Park", email: "kim@example.com" },
+      { name: null, email: "lee@example.com" },
+    ]
+  );
+  // A note with no identified speakers adds nobody.
+  assert.deepEqual(await lookup(request({ noteId: 8 })), []);
+});
+
+test("the note chat's lookup works without a Gmail login", async () => {
+  const lookup = await noteLookup();
+  assert.deepEqual(await lookup(request({ participants: [{ email: "dana@example.com" }] })), [
     { name: null, email: "dana@example.com" },
   ]);
 });

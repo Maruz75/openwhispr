@@ -163,6 +163,8 @@ test("a bad address, an empty To or Gmail's limits block Send with the reason on
     ["ccLabel", "", null],
     ["subjectLabel", "x".repeat(251), "subjectTooLong"],
     ["subjectLabel", "x".repeat(250), null],
+    ["bodyLabel", "x".repeat(512 * 1024 + 1), "bodyTooLong"],
+    ["bodyLabel", "Numbers attached.", null],
   ]) {
     await React.act(async () => type(field(container, labelKey), value));
     const send = button(container, "connectors.approval.send");

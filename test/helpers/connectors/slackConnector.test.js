@@ -554,6 +554,21 @@ test("the binding and status follow the active account's login", async () => {
   assert.deepEqual(await connector.getStatus(), NOT_CONNECTED);
 });
 
+test("a Slack login is the same account only for the same user in the same workspace", async () => {
+  const { createSlackConnector } =
+    await import("../../../src/helpers/connectors/slackConnector.js");
+  const { loginKey } = createSlackConnector({
+    api: null,
+    auth: null,
+    directory: null,
+    credentials: null,
+  });
+  const login = { userId: "U1", teamId: "T1" };
+  assert.equal(loginKey(login), loginKey({ ...login, accessToken: "newer" }));
+  assert.notEqual(loginKey(login), loginKey({ ...login, userId: "U2" }));
+  assert.notEqual(loginKey(login), loginKey({ ...login, teamId: "T2" }));
+});
+
 test("Slack's card lets the user edit only the message text", async () => {
   const { connector } = await setupSlack({});
   assert.deepEqual(connector.actions, {

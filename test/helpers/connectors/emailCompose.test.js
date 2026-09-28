@@ -200,6 +200,11 @@ test("email address validation", async () => {
     "a@b",
     "a b@example.com",
     "a@example.com,b@example.com",
+    // Not a dot-atom local part.
+    "a..b@example.com",
+    ".a@example.com",
+    "a.@example.com",
+    "a\\@b.example.com",
     "",
     null,
   ]) {

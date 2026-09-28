@@ -3,7 +3,9 @@ import { useChatPersistence } from "../components/chat/useChatPersistence";
 import { useChatStreaming } from "../components/chat/useChatStreaming";
 import { useChatMessageSender } from "../components/chat/useChatMessageSender";
 import type { Message, AgentState } from "../components/chat/types";
-import { attendeesForUser, parseNoteParticipants } from "../utils/noteAttendees";
+import { attendeesForUser } from "../utils/noteAttendees";
+import type { CalendarAttendee } from "../types/calendar";
+import type { NoteAttendeesRequest } from "../types/connectors";
 
 interface UseEmbeddedChatOptions {
   noteId: number | null;
@@ -11,9 +13,13 @@ interface UseEmbeddedChatOptions {
   noteTitle: string;
   noteContent: string;
   noteTranscript?: string;
-  /** The note's raw `participants` JSON (CalendarAttendee[]), or null. */
-  noteParticipants?: string | null;
-  /** Whether the signed-in user owns the note, which decides what `self` means. */
+  /** The note's participants, as parsed by parseNoteParticipants. */
+  noteParticipants?: CalendarAttendee[];
+  /**
+   * Whether the signed-in user owns the note, which decides what `self`
+   * means. Unknown reads as someone else's: then the recorder is listed as
+   * an attendee rather than the user left in.
+   */
   noteOwnedByUser?: boolean;
   /** The signed-in user's OpenWhispr address, never listed as an attendee. */
   selfEmail?: string | null;
@@ -40,14 +46,18 @@ interface UseEmbeddedChatReturn {
   startNewChat: () => void;
 }
 
+// Stable, so a note without participants doesn't rebuild noteMeeting on
+// every render.
+const NO_PARTICIPANTS: CalendarAttendee[] = [];
+
 export function useEmbeddedChat({
   noteId,
   folderId,
   noteTitle,
   noteContent,
   noteTranscript,
-  noteParticipants,
-  noteOwnedByUser = true,
+  noteParticipants = NO_PARTICIPANTS,
+  noteOwnedByUser = false,
   selfEmail = null,
   noteCalendarEventId = null,
 }: UseEmbeddedChatOptions): UseEmbeddedChatReturn {
@@ -77,9 +87,14 @@ export function useEmbeddedChat({
     [folderId, noteContent, noteId, noteTitle, noteTranscript]
   );
 
-  const noteAttendees = useMemo(
-    () => attendeesForUser(parseNoteParticipants(noteParticipants), noteOwnedByUser),
-    [noteOwnedByUser, noteParticipants]
+  const noteMeeting = useMemo<NoteAttendeesRequest>(
+    () => ({
+      noteId,
+      participants: attendeesForUser(noteParticipants, noteOwnedByUser),
+      calendarEventId: noteCalendarEventId,
+      selfEmail,
+    }),
+    [noteCalendarEventId, noteId, noteOwnedByUser, noteParticipants, selfEmail]
   );
 
   // A meeting note's chat drafts follow-ups to its attendees, so it offers
@@ -89,9 +104,7 @@ export function useEmbeddedChat({
     setMessages: persistence.setMessages,
     noteContext,
     allowConnectors: true,
-    noteAttendees,
-    noteCalendarEventId,
-    noteSelfEmail: selfEmail,
+    noteMeeting,
     onStreamComplete: (_id, content, toolCalls) => {
       persistence.saveAssistantMessage(content, toolCalls);
     },

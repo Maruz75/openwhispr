@@ -142,12 +142,17 @@ function normalizePreviewFields(fields) {
 }
 
 // The card renders exactly this, so a preview missing a field it needs is
-// malformed rather than shown half empty.
-function normalizePreview(preview) {
+// malformed rather than shown half empty. Every field the card can edit must
+// be one the action declares editable: an undeclared one (a typo in the
+// declaration, say) would let the user change it only for Send to drop it.
+function normalizePreview(preview, editable) {
   if (!preview || typeof preview !== "object") return null;
   const { verbKey, destinationLabel, accountLabel, body } = preview;
   if (![verbKey, destinationLabel, accountLabel, body].every(isString)) return null;
   const fields = normalizePreviewFields(preview.fields);
+  if (fields && !Object.keys(fields).every((name) => Object.hasOwn(editable ?? {}, name))) {
+    return null;
+  }
   return {
     verbKey,
     destinationLabel,
@@ -166,10 +171,10 @@ function normalizePreview(preview) {
 // payload stays in main; only the fields each status defines reach the
 // renderer, so a connector can't leak anything else (such as message text)
 // through an odd result.
-function normalizePrepareResult(result) {
+function normalizePrepareResult(result, editable) {
   switch (result?.status) {
     case "ready": {
-      const preview = normalizePreview(result.preview);
+      const preview = normalizePreview(result.preview, editable);
       return preview && result.payload !== undefined
         ? { status: "ready", payload: result.payload, preview }
         : INVALID_PREPARE_RESULT;
@@ -382,6 +387,12 @@ function createConnectorManager({
     return Promise.all([...byId.values()].map(statusOf));
   }
 
+  // One connector's status, or null for an unknown id.
+  async function connectorStatus(connectorId) {
+    const connector = byId.get(connectorId);
+    return connector ? statusOf(connector) : null;
+  }
+
   // The sign-in in flight per account and connector. A new Connect replaces
   // it: a user who closed the browser tab would otherwise wait out the flow.
   const connecting = new Map();
@@ -430,6 +441,7 @@ function createConnectorManager({
     const startGeneration = credentials.generation(accountId, connectorId);
     try {
       let credential;
+      let replaced = null;
       try {
         credential = await connector.authorize({ signal: controller.signal });
       } catch (error) {
@@ -456,6 +468,7 @@ function createConnectorManager({
           throw Object.assign(new Error("account changed"), { code: "connection_changed" });
         }
         // A new login: approvals prepared under the old one must not send.
+        replaced = credentials.read(accountId, connectorId)?.credential ?? null;
         credentials.replace(accountId, connectorId, credential, startGeneration);
       } catch (error) {
         // Nobody will use this login, so it is revoked rather than left live.
@@ -473,6 +486,12 @@ function createConnectorManager({
       }
       invalidate(connectorId);
       await notifyStatusChanged();
+      // A login for another account is left with nothing using it, so it is
+      // revoked rather than left live. The same account's is kept: Google's
+      // revoke would end the new login's grant too.
+      if (replaced && connector.loginKey?.(replaced) !== connector.loginKey?.(credential)) {
+        await revokeQuietly(connector, replaced);
+      }
       const current = await statusOf(connector);
       return {
         status: "connected",
@@ -524,10 +543,13 @@ function createConnectorManager({
     return grantKept ? { status: "disconnected", grantKept: true } : { status: "disconnected" };
   }
 
+  // In parallel, so an offline account deletion waits one revoke deadline.
   async function disconnectAll(options) {
-    for (const connector of byId.values()) {
-      if (connector.revoke) await disconnect(connector.id, options);
-    }
+    await Promise.all(
+      [...byId.values()]
+        .filter((connector) => connector.revoke)
+        .map((connector) => disconnect(connector.id, options))
+    );
   }
 
   // Reset app data: every login stored on this device is revoked at its
@@ -562,7 +584,10 @@ function createConnectorManager({
 
     let prepared;
     try {
-      prepared = normalizePrepareResult(await connector.prepare(action, args || {}, { binding }));
+      prepared = normalizePrepareResult(
+        await connector.prepare(action, args || {}, { binding }),
+        connector.actions?.[action]?.editable
+      );
     } catch (error) {
       logger.warn(
         "connector prepare threw",
@@ -773,6 +798,7 @@ function createConnectorManager({
 
   return {
     status,
+    connectorStatus,
     prepare,
     commit,
     cancel,

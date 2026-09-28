@@ -611,6 +611,14 @@ test("a body-only declaration (Slack's) drops the title; no declaration keeps ti
   });
 });
 
+// An email-like card: the fields it shows are the fields it declares editable.
+const EMAIL_ACTIONS = {
+  post: {
+    kind: "approval",
+    editable: { to: "addresses", cc: "addresses", subject: "line", body: "text" },
+  },
+};
+
 test("a preview keeps its fields map of strings and string lists, and body stays required", async () => {
   const preview = {
     verbKey: "email",
@@ -627,6 +635,7 @@ test("a preview keeps its fields map of strings and string lists, and body stays
     },
   };
   const { manager } = await setup({
+    actions: EMAIL_ACTIONS,
     prepare: async () => ({ status: "ready", payload: {}, preview }),
   });
   const prepared = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
@@ -645,6 +654,7 @@ test("a preview keeps its fields map of strings and string lists, and body stays
 
   for (const fields of [{ count: 2 }, {}, ["to"], "to", null]) {
     const odd = await setup({
+      actions: EMAIL_ACTIONS,
       prepare: async () => ({ status: "ready", payload: {}, preview: { ...preview, fields } }),
     });
     const result = await odd.manager.prepare("fake", "post", { text: "x" }, ALLOWED);
@@ -655,11 +665,31 @@ test("a preview keeps its fields map of strings and string lists, and body stays
   const { body, ...withoutBody } = preview;
   assert.equal(body, "Numbers attached.");
   const bodiless = await setup({
+    actions: EMAIL_ACTIONS,
     prepare: async () => ({ status: "ready", payload: {}, preview: withoutBody }),
   });
   const refused = await bodiless.manager.prepare("fake", "post", { text: "x" }, ALLOWED);
   assert.equal(refused.errorCode, "invalid_result");
   assert.equal(bodiless.log.rows.size, 0);
+});
+
+test("a card field the action doesn't declare editable (a typo, say) means no card", async () => {
+  const preview = {
+    verbKey: "email",
+    destinationLabel: "josh@acme.test",
+    accountLabel: "you@example.test",
+    body: "Hi",
+    fields: { to: ["josh@acme.test"], subject: "Q3", body: "Hi" },
+  };
+  for (const editable of [{ to: "addresses", subjct: "line", body: "text" }, undefined]) {
+    const { manager, log } = await setup({
+      actions: { post: { kind: "approval", ...(editable ? { editable } : {}) } },
+      prepare: async () => ({ status: "ready", payload: {}, preview }),
+    });
+    const result = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
+    assert.equal(result.errorCode, "invalid_result", JSON.stringify(editable));
+    assert.equal(log.rows.size, 0);
+  }
 });
 
 test("a status says whether the connector is configured; only an explicit false hides it", async () => {
@@ -871,12 +901,6 @@ test("connector logs carry error names and codes, never messages", async () => {
   assert.match(logged, /ECONNRESET/);
 });
 
-const VALID_PREVIEW = {
-  verbKey: "default",
-  destinationLabel: "#eng",
-  accountLabel: "chad",
-  body: "hi",
-};
 const NOT_CONNECTED = {
   connected: false,
   configured: true,
@@ -1075,6 +1099,33 @@ test("connect saves under the account that started it, cancels old approvals and
   });
   assert.equal(log.rows.get(prepared.actionId).state, "cancelled");
   assert.equal(announced.length, 1);
+});
+
+test("connecting another account revokes the login it replaced; the same account keeps it", async () => {
+  for (const [previous, revokesOld] of [
+    [{ accessToken: "old", user: "someone-else" }, true],
+    [{ accessToken: "old", user: "me" }, false],
+  ]) {
+    const credentials = memoryCredentials(previous, { connectorId: "fake" });
+    const revoked = [];
+    const { manager } = await setup(
+      connectable({
+        async authorize() {
+          return { accessToken: "new", user: "me" };
+        },
+        async revoke(credential) {
+          revoked.push(credential.accessToken);
+        },
+        loginKey: (credential) => credential.user,
+      }),
+      undefined,
+      { credentials }
+    );
+
+    assert.equal((await manager.connect("fake", "allowed")).status, "connected");
+    assert.deepEqual(revoked, revokesOld ? ["old"] : [], previous.user);
+    assert.equal(credentials.read("acct-1", "fake").credential.accessToken, "new");
+  }
 });
 
 test("an account switch during the OAuth round trip saves nothing and revokes the new login", async () => {
@@ -1582,6 +1633,35 @@ test("revokeAllStored waits one revoke deadline, not one per login", async () =>
   assert.equal(started.length, 2, "both revokes are in flight together");
   release.resolve();
   await revoking;
+});
+
+test("disconnectAll (account deletion) waits one revoke deadline, not one per connector", async () => {
+  const credentials = memoryCredentials({ accessToken: "a" }, { connectorId: "fake" });
+  credentials.replace("acct-1", "other", { accessToken: "b" }, 0);
+  const started = [];
+  const release = deferred();
+  const revokingConnector = (id) =>
+    fakeConnector({
+      id,
+      ...connectable({
+        revoke(credential) {
+          started.push(credential.accessToken);
+          return release.promise;
+        },
+      }),
+    }).connector;
+  const { manager } = await setup(undefined, undefined, {
+    credentials,
+    connectors: [revokingConnector("fake"), revokingConnector("other")],
+  });
+
+  const disconnecting = manager.disconnectAll();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(started.sort(), ["a", "b"], "both revokes are in flight together");
+  release.resolve();
+  await disconnecting;
+  assert.equal(credentials.read("acct-1", "fake"), null);
+  assert.equal(credentials.read("acct-1", "other"), null);
 });
 
 test("only the newest status change is announced", async () => {

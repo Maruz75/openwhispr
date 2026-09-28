@@ -40,7 +40,7 @@ import { createToolExecutionScope, type ToolExecutionScope } from "./toolExecuti
 import { getAgentToolActivityRemainingMs } from "../../helpers/agentToolPresentation";
 import type { Message, AgentState, ChatImageAttachment, ToolCallInfo } from "./types";
 import type { ContainerScope } from "../../types/chat";
-import type { CalendarAttendee } from "../../types/calendar";
+import type { NoteAttendeesRequest } from "../../types/connectors";
 import {
   buildAgentRequestText,
   type AgentSelectionContext,
@@ -57,22 +57,16 @@ function estimateModelSizeB(modelId: string): number {
   return match ? parseFloat(match[1]) : 0;
 }
 
-// Main adds the meeting's organizer (calendars often leave them out of the
-// attendees), then drops the user (their OpenWhispr address included) and
-// rooms with find_contact's rules; a failed lookup just leaves the block out.
+// Main adds the note's identified speakers and its calendar event's
+// organizer (calendars often leave them out of the attendees), then drops
+// the user (their OpenWhispr address included) and rooms with find_contact's
+// rules; a failed lookup just leaves the block out.
 async function buildNoteAttendeesContext(
-  participants: CalendarAttendee[] | undefined,
-  calendarEventId: string | null | undefined,
-  selfEmail: string | null | undefined
+  meeting: NoteAttendeesRequest | undefined
 ): Promise<string> {
-  if (!window.electronAPI?.connectorNoteAttendees) return "";
-  if (!participants?.length && !calendarEventId) return "";
+  if (!meeting || !window.electronAPI?.connectorNoteAttendees) return "";
   try {
-    const result = await window.electronAPI.connectorNoteAttendees(
-      participants ?? [],
-      calendarEventId ?? null,
-      selfEmail ?? null
-    );
+    const result = await window.electronAPI.connectorNoteAttendees(meeting);
     return noteAttendeesContext(result?.attendees ?? []);
   } catch {
     return "";
@@ -128,14 +122,10 @@ interface UseChatStreamingOptions {
    */
   allowConnectors?: boolean;
   /**
-   * The meeting note's participants (note chat). Listed for the model only in
-   * a send that offers connector tools, so recipients come from them.
+   * The note's meeting (note chat). Its attendees are listed for the model
+   * only in a send that offers connector tools, so recipients come from them.
    */
-  noteAttendees?: CalendarAttendee[];
-  /** The meeting note's calendar event, whose organizer is an attendee too. */
-  noteCalendarEventId?: string | null;
-  /** The signed-in user's OpenWhispr address, never listed as an attendee. */
-  noteSelfEmail?: string | null;
+  noteMeeting?: NoteAttendeesRequest;
   onStreamComplete?: (assistantId: string, content: string, toolCalls?: ToolCallInfo[]) => void;
   /** Fires exactly once when displayable assistant content or tool activity becomes available. */
   onResponseContent?: () => void;
@@ -193,9 +183,7 @@ export function useChatStreaming({
   noteContext: externalNoteContext,
   searchScope,
   allowConnectors = false,
-  noteAttendees,
-  noteCalendarEventId,
-  noteSelfEmail,
+  noteMeeting,
   onStreamComplete,
   onResponseContent,
 }: UseChatStreamingOptions): ChatStreaming {
@@ -209,12 +197,8 @@ export function useChatStreaming({
   noteContextRef.current = externalNoteContext;
   const searchScopeRef = useRef(searchScope);
   searchScopeRef.current = searchScope;
-  const noteAttendeesRef = useRef(noteAttendees);
-  noteAttendeesRef.current = noteAttendees;
-  const noteCalendarEventIdRef = useRef(noteCalendarEventId);
-  noteCalendarEventIdRef.current = noteCalendarEventId;
-  const noteSelfEmailRef = useRef(noteSelfEmail);
-  noteSelfEmailRef.current = noteSelfEmail;
+  const noteMeetingRef = useRef(noteMeeting);
+  noteMeetingRef.current = noteMeeting;
   const toolRegistryRef = useRef<{ key: string; registry: ToolRegistry } | null>(null);
   const toolActivityStartedAtRef = useRef<number | null>(null);
   const toolActivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -440,13 +424,7 @@ export function useChatStreaming({
 
         const [ragContext, attendeesContext] = await Promise.all([
           buildRAGContext(userText, scope),
-          connectorsOffered
-            ? buildNoteAttendeesContext(
-                noteAttendeesRef.current,
-                noteCalendarEventIdRef.current,
-                noteSelfEmailRef.current
-              )
-            : "",
+          connectorsOffered ? buildNoteAttendeesContext(noteMeetingRef.current) : "",
         ]);
         if (cancelled() || !mountedRef.current) return;
         const combinedContext = [noteContextRef.current, attendeesContext, ragContext]
