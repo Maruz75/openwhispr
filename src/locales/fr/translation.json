@@ -4090,7 +4090,7 @@
     "policyOff": "Votre organisation a désactivé les connecteurs.",
     "email": {
       "title": "Brouillons d'e-mails",
-      "description": "L'assistant ouvre un brouillon pré-rempli dans votre application de messagerie. Vous le vérifiez et appuyez vous-même sur Envoyer.",
+      "description": "L'assistant ouvre un brouillon pré-rempli dans votre application de messagerie ou, si Gmail est connecté, affiche une carte que vous envoyez depuis le chat. Rien n'est envoyé avant que vous appuyiez sur Envoyer.",
       "proRequired": "Passez à un plan payant pour que l'assistant rédige des e-mails pour vous.",
       "unavailable": "Les brouillons d'e-mails ne sont pas disponibles pour le moment.",
       "targetLabel": "Rédiger les e-mails dans",
@@ -4135,6 +4135,31 @@
       }
     },
     "gmail": {
+      "title": "Gmail",
+      "description": "L'assistant peut envoyer des e-mails depuis votre compte Gmail. Il ne peut pas lire vos e-mails, et vous appuyez vous-même sur Envoyer pour chaque e-mail.",
+      "connect": "Connecter",
+      "reconnect": "Reconnecter",
+      "disconnect": "Déconnecter",
+      "connecting": "Terminez la connexion dans votre navigateur…",
+      "connectedAs": "Connecté en tant que {{account}}",
+      "needsReconnect": "Gmail doit être reconnecté.",
+      "proRequired": "Passez à un plan payant pour que l'assistant envoie des e-mails depuis Gmail pour vous.",
+      "errors": {
+        "connect_failed": "Impossible de connecter Gmail. Réessayez.",
+        "disconnect_failed": "Impossible de déconnecter Gmail. Réessayez.",
+        "oauth_denied": "Gmail n'a pas été connecté car l'accès n'a pas été autorisé.",
+        "oauth_timeout": "La connexion a pris trop de temps. Réessayez.",
+        "oauth_state_mismatch": "Ce lien de connexion était périmé. Réessayez.",
+        "ports_busy": "Une autre application utilise les ports dont OpenWhispr a besoin pour se connecter. Fermez-la et réessayez.",
+        "token_exchange_failed": "Google n'a pas terminé la connexion. Réessayez.",
+        "not_configured": "Gmail n'est pas disponible dans cette version.",
+        "connection_changed": "Votre compte ou la connexion Gmail a changé pendant la connexion. Réessayez.",
+        "signed_out": "Connectez-vous à OpenWhispr pour connecter Gmail.",
+        "policy_blocked": "Votre organisation a désactivé les connecteurs.",
+        "policy_unavailable": "Impossible de vérifier les paramètres de votre organisation. Réessayez.",
+        "permission_not_granted": "Gmail n'a pas été connecté car l'autorisation d'envoyer des e-mails n'a pas été accordée. Reconnectez-vous en laissant cette autorisation cochée.",
+        "email_not_verified": "Google n'a pas vérifié l'adresse e-mail de ce compte, Gmail n'a donc pas été connecté."
+      },
       "browser": {
         "connectedTitle": "Gmail est connecté",
         "connectedBody": "Vous pouvez fermer cet onglet et retourner à OpenWhispr.",
@@ -4146,11 +4171,13 @@
       "title": "Actions récentes",
       "actions": {
         "email_draft": "Brouillon à {{destination}}",
-        "slack_send_message": "Message à {{destination}}"
+        "slack_send_message": "Message à {{destination}}",
+        "gmail_send": "E-mail à {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "Brouillon d'e-mail",
-        "slack_send_message": "Message Slack"
+        "slack_send_message": "Message Slack",
+        "gmail_send": "E-mail Gmail"
       },
       "states": {
         "pending": "En attente",

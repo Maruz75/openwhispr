@@ -4090,7 +4090,7 @@
     "policyOff": "Konnektoren wurden von deiner Organisation deaktiviert.",
     "email": {
       "title": "E-Mail-Entwürfe",
-      "description": "Der Assistent öffnet einen vorausgefüllten Entwurf in deiner E-Mail-App. Du prüfst ihn und klickst selbst auf Senden.",
+      "description": "Der Assistent öffnet einen vorausgefüllten Entwurf in deiner E-Mail-App oder zeigt bei verbundenem Gmail eine Karte, die du im Chat sendest. Nichts wird gesendet, bevor du auf Senden klickst.",
       "proRequired": "Upgrade auf einen kostenpflichtigen Plan, damit der Assistent E-Mails für dich entwirft.",
       "unavailable": "E-Mail-Entwürfe sind gerade nicht verfügbar.",
       "targetLabel": "E-Mails entwerfen in",
@@ -4135,6 +4135,31 @@
       }
     },
     "gmail": {
+      "title": "Gmail",
+      "description": "Der Assistent kann E-Mails über dein Gmail-Konto senden. Er kann deine E-Mails nicht lesen, und du klickst bei jeder E-Mail selbst auf Senden.",
+      "connect": "Verbinden",
+      "reconnect": "Erneut verbinden",
+      "disconnect": "Trennen",
+      "connecting": "Schließe die Verbindung in deinem Browser ab…",
+      "connectedAs": "Verbunden als {{account}}",
+      "needsReconnect": "Gmail muss erneut verbunden werden.",
+      "proRequired": "Upgrade auf einen kostenpflichtigen Plan, damit der Assistent E-Mails über Gmail für dich sendet.",
+      "errors": {
+        "connect_failed": "Gmail konnte nicht verbunden werden. Versuche es erneut.",
+        "disconnect_failed": "Gmail konnte nicht getrennt werden. Versuche es erneut.",
+        "oauth_denied": "Gmail wurde nicht verbunden, da der Zugriff nicht erlaubt wurde.",
+        "oauth_timeout": "Die Verbindung hat zu lange gedauert. Versuche es erneut.",
+        "oauth_state_mismatch": "Dieser Anmeldelink war veraltet. Versuche es erneut.",
+        "ports_busy": "Eine andere App verwendet die Ports, die OpenWhispr zum Verbinden benötigt. Schließe sie und versuche es erneut.",
+        "token_exchange_failed": "Google hat die Verbindung nicht abgeschlossen. Versuche es erneut.",
+        "not_configured": "Gmail ist in dieser Version nicht verfügbar.",
+        "connection_changed": "Dein Konto oder die Gmail-Verbindung hat sich während der Verbindung geändert. Versuche es erneut.",
+        "signed_out": "Melde dich bei OpenWhispr an, um Gmail zu verbinden.",
+        "policy_blocked": "Konnektoren wurden von deiner Organisation deaktiviert.",
+        "policy_unavailable": "Die Einstellungen deiner Organisation konnten nicht geprüft werden. Versuche es erneut.",
+        "permission_not_granted": "Gmail wurde nicht verbunden, da die Berechtigung zum Senden von E-Mails nicht erteilt wurde. Verbinde erneut und lass diese Berechtigung aktiviert.",
+        "email_not_verified": "Google hat die E-Mail-Adresse dieses Kontos nicht bestätigt, daher wurde Gmail nicht verbunden."
+      },
       "browser": {
         "connectedTitle": "Gmail ist verbunden",
         "connectedBody": "Du kannst diesen Tab schließen und zu OpenWhispr zurückkehren.",
@@ -4146,11 +4171,13 @@
       "title": "Letzte Aktionen",
       "actions": {
         "email_draft": "Entwurf an {{destination}}",
-        "slack_send_message": "Nachricht an {{destination}}"
+        "slack_send_message": "Nachricht an {{destination}}",
+        "gmail_send": "E-Mail an {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "E-Mail-Entwurf",
-        "slack_send_message": "Slack-Nachricht"
+        "slack_send_message": "Slack-Nachricht",
+        "gmail_send": "Gmail-E-Mail"
       },
       "states": {
         "pending": "Wartet",

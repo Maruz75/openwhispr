@@ -3974,7 +3974,7 @@
     "policyOff": "Tu organización ha desactivado los conectores.",
     "email": {
       "title": "Borradores de correo",
-      "description": "El asistente abre un borrador prellenado en tu aplicación de correo. Tú lo revisas y pulsas Enviar.",
+      "description": "El asistente abre un borrador prellenado en tu aplicación de correo o, con Gmail conectado, muestra una tarjeta que envías desde el chat. No se envía nada hasta que pulsas Enviar.",
       "proRequired": "Actualiza a un plan de pago para que el asistente redacte correos por ti.",
       "unavailable": "Los borradores de correo no están disponibles en este momento.",
       "targetLabel": "Redactar correos en",
@@ -4019,6 +4019,31 @@
       }
     },
     "gmail": {
+      "title": "Gmail",
+      "description": "El asistente puede enviar correos desde tu cuenta de Gmail. No puede leer tu correo y tú pulsas Enviar en cada correo.",
+      "connect": "Conectar",
+      "reconnect": "Reconectar",
+      "disconnect": "Desconectar",
+      "connecting": "Termina de conectar en tu navegador…",
+      "connectedAs": "Conectado como {{account}}",
+      "needsReconnect": "Gmail debe reconectarse.",
+      "proRequired": "Actualiza a un plan de pago para que el asistente envíe correos desde Gmail por ti.",
+      "errors": {
+        "connect_failed": "No se pudo conectar Gmail. Inténtalo de nuevo.",
+        "disconnect_failed": "No se pudo desconectar Gmail. Inténtalo de nuevo.",
+        "oauth_denied": "Gmail no se conectó porque no se concedió el acceso.",
+        "oauth_timeout": "La conexión tardó demasiado. Inténtalo de nuevo.",
+        "oauth_state_mismatch": "Ese enlace de inicio de sesión estaba caducado. Inténtalo de nuevo.",
+        "ports_busy": "Otra aplicación está usando los puertos que OpenWhispr necesita para conectarse. Ciérrala e inténtalo de nuevo.",
+        "token_exchange_failed": "Google no terminó de conectarse. Inténtalo de nuevo.",
+        "not_configured": "Gmail no está disponible en esta versión.",
+        "connection_changed": "Tu cuenta o la conexión de Gmail cambiaron durante la conexión. Inténtalo de nuevo.",
+        "signed_out": "Inicia sesión en OpenWhispr para conectar Gmail.",
+        "policy_blocked": "Tu organización ha desactivado los conectores.",
+        "policy_unavailable": "No se pudieron comprobar los ajustes de tu organización. Inténtalo de nuevo.",
+        "permission_not_granted": "Gmail no se conectó porque no se concedió el permiso para enviar correos. Vuelve a conectar y deja ese permiso marcado.",
+        "email_not_verified": "Google no ha verificado la dirección de correo de esta cuenta, así que Gmail no se conectó."
+      },
       "browser": {
         "connectedTitle": "Gmail está conectado",
         "connectedBody": "Puedes cerrar esta pestaña y volver a OpenWhispr.",
@@ -4030,11 +4055,13 @@
       "title": "Acciones recientes",
       "actions": {
         "email_draft": "Borrador a {{destination}}",
-        "slack_send_message": "Mensaje a {{destination}}"
+        "slack_send_message": "Mensaje a {{destination}}",
+        "gmail_send": "Correo a {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "Borrador de correo",
-        "slack_send_message": "Mensaje de Slack"
+        "slack_send_message": "Mensaje de Slack",
+        "gmail_send": "Correo de Gmail"
       },
       "states": {
         "pending": "Esperando",

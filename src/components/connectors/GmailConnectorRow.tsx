@@ -1,32 +1,31 @@
 import type { ReactElement } from "react";
-import { MessageSquare } from "../icons";
+import { Mail } from "../icons";
 import { ConnectorLoginRow } from "./ConnectorLoginRow";
 import type { ConnectorStatus } from "../../types/connectors";
 
-interface SlackConnectorRowProps {
+interface GmailConnectorRowProps {
   isPaid: boolean;
   blockedByOrg: boolean;
   onUpgrade: () => void;
 }
 
-const slackAccountSummary = (status: ConnectorStatus): Record<string, string> => ({
+const gmailAccountSummary = (status: ConnectorStatus): Record<string, string> => ({
   account: status.accountLabel ?? "",
-  workspace: status.workspaceLabel ?? "",
 });
 
-export function SlackConnectorRow({
+export function GmailConnectorRow({
   isPaid,
   blockedByOrg,
   onUpgrade,
-}: SlackConnectorRowProps): ReactElement | null {
+}: GmailConnectorRowProps): ReactElement | null {
   return (
     <ConnectorLoginRow
-      connectorId="slack"
+      connectorId="gmail"
       isPaid={isPaid}
       blockedByOrg={blockedByOrg}
       onUpgrade={onUpgrade}
-      accountSummary={slackAccountSummary}
-      icon={<MessageSquare className="w-4 h-4 text-primary" aria-hidden="true" />}
+      accountSummary={gmailAccountSummary}
+      icon={<Mail className="w-4 h-4 text-primary" aria-hidden="true" />}
     />
   );
 }

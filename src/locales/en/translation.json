@@ -4090,7 +4090,7 @@
     "policyOff": "Connectors are turned off by your organization.",
     "email": {
       "title": "Email drafts",
-      "description": "The assistant opens a pre-filled draft in your email app. You review it and press Send yourself.",
+      "description": "The assistant opens a pre-filled draft in your email app, or with Gmail connected, shows a card you send from the chat. Nothing is sent until you press Send.",
       "proRequired": "Upgrade to a paid plan to let the assistant draft emails for you.",
       "unavailable": "Email drafts aren't available right now.",
       "targetLabel": "Draft emails in",
@@ -4135,6 +4135,31 @@
       }
     },
     "gmail": {
+      "title": "Gmail",
+      "description": "The assistant can send emails from your Gmail account. It can't read your mail, and you press Send on every email yourself.",
+      "connect": "Connect",
+      "reconnect": "Reconnect",
+      "disconnect": "Disconnect",
+      "connecting": "Finish connecting in your browser…",
+      "connectedAs": "Connected as {{account}}",
+      "needsReconnect": "Gmail needs to be reconnected.",
+      "proRequired": "Upgrade to a paid plan to let the assistant send emails from Gmail for you.",
+      "errors": {
+        "connect_failed": "Couldn't connect Gmail. Try again.",
+        "disconnect_failed": "Couldn't disconnect Gmail. Try again.",
+        "oauth_denied": "Gmail wasn't connected because access wasn't allowed.",
+        "oauth_timeout": "Connecting took too long. Try again.",
+        "oauth_state_mismatch": "That sign-in link was out of date. Try again.",
+        "ports_busy": "Another app is using the ports OpenWhispr needs to connect. Close it and try again.",
+        "token_exchange_failed": "Google didn't finish connecting. Try again.",
+        "not_configured": "Gmail isn't available in this build.",
+        "connection_changed": "Your account or Gmail connection changed while connecting. Try again.",
+        "signed_out": "Sign in to OpenWhispr to connect Gmail.",
+        "policy_blocked": "Connectors are turned off by your organization.",
+        "policy_unavailable": "Couldn't check your organization's settings. Try again.",
+        "permission_not_granted": "Gmail wasn't connected because permission to send email wasn't granted. Connect again and leave that permission ticked.",
+        "email_not_verified": "Google hasn't verified this account's email address, so Gmail wasn't connected."
+      },
       "browser": {
         "connectedTitle": "Gmail is connected",
         "connectedBody": "You can close this tab and return to OpenWhispr.",
@@ -4146,11 +4171,13 @@
       "title": "Recent actions",
       "actions": {
         "email_draft": "Draft to {{destination}}",
-        "slack_send_message": "Message to {{destination}}"
+        "slack_send_message": "Message to {{destination}}",
+        "gmail_send": "Email to {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "Email draft",
-        "slack_send_message": "Slack message"
+        "slack_send_message": "Slack message",
+        "gmail_send": "Gmail email"
       },
       "states": {
         "pending": "Waiting",

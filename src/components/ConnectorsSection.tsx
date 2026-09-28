@@ -5,8 +5,10 @@ import { Button } from "./ui/button";
 import { SettingsPanel, SettingsPanelRow } from "./ui/SettingsSection";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { RecentActions } from "./connectors/RecentActions";
+import { GmailConnectorRow } from "./connectors/GmailConnectorRow";
 import { SlackConnectorRow } from "./connectors/SlackConnectorRow";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useConnectorStatusStore } from "../stores/connectorStatusStore";
 import { usePolicyStore } from "../stores/policyStore";
 import { isConnectorsAllowed, isConnectorsBlockedByOrg } from "../stores/policyRules";
 import { getUsageState, subscribeUsage } from "../lib/usageStore";
@@ -14,6 +16,7 @@ import { readIsSubscribed, subscribeIsSubscribed } from "../lib/subscriptionFlag
 import { hasConnectorPlan } from "../utils/connectorEligibility";
 import {
   EMAIL_DRAFT_TARGET_SETTINGS,
+  gmailSendStatus,
   resolveEmailDraftTarget,
   type EmailDraftTargetSetting,
 } from "../utils/emailDraftTarget";
@@ -33,6 +36,8 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
   const setEmailDraftTarget = useSettingsStore((state) => state.setEmailDraftTarget);
   const gcalConnected = useSettingsStore((state) => state.gcalConnected);
   const mcalAccounts = useSettingsStore((state) => state.mcalAccounts);
+  const gmail = useConnectorStatusStore((state) => state.statuses.gmail);
+  const gmailStatus = gmailSendStatus(gmail);
   // The same plan check that decides whether the chat gets the connector tools.
   const usage = useSyncExternalStore(subscribeUsage, getUsageState);
   const isSubscribedFlag = useSyncExternalStore(subscribeIsSubscribed, readIsSubscribed);
@@ -43,7 +48,15 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
     emailDraftTarget: "auto",
     gcalConnected,
     mcalAccounts,
+    gmailStatus,
   });
+  // Sending from chat needs a working Gmail login. A build without a Google
+  // client never offers it, unless it is already the saved choice (which
+  // then resolves as Automatic).
+  const targetOptions = EMAIL_DRAFT_TARGET_SETTINGS.filter(
+    (option) =>
+      option !== "gmailSend" || gmail?.configured !== false || emailDraftTarget === "gmailSend"
+  );
   const optionLabel = (option: EmailDraftTargetSetting): string =>
     option === "auto"
       ? t("connectors.email.autoResolved", {
@@ -82,8 +95,12 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {EMAIL_DRAFT_TARGET_SETTINGS.map((option) => (
-                  <SelectItem key={option} value={option}>
+                {targetOptions.map((option) => (
+                  <SelectItem
+                    key={option}
+                    value={option}
+                    disabled={option === "gmailSend" && gmailStatus !== "connected"}
+                  >
                     {optionLabel(option)}
                   </SelectItem>
                 ))}
@@ -99,6 +116,7 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
 
         {showActions && <RecentActions connectorId="email" />}
       </SettingsPanelRow>
+      <GmailConnectorRow isPaid={isPaid} blockedByOrg={blockedByOrg} onUpgrade={onUpgrade} />
       <SlackConnectorRow isPaid={isPaid} blockedByOrg={blockedByOrg} onUpgrade={onUpgrade} />
     </SettingsPanel>
   );

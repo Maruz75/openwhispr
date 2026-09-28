@@ -3921,7 +3921,7 @@
     "policyOff": "組織によってコネクタが無効にされています。",
     "email": {
       "title": "メール下書き",
-      "description": "アシスタントがメールアプリに下書きを自動入力して開きます。内容を確認し、自分で送信を押してください。",
+      "description": "アシスタントがメールアプリに下書きを自動入力して開きます。Gmailを接続している場合は、チャットから送信するカードを表示します。送信を押すまで何も送信されません。",
       "proRequired": "アシスタントにメールの下書きを作成させるには、有料プランへのアップグレードが必要です。",
       "unavailable": "現在メール下書きを利用できません。",
       "targetLabel": "メールを作成するアプリ",
@@ -3966,6 +3966,31 @@
       }
     },
     "gmail": {
+      "title": "Gmail",
+      "description": "アシスタントはあなたのGmailアカウントからメールを送信できます。メールを読むことはできず、各メールはあなた自身が送信を押して送ります。",
+      "connect": "接続",
+      "reconnect": "再接続",
+      "disconnect": "接続を解除",
+      "connecting": "ブラウザで接続を完了してください…",
+      "connectedAs": "{{account}} として接続済み",
+      "needsReconnect": "Gmailを再接続する必要があります。",
+      "proRequired": "アシスタントにGmailからメールを送信させるには、有料プランへのアップグレードが必要です。",
+      "errors": {
+        "connect_failed": "Gmailを接続できませんでした。もう一度お試しください。",
+        "disconnect_failed": "Gmailの接続を解除できませんでした。もう一度お試しください。",
+        "oauth_denied": "アクセスが許可されなかったため、Gmailは接続されませんでした。",
+        "oauth_timeout": "接続に時間がかかりすぎました。もう一度お試しください。",
+        "oauth_state_mismatch": "そのサインインリンクは期限切れでした。もう一度お試しください。",
+        "ports_busy": "OpenWhisprが接続に必要なポートを別のアプリが使用しています。そのアプリを閉じてから、もう一度お試しください。",
+        "token_exchange_failed": "Googleの接続が完了しませんでした。もう一度お試しください。",
+        "not_configured": "このビルドではGmailを利用できません。",
+        "connection_changed": "接続中にアカウントまたはGmailの接続が変わりました。もう一度お試しください。",
+        "signed_out": "Gmailを接続するにはOpenWhisprにサインインしてください。",
+        "policy_blocked": "組織によってコネクタが無効にされています。",
+        "policy_unavailable": "組織の設定を確認できませんでした。もう一度お試しください。",
+        "permission_not_granted": "メール送信の権限が許可されなかったため、Gmailは接続されませんでした。もう一度接続し、その権限をオンのままにしてください。",
+        "email_not_verified": "このアカウントのメールアドレスがGoogleで確認されていないため、Gmailは接続されませんでした。"
+      },
       "browser": {
         "connectedTitle": "Gmailが接続されました",
         "connectedBody": "このタブを閉じてOpenWhisprに戻ることができます。",
@@ -3977,11 +4002,13 @@
       "title": "最近のアクション",
       "actions": {
         "email_draft": "{{destination}} 宛ての下書き",
-        "slack_send_message": "{{destination}} 宛てのメッセージ"
+        "slack_send_message": "{{destination}} 宛てのメッセージ",
+        "gmail_send": "{{destination}} 宛てのメール"
       },
       "unlabeledActions": {
         "email_draft": "メール下書き",
-        "slack_send_message": "Slackメッセージ"
+        "slack_send_message": "Slackメッセージ",
+        "gmail_send": "Gmailのメール"
       },
       "states": {
         "pending": "待機中",

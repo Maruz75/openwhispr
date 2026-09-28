@@ -783,7 +783,7 @@
     "policyOff": "أوقفت مؤسستك تشغيل الموصلات.",
     "email": {
       "title": "مسودات البريد الإلكتروني",
-      "description": "يفتح المساعد مسودة معبأة مسبقًا في تطبيق البريد الإلكتروني الخاص بك. راجعها واضغط إرسال بنفسك.",
+      "description": "يفتح المساعد مسودة معبأة مسبقًا في تطبيق البريد الإلكتروني الخاص بك، أو يعرض بطاقة ترسلها من الدردشة عند ربط Gmail. لا يُرسل أي شيء حتى تضغط إرسال.",
       "proRequired": "قم بالترقية إلى خطة مدفوعة ليكتب المساعد مسودات رسائلك الإلكترونية.",
       "unavailable": "مسودات البريد الإلكتروني غير متاحة حاليًا.",
       "targetLabel": "صياغة رسائل البريد الإلكتروني في",
@@ -828,6 +828,31 @@
       }
     },
     "gmail": {
+      "title": "Gmail",
+      "description": "يمكن للمساعد إرسال الرسائل الإلكترونية من حسابك على Gmail. لا يمكنه قراءة بريدك، وتضغط إرسال بنفسك لكل رسالة.",
+      "connect": "ربط",
+      "reconnect": "إعادة الربط",
+      "disconnect": "قطع الربط",
+      "connecting": "أكمل الربط في متصفحك…",
+      "connectedAs": "متصل بصفتك {{account}}",
+      "needsReconnect": "يلزم إعادة ربط Gmail.",
+      "proRequired": "قم بالترقية إلى خطة مدفوعة ليتمكن المساعد من إرسال الرسائل الإلكترونية من Gmail نيابةً عنك.",
+      "errors": {
+        "connect_failed": "تعذّر ربط Gmail. حاول مرة أخرى.",
+        "disconnect_failed": "تعذّر قطع ربط Gmail. حاول مرة أخرى.",
+        "oauth_denied": "لم يتم ربط Gmail لأن الإذن لم يُمنح.",
+        "oauth_timeout": "استغرق الربط وقتًا طويلاً. حاول مرة أخرى.",
+        "oauth_state_mismatch": "رابط تسجيل الدخول هذا كان قديمًا. حاول مرة أخرى.",
+        "ports_busy": "يستخدم تطبيق آخر المنافذ التي يحتاجها OpenWhispr للربط. أغلقه وحاول مرة أخرى.",
+        "token_exchange_failed": "لم يكمل Google عملية الربط. حاول مرة أخرى.",
+        "not_configured": "Gmail غير متاح في هذا الإصدار.",
+        "connection_changed": "تغيّر حسابك أو اتصال Gmail أثناء الربط. حاول مرة أخرى.",
+        "signed_out": "سجّل الدخول إلى OpenWhispr لربط Gmail.",
+        "policy_blocked": "أوقفت مؤسستك تشغيل الموصلات.",
+        "policy_unavailable": "تعذّر التحقق من إعدادات مؤسستك. حاول مرة أخرى.",
+        "permission_not_granted": "لم يتم ربط Gmail لأن إذن إرسال الرسائل الإلكترونية لم يُمنح. أعد الربط واترك هذا الإذن محددًا.",
+        "email_not_verified": "لم تتحقق Google من عنوان البريد الإلكتروني لهذا الحساب، لذلك لم يتم ربط Gmail."
+      },
       "browser": {
         "connectedTitle": "تم توصيل Gmail",
         "connectedBody": "يمكنك إغلاق هذا التبويب والعودة إلى OpenWhispr.",
@@ -839,11 +864,13 @@
       "title": "الإجراءات الأخيرة",
       "actions": {
         "email_draft": "مسودة إلى {{destination}}",
-        "slack_send_message": "رسالة إلى {{destination}}"
+        "slack_send_message": "رسالة إلى {{destination}}",
+        "gmail_send": "رسالة إلكترونية إلى {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "مسودة بريد إلكتروني",
-        "slack_send_message": "رسالة Slack"
+        "slack_send_message": "رسالة Slack",
+        "gmail_send": "رسالة Gmail"
       },
       "states": {
         "pending": "قيد الانتظار",

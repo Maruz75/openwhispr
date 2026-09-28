@@ -3921,7 +3921,7 @@
     "policyOff": "您的组织已关闭连接器。",
     "email": {
       "title": "邮件草稿",
-      "description": "助手会在您的邮件应用中打开预填好的草稿，由您检查并亲自点击发送。",
+      "description": "助手会在您的邮件应用中打开预填好的草稿；连接 Gmail 后，则会显示一张卡片，由您在聊天中发送。在您点击发送之前，不会发送任何内容。",
       "proRequired": "升级到付费计划，让助手为您起草邮件。",
       "unavailable": "邮件草稿暂时不可用。",
       "targetLabel": "在此处起草邮件",
@@ -3966,6 +3966,31 @@
       }
     },
     "gmail": {
+      "title": "Gmail",
+      "description": "助手可以通过您的 Gmail 账户发送邮件。它无法读取您的邮件，每封邮件都由您亲自点击发送。",
+      "connect": "连接",
+      "reconnect": "重新连接",
+      "disconnect": "断开连接",
+      "connecting": "请在浏览器中完成连接…",
+      "connectedAs": "已以 {{account}} 身份连接",
+      "needsReconnect": "需要重新连接 Gmail。",
+      "proRequired": "升级到付费计划，让助手通过 Gmail 为您发送邮件。",
+      "errors": {
+        "connect_failed": "无法连接 Gmail，请重试。",
+        "disconnect_failed": "无法断开 Gmail 连接，请重试。",
+        "oauth_denied": "由于未获得授权，Gmail 未连接。",
+        "oauth_timeout": "连接耗时过长，请重试。",
+        "oauth_state_mismatch": "该登录链接已过期，请重试。",
+        "ports_busy": "另一个应用正在使用 OpenWhispr 连接所需的端口。请关闭它后重试。",
+        "token_exchange_failed": "Google 未完成连接，请重试。",
+        "not_configured": "此版本中 Gmail 不可用。",
+        "connection_changed": "连接过程中您的账户或 Gmail 连接发生了变化，请重试。",
+        "signed_out": "请登录 OpenWhispr 以连接 Gmail。",
+        "policy_blocked": "您的组织已关闭连接器。",
+        "policy_unavailable": "无法检查您的组织设置，请重试。",
+        "permission_not_granted": "由于未授予发送邮件的权限，Gmail 未连接。请重新连接并保持勾选该权限。",
+        "email_not_verified": "Google 尚未验证此账户的邮箱地址，因此 Gmail 未连接。"
+      },
       "browser": {
         "connectedTitle": "Gmail 已连接",
         "connectedBody": "您可以关闭此标签页并返回 OpenWhispr。",
@@ -3977,11 +4002,13 @@
       "title": "最近的操作",
       "actions": {
         "email_draft": "发送给 {{destination}} 的草稿",
-        "slack_send_message": "发送给 {{destination}} 的消息"
+        "slack_send_message": "发送给 {{destination}} 的消息",
+        "gmail_send": "发送给 {{destination}} 的邮件"
       },
       "unlabeledActions": {
         "email_draft": "邮件草稿",
-        "slack_send_message": "Slack 消息"
+        "slack_send_message": "Slack 消息",
+        "gmail_send": "Gmail 邮件"
       },
       "states": {
         "pending": "等待中",
