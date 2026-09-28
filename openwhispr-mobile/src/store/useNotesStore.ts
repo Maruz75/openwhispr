@@ -359,6 +359,8 @@ interface NotesStore {
   deleteFolderSafe: (id: number) => void;
   /** Creates in the private space unless `spaceId` names a team space to create it inside. */
   createFolder: (name: string, spaceId?: number) => Folder;
+  /** Folders of any space, read from the repository. `spaceFolders` only caches the browsed space's. */
+  getSpaceFolders: (spaceId: number) => Folder[];
   renameFolder: (id: number, name: string) => void;
   setNotePrivacy: (id: number, isPrivate: boolean) => Promise<void>;
   /** Data source for the conflict banner (see NoteEditorScreen) — the parked 409 row for this note, if any. */
@@ -559,6 +561,8 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
     get().loadNotes();
     get().loadFolders();
   },
+
+  getSpaceFolders: (spaceId) => notesRepository.getFoldersBySpace(spaceId),
 
   moveNoteToFolder: (noteId, folderId) => {
     notesRepository.moveNoteToFolder(noteId, folderId);
