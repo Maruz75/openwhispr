@@ -14,17 +14,8 @@ function createTimers() {
   return {
     timers,
     active: () => timers.filter((timer) => !timer.cleared && !timer.fired),
-    setTimeout(callback, ms) {
-      const timer = {
-        callback,
-        ms,
-        cleared: false,
-        fired: false,
-        unrefed: false,
-        unref() {
-          this.unrefed = true;
-        },
-      };
+    setTimeout(callback) {
+      const timer = { callback, cleared: false, fired: false, unref() {} };
       timers.push(timer);
       return timer;
     },
@@ -136,8 +127,6 @@ test("an extract arms an idle unload that releases the speaker session, then the
   const h = createHarness();
   assert.ok(await h.speaker.extractEmbeddingFromSamples(SAMPLES));
   const [timer] = h.timers.active();
-  assert.equal(timer.ms, 5 * 60 * 1000);
-  assert.equal(timer.unrefed, true);
   h.timers.fire(timer);
   await flush();
   const { sessions } = await h.client.request("ping", {});

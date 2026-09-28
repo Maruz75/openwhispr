@@ -236,7 +236,7 @@ class OnnxWorkerClient {
       const timeout = setTimeout(() => {
         if (!this.pending.delete(id)) return;
         reject(new Error(`onnx worker request timeout: ${method}`));
-        // The worker serializes each session's calls, so one hung request wedges every later one.
+        // The worker serializes each session's calls, so one hung request blocks every later call on that session.
         debugLogger.warn("onnx worker request timeout; killing worker", { method });
         this.killedForTimeout = true;
         try {

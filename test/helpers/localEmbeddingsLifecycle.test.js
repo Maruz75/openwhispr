@@ -40,13 +40,18 @@ function loadEmbeddings(client) {
   return localContext.module.exports;
 }
 
-function loadSpeakerEmbeddings(client) {
+function loadSpeakerEmbeddings(client, idleTimers) {
   const context = vm.createContext({
     module: { exports: {} },
     process: {},
-    // The idle timer never fires here; tests unload explicitly.
-    setTimeout: () => ({ unref() {} }),
-    clearTimeout() {},
+    setTimeout(callback) {
+      const timer = { callback, cleared: false, unref() {} };
+      idleTimers.push(timer);
+      return timer;
+    },
+    clearTimeout(timer) {
+      if (timer) timer.cleared = true;
+    },
     require(name) {
       if (name === "fs") return { existsSync: () => true };
       if (name === "./debugLogger") return { debug() {}, warn() {} };
@@ -257,6 +262,7 @@ class FakePort extends EventEmitter {
 function createIntegratedHarness({ failRelease = null } = {}) {
   const events = [];
   const workers = [];
+  const idleTimers = [];
   const nativeSession = (name) => ({
     inputNames: ["input"],
     async run() {
@@ -333,9 +339,13 @@ function createIntegratedHarness({ failRelease = null } = {}) {
   return {
     client,
     embeddings: loadEmbeddings(client),
-    speaker: loadSpeakerEmbeddings(client),
+    speaker: loadSpeakerEmbeddings(client, idleTimers),
     events,
     workers,
+    async fireSpeakerIdleUnload() {
+      idleTimers.findLast((timer) => !timer.cleared).callback();
+      for (let i = 0; i < 10; i++) await nextTurn();
+    },
   };
 }
 
@@ -366,24 +376,24 @@ test("unloading text keeps the worker alive while diarization holds a speaker se
   assert.equal(sessions.text, false);
 });
 
-test("unloading the speaker session exits the worker once the text session is gone", async () => {
+test("the speaker idle unload exits the worker once the text session is gone", async () => {
   const h = createIntegratedHarness();
   await h.speaker.extractEmbeddingFromSamples(SPEAKER_SAMPLES);
   await h.embeddings.embedText("");
   await h.embeddings.unload();
   assert.equal(h.workers[0].child.killed, false);
-  await h.speaker.unload();
+  await h.fireSpeakerIdleUnload();
   assert.equal(h.workers[0].child.killed, true);
   assert.deepEqual(h.events, ["speaker.create", "text.create", "text.release", "speaker.release"]);
   assert.ok(await h.speaker.extractEmbeddingFromSamples(SPEAKER_SAMPLES));
   assert.equal(h.workers.length, 2);
 });
 
-test("unloading the speaker session keeps the worker for a loaded text session", async () => {
+test("the speaker idle unload keeps the worker for a loaded text session", async () => {
   const h = createIntegratedHarness();
   await h.embeddings.embedText("");
   await h.speaker.extractEmbeddingFromSamples(SPEAKER_SAMPLES);
-  await h.speaker.unload();
+  await h.fireSpeakerIdleUnload();
   assert.equal(h.workers[0].child.killed, false);
   await h.embeddings.unload();
   assert.equal(h.workers[0].child.killed, true);
