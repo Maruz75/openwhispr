@@ -63,6 +63,15 @@ const deleteRecording = (uri: string): void => {
   FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => undefined);
 };
 
+// Reading a released native recorder throws, so a failed read means there is no file to track.
+const readRecorderUri = (recorder: { uri?: string | null } | null | undefined): string | null => {
+  try {
+    return recorder?.uri || null;
+  } catch {
+    return null;
+  }
+};
+
 export function VoiceEnrollmentRecorder({
   mode,
   isOwner,
@@ -87,25 +96,28 @@ export function VoiceEnrollmentRecorder({
   const [failure, setFailure] = useState<string | null>(null);
   const consentAtRef = useRef<string | null>(null);
   const downloadRef = useRef<Promise<void> | null>(null);
+  // The file the recorder is writing, captured while it starts. On unmount the recorder
+  // hook releases the native recorder before this component's cleanup runs, and a
+  // released recorder can't be asked for its uri any more.
+  const activeUriRef = useRef<string | null>(null);
   // A finished recording not yet handed to onSubmit; deleted if you leave.
   const pendingUriRef = useRef<string | null>(null);
+  const startingRef = useRef(false);
   const stoppingRef = useRef(false);
   const mountedRef = useRef(true);
   const cancelRecordingRef = useRef(recording.cancelRecording);
   cancelRecordingRef.current = recording.cancelRecording;
-  const audioRecorderRef = useRef(recording.audioRecorder);
-  audioRecorderRef.current = recording.audioRecorder;
-  const phaseRef = useRef(phase);
-  phaseRef.current = phase;
 
-  // Stops the recorder, then deletes the partial sample it was writing.
+  // Stops the recorder, then deletes the sample it was writing.
   const discardActiveRecording = useCallback((): void => {
-    Promise.resolve(cancelRecordingRef.current())
+    const uri = activeUriRef.current;
+    activeUriRef.current = null;
+    // The executor runs now, and turns a throw from a released recorder into a rejection.
+    new Promise((resolve) => resolve(cancelRecordingRef.current()))
+      .catch(() => undefined)
       .then(() => {
-        const uri = audioRecorderRef.current?.uri;
         if (uri) deleteRecording(uri);
-      })
-      .catch(() => undefined);
+      });
   }, []);
 
   useEffect(() => {
@@ -124,12 +136,9 @@ export function VoiceEnrollmentRecorder({
       mountedRef.current = false;
       if (pendingUriRef.current) deleteRecording(pendingUriRef.current);
       pendingUriRef.current = null;
-      // A stop already in flight deletes its own file once it resolves (see submit).
-      if (phaseRef.current === 'recording' && !stoppingRef.current) {
-        discardActiveRecording();
-      } else {
-        Promise.resolve(cancelRecordingRef.current()).catch(() => undefined);
-      }
+      // Releasing the recorder has already stopped it. A stop still in flight that
+      // resolves later finds the component gone and deletes the same file again.
+      discardActiveRecording();
     },
     [discardActiveRecording],
   );
@@ -224,16 +233,17 @@ export function VoiceEnrollmentRecorder({
     try {
       const uri = await recording.stopRecordingRaw();
       if (!uri) {
+        discardActiveRecording();
         setFailure(voiceEnrollmentFailureMessage(null));
         setPhase('failed');
         return;
       }
+      // submit owns the file from here, so leaving no longer deletes it as the active one.
+      activeUriRef.current = null;
       await submit(uri);
     } catch (caught) {
-      if (!mountedRef.current) {
-        discardActiveRecording();
-        return;
-      }
+      discardActiveRecording();
+      if (!mountedRef.current) return;
       setFailure(voiceEnrollmentFailureMessage(caught));
       setPhase('failed');
     } finally {
@@ -246,10 +256,15 @@ export function VoiceEnrollmentRecorder({
   }, [elapsedSeconds, phase, stop]);
 
   const start = useCallback(async (): Promise<void> => {
+    // The phase stays ready while the microphone opens; a second tap would prepare a
+    // second file that nothing deletes.
+    if (startingRef.current || activeUriRef.current) return;
+    startingRef.current = true;
     setFailure(null);
     consentAtRef.current ??= now().toISOString();
     try {
       await recording.startRecording();
+      activeUriRef.current = readRecorderUri(recording.audioRecorder);
       // Left before the microphone opened: stop it and drop what it started writing.
       if (!mountedRef.current) {
         discardActiveRecording();
@@ -259,6 +274,8 @@ export function VoiceEnrollmentRecorder({
     } catch {
       setFailure(MIC_START_FAILURE);
       setPhase('failed');
+    } finally {
+      startingRef.current = false;
     }
   }, [discardActiveRecording, now, recording]);
 

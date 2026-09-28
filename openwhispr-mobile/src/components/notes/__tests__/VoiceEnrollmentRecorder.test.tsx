@@ -40,7 +40,7 @@ jest.mock('@/hooks/useAudioRecording', () => ({ useAudioRecording: jest.fn() }))
 
 const mockUseAudioRecording = useAudioRecording as jest.MockedFunction<typeof useAudioRecording>;
 const startRecording = jest.fn(async () => undefined);
-const stopRecordingRaw = jest.fn(async () => 'file://sample.wav');
+const stopRecordingRaw = jest.fn(async (): Promise<string | null> => 'file://sample.wav');
 const cancelRecording = jest.fn();
 
 const renderRecorder = (overrides: Partial<Parameters<typeof VoiceEnrollmentRecorder>[0]> = {}) => {
@@ -68,6 +68,51 @@ const recordFor = async (
   });
   await act(async () => {
     jest.advanceTimersByTime(seconds * 1000);
+  });
+};
+
+// Mirrors the real hook: useAudioRecorder's releasing cleanup is declared before the
+// recorder component's own effects, so on unmount it releases the native recorder first,
+// and every property read after that throws NativeSharedObjectNotFoundException.
+const mockReleasingRecorder = (waitForStop: () => Promise<void> = async () => undefined) => {
+  let released = false;
+  let recordingNow = false;
+  const read = <T,>(value: T): T => {
+    if (released) throw new Error('NativeSharedObjectNotFoundException');
+    return value;
+  };
+  const audioRecorder = {
+    get uri() {
+      return read('file://partial.wav');
+    },
+    get isRecording() {
+      return read(recordingNow);
+    },
+  } as unknown as ReturnType<typeof useAudioRecording>['audioRecorder'];
+  const recording = {
+    ...mockUseAudioRecording(),
+    startRecording: jest.fn(async () => {
+      recordingNow = true;
+    }),
+    cancelRecording: jest.fn(async () => {
+      if (audioRecorder.isRecording) recordingNow = false;
+    }),
+    stopRecordingRaw: jest.fn(async () => {
+      if (!audioRecorder.isRecording) return null;
+      await waitForStop();
+      recordingNow = false;
+      return audioRecorder.uri ?? null;
+    }),
+    audioRecorder,
+  };
+  mockUseAudioRecording.mockImplementation(() => {
+    require('react').useEffect(
+      () => () => {
+        released = true;
+      },
+      [],
+    );
+    return recording;
   });
 };
 
@@ -284,6 +329,97 @@ describe('VoiceEnrollmentRecorder', () => {
 
     expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file://sample.wav', { idempotent: true });
     expect(utils.props.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('deletes the sample when you leave mid-read, after the recorder is released', async () => {
+    mockReleasingRecorder();
+    const utils = renderRecorder();
+    await recordFor(utils, 5);
+
+    utils.unmount();
+    await act(async () => undefined);
+
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file://partial.wav', { idempotent: true });
+  });
+
+  it('deletes the sample when you leave mid-stop, after the recorder is released', async () => {
+    let finishStop: () => void = () => {};
+    mockReleasingRecorder(() => new Promise<void>((resolve) => (finishStop = resolve)));
+    const utils = renderRecorder();
+    await recordFor(utils, 12);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+
+    utils.unmount();
+    await act(async () => finishStop());
+
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file://partial.wav', { idempotent: true });
+    expect(utils.props.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('never deletes a sample already handed to onSubmit when you leave', async () => {
+    let finishSubmit: () => void = () => {};
+    mockReleasingRecorder();
+    const onSubmit = jest.fn(() => new Promise<void>((resolve) => (finishSubmit = resolve)));
+    const utils = renderRecorder({ onSubmit });
+    await recordFor(utils, 12);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+
+    utils.unmount();
+    await act(async () => undefined);
+    expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+
+    await act(async () => finishSubmit());
+    expect(FileSystem.deleteAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['returns no file', async () => null],
+    [
+      'fails',
+      async () => {
+        throw new Error('stop failed');
+      },
+    ],
+  ])('deletes the sample and shows a failure when stopping %s', async (_label, stopResult) => {
+    stopRecordingRaw.mockImplementationOnce(stopResult);
+    mockUseAudioRecording.mockReturnValue({
+      ...mockUseAudioRecording(),
+      audioRecorder: { uri: 'file://partial.wav' } as ReturnType<
+        typeof useAudioRecording
+      >['audioRecorder'],
+    });
+    const utils = renderRecorder();
+    await recordFor(utils, 12);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+
+    expect(utils.getByTestId('voice-enrollment-error')).toBeTruthy();
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file://partial.wav', { idempotent: true });
+    expect(utils.props.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('starts one recording when the mic is tapped twice while it opens', async () => {
+    let finishStart: () => void = () => {};
+    startRecording.mockImplementationOnce(
+      () => new Promise<undefined>((resolve) => (finishStart = () => resolve(undefined))),
+    );
+    const utils = renderRecorder();
+    await waitFor(() => expect(utils.getByTestId('voice-enrollment-record')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-record'));
+      fireEvent.press(utils.getByTestId('voice-enrollment-record'));
+    });
+    await act(async () => finishStart());
+
+    expect(startRecording).toHaveBeenCalledTimes(1);
+    expect(utils.getByTestId('voice-enrollment-stop')).toBeTruthy();
   });
 
   it("needs a name before recording someone else's voice", async () => {
