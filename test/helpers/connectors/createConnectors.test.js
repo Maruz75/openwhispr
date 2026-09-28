@@ -59,26 +59,33 @@ test("the shipped connectors are email, Slack and Gmail, built from the deps", a
     connectors.map((connector) => connector.id),
     ["email", "slack", "gmail"]
   );
-
-  // Gmail reads its Google client from the deps' env, lazily.
-  const gmail = (list) => list.find((connector) => connector.id === "gmail");
-  assert.equal((await gmail(connectors).getStatus()).configured, false);
-  const withClient = createConnectors(
-    fakeDeps({
-      env: { GOOGLE_CALENDAR_CLIENT_ID: "client-id", GOOGLE_CALENDAR_CLIENT_SECRET: "secret" },
-    })
-  );
-  assert.equal((await gmail(withClient).getStatus()).configured, true);
 });
 
-// Controller ruling (see task-10-report.md): round-2 (577be41ad) changed
-// main.js's Gmail `sharesGrant` to read the revoked login's own issuing
-// client id (the second argument gmailAuth.js passes on revoke), not
-// deps.env's *current* Gmail client id. A stale login issued under an older
-// Gmail client (or the calendar's client, from the pre-split flow) must
-// still be checked against the calendar client under the project it was
-// actually issued to — using "today's" GMAIL_CLIENT_ID would wrongly
-// conclude the grant isn't shared and revoke a still-shared calendar login.
+// Gmail reads its Google client from deps.env lazily (a getter closure over
+// deps.env, not a value captured when the connector is built), so a client
+// id saved after startup takes effect without rebuilding the connector list.
+// Built once, then mutating the SAME env object catches a build-time read
+// that two separately-built connector lists (one per env object) would not.
+test("Gmail reads its Google client from deps.env lazily, not at build time", async () => {
+  const { createConnectors } = await load();
+  const env = {};
+  const connectors = createConnectors(fakeDeps({ env }));
+  const gmail = connectors.find((connector) => connector.id === "gmail");
+
+  assert.equal((await gmail.getStatus()).configured, false);
+
+  env.GOOGLE_CALENDAR_CLIENT_ID = "client-id";
+  env.GOOGLE_CALENDAR_CLIENT_SECRET = "secret";
+
+  assert.equal((await gmail.getStatus()).configured, true);
+});
+
+// Revoke must check the login's own issuing client, not today's
+// GMAIL_CLIENT_ID: a stale login issued under an older Gmail client (or the
+// calendar's client, from the pre-split flow) must still be checked against
+// the calendar client under the project it was actually issued to — reading
+// "today's" GMAIL_CLIENT_ID would wrongly conclude the grant isn't shared
+// and revoke a still-shared calendar login.
 test("Gmail's sharesGrant is called with the login's own client id, not deps.env's current Gmail client id", async () => {
   const { buildGmailConnector } = await import("../../../src/helpers/connectors/gmailConnector.js");
   const revokeCalls = [];

@@ -8,9 +8,7 @@ export interface ConnectorRowSpec {
   id: string;
   icon: ReactNode;
   /** Values for `connectors.<id>.connectedAs`. */
-  accountSummary: (
-    status: Pick<ConnectorStatus, "accountLabel" | "workspaceLabel">
-  ) => Record<string, string>;
+  accountSummary: (status: ConnectorStatus) => Record<string, string>;
   /** Shown under the row's summary while Connect is in progress (GitHub's device code). */
   connectingDetail?: ComponentType<{ connectorId: string }>;
 }

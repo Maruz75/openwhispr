@@ -12,6 +12,10 @@ const MAX_CANDIDATES = 20;
 
 // Short identifiers only: no "__proto__", nothing a template would misread.
 const FIELD_NAME = /^[a-zA-Z][a-zA-Z0-9_]{0,39}$/;
+// A failure's errorCode reaches connectorManager.js's log line uncapped, so
+// it's the one connector-supplied string that must be a short, flat token —
+// never free text (a URL, a message) that could bloat or spoof a log line.
+const ERROR_CODE = /^[a-z0-9_]{1,64}$/;
 // C0 control characters other than tab and line feed (terminal escapes, NUL, CR).
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B-\u001F]/g;
@@ -107,7 +111,10 @@ function normalizeQueryResult(result) {
       const state = { truncated: false };
       return {
         status: "failed",
-        errorCode: typeof result.errorCode === "string" ? result.errorCode : fallback.errorCode,
+        errorCode:
+          typeof result.errorCode === "string" && ERROR_CODE.test(result.errorCode)
+            ? result.errorCode
+            : fallback.errorCode,
         message:
           typeof result.message === "string"
             ? cleanString(result.message, MAX_QUERY_STRING_LENGTH, state)

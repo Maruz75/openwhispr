@@ -163,6 +163,37 @@ test("a failure keeps its code and message, with defaults", async () => {
   assert.notEqual(queryFailed(), queryFailed(), "callers can't mutate a shared object");
 });
 
+test("a failure's errorCode reaches a log line uncapped, so only a short lowercase token passes through", async () => {
+  const { normalizeQueryResult } = await load();
+
+  // A normal, well-formed code passes through as-is.
+  assert.equal(
+    normalizeQueryResult({ status: "failed", errorCode: "rate_limited" }).errorCode,
+    "rate_limited"
+  );
+
+  // Anything else falls back, so a connector can't smuggle arbitrary text
+  // into the log line that prints errorCode uncapped.
+  for (const errorCode of [
+    "Rate Limited", // uppercase
+    "rate limited", // spaces
+    "https://evil.test/x", // URL-shaped
+    "a".repeat(65), // longer than 64
+  ]) {
+    assert.equal(
+      normalizeQueryResult({ status: "failed", errorCode }).errorCode,
+      "query_failed",
+      errorCode
+    );
+  }
+
+  // Exactly 64 characters is still allowed.
+  assert.equal(
+    normalizeQueryResult({ status: "failed", errorCode: "a".repeat(64) }).errorCode,
+    "a".repeat(64)
+  );
+});
+
 test("anything else is malformed", async () => {
   const { normalizeQueryResult } = await load();
   for (const result of [

@@ -200,7 +200,10 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
 
       {preview.notes?.map((note) => (
         <p key={note.key} className="mt-1 text-xs text-muted-foreground" dir="auto">
-          {t(note.key, note.values)}
+          {/* Some note copy (issue.notes.droppedLabels) interpolates the
+              card's destination, which connectors don't themselves send in
+              note values (spec §5.1) — the note's own values win on conflict. */}
+          {t(note.key, { destination, ...note.values })}
         </p>
       ))}
 

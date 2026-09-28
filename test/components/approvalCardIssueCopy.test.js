@@ -97,6 +97,26 @@ test("a pending issue card names the team, its button, its fields and its notes"
   assert.doesNotMatch(markup, /connectors\.approval/);
 });
 
+// Spec §5.1 lists `labels` as the connector's only value for
+// `droppedLabels`; §5.3's copy also needs `{{destination}}`. The card must
+// supply it itself rather than relying on the connector to pass it along.
+test("a droppedLabels note with only labels still shows the card's destination", async (t) => {
+  const render = await loadTranslatedCard(t);
+  const markup = render(
+    issueCard({
+      preview: {
+        ...issueCard().preview,
+        notes: [
+          { key: "connectors.approval.issue.notes.droppedLabels", values: { labels: "wontfix" } },
+        ],
+      },
+    })
+  );
+
+  assert.match(markup, /Not added \(not in ENG\): wontfix/);
+  assert.doesNotMatch(markup, /connectors\.approval/);
+});
+
 test("a pending comment card names what it comments on", async (t) => {
   const render = await loadTranslatedCard(t);
   const markup = render(commentCard());
