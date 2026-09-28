@@ -98,7 +98,8 @@ export function EditableMarkdown({
       <Pressable
         testID="enhanced-read"
         disabled={!editable}
-        accessibilityHint="Double-tap to edit"
+        // Screen readers move through the rendered headings and paragraphs; Edit enters editing.
+        accessible={false}
         onPress={() => setEditingState(true)}
         // A long press selects text; without this handler Pressable would treat it as a tap.
         onLongPress={() => {}}

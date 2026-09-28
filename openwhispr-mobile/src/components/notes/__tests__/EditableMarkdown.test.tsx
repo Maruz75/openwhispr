@@ -101,6 +101,11 @@ describe('EditableMarkdown', () => {
     expect(getByTestId('rendered-markdown').props.children).toBe('## New');
   });
 
+  it('leaves the rendered notes to screen readers instead of reading them as one block', () => {
+    const { getByTestId } = render(<EditableMarkdown content="## Summary" onChange={jest.fn()} />);
+    expect(getByTestId('enhanced-read').props.accessible).toBe(false);
+  });
+
   it('reports leaving editing when unmounted mid-edit', () => {
     const onEditingChange = jest.fn();
     const { getByTestId, unmount } = render(
