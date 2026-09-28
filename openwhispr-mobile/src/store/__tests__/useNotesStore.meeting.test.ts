@@ -115,6 +115,7 @@ import { generateLocalMeetingNotes } from '@/lib/notes/localMeetingNotes';
 import * as localReasoning from '@/lib/localReasoning';
 import type { Speaker } from '@/data/types';
 import { SpeakerProfileOwnerAlreadyExistsError } from '@/data/local/notesRepository';
+import * as Sentry from '@sentry/react-native';
 
 const speaker = (overrides: Partial<Speaker>): Speaker =>
   ({
@@ -1188,7 +1189,6 @@ describe('speaker mutations', () => {
         10,
         {
           displayName: 'Me',
-          isOwner: 1,
           // Stored normalized, like a guided-read sample.
           embedding: [0.6, 0.8],
           sampleCount: 1,
@@ -1222,6 +1222,62 @@ describe('speaker mutations', () => {
         11,
         expect.objectContaining({ displayName: 'Me', profileId: 3 }),
       );
+    });
+
+    it("leaves a speaker linked to someone else's profile, or a rejected suggestion, alone", () => {
+      const bob = { id: 4, displayName: 'Bob', isOwner: 0, email: null, embedding: [0, 1] };
+      profiles = [bob];
+      useNotesStore.setState({
+        meetingSpeakerEmbeddingsByNoteId: {
+          7: { SPEAKER_01: [3, 4], SPEAKER_02: [3, 4], SPEAKER_03: [0, 1] },
+        },
+      });
+      rows = [
+        speaker({ id: 10, speakerLabel: 'SPEAKER_01' }),
+        // Auto-labelled Bob, though the voice matches yours.
+        speaker({
+          id: 11,
+          speakerLabel: 'SPEAKER_02',
+          sortOrder: 1,
+          displayName: 'Bob',
+          profileId: 4,
+          speakerStatus: 'confirmed',
+        }),
+        // You rejected "Bob?" here; claiming must not suggest Bob again.
+        speaker({ id: 12, speakerLabel: 'SPEAKER_03', sortOrder: 2 }),
+      ];
+      (notesRepository.createOwnerProfileForSpeaker as jest.Mock).mockImplementation(
+        (speakerId: number, _input: unknown, patch: Partial<Speaker>) => {
+          profiles = [bob, ownerProfile];
+          rows = rows.map((row) =>
+            row.id === speakerId ? { ...row, ...patch, profileId: ownerProfile.id } : row,
+          );
+          return ownerProfile;
+        },
+      );
+
+      useNotesStore.getState().claimSpeakerAsMe(7, 10);
+
+      expect(notesRepository.updateSpeaker).not.toHaveBeenCalled();
+    });
+
+    it('keeps the claim when labelling the rest of the meeting fails', () => {
+      const failure = new Error('disk full');
+      (notesRepository.updateSpeaker as jest.Mock).mockImplementationOnce(() => {
+        throw failure;
+      });
+      useNotesStore.setState({
+        meetingSpeakerEmbeddingsByNoteId: { 7: { SPEAKER_01: [3, 4], SPEAKER_02: [3, 4] } },
+      });
+      rows = [
+        speaker({ id: 10, speakerLabel: 'SPEAKER_01' }),
+        speaker({ id: 11, speakerLabel: 'SPEAKER_02', sortOrder: 1 }),
+      ];
+
+      expect(() => useNotesStore.getState().claimSpeakerAsMe(7, 10)).not.toThrow();
+
+      expect(useNotesStore.getState().voiceProfiles).toEqual([ownerProfile]);
+      expect(Sentry.captureException).toHaveBeenCalledWith(failure, expect.anything());
     });
 
     it('refuses without writing when you already have a profile', () => {
@@ -1269,7 +1325,7 @@ describe('speaker mutations', () => {
     it('labels a meeting still held in memory with a newly added voice', () => {
       useNotesStore.setState({ meetingSpeakerEmbeddingsByNoteId: { 7: { SPEAKER_01: [3, 4] } } });
 
-      useNotesStore.getState().relabelMeetingSpeakers(7);
+      useNotesStore.getState().relabelMeetingSpeakers(7, 3);
 
       expect(notesRepository.updateSpeaker).toHaveBeenCalledWith(
         10,
@@ -1281,7 +1337,25 @@ describe('speaker mutations', () => {
     it('does nothing for a meeting whose samples are gone', () => {
       useNotesStore.setState({ meetingSpeakerEmbeddingsByNoteId: {} });
 
-      useNotesStore.getState().relabelMeetingSpeakers(7);
+      useNotesStore.getState().relabelMeetingSpeakers(7, 3);
+
+      expect(notesRepository.updateSpeaker).not.toHaveBeenCalled();
+      expect(useNotesStore.getState().transcriptRevision).toBe(0);
+    });
+
+    it('writes nothing when the speaker already has the new label', () => {
+      useNotesStore.setState({ meetingSpeakerEmbeddingsByNoteId: { 7: { SPEAKER_01: [3, 4] } } });
+      (notesRepository.getSpeakers as jest.Mock).mockReturnValue([
+        speaker({
+          id: 10,
+          speakerLabel: 'SPEAKER_01',
+          displayName: 'Me',
+          profileId: 3,
+          speakerStatus: 'confirmed',
+        }),
+      ]);
+
+      useNotesStore.getState().relabelMeetingSpeakers(7, 3);
 
       expect(notesRepository.updateSpeaker).not.toHaveBeenCalled();
       expect(useNotesStore.getState().transcriptRevision).toBe(0);

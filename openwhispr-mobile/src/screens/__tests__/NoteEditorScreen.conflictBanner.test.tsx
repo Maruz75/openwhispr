@@ -59,6 +59,7 @@ const mockNotesState = {
   voiceProfiles: [] as SpeakerProfile[],
   meetingSpeakerEmbeddingsByNoteId: {} as Record<number, Record<string, number[]>>,
   claimSpeakerAsMe: jest.fn(),
+  loadVoiceProfiles: jest.fn(),
 };
 
 const mockActionsState = {

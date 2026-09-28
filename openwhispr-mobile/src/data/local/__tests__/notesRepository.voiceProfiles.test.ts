@@ -293,7 +293,6 @@ describe('LocalNotesRepository speaker profiles', () => {
       spkr.id,
       {
         displayName: 'Me',
-        isOwner: 1,
         embedding: [0.1, 0.2],
         sampleCount: 1,
         consentAt: '2026-06-19T00:00:00.000Z',
@@ -318,7 +317,6 @@ describe('LocalNotesRepository speaker profiles', () => {
 
   const claimInput = {
     displayName: 'Me',
-    isOwner: 1 as const,
     embedding: [0.6, 0.8],
     sampleCount: 1,
     consentAt: '2026-06-19T00:00:00.000Z',
@@ -328,7 +326,7 @@ describe('LocalNotesRepository speaker profiles', () => {
     const { repo, db } = createMemoryRepository();
     const note = createMeeting(db);
     const spkr = createSpeaker(db, { noteId: note.id, speakerLabel: 'SPEAKER_00' });
-    repo.createSpeakerProfile({ ...claimInput, email: null });
+    repo.createSpeakerProfile({ ...claimInput, isOwner: 1, email: null });
 
     expect(() =>
       repo.createOwnerProfileForSpeaker(spkr.id, claimInput, { displayName: 'Me' }),
@@ -364,7 +362,6 @@ describe('LocalNotesRepository speaker profiles', () => {
         spkr.id,
         {
           displayName: 'Me',
-          isOwner: 1,
           embedding: [0.1, 0.2],
           sampleCount: 1,
           consentAt: '2026-06-19T00:00:00.000Z',
@@ -407,7 +404,6 @@ describe('LocalNotesRepository speaker profiles', () => {
         speakerId,
         {
           displayName: 'Me',
-          isOwner: 1,
           embedding: [0.1, 0.2],
           sampleCount: 1,
           consentAt: '2026-06-19T00:00:00.000Z',

@@ -192,6 +192,11 @@ export interface IdentifyNoteSpeakersDeps {
 
 export interface IdentifyNoteSpeakersOptions {
   preferredProfileEmails?: string[];
+  /**
+   * Only labels speakers with this profile, and only speakers not already linked to a
+   * profile that still exists, so labels the user rejected or chose stay as they are.
+   */
+  onlyProfileId?: number;
 }
 
 export interface VoiceprintSpeakerIdentificationDecision {
@@ -608,6 +613,10 @@ const buildIdentificationPatch = (
   return {};
 };
 
+// Rewriting a speaker with the values it already has would still mark the note for sync.
+const changesSpeaker = (speaker: Speaker, patch: Partial<Speaker>): boolean =>
+  Object.entries(patch).some(([key, value]) => speaker[key as keyof Speaker] !== value);
+
 export const identifyNoteSpeakers = (
   noteId: number,
   speakerEmbeddingsByLabel: Record<string, number[]>,
@@ -632,9 +641,18 @@ export const identifyNoteSpeakers = (
   const decisions: VoiceprintSpeakerIdentificationDecision[] = [];
   const updatedSpeakerIds: number[] = [];
 
+  const { onlyProfileId } = options;
+
   speakers.forEach((speaker) => {
     const match = matchesByLabel[speaker.speakerLabel];
     if (!match) return;
+    if (
+      onlyProfileId !== undefined &&
+      (match.profileId !== onlyProfileId ||
+        (speaker.profileId !== null && profilesById.has(speaker.profileId)))
+    ) {
+      return;
+    }
 
     const profile = getMatchedProfile(match, profilesById);
     const patch = buildIdentificationPatch(speaker, profile, match.decision);
@@ -646,7 +664,7 @@ export const identifyNoteSpeakers = (
       profileId: match.profileId,
     });
 
-    if (Object.keys(patch).length === 0) return;
+    if (!changesSpeaker(speaker, patch)) return;
     deps.repo.updateSpeaker(speaker.id, patch);
     updatedSpeakerIds.push(speaker.id);
   });

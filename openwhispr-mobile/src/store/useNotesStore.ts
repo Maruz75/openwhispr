@@ -116,10 +116,11 @@ const reloadVoiceProfiles = (): Pick<NotesStore, 'voiceProfiles'> => ({
   voiceProfiles: notesRepository.getSpeakerProfiles(),
 });
 
-/** Labels a meeting's speakers from the saved voice profiles; true when any label changed. */
+/** Labels a meeting's speakers from the saved voice profiles; true when any speaker changed. */
 const identifyMeetingSpeakers = (
   noteId: number,
   speakerEmbeddingsByLabel: Record<string, number[]>,
+  onlyProfileId?: number,
 ): boolean => {
   const note = notesRepository.getNoteById(noteId);
   const preferredProfileEmails = getCalendarParticipantEmails(
@@ -129,7 +130,7 @@ const identifyMeetingSpeakers = (
     noteId,
     speakerEmbeddingsByLabel,
     { repo: notesRepository },
-    { preferredProfileEmails },
+    { preferredProfileEmails, onlyProfileId },
   );
   return identification.updatedSpeakerIds.length > 0;
 };
@@ -437,8 +438,11 @@ interface NotesStore {
   renameSpeaker: (noteId: number, speakerId: number, displayName: string) => void;
   /** Makes a speaker from a meeting just processed on this device your voice profile. */
   claimSpeakerAsMe: (noteId: number, speakerId: number) => void;
-  /** Relabels a meeting processed since launch after a voice profile is added. */
-  relabelMeetingSpeakers: (noteId: number) => void;
+  /**
+   * Labels a meeting processed since launch with a newly added or retrained voice profile,
+   * leaving speakers already linked to another profile alone.
+   */
+  relabelMeetingSpeakers: (noteId: number, profileId: number) => void;
   mergeSpeakers: (noteId: number, sourceSpeakerId: number, targetSpeakerId: number) => void;
 }
 
@@ -937,27 +941,30 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
       throw new Error("This meeting's voice sample is no longer available.");
     }
 
-    notesRepository.createOwnerProfileForSpeaker(
+    const profile = notesRepository.createOwnerProfileForSpeaker(
       speaker.id,
       {
         displayName: 'Me',
-        isOwner: 1,
         embedding: l2Normalize(embedding),
         sampleCount: 1,
         consentAt: new Date().toISOString(),
       },
       buildRenameSpeakerPatch(speaker, 'Me'),
     );
-    // Other clusters of your voice in this meeting pick up the new profile too.
-    identifyMeetingSpeakers(noteId, embeddings);
     set((state) => ({
       ...reloadVoiceProfiles(),
       transcriptRevision: state.transcriptRevision + 1,
     }));
+    // The claim is saved; labelling the rest of the meeting is a bonus that must not undo it.
+    try {
+      get().relabelMeetingSpeakers(noteId, profile.id);
+    } catch (error) {
+      Sentry.captureException(error, { tags: { feature: 'voice-setup' } });
+    }
   },
-  relabelMeetingSpeakers: (noteId) => {
+  relabelMeetingSpeakers: (noteId, profileId) => {
     const embeddings = get().meetingSpeakerEmbeddingsByNoteId[noteId];
-    if (!embeddings || !identifyMeetingSpeakers(noteId, embeddings)) return;
+    if (!embeddings || !identifyMeetingSpeakers(noteId, embeddings, profileId)) return;
     set((state) => ({ transcriptRevision: state.transcriptRevision + 1 }));
   },
   mergeSpeakers: (noteId, sourceSpeakerId, targetSpeakerId) => {

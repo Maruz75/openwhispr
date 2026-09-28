@@ -337,7 +337,7 @@ export class SyncedNotesRepository implements NotesRepository {
   }
   createOwnerProfileForSpeaker(
     speakerId: number,
-    profileInput: NewSpeakerProfile,
+    profileInput: Omit<NewSpeakerProfile, 'isOwner'>,
     speakerPatch: Partial<Speaker>,
   ): SpeakerProfile {
     // Also writes the speaker row (see LocalNotesRepository), so nudge sync like updateSpeaker.

@@ -410,12 +410,12 @@ export interface NotesRepository {
   /**
    * Atomically creates the owner speaker profile and applies `speakerPatch` (plus the new
    * profile's id) to the speaker row in one transaction, so a failure partway through never
-   * leaves an owner profile with no speaker linked to it — the single-owner constraint would
-   * otherwise permanently block every future claim. Used by the "claim this speaker as me" flow.
+   * leaves an owner profile with no speaker linked to it, which would block every later
+   * claim until the profile was deleted. Used by the "claim this speaker as me" flow.
    */
   createOwnerProfileForSpeaker(
     speakerId: number,
-    profileInput: NewSpeakerProfile,
+    profileInput: Omit<NewSpeakerProfile, 'isOwner'>,
     speakerPatch: Partial<Speaker>,
   ): SpeakerProfile;
   updateSpeakerProfile(id: number, updates: Partial<SpeakerProfile>): void;

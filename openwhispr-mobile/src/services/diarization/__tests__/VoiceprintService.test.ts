@@ -523,6 +523,25 @@ describe('identifyNoteSpeakers', () => {
     return { deps, calls };
   };
 
+  it('writes nothing to a speaker that already carries the label, which would resync the note', () => {
+    const { deps, calls } = makeIdentificationDeps({
+      speakers: [
+        speaker({
+          displayName: 'Alice',
+          speakerStatus: 'confirmed',
+          speakerLocked: 0,
+          speakerLockSource: null,
+          profileId: 10,
+        }),
+      ],
+    });
+
+    const result = identifyNoteSpeakers(7, { speaker_0: [1, 0] }, deps);
+
+    expect(calls.updateSpeaker).toEqual([]);
+    expect(result.updatedSpeakerIds).toEqual([]);
+  });
+
   it('auto-labels a high-confidence unlocked speaker and sets profileId', () => {
     const { deps, calls } = makeIdentificationDeps();
 

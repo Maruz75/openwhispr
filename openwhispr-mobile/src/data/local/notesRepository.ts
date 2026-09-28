@@ -1609,10 +1609,9 @@ export class LocalNotesRepository implements NotesRepository {
 
   createOwnerProfileForSpeaker(
     speakerId: number,
-    profileInput: NewSpeakerProfile,
+    profileInput: Omit<NewSpeakerProfile, 'isOwner'>,
     speakerPatch: Partial<Speaker>,
   ): SpeakerProfile {
-    validateSpeakerProfileOwnerFlag(profileInput.isOwner);
     this.validateSpeakerProfileEmbedding(profileInput.embedding);
 
     let result: { profile: SpeakerProfile; noteId: number };
@@ -1622,12 +1621,13 @@ export class LocalNotesRepository implements NotesRepository {
           .insert(speakerProfiles)
           .values({
             ...profileInput,
+            isOwner: 1,
             embedding: encodeSpeakerProfileEmbedding(profileInput.embedding),
           })
           .returning()
           .get();
         const profile = this.mapSpeakerProfile(row);
-        const linked = tx
+        const [linked] = tx
           .update(speakers)
           .set({
             ...speakerPatch,
@@ -1639,8 +1639,8 @@ export class LocalNotesRepository implements NotesRepository {
           .returning({ noteId: speakers.noteId })
           .all();
         // Throwing rolls back the insert, so no owner profile is saved without its speaker.
-        if (linked.length !== 1) throw new Error(`Speaker ${speakerId} not found`);
-        return { profile, noteId: linked[0].noteId };
+        if (!linked) throw new Error(`Speaker ${speakerId} not found`);
+        return { profile, noteId: linked.noteId };
       });
     } catch (error) {
       mapSpeakerProfileOwnerConstraint(error);

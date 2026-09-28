@@ -13,6 +13,12 @@ import {
 export const VOICE_ENROLLMENT_UNEXPLAINED_FAILURE =
   'Something went wrong checking your voice. Try again.';
 
+/** Alert title and message for teaching your voice when you already have a profile. */
+export const VOICE_ALREADY_TAUGHT_ALERT = [
+  "You've already taught OpenWhispr your voice",
+  'Open it in Voice Profiles and choose Retrain Voice.',
+] as const;
+
 // The speech detector never sets its bar above -30 dB, so a voice whose loudest moment
 // stays below this reads as pauses or too little speech. Measured: failed reads peaked
 // at -22 to -24 dB, a normal read at -9 dB.

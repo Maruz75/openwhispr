@@ -35,7 +35,7 @@ describe('SyncedNotesRepository — transcript writes are syncable', () => {
 
   it('createOwnerProfileForSpeaker delegates and nudges a debounced sync for the speaker row', () => {
     const local = makeLocal();
-    const input = { displayName: 'Me', isOwner: 1 as const, embedding: [1], consentAt: 'now' };
+    const input = { displayName: 'Me', embedding: [1], consentAt: 'now' };
     const profile = new SyncedNotesRepository(local).createOwnerProfileForSpeaker(5, input, {
       displayName: 'Me',
     });

@@ -41,6 +41,7 @@ import { VoiceSetupBanner } from '@/components/notes/VoiceSetupBanner';
 import { ThatsMeSheet } from '@/components/notes/ThatsMeSheet';
 import { shouldOfferVoiceSetup, voiceSetupCandidates } from '@/lib/notes/voiceSetupPrompt';
 import { SpeakerProfileOwnerAlreadyExistsError } from '@/data/local/notesRepository';
+import { VOICE_ALREADY_TAUGHT_ALERT } from '@/lib/voiceEnrollmentMessages';
 import { NoteChatSheet } from '@/components/notes/NoteChatSheet';
 import { isDictationAgentEnabled } from '@/lib/dictationAgent';
 import { SpeakerTranscript } from '@/components/notes/SpeakerTranscript';
@@ -150,6 +151,7 @@ export default function NoteEditorScreen() {
   const voiceProfiles = useNotesStore((s) => s.voiceProfiles);
   const meetingSpeakerEmbeddings = useNotesStore((s) => s.meetingSpeakerEmbeddingsByNoteId);
   const claimSpeakerAsMe = useNotesStore((s) => s.claimSpeakerAsMe);
+  const loadVoiceProfiles = useNotesStore((s) => s.loadVoiceProfiles);
   // Until the config loads, treat the banner as dismissed so it can't flash.
   const voiceSetupDismissed = useConfigStore(
     (s) => !s.config || !!s.config.voiceSetupBannerDismissedAt,
@@ -345,8 +347,14 @@ export default function NoteEditorScreen() {
     dismissed: voiceSetupDismissed,
     candidateCount: voiceCandidates.length,
   });
+  // The banner and That's me need your profiles, and a meeting opened straight from
+  // recording never passes a screen that loads them.
+  useEffect(() => {
+    loadVoiceProfiles();
+  }, [loadVoiceProfiles]);
   useEffect(() => {
     setVoiceSetupVisible(false);
+    readScriptAfterSheetRef.current = false;
   }, [noteId]);
   const hasTranscriptSegments = transcriptSegments.length > 0;
   const usesSegmentTranscript = isAudioTranscript && hasTranscriptSegments;
@@ -482,17 +490,15 @@ export default function NoteEditorScreen() {
 
   const handleClaimVoice = useCallback(
     (speakerId: number): boolean => {
-      if (!note) return false;
       try {
-        claimSpeakerAsMe(note.id, speakerId);
+        claimSpeakerAsMe(noteId, speakerId);
         safeHaptics('success');
         return true;
       } catch (error) {
         if (error instanceof SpeakerProfileOwnerAlreadyExistsError) {
-          Alert.alert(
-            "You've already taught OpenWhispr your voice",
-            'Open it in Voice Profiles and choose Retrain Voice.',
-          );
+          // A profile this screen didn't know about: reloading hides the banner.
+          loadVoiceProfiles();
+          Alert.alert(...VOICE_ALREADY_TAUGHT_ALERT);
         } else {
           Alert.alert(
             "Couldn't save your voice",
@@ -502,7 +508,7 @@ export default function NoteEditorScreen() {
         return false;
       }
     },
-    [claimSpeakerAsMe, note],
+    [claimSpeakerAsMe, loadVoiceProfiles, noteId],
   );
 
   const openVoiceScript = useCallback(() => {

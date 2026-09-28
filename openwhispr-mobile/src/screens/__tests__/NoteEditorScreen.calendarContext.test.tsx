@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Modal } from 'react-native';
+import { Alert, Modal, Platform } from 'react-native';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import NoteEditorScreen from '@/screens/NoteEditorScreen';
 import { ReasoningService } from '@/services/reasoning/ReasoningService';
@@ -26,6 +26,7 @@ const mockUpdateConfig = jest.fn(async (updates: Record<string, unknown>) => {
   mockConfigState.config = { ...mockConfigState.config, ...updates };
 });
 const mockClaimSpeakerAsMe = jest.fn();
+const mockLoadVoiceProfiles = jest.fn();
 
 let mockNote: Note;
 let mockRouteNoteId = '7';
@@ -60,6 +61,7 @@ const mockNotesState = {
   voiceProfiles: [] as SpeakerProfile[],
   meetingSpeakerEmbeddingsByNoteId: {} as Record<number, Record<string, number[]>>,
   claimSpeakerAsMe: mockClaimSpeakerAsMe,
+  loadVoiceProfiles: mockLoadVoiceProfiles,
 };
 
 const mockActionsState = {
@@ -1643,6 +1645,11 @@ describe('NoteEditorScreen voice setup', () => {
     expect(getByTestId('voice-setup-banner')).toBeTruthy();
   });
 
+  it('loads your voice profiles, which a meeting opened straight from recording never did', () => {
+    render(<NoteEditorScreen />);
+    expect(mockLoadVoiceProfiles).toHaveBeenCalled();
+  });
+
   it('does not offer it on a meeting recorded elsewhere, or once you have a profile', () => {
     mockNote = note({ sourceFile: null });
     mockNotesState.notes = [mockNote];
@@ -1732,6 +1739,8 @@ describe('NoteEditorScreen voice setup', () => {
       "You've already taught OpenWhispr your voice",
       'Open it in Voice Profiles and choose Retrain Voice.',
     );
+    // Reloading picks up the profile, which hides the banner.
+    expect(mockLoadVoiceProfiles).toHaveBeenCalledTimes(2);
   });
 
   it('opens the script for this meeting once the sheet has finished closing', () => {
@@ -1747,6 +1756,37 @@ describe('NoteEditorScreen voice setup', () => {
     act(() => sheet?.props.onDismiss());
 
     expect(mockPush).toHaveBeenCalledWith('/(tabs)/(notes)/voice-enrollment?owner=1&noteId=7');
+  });
+
+  it('opens the script right away on Android, which has no sheet onDismiss', () => {
+    const platform = Platform.OS;
+    Platform.OS = 'android';
+    try {
+      const { getByTestId } = render(<NoteEditorScreen />);
+      fireEvent.press(getByTestId('voice-setup-banner-set-up'));
+      fireEvent.press(getByTestId('thats-me-read-script'));
+
+      expect(mockPush).toHaveBeenCalledWith('/(tabs)/(notes)/voice-enrollment?owner=1&noteId=7');
+    } finally {
+      Platform.OS = platform;
+    }
+  });
+
+  it("doesn't open the script for another note after switching mid-close", () => {
+    const { getByTestId, UNSAFE_getAllByType, rerender } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('voice-setup-banner-set-up'));
+    const sheet = UNSAFE_getAllByType(Modal).find(
+      (modal) => modal.props.presentationStyle === 'pageSheet' && modal.props.visible,
+    );
+    fireEvent.press(getByTestId('thats-me-read-script'));
+
+    mockRouteNoteId = '8';
+    mockNote = note({ id: 8, sourceFile: 'managed://meeting-8.wav' });
+    mockNotesState.notes = [mockNote];
+    rerender(<NoteEditorScreen />);
+    act(() => sheet?.props.onDismiss());
+
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('closes the sheet when another note opens', () => {
