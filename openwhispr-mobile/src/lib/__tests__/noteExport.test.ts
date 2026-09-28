@@ -2,7 +2,7 @@ import { buildNoteShareContent } from '../noteExport';
 
 describe('buildNoteShareContent', () => {
   const base = {
-    viewMode: 'original' as const,
+    viewMode: 'notes' as const,
     enhancedContent: null,
     usesSegmentTranscript: false,
     transcript: '[00:12] Alice: Hello there\n\n[00:15] Bob: Hi',
@@ -31,17 +31,28 @@ describe('buildNoteShareContent', () => {
   });
 
   it('shares the formatted transcript when viewing the transcript of a meeting note', () => {
-    const shared = buildNoteShareContent({ ...base, usesSegmentTranscript: true });
+    const shared = buildNoteShareContent({
+      ...base,
+      viewMode: 'transcript',
+      usesSegmentTranscript: true,
+    });
     expect(shared).toBe(base.transcript);
     expect(shared).not.toContain('Raw notes captured during the meeting');
     expect(shared).not.toContain('Meeting transcript:');
+  });
+
+  it('shares the typed notes when a meeting note is on My notes', () => {
+    expect(buildNoteShareContent({ ...base, usesSegmentTranscript: true })).toBe('Raw note body');
   });
 
   it('shares the note body for plain notes without enhancement', () => {
     expect(buildNoteShareContent(base)).toBe('Raw note body');
   });
 
-  it('falls back to the original content when enhanced view has no enhanced content', () => {
+  it('falls back to what the note shows when the enhanced view has no enhanced content', () => {
     expect(buildNoteShareContent({ ...base, viewMode: 'enhanced' })).toBe('Raw note body');
+    expect(
+      buildNoteShareContent({ ...base, viewMode: 'enhanced', usesSegmentTranscript: true }),
+    ).toBe(base.transcript);
   });
 });
