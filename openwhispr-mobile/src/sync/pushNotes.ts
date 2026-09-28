@@ -8,6 +8,7 @@ import {
   type NotePushInput,
 } from '@/data/remote/notesApi';
 import { serializeSegmentsForSync } from '@/lib/notes/remoteTranscript';
+import { isFolderAwaitingUpload } from '@/lib/notes/folderUpload';
 import { isPermissionDenialCode, isSpaceAccessCode } from './pushErrorCodes';
 import { createPushScopeResolver, createTeamSpaceFilter } from './pushScope';
 import { resetTeamCursors } from './teamCursors';
@@ -199,12 +200,6 @@ function assertNotPrivate(n: Note): boolean {
   return true;
 }
 
-function serverFolderId(localFolderId: number | null): string | null {
-  if (localFolderId == null) return null;
-  const folder = notesRepository.getFolders().find((f) => f.id === localFolderId);
-  return folder?.remoteId ?? null;
-}
-
 function calendarContextPayload(
   n: Note,
 ): Pick<NotePushInput, 'participants' | 'calendar_event_id'> {
@@ -275,6 +270,9 @@ export async function pushNotes(
   // mid-push. Rows queued for deletion never reach it — DELETE carries no
   // body, so scope does not apply to one.
   const resolveScope = createPushScopeResolver();
+  // Folders too: pushFolders has finished, and nothing below awaits before every row is
+  // sorted into creates, updates and deletes.
+  const foldersById = new Map(notesRepository.getFolders().map((folder) => [folder.id, folder]));
 
   for (const n of pending) {
     if (n.deletedAt) {
@@ -300,12 +298,13 @@ export async function pushNotes(
     // a space; pushFolders runs first, so normally that's just this pass. A folder
     // pushFolders will never upload (refused, or never queued) holds nothing: the note
     // goes up unfiled rather than not at all.
-    if (notesRepository.isFolderAwaitingUpload(n.folderId)) {
+    const folder = n.folderId == null ? undefined : foldersById.get(n.folderId);
+    if (isFolderAwaitingUpload(folder)) {
       skippedPendingFolder += 1;
       continue;
     }
 
-    const folderId = serverFolderId(n.folderId);
+    const folderId = folder?.remoteId ?? null;
 
     if (!n.remoteId) {
       if (!n.clientNoteId) {

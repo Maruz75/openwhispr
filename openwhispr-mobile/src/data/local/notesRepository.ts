@@ -16,6 +16,7 @@ import {
 import * as FileSystem from 'expo-file-system/legacy';
 import { parseRemoteTranscript, serializeSegmentsForSync } from '@/lib/notes/remoteTranscript';
 import { randomUUID } from '@/lib/uuid';
+import { isFolderAwaitingUpload } from '@/lib/notes/folderUpload';
 import {
   folderDeleteJournal,
   folders,
@@ -134,11 +135,6 @@ const NOTE_PUSH_ACK_FIELDS: ReadonlyArray<keyof Note> = [
 ];
 
 const pushRejectedKey = (localId: number): string => `note.pushRejected.${localId}`;
-
-// pushFolders only uploads a folder that is queued and has a client id, so only then does
-// the folder get a cloud id a note could be filed under.
-const isAwaitingUpload = (folder: Folder | null): boolean =>
-  folder?.pendingSync === 1 && folder.clientFolderId != null;
 
 export class LocalNotesRepository implements NotesRepository {
   private readonly database: NotesDb;
@@ -890,7 +886,7 @@ export class LocalNotesRepository implements NotesRepository {
         clientNoteId: remote.client_note_id ?? local.clientNoteId,
         remoteId: remote.id,
         deletedAt: null,
-        pendingSync: isAwaitingUpload(unsyncedFolder) ? 1 : 0,
+        pendingSync: isFolderAwaitingUpload(unsyncedFolder) ? 1 : 0,
         conflictServerNote: null,
         // Only the team pass relocates an existing note; without an explicit
         // space the row keeps whatever space it already sits in.
@@ -964,10 +960,6 @@ export class LocalNotesRepository implements NotesRepository {
       .where(and(eq(folders.id, folderId), isNull(folders.deletedAt)))
       .get();
     return folder && !folder.remoteId ? folder : null;
-  }
-
-  isFolderAwaitingUpload(folderId: number | null): boolean {
-    return isAwaitingUpload(this.getFolderUnknownToServer(folderId));
   }
 
   private resolveFolderByRemoteId(serverFolderId: string | null): number | null {

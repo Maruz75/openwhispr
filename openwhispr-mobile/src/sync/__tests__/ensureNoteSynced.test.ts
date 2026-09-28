@@ -1,4 +1,4 @@
-import type { Note } from '@/data';
+import type { Folder, Note } from '@/data';
 
 jest.mock('@/store/useAuthStore', () => ({
   useAuthStore: require('zustand').create(() => ({
@@ -21,7 +21,7 @@ jest.mock('@/data', () => ({
     isRemoteNoteHeldByFolderDelete: jest.fn(),
     getSyncState: jest.fn(),
     isNotePushRejected: jest.fn(),
-    isFolderAwaitingUpload: jest.fn(),
+    getFolders: jest.fn(),
   },
   spacesRepository: { listSpaces: jest.fn(() => []) },
 }));
@@ -55,7 +55,7 @@ beforeEach((): void => {
   jest.clearAllMocks();
   jest.mocked(notesRepository.getSyncState).mockReturnValue(null);
   jest.mocked(notesRepository.isNotePushRejected).mockReturnValue(false);
-  jest.mocked(notesRepository.isFolderAwaitingUpload).mockReturnValue(false);
+  jest.mocked(notesRepository.getFolders).mockReturnValue([]);
   jest
     .mocked(Network.getNetworkStateAsync)
     .mockResolvedValue({ isConnected: true } as Network.NetworkState);
@@ -303,7 +303,11 @@ it('explains a note held back because its space cannot sync', async (): Promise<
 });
 it('explains a note held back because its folder has not synced yet', async (): Promise<void> => {
   note = { ...note, folderId: 3 };
-  jest.mocked(notesRepository.isFolderAwaitingUpload).mockImplementation((id) => id === 3);
+  jest
+    .mocked(notesRepository.getFolders)
+    .mockReturnValue([
+      { id: 3, remoteId: null, pendingSync: 1, clientFolderId: 'client-folder' } as Folder,
+    ]);
   const pending = ensureNoteSynced(1, { signal: controller.signal });
   complete();
   await expect(pending).rejects.toThrow(/folder has not synced/i);

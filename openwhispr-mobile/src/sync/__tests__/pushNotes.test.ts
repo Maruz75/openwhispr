@@ -36,7 +36,6 @@ jest.mock('@/data', () => ({
     markTranscriptPushed: jest.fn(),
     forkNoteToPrivate: jest.fn(),
     dropNotePushAttempt: jest.fn(),
-    isFolderAwaitingUpload: jest.fn(),
     getSyncState: jest.fn(),
     setSyncState: jest.fn(),
     clearSyncState: jest.fn(),
@@ -101,7 +100,6 @@ const note = (overrides: Partial<Note> = {}): Note =>
   }) as Note;
 
 beforeEach(() => {
-  mockNotesRepository.isFolderAwaitingUpload.mockReturnValue(false);
   mockNotesRepository.getNoteById.mockImplementation((id) => {
     const pending = mockNotesRepository.getPendingNotes.mock.results.at(-1)?.value as
       | Note[]
@@ -178,9 +176,18 @@ describe('pushNotes calendar context', () => {
 
   it("holds a note whose folder hasn't reached the server yet, instead of filing it nowhere", async () => {
     const UNSYNCED_FOLDER_ID = 3;
-    mockNotesRepository.isFolderAwaitingUpload.mockImplementation(
-      (folderId) => folderId === UNSYNCED_FOLDER_ID,
-    );
+    const [syncedFolder] = mockNotesRepository.getFolders();
+    mockNotesRepository.getFolders.mockReset().mockReturnValue([
+      syncedFolder,
+      {
+        ...syncedFolder,
+        id: UNSYNCED_FOLDER_ID,
+        name: 'Clients',
+        clientFolderId: 'client-folder-3',
+        remoteId: null,
+        pendingSync: 1,
+      },
+    ]);
     mockNotesRepository.getPendingNotes.mockReturnValue([
       note({ id: 1, remoteId: null, folderId: UNSYNCED_FOLDER_ID }),
       note({
@@ -204,6 +211,8 @@ describe('pushNotes calendar context', () => {
     expect(mockUpdateNoteRemote).not.toHaveBeenCalled();
     expect(mockNotesRepository.markNotePushed).toHaveBeenCalledTimes(1);
     expect(mockNotesRepository.markNoteTerminal).not.toHaveBeenCalled();
+    // Folders are read once per pass, not once per note.
+    expect(mockNotesRepository.getFolders).toHaveBeenCalledTimes(1);
     expect(mockAddBreadcrumb).toHaveBeenCalledWith(
       expect.objectContaining({
         category: 'sync',

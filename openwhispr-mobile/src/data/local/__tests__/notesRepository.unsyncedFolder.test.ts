@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { folders, notes } from '@/db/schema';
 import type { RemoteNote } from '@/data/types';
+import { isFolderAwaitingUpload } from '@/lib/notes/folderUpload';
 import { createMemoryRepository, type TestDb } from './testDb';
 import type { LocalNotesRepository } from '../notesRepository';
 
@@ -39,13 +40,17 @@ const fileNote = (db: TestDb, noteId: number, folderId: number): void => {
   db.update(notes).set({ folderId }).where(eq(notes.id, noteId)).run();
 };
 
+// Reads the folder the way pushNotes and ensureNoteSynced do.
+const awaitsUpload = (repo: LocalNotesRepository, folderId: number): boolean =>
+  isFolderAwaitingUpload(repo.getFolders().find(({ id }) => id === folderId));
+
 describe('isFolderAwaitingUpload', () => {
   it('is true for a queued folder with a client id and no cloud id', () => {
     const { repo } = createMemoryRepository();
     const folder = repo.createFolder('Meetings');
     repo.setFolderClientId(folder.id, 'client-folder');
 
-    expect(repo.isFolderAwaitingUpload(folder.id)).toBe(true);
+    expect(awaitsUpload(repo, folder.id)).toBe(true);
   });
 
   it('is false once the folder has a cloud id, and for no folder at all', () => {
@@ -54,9 +59,19 @@ describe('isFolderAwaitingUpload', () => {
     repo.setFolderClientId(folder.id, 'client-folder');
     repo.markFolderPushed(folder.id, 'srv-folder', '2026-07-09T10:00:00.000Z');
 
-    expect(repo.isFolderAwaitingUpload(folder.id)).toBe(false);
-    expect(repo.isFolderAwaitingUpload(null)).toBe(false);
-    expect(repo.isFolderAwaitingUpload(404)).toBe(false);
+    expect(awaitsUpload(repo, folder.id)).toBe(false);
+    expect(isFolderAwaitingUpload(null)).toBe(false);
+    expect(awaitsUpload(repo, 404)).toBe(false);
+  });
+
+  it('is false for a synced folder queued again by a rename', () => {
+    const { repo } = createMemoryRepository();
+    const folder = repo.createFolder('Meetings');
+    repo.setFolderClientId(folder.id, 'client-folder');
+    repo.markFolderPushed(folder.id, 'srv-folder', '2026-07-09T10:00:00.000Z');
+    repo.renameFolder(folder.id, 'Calls');
+
+    expect(awaitsUpload(repo, folder.id)).toBe(false);
   });
 
   it('is false for a folder pushFolders will never upload', () => {
@@ -71,9 +86,9 @@ describe('isFolderAwaitingUpload', () => {
     repo.setFolderClientId(refused.id, 'client-refused');
     repo.markFolderTerminal(refused.id);
 
-    expect(repo.isFolderAwaitingUpload(reseeded.id)).toBe(false);
-    expect(repo.isFolderAwaitingUpload(noClientId.id)).toBe(false);
-    expect(repo.isFolderAwaitingUpload(refused.id)).toBe(false);
+    expect(awaitsUpload(repo, reseeded.id)).toBe(false);
+    expect(awaitsUpload(repo, noClientId.id)).toBe(false);
+    expect(awaitsUpload(repo, refused.id)).toBe(false);
   });
 
   it('is false for a deleted folder', () => {
@@ -82,7 +97,7 @@ describe('isFolderAwaitingUpload', () => {
     repo.setFolderClientId(folder.id, 'client-folder');
     repo.deleteFolder(folder.id);
 
-    expect(repo.isFolderAwaitingUpload(folder.id)).toBe(false);
+    expect(awaitsUpload(repo, folder.id)).toBe(false);
   });
 });
 
