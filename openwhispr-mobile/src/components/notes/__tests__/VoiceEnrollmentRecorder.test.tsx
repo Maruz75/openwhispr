@@ -252,11 +252,38 @@ describe('VoiceEnrollmentRecorder', () => {
     expect(utils.getByTestId('voice-enrollment-try-again')).toBeTruthy();
   });
 
-  it('cancels the recording when you leave mid-read', async () => {
+  it('cancels the recording and deletes it when you leave mid-read', async () => {
+    mockUseAudioRecording.mockReturnValue({
+      ...mockUseAudioRecording(),
+      audioRecorder: { uri: 'file://partial.wav' } as ReturnType<
+        typeof useAudioRecording
+      >['audioRecorder'],
+    });
     const utils = renderRecorder();
     await recordFor(utils, 5);
     utils.unmount();
     expect(cancelRecording).toHaveBeenCalled();
+
+    await act(async () => undefined);
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file://partial.wav', { idempotent: true });
+  });
+
+  it('deletes the recording and never submits it when you leave while it is stopping', async () => {
+    let finishStop: (uri: string) => void = () => {};
+    stopRecordingRaw.mockImplementationOnce(
+      () => new Promise<string>((resolve) => (finishStop = resolve)),
+    );
+    const utils = renderRecorder();
+    await recordFor(utils, 12);
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('voice-enrollment-stop'));
+    });
+
+    utils.unmount();
+    await act(async () => finishStop('file://sample.wav'));
+
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file://sample.wav', { idempotent: true });
+    expect(utils.props.onSubmit).not.toHaveBeenCalled();
   });
 
   it("needs a name before recording someone else's voice", async () => {

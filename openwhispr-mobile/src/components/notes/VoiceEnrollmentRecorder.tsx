@@ -93,6 +93,20 @@ export function VoiceEnrollmentRecorder({
   const mountedRef = useRef(true);
   const cancelRecordingRef = useRef(recording.cancelRecording);
   cancelRecordingRef.current = recording.cancelRecording;
+  const audioRecorderRef = useRef(recording.audioRecorder);
+  audioRecorderRef.current = recording.audioRecorder;
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+
+  // Stops the recorder, then deletes the partial sample it was writing.
+  const discardActiveRecording = useCallback((): void => {
+    Promise.resolve(cancelRecordingRef.current())
+      .then(() => {
+        const uri = audioRecorderRef.current?.uri;
+        if (uri) deleteRecording(uri);
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -110,9 +124,14 @@ export function VoiceEnrollmentRecorder({
       mountedRef.current = false;
       if (pendingUriRef.current) deleteRecording(pendingUriRef.current);
       pendingUriRef.current = null;
-      Promise.resolve(cancelRecordingRef.current()).catch(() => undefined);
+      // A stop already in flight deletes its own file once it resolves (see submit).
+      if (phaseRef.current === 'recording' && !stoppingRef.current) {
+        discardActiveRecording();
+      } else {
+        Promise.resolve(cancelRecordingRef.current()).catch(() => undefined);
+      }
     },
-    [],
+    [discardActiveRecording],
   );
 
   useEffect(() => {
@@ -141,6 +160,11 @@ export function VoiceEnrollmentRecorder({
 
   const trimmedName = displayName.trim();
 
+  const discardPending = (uri: string): void => {
+    pendingUriRef.current = null;
+    deleteRecording(uri);
+  };
+
   const submit = useCallback(
     async (uri: string): Promise<void> => {
       setPhase('checking');
@@ -151,10 +175,14 @@ export function VoiceEnrollmentRecorder({
       } catch {
         // Kept so a retried download can check it without reading again.
         if (mountedRef.current) setPhase('download-failed');
+        else discardPending(uri);
         return;
       }
-      // Left while waiting: the unmount already deleted the recording.
-      if (!mountedRef.current) return;
+      // Left while stopping or waiting: nothing will check this recording.
+      if (!mountedRef.current) {
+        discardPending(uri);
+        return;
+      }
       // From here the enrollment service owns the file until the finally below.
       pendingUriRef.current = null;
       const input = {
@@ -202,12 +230,16 @@ export function VoiceEnrollmentRecorder({
       }
       await submit(uri);
     } catch (caught) {
+      if (!mountedRef.current) {
+        discardActiveRecording();
+        return;
+      }
       setFailure(voiceEnrollmentFailureMessage(caught));
       setPhase('failed');
     } finally {
       stoppingRef.current = false;
     }
-  }, [recording, submit]);
+  }, [discardActiveRecording, recording, submit]);
 
   useEffect(() => {
     if (phase === 'recording' && elapsedSeconds >= MAX_SECONDS) stop().catch(() => undefined);
@@ -218,12 +250,17 @@ export function VoiceEnrollmentRecorder({
     consentAtRef.current ??= now().toISOString();
     try {
       await recording.startRecording();
+      // Left before the microphone opened: stop it and drop what it started writing.
+      if (!mountedRef.current) {
+        discardActiveRecording();
+        return;
+      }
       setPhase('recording');
     } catch {
       setFailure(MIC_START_FAILURE);
       setPhase('failed');
     }
-  }, [now, recording]);
+  }, [discardActiveRecording, now, recording]);
 
   const retryDownload = useCallback(async (): Promise<void> => {
     startDownload();
