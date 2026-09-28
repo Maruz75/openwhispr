@@ -336,19 +336,47 @@ test(
   "a stream whose server stops answering pings fails while recording",
   { timeout: 2000 },
   async (t) => {
-    const { adapter, options, control } = await stallableFixture(t, undefined, { livenessMs: 100 });
+    const livenessMs = 200;
+    const { adapter, options, control } = await stallableFixture(t, undefined, { livenessMs });
     const raised = new Promise((resolve) => {
       adapter.onError = resolve;
     });
     await adapter.connect(options);
     await once(adapter.ws, "pong");
     control.answering = false;
+    const stalledAt = performance.now();
     adapter.sendAudio(Buffer.alloc(640));
 
     assert.match((await raised).message, /stopped responding/);
+    assert.ok(performance.now() - stalledAt < livenessMs * 2.5);
     await assert.rejects(adapter.finalize(), /stopped responding/);
   }
 );
+
+test("a blocked main thread is not judged a stalled server", { timeout: 2000 }, async (t) => {
+  const { adapter, options } = await stallableFixture(
+    t,
+    (socket, event) => {
+      if (event.type === "commit") socket.send(JSON.stringify({ type: "final", text: "Kept." }));
+    },
+    { livenessMs: 100 }
+  );
+  const errors = [];
+  adapter.onError = (error) => errors.push(error);
+  await adapter.connect(options);
+  await new Promise((resolve) =>
+    adapter.ws.once("pong", () => {
+      const until = performance.now() + 400;
+      while (performance.now() < until);
+      resolve();
+    })
+  );
+  adapter.sendAudio(Buffer.alloc(640));
+  await new Promise((resolve) => setTimeout(resolve, 200));
+
+  assert.deepEqual(errors, []);
+  assert.equal((await adapter.finalize()).text, "Kept.");
+});
 
 test("a server that never answers pings is not judged stalled", { timeout: 2000 }, async (t) => {
   const { adapter, options, control } = await stallableFixture(
@@ -378,7 +406,7 @@ test(
         control.answering = false;
         setTimeout(() => socket.send(JSON.stringify({ type: "final", text: "Slow." })), 200);
       },
-      { livenessMs: 50 }
+      { livenessMs: 50, timeoutMs: 1000 }
     );
     await adapter.connect(options);
     await once(adapter.ws, "pong");
@@ -414,9 +442,8 @@ test("the final deadline scales with the audio sent", { timeout: 2000 }, async (
 
 test("managed streams fail over within seconds instead of the 30 s budget", () => {
   assert.equal(MANAGED_STREAM_OPTIONS.retryCapacity, false);
-  assert.equal(MANAGED_STREAM_OPTIONS.livenessMs, 5000);
+  assert.equal(MANAGED_STREAM_OPTIONS.livenessMs, 8000);
   assert.equal(MANAGED_STREAM_OPTIONS.timeoutMs, 10000);
   assert.equal(MANAGED_STREAM_OPTIONS.finalTimeoutMs(0), 5000);
   assert.equal(MANAGED_STREAM_OPTIONS.finalTimeoutMs(60), 11000);
-  assert.equal(MANAGED_STREAM_OPTIONS.finalTimeoutMs(600), 30000);
 });

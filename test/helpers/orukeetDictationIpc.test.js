@@ -28,7 +28,7 @@ const cloudSession = {
 const { once, EventEmitter } = require("node:events");
 const { WebSocket, WebSocketServer } = require("ws");
 const orukeetStreamingModule = require("../../src/helpers/orukeetStreaming");
-const { OrukeetStreaming } = orukeetStreamingModule;
+const { OrukeetStreaming, MANAGED_STREAM_OPTIONS } = orukeetStreamingModule;
 const AgentStreamRequestRegistry = require("../../src/helpers/agentStreamRequestRegistry");
 let server,
   target,
@@ -255,6 +255,8 @@ test(
       true
     );
     const streaming = target._dictationStreaming;
+    assert.equal(streaming.livenessMs, MANAGED_STREAM_OPTIONS.livenessMs);
+    assert.equal(streaming.finalTimeoutMs, MANAGED_STREAM_OPTIONS.finalTimeoutMs);
     const closed = once(streaming.ws, "close");
     handlers.get("dictation-realtime-send")(event, Buffer.alloc(640));
     const final = await handlers.get("dictation-realtime-finalize")();
@@ -287,6 +289,7 @@ test("self-hosted IPC still retries a capacity-refused commit without re-uploadi
     baseUrl: cloudSession.baseUrl,
   });
   assert.equal(start.success, true);
+  assert.equal(target._dictationStreaming.livenessMs, null, "self-hosted servers are never pinged");
   handlers.get("dictation-realtime-send")(event, Buffer.alloc(640));
   const final = await handlers.get("dictation-realtime-finalize")();
 

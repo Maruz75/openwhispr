@@ -3,6 +3,7 @@ const WebSocket = require("ws");
 const MAX_PENDING_BYTES = 2 * 1024 * 1024;
 // Mono 16 kHz PCM16.
 const BYTES_PER_SECOND = 32000;
+const MAX_FINAL_WAIT_MS = 30000;
 
 // Managed Cloud keeps the capture for a batch upload, so a stalled or
 // unreachable GPU host should fail over within seconds rather than hold the
@@ -12,8 +13,9 @@ const MANAGED_STREAM_OPTIONS = {
   // A refused commit must close this attempt instead of retrying for 30 s.
   retryCapacity: false,
   timeoutMs: 10000,
-  livenessMs: 5000,
-  finalTimeoutMs: (audioSeconds) => Math.min(30000, 5000 + audioSeconds * 100),
+  // Long enough to ride out a Wi-Fi roam or cellular hand-off.
+  livenessMs: 8000,
+  finalTimeoutMs: (audioSeconds) => 5000 + audioSeconds * 100,
 };
 
 function languageMetadata(message) {
@@ -217,19 +219,31 @@ class OrukeetStreaming {
   // may hold the server's event loop.
   startLivenessCheck() {
     if (!this.livenessMs) return;
-    let lastPongAt = null;
+    const intervalMs = this.livenessMs / 2;
+    let lastHeardAt = null;
+    let lastCheckAt = performance.now();
     this.ws.on("pong", () => {
-      lastPongAt = Date.now();
+      lastHeardAt = performance.now();
+    });
+    this.ws.on("message", () => {
+      if (lastHeardAt !== null) lastHeardAt = performance.now();
     });
     const check = () => {
-      if (this.finalPromise) return;
-      if (lastPongAt !== null && Date.now() - lastPongAt > this.livenessMs) {
+      if (this.intentionalClose || this.failure || this.finalPromise) return;
+      const now = performance.now();
+      // A late tick means this process stalled (a blocked main thread, App Nap,
+      // sleep), not the server, so it only sends the next ping.
+      const onTime = now - lastCheckAt < intervalMs * 1.5;
+      lastCheckAt = now;
+      if (onTime && lastHeardAt !== null && now - lastHeardAt > this.livenessMs) {
         return this.fail(new Error("Orukeet server stopped responding"));
       }
       this.ws.ping();
     };
     check();
-    this.livenessTimer = setInterval(check, this.livenessMs / 2);
+    // After a blocked main thread, timers run before pending socket reads;
+    // setImmediate lets a pong that already arrived count first.
+    this.livenessTimer = setInterval(() => setImmediate(check), intervalMs);
     this.livenessTimer.unref?.();
   }
 
@@ -261,12 +275,12 @@ class OrukeetStreaming {
     this.audioBytesSent += buffer.length;
   }
 
-  sendControl(message) {
+  sendControl(message, onSent) {
     try {
       if (!this.isConnected || this.ws.readyState !== WebSocket.OPEN) {
         throw new Error("Orukeet connection closed before completion");
       }
-      this.ws.send(JSON.stringify(message));
+      this.ws.send(JSON.stringify(message), onSent);
     } catch (error) {
       this.fail(error);
     }
@@ -282,16 +296,21 @@ class OrukeetStreaming {
     this.finalPromise = new Promise((resolve, reject) => {
       this.finalResolve = resolve;
       this.finalReject = reject;
-      this.finalTimer = setTimeout(
-        () => this.fail(new Error("Orukeet final transcript timed out")),
-        this.finalTimeoutMs(this.audioBytesSent / BYTES_PER_SECOND)
-      );
-      this.sendControl({ type: "commit" });
+      const timedOut = () => this.fail(new Error("Orukeet final transcript timed out"));
+      const audioSeconds = this.audioBytesSent / BYTES_PER_SECOND;
+      // The commit queues behind audio still uploading, so the scaled deadline
+      // starts once it is written; the cap bounds a slow upload.
+      this.finalCapTimer = setTimeout(timedOut, MAX_FINAL_WAIT_MS);
+      this.sendControl({ type: "commit" }, (error) => {
+        if (error || !this.finalResolve) return;
+        this.finalTimer = setTimeout(timedOut, this.finalTimeoutMs(audioSeconds));
+      });
     });
     return this.finalPromise;
   }
 
   clearFinal() {
+    clearTimeout(this.finalCapTimer);
     clearTimeout(this.finalTimer);
     clearTimeout(this.retryTimer);
     this.finalResolve = this.finalReject = null;
@@ -326,7 +345,10 @@ class OrukeetStreaming {
     this.connecting = false;
     this.pendingAudio = [];
     this.pendingBytes = 0;
-    this.ws?.close();
+    // A failed socket has nothing left to say, and a graceful close would wait
+    // behind unsent audio for up to 30 s while the account's socket slot stays taken.
+    if (this.failure) this.ws?.terminate();
+    else this.ws?.close();
     this.onClose?.();
   }
 
