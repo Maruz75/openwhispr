@@ -835,7 +835,9 @@ export default function NoteEditorScreen() {
 
   const handleRunAction = useCallback(
     (action: Parameters<typeof runAction>[0]) => {
-      if (!note?.enhancedContent?.trim()) {
+      // Decide from the notes on screen: an edit typed since the last save counts too.
+      flushEnhancedSave();
+      if (!getNoteById(noteId)?.enhancedContent?.trim()) {
         runActionWithRouting(action).catch(() => {});
         return;
       }
@@ -846,7 +848,7 @@ export default function NoteEditorScreen() {
         { destructiveLabel: 'Replace' },
       );
     },
-    [note?.enhancedContent, runActionWithRouting],
+    [flushEnhancedSave, getNoteById, noteId, runActionWithRouting],
   );
 
   const startChatRequest = useCallback(

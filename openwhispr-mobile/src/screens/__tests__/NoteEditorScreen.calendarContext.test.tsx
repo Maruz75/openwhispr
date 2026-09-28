@@ -1294,6 +1294,34 @@ describe('NoteEditorScreen replacing generated notes', () => {
     expect(saved.filter((value) => value === '## Edited')).toHaveLength(1);
   });
 
+  it('asks before replacing notes typed since they were last cleared', async () => {
+    mockUpdateNote.mockImplementation((id: number, updates: Partial<Note>) => {
+      mockNote = { ...mockNote!, ...updates };
+      mockNotesState.notes = [mockNote];
+    });
+    const { getByTestId, rerender } = render(<NoteEditorScreen />);
+    fireEvent.press(getByTestId('enhanced-edit'));
+    fireEvent.changeText(getByTestId('enhanced-editor'), '');
+    // Outlast the 800 ms save debounce, so the cleared notes are what is saved.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    });
+    rerender(<NoteEditorScreen />);
+    expect(mockNote?.enhancedContent).toBe('');
+
+    fireEvent.changeText(getByTestId('enhanced-editor'), '## Rewritten');
+    await act(async () => {
+      fireEvent.press(getByTestId('run-action-1'));
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Replace enhanced notes?',
+      expect.any(String),
+      expect.any(Array),
+    );
+    expect(ReasoningService.processText).not.toHaveBeenCalled();
+  });
+
   it('keeps an unsaved edit when the action fails', async () => {
     (ReasoningService.processText as jest.Mock).mockRejectedValueOnce(new Error('offline'));
 
