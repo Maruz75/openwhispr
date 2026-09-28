@@ -679,7 +679,7 @@ describe('LocalNotesRepository — server copies clear a push rejection', () => 
     repo.applyRemoteNote(remoteNote({ content: 'Server content' }), noFolder);
 
     expect(repo.getNoteById(local.id)?.content).toBe('Server content');
-    expect(repo.getSyncState(`note.pushRejected.${local.id}`)).toBeNull();
+    expect(repo.isNotePushRejected(local.id)).toBe(false);
   });
 
   it('when a pull deletes a note whose last upload was rejected', () => {
@@ -692,7 +692,7 @@ describe('LocalNotesRepository — server copies clear a push rejection', () => 
     repo.applyRemoteNote(remoteNote({ deleted_at: '2026-08-24T10:00:00.000Z' }), noFolder);
 
     expect(repo.getNoteById(local.id)).toBeNull();
-    expect(repo.getSyncState(`note.pushRejected.${local.id}`)).toBeNull();
+    expect(repo.isNotePushRejected(local.id)).toBe(false);
   });
 
   it('when using the server copy accepts a deletion', () => {
@@ -705,6 +705,6 @@ describe('LocalNotesRepository — server copies clear a push rejection', () => 
     repo.resolveConflictUseServer(local.id);
 
     expect(repo.getNoteById(local.id)).toBeNull();
-    expect(repo.getSyncState(`note.pushRejected.${local.id}`)).toBeNull();
+    expect(repo.isNotePushRejected(local.id)).toBe(false);
   });
 });

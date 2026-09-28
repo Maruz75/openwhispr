@@ -20,6 +20,7 @@ jest.mock('@/data', () => ({
     hasDirtyTranscript: jest.fn(),
     isRemoteNoteHeldByFolderDelete: jest.fn(),
     getSyncState: jest.fn(),
+    isNotePushRejected: jest.fn(),
   },
   spacesRepository: { listSpaces: jest.fn(() => []) },
 }));
@@ -52,6 +53,7 @@ beforeEach((): void => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   jest.mocked(notesRepository.getSyncState).mockReturnValue(null);
+  jest.mocked(notesRepository.isNotePushRejected).mockReturnValue(false);
   jest
     .mocked(Network.getNetworkStateAsync)
     .mockResolvedValue({ isConnected: true } as Network.NetworkState);
@@ -164,6 +166,20 @@ it('surfaces a subscription gate for personal notes', async (): Promise<void> =>
   complete();
   await expect(pending).rejects.toThrow(/subscription/i);
 });
+it('reports a failed sync, not a missing subscription, when the server is unreachable', async (): Promise<void> => {
+  const pending = ensureNoteSynced(1, { signal: controller.signal });
+  useSyncStore
+    .getState()
+    .set({ subscriptionRequired: true, lastError: new Error('Network request failed') });
+  complete();
+  await expect(pending).rejects.toThrow(/unable to sync/i);
+});
+it('explains an organization that blocks cloud backup', async (): Promise<void> => {
+  const pending = ensureNoteSynced(1, { signal: controller.signal });
+  useSyncStore.getState().set({ policyBlocked: true });
+  complete();
+  await expect(pending).rejects.toThrow(/organization/i);
+});
 it('does not apply the personal subscription gate to a synced team note', async (): Promise<void> => {
   note = { ...note, spaceId: 2 };
   jest
@@ -232,16 +248,47 @@ it('rejects terminally dropped edits instead of sharing stale cloud content', as
   note = { ...note, remoteId: 'remote' };
   const pending = ensureNoteSynced(1, { signal: controller.signal });
   note = { ...note, pendingSync: 0 };
-  jest.mocked(notesRepository.getSyncState).mockReturnValue('1');
+  jest.mocked(notesRepository.isNotePushRejected).mockReturnValue(true);
   complete();
   await expect(pending).rejects.toThrow(/rejected/i);
 });
 it('rejects a never-synced note whose upload was terminally rejected', async (): Promise<void> => {
   const pending = ensureNoteSynced(1, { signal: controller.signal });
   note = { ...note, pendingSync: 0 };
-  jest.mocked(notesRepository.getSyncState).mockReturnValue('1');
+  jest.mocked(notesRepository.isNotePushRejected).mockReturnValue(true);
   complete();
   await expect(pending).rejects.toThrow(/rejected/i);
+});
+it('rejects a rejected push whose transcript rows stay dirty after a retry', async (): Promise<void> => {
+  note = { ...note, remoteId: 'remote', pendingSync: 0 };
+  jest.mocked(notesRepository.hasDirtyTranscript).mockReturnValue(true);
+  jest.mocked(notesRepository.isNotePushRejected).mockReturnValue(true);
+  const settled = jest.fn();
+  const pending = ensureNoteSynced(1, { signal: controller.signal });
+  pending.catch(settled);
+  await Promise.resolve();
+  expect(settled).not.toHaveBeenCalled();
+  complete();
+  await expect(pending).rejects.toThrow(/rejected/i);
+});
+it('shares a transcript edit that a retry accepts after an earlier rejection', async (): Promise<void> => {
+  note = { ...note, remoteId: 'remote', pendingSync: 0 };
+  jest.mocked(notesRepository.hasDirtyTranscript).mockReturnValue(true);
+  jest.mocked(notesRepository.isNotePushRejected).mockReturnValue(true);
+  const pending = ensureNoteSynced(1, { signal: controller.signal });
+  jest.mocked(notesRepository.hasDirtyTranscript).mockReturnValue(false);
+  jest.mocked(notesRepository.isNotePushRejected).mockReturnValue(false);
+  complete();
+  await expect(pending).resolves.toBe('remote');
+});
+it('stops waiting when a different account signs in with the same session', async (): Promise<void> => {
+  const pending = ensureNoteSynced(1, { signal: controller.signal });
+  useAuthStore.setState({
+    user: { id: 'other', isAnonymous: false } as NonNullable<
+      ReturnType<typeof useAuthStore.getState>['user']
+    >,
+  });
+  await expect(pending).rejects.toThrow(/account changed/i);
 });
 it('explains a note held back because its space cannot sync', async (): Promise<void> => {
   note = { ...note, spaceId: 5 };

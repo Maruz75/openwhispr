@@ -189,9 +189,9 @@ describe('rejected note upload tracking', () => {
       const { repo } = createMemoryRepository();
       const note = repo.createNote('Title', 'Unaccepted body');
       repo[method](note.id);
-      expect(repo.getSyncState(`note.pushRejected.${note.id}`)).toBe('1');
+      expect(repo.isNotePushRejected(note.id)).toBe(true);
       repo.markNotePushed(repo.getNoteById(note.id)!, 'remote', 'server-time', null);
-      expect(repo.getSyncState(`note.pushRejected.${note.id}`)).toBeNull();
+      expect(repo.isNotePushRejected(note.id)).toBe(false);
     },
   );
 
@@ -201,8 +201,8 @@ describe('rejected note upload tracking', () => {
     repo.markNoteTerminal(note.id);
     repo.updateNote(note.id, { content: 'Newer body' });
     repo.markNotePushed(note, 'remote', 'server-time');
-    expect(repo.getSyncState(`note.pushRejected.${note.id}`)).toBe('1');
+    expect(repo.isNotePushRejected(note.id)).toBe(true);
     repo.hardDeleteNote(note.id);
-    expect(repo.getSyncState(`note.pushRejected.${note.id}`)).toBeNull();
+    expect(repo.isNotePushRejected(note.id)).toBe(false);
   });
 });

@@ -1,11 +1,14 @@
 import * as Network from 'expo-network';
-import { notesRepository, spacesRepository, type Note } from '@/data';
+import { notesRepository, type Note } from '@/data';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useConfigStore } from '@/store/useConfigStore';
 import { useNotesStore } from '@/store/useNotesStore';
-import { createPushScopeResolver } from './pushScope';
+import { createPushScopeResolver, createTeamSpaceFilter } from './pushScope';
 import { requestSync, subscribeSyncCompletion } from './syncEngine';
 import { useSyncStore } from './useSyncStore';
+
+export const NOTE_UNAVAILABLE_ERROR = 'This note is no longer available.';
+export const NOTE_PRIVATE_ERROR = 'Enable cloud sync for this note before sharing.';
 
 function readPublishableNote(noteId: number): Note {
   const note = notesRepository.getNoteById(noteId);
@@ -17,8 +20,8 @@ function readPublishableNote(noteId: number): Note {
       client_note_id: note.clientNoteId,
     })
   )
-    throw new Error('This note is no longer available.');
-  if (note.isPrivate === 1) throw new Error('Enable cloud sync for this note before sharing.');
+    throw new Error(NOTE_UNAVAILABLE_ERROR);
+  if (note.isPrivate === 1) throw new Error(NOTE_PRIVATE_ERROR);
   if (note.conflictServerNote) throw new Error('Resolve this note’s sync conflict before sharing.');
   return note;
 }
@@ -34,9 +37,7 @@ export async function ensureNoteSynced(
   }
   if (signal.aborted) throw new Error('Sharing cancelled.');
   const original = readPublishableNote(noteId);
-  const isTeamNote = spacesRepository
-    .listSpaces()
-    .some((space) => space.id === original.spaceId && space.kind === 'team');
+  const isTeamNote = createTeamSpaceFilter()(original.spaceId);
 
   return new Promise<string>((resolve, reject) => {
     let settled = false;
@@ -83,14 +84,16 @@ export async function ensureNoteSynced(
         // Acknowledgement is repository state: a push clears pendingSync only when the server
         // accepted this exact snapshot, terminal rejections leave a flag, and conflicts or privacy
         // changes are rejected above. It needs no completed pass to observe.
-        if (!note.pendingSync && !notesRepository.hasDirtyTranscript(noteId)) {
-          // A rejected create settles with no remote ID, so check before requiring one.
-          if (notesRepository.getSyncState(`note.pushRejected.${noteId}`)) {
+        if (!note.pendingSync) {
+          const dirtyTranscript = notesRepository.hasDirtyTranscript(noteId);
+          // A rejected create settles with no remote ID, so check before requiring one. A rejection
+          // also leaves transcript rows dirty; with those, judge it once a pass has retried them.
+          if (notesRepository.isNotePushRejected(noteId) && (!dirtyTranscript || completedPass)) {
             throw new Error(
               'The latest changes were rejected by sync. Edit the note and retry before sharing.',
             );
           }
-          if (note.remoteId) {
+          if (note.remoteId && !dirtyTranscript) {
             finish(note.remoteId);
             return;
           }
@@ -100,11 +103,12 @@ export async function ensureNoteSynced(
         if (offline) throw new Error('You’re offline. Connect to the internet to share this note.');
         const sync = useSyncStore.getState();
         if (sync.policyBlocked) throw new Error('Your organization does not allow cloud backup.');
+        // The subscription check fails closed, so an unreachable server also reads as unsubscribed.
+        if (sync.lastError)
+          throw new Error('Unable to sync this note. Check your connection and try again.');
         if (!isTeamNote && sync.subscriptionRequired) {
           throw new Error('An active subscription is required to sync this note.');
         }
-        if (sync.lastError)
-          throw new Error('Unable to sync this note. Check your connection and try again.');
         // The same test pushNotes uses to leave a row queued until its space resolves.
         if (!createPushScopeResolver()(note.spaceId)) {
           throw new Error('This note’s space is not available to sync yet. Try again later.');

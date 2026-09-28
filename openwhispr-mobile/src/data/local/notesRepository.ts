@@ -133,6 +133,8 @@ const NOTE_PUSH_ACK_FIELDS: ReadonlyArray<keyof Note> = [
   'deletedAt',
 ];
 
+const pushRejectedKey = (localId: number): string => `note.pushRejected.${localId}`;
+
 export class LocalNotesRepository implements NotesRepository {
   private readonly database: NotesDb;
 
@@ -889,7 +891,7 @@ export class LocalNotesRepository implements NotesRepository {
       .where(eq(notes.id, local.id))
       .run();
 
-    this.clearSyncState(`note.pushRejected.${local.id}`);
+    this.clearSyncState(pushRejectedKey(local.id));
 
     // Rebuild the transcript when the server sent a different one. Normally
     // gated on !hasDirtyTranscript (un-pushed local edits are authoritative
@@ -1031,7 +1033,7 @@ export class LocalNotesRepository implements NotesRepository {
       )
       .where(eq(notes.id, pushed.id))
       .run();
-    if (unchanged) this.clearSyncState(`note.pushRejected.${pushed.id}`);
+    if (unchanged) this.clearSyncState(pushRejectedKey(pushed.id));
   }
 
   markNoteTerminal(localId: number): void {
@@ -1040,7 +1042,7 @@ export class LocalNotesRepository implements NotesRepository {
     // retry — that will re-flag pending.
     this.database.transaction((tx) => {
       tx.insert(syncState)
-        .values({ key: `note.pushRejected.${localId}`, value: '1' })
+        .values({ key: pushRejectedKey(localId), value: '1' })
         .onConflictDoUpdate({ target: syncState.key, set: { value: '1' } })
         .run();
       tx.update(notes).set({ pendingSync: 0 }).where(eq(notes.id, localId)).run();
@@ -1055,7 +1057,7 @@ export class LocalNotesRepository implements NotesRepository {
     this.database.transaction((tx) => {
       // A cleared queue flag alone must never be mistaken for uploaded content.
       tx.insert(syncState)
-        .values({ key: `note.pushRejected.${localId}`, value: '1' })
+        .values({ key: pushRejectedKey(localId), value: '1' })
         .onConflictDoUpdate({ target: syncState.key, set: { value: '1' } })
         .run();
       tx.update(notes)
@@ -1156,8 +1158,12 @@ export class LocalNotesRepository implements NotesRepository {
     this.database.delete(folders).where(eq(folders.id, localId)).run();
   }
 
+  isNotePushRejected(localId: number): boolean {
+    return this.getSyncState(pushRejectedKey(localId)) !== null;
+  }
+
   hardDeleteNote(localId: number): void {
-    this.clearSyncState(`note.pushRejected.${localId}`);
+    this.clearSyncState(pushRejectedKey(localId));
     this.deleteNoteChildrenAndAudio(localId);
     this.database.delete(notes).where(eq(notes.id, localId)).run();
   }
