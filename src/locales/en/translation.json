@@ -4245,7 +4245,8 @@
       "unknownSent": {
         "gmail": "Couldn't confirm the email to {{destination}} was sent. Check your Gmail Sent folder."
       },
-      "gmailDraftLimit": "Only {{count}} emails can be prepared per request."
+      "gmailDraftLimit": "Only {{count}} emails can be prepared per request.",
+      "queryResults": "Results found: {{total}}"
     }
   },
   "notesView": {

@@ -687,3 +687,40 @@ test("without an attendee filter, no note-attendees channel is registered", asyn
   registerConnectorIpc({ ipcMain, manager: fakeManager(), getPolicyState: async () => "allowed" });
   assert.equal(ipcMain.handlers.has("connector-note-attendees"), false);
 });
+
+test("a query reaches the manager with the call's auth; malformed requests don't", async () => {
+  const { registerConnectorIpc } = await load();
+  const ipcMain = fakeIpcMain();
+  const calls = [];
+  const manager = {
+    ...fakeManager(),
+    query: async (...args) => {
+      calls.push(args);
+      return { status: "ok", items: [], truncated: false };
+    },
+  };
+  registerConnectorIpc({
+    ipcMain,
+    manager,
+    getPolicyState: async () => "allowed",
+    getAccountScope: () => SCOPE,
+  });
+  const query = ipcMain.handlers.get("connector-query");
+
+  assert.deepEqual(await query({}, "linear", "search_issues", { query: "login" }), {
+    status: "ok",
+    items: [],
+    truncated: false,
+  });
+  assert.deepEqual(calls, [["linear", "search_issues", { query: "login" }, ALLOWED]]);
+
+  for (const bad of [
+    [7, "search_issues", {}],
+    ["linear", "", {}],
+    ["linear", "search_issues", null],
+    ["linear", "search_issues", ["login"]],
+  ]) {
+    assert.deepEqual(await query({}, ...bad), { status: "unavailable", reason: "invalid_request" });
+  }
+  assert.equal(calls.length, 1);
+});

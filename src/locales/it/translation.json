@@ -4076,7 +4076,8 @@
       "unknownSent": {
         "gmail": "Impossibile confermare l'invio dell'email a {{destination}}. Controlla la cartella Posta inviata di Gmail."
       },
-      "gmailDraftLimit": "Si possono preparare solo {{count}} email per richiesta."
+      "gmailDraftLimit": "Si possono preparare solo {{count}} email per richiesta.",
+      "queryResults": "Risultati trovati: {{total}}"
     }
   },
   "calendar": {

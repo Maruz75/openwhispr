@@ -4120,7 +4120,8 @@
       "unknownSent": {
         "gmail": "Не удалось подтвердить отправку письма для {{destination}}. Проверьте папку «Отправленные» в Gmail."
       },
-      "gmailDraftLimit": "Лимит писем на один запрос: {{count}}."
+      "gmailDraftLimit": "Лимит писем на один запрос: {{count}}.",
+      "queryResults": "Найдено результатов: {{total}}"
     }
   },
   "calendar": {

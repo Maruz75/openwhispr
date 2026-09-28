@@ -4245,7 +4245,8 @@
       "unknownSent": {
         "gmail": "Konnte nicht bestätigen, dass die E-Mail an {{destination}} gesendet wurde. Prüfe den Gmail-Ordner „Gesendet“."
       },
-      "gmailDraftLimit": "Pro Anfrage können nur {{count}} E-Mails vorbereitet werden."
+      "gmailDraftLimit": "Pro Anfrage können nur {{count}} E-Mails vorbereitet werden.",
+      "queryResults": "Gefundene Ergebnisse: {{total}}"
     }
   },
   "notesView": {

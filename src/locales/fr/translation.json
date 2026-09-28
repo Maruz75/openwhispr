@@ -4245,7 +4245,8 @@
       "unknownSent": {
         "gmail": "Impossible de confirmer l'envoi de l'e-mail à {{destination}}. Vérifiez le dossier Messages envoyés de Gmail."
       },
-      "gmailDraftLimit": "Seuls {{count}} e-mails peuvent être préparés par demande."
+      "gmailDraftLimit": "Seuls {{count}} e-mails peuvent être préparés par demande.",
+      "queryResults": "Résultats trouvés : {{total}}"
     }
   },
   "notesView": {

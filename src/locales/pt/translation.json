@@ -4076,7 +4076,8 @@
       "unknownSent": {
         "gmail": "Não foi possível confirmar o envio do e-mail para {{destination}}. Verifique a pasta Enviados do Gmail."
       },
-      "gmailDraftLimit": "Só é possível preparar {{count}} e-mails por solicitação."
+      "gmailDraftLimit": "Só é possível preparar {{count}} e-mails por solicitação.",
+      "queryResults": "Resultados encontrados: {{total}}"
     }
   },
   "calendar": {

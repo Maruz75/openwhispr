@@ -4076,7 +4076,8 @@
       "unknownSent": {
         "gmail": "無法確認寄給 {{destination}} 的郵件是否已傳送，請檢查 Gmail 的「寄件備份」資料夾。"
       },
-      "gmailDraftLimit": "每次請求最多只能準備 {{count}} 封郵件。"
+      "gmailDraftLimit": "每次請求最多只能準備 {{count}} 封郵件。",
+      "queryResults": "找到的結果：{{total}}"
     }
   },
   "calendar": {

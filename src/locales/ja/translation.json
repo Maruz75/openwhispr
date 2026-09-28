@@ -4076,7 +4076,8 @@
       "unknownSent": {
         "gmail": "{{destination}} 宛てのメールが送信されたか確認できませんでした。Gmailの送信済みフォルダを確認してください。"
       },
-      "gmailDraftLimit": "1回のリクエストで準備できるメールは{{count}}件までです。"
+      "gmailDraftLimit": "1回のリクエストで準備できるメールは{{count}}件までです。",
+      "queryResults": "見つかった結果: {{total}}"
     }
   },
   "calendar": {

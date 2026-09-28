@@ -37,6 +37,17 @@ export type ConnectorPrepareResult =
   | { status: "failed"; errorCode: string; message: string }
   | { status: "unavailable"; reason: string };
 
+/** A value in a query item: flat, and capped in main (queryResult.js). */
+export type ConnectorQueryValue = string | number | boolean | null | string[];
+
+export type ConnectorQueryItem = Record<string, ConnectorQueryValue>;
+
+export type ConnectorQueryResult =
+  | { status: "ok"; items: ConnectorQueryItem[]; truncated: boolean }
+  | { status: "needs_clarification"; message: string; candidates: string[] }
+  | { status: "failed"; errorCode: string; message: string }
+  | { status: "unavailable"; reason: string };
+
 // destinationLabel: who the action went to, when Send could change the
 // recipients (an edited email card). Absent means the prepared label stands.
 export type ConnectorCommitResult =

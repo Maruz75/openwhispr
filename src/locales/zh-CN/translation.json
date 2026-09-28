@@ -4076,7 +4076,8 @@
       "unknownSent": {
         "gmail": "无法确认发给 {{destination}} 的邮件是否已发送，请检查 Gmail 的“已发送”文件夹。"
       },
-      "gmailDraftLimit": "每次请求最多只能准备 {{count}} 封邮件。"
+      "gmailDraftLimit": "每次请求最多只能准备 {{count}} 封邮件。",
+      "queryResults": "找到的结果：{{total}}"
     }
   },
   "calendar": {

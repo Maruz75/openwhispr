@@ -149,6 +149,14 @@ function registerConnectorIpc({
     return manager.prepare(connectorId, action, args, await resolveCallAuth(event));
   });
 
+  // Reads for the model: the same checks as prepare, and nothing is written.
+  ipcMain.handle("connector-query", async (event, connectorId, action, args) => {
+    if (!isNonEmptyString(connectorId) || !isNonEmptyString(action) || !isPlainObject(args)) {
+      return { status: "unavailable", reason: "invalid_request" };
+    }
+    return manager.query(connectorId, action, args, await resolveCallAuth(event));
+  });
+
   ipcMain.handle("connector-commit", async (event, actionId, edits) => {
     if (!isNonEmptyString(actionId)) return { state: "not_sent", reason: "invalid_request" };
     return manager.commit(
