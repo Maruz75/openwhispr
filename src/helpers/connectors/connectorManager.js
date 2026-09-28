@@ -378,9 +378,9 @@ function createConnectorManager({
     }
   }
 
-  async function revokeQuietly(connector, credential) {
+  async function revokeQuietly(connector, credential, options) {
     try {
-      await withinDeadline(connector.revoke(credential), REVOKE_TIMEOUT_MS);
+      await withinDeadline(connector.revoke(credential, options), REVOKE_TIMEOUT_MS);
     } catch (error) {
       logger.warn(
         "connector revoke failed",
@@ -499,6 +499,24 @@ function createConnectorManager({
     for (const connector of byId.values()) {
       if (connector.revoke) await disconnect(connector.id);
     }
+  }
+
+  // Reset app data: every login stored on this device is revoked at its
+  // provider, whichever account it belongs to and whether anyone is still
+  // signed in (the renderer signs out before the reset runs). The files are
+  // deleted right after, so nothing is cleared here. In parallel, so an
+  // offline reset waits one revoke deadline, not one per login.
+  async function revokeAllStored() {
+    if (!credentials) return;
+    const revokes = [];
+    for (const connector of byId.values()) {
+      if (!connector.revoke) continue;
+      for (const credential of credentials.readAllAccounts(connector.id)) {
+        revokes.push(revokeQuietly(connector, credential, { erasingDevice: true }));
+      }
+      invalidate(connector.id);
+    }
+    await Promise.all(revokes);
   }
 
   async function prepare(connectorId, action, args, { policyState, accountId }) {
@@ -738,6 +756,7 @@ function createConnectorManager({
     connect,
     disconnect,
     disconnectAll,
+    revokeAllStored,
     notifyStatusChanged,
   };
 }

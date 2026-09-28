@@ -88,6 +88,14 @@ export function recipientLabel(address) {
   return ascii ? `${address} (${ascii})` : address;
 }
 
+// What an email card's header and receipt name: the first recipient, and how
+// many more. Never the subject or body.
+export function recipientsLabel(to, cc = []) {
+  const all = [...to, ...cc];
+  if (all.length === 0) return "";
+  return all.length > 1 ? `${recipientLabel(all[0])} +${all.length - 1}` : recipientLabel(all[0]);
+}
+
 // Models often write "Josh Lee <josh@example.com>"; only the address inside
 // the brackets is kept, so the name can't disguise it.
 const DISPLAY_NAME_FORM = /^[^<>]*<([^<>]*)>$/;

@@ -1503,6 +1503,52 @@ test("disconnectAll disconnects every connector that can revoke", async () => {
   assert.equal(credentials.read("acct-1", "fake"), null);
 });
 
+test("revokeAllStored (Reset app data) revokes every account's login with no one signed in", async () => {
+  const credentials = memoryCredentials({ accessToken: "mine" }, { connectorId: "fake" });
+  credentials.replace("acct-2", "fake", { accessToken: "theirs" }, 0);
+  credentials.switchAccount(null);
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      async revoke(credential, options) {
+        revoked.push([credential.accessToken, options]);
+      },
+    }),
+    undefined,
+    { credentials, getAccountId: () => null }
+  );
+
+  await manager.revokeAllStored();
+
+  assert.deepEqual(revoked.sort(), [
+    ["mine", { erasingDevice: true }],
+    ["theirs", { erasingDevice: true }],
+  ]);
+});
+
+test("revokeAllStored waits one revoke deadline, not one per login", async () => {
+  const credentials = memoryCredentials({ accessToken: "a" }, { connectorId: "fake" });
+  credentials.replace("acct-2", "fake", { accessToken: "b" }, 0);
+  const started = [];
+  const release = deferred();
+  const { manager } = await setup(
+    connectable({
+      revoke(credential) {
+        started.push(credential.accessToken);
+        return release.promise;
+      },
+    }),
+    undefined,
+    { credentials }
+  );
+
+  const revoking = manager.revokeAllStored();
+  await Promise.resolve();
+  assert.equal(started.length, 2, "both revokes are in flight together");
+  release.resolve();
+  await revoking;
+});
+
 test("only the newest status change is announced", async () => {
   const announced = [];
   const slowFirst = deferred();

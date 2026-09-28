@@ -36,6 +36,8 @@ export interface ApprovalEntry {
   message?: string;
   /** The connector's failure code, when state is "failed"; drives the card's translated copy. */
   errorCode?: string;
+  /** Who a sent or unknown action went to, as main reported it after Send. */
+  destinationLabel?: string;
   /** Shown on a pending card after a Send that could not run. */
   notice?: "policy_retry";
 }
@@ -268,6 +270,12 @@ export async function approveAction(key: string): Promise<void> {
     fields && fieldsDiffer(fields, entry.preview.fields ?? {}) ? copyFields(fields) : undefined;
   const finalText =
     !fields && entry.draft.body !== entry.preview.body ? entry.draft.body : undefined;
+  const destination =
+    (result.state === "sent" || result.state === "unknown") &&
+    typeof result.destinationLabel === "string" &&
+    result.destinationLabel !== ""
+      ? { destinationLabel: result.destinationLabel }
+      : {};
   switch (result.state) {
     case "sent":
       settle(
@@ -277,9 +285,10 @@ export async function approveAction(key: string): Promise<void> {
           url: result.url,
           ...(finalText !== undefined ? { finalText } : {}),
           ...(final !== undefined ? { final } : {}),
+          ...destination,
         },
         "sent",
-        { url: result.url }
+        { url: result.url, ...destination }
       );
       break;
     case "failed":
@@ -296,9 +305,10 @@ export async function approveAction(key: string): Promise<void> {
         {
           state: "unknown",
           ...(result.checkUrl !== undefined ? { checkUrl: result.checkUrl } : {}),
+          ...destination,
         },
         "unknown",
-        { url: result.checkUrl }
+        { url: result.checkUrl, ...destination }
       );
       break;
     case "not_sent":

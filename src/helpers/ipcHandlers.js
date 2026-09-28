@@ -3934,14 +3934,13 @@ class IPCHandlers {
         errors.push(`GCal revoke: ${e.message}`);
       }
 
-      // Revoke the signed-in account's connector logins (Slack, Gmail) at
-      // their providers. This must run while the bearer token, the account
-      // binding and the receipts database still exist: without them the
-      // manager sees no account and revokes nothing. Other accounts' logins
-      // are only deleted with the connectors directory below. Best effort:
-      // each revoke has a 5 s deadline and never blocks the reset.
+      // Revoke every connector login stored on this device (Slack, Gmail) at
+      // its provider, for every account: Settings signs out before this
+      // runs, so there may be no signed-in account left. It must run before
+      // the connectors directory is deleted below. Best effort: the revokes
+      // run in parallel under a 5 s deadline and never block the reset.
       try {
-        await this.connectorManager?.disconnectAll();
+        await this.connectorManager?.revokeAllStored();
       } catch (e) {
         const { describeError } = require("./connectors/errorSummary");
         const { errorName, errorCode } = describeError(e);
@@ -4041,8 +4040,8 @@ class IPCHandlers {
       } catch (e) {
         errors.push(`Device setting files: ${e.message}`);
       }
-      // "connectors" holds encrypted connector logins (Slack, Gmail); the
-      // signed-in account's were revoked above.
+      // "connectors" holds encrypted connector logins (Slack, Gmail), all
+      // revoked above.
       for (const directoryName of ["bin", "llama-cpp", "connectors"]) {
         try {
           fs.rmSync(path.join(app.getPath("userData"), directoryName), {
@@ -6098,8 +6097,22 @@ class IPCHandlers {
           }),
         findContacts: (query) =>
           searchContacts(this.databaseManager.getContactLookupSources(), query),
-        noteAttendees: (participants) =>
-          personAttendees(this.databaseManager.getContactLookupSources(), participants),
+        // The Gmail login sends as the user, so its address is theirs too,
+        // even when it isn't one of their calendar accounts.
+        noteAttendees: async (participants) => {
+          const sources = this.databaseManager.getContactLookupSources();
+          const gmail = (await this.connectorManager.status()).find(({ id }) => id === "gmail");
+          return personAttendees(
+            {
+              ...sources,
+              excludedEmails: [
+                ...(sources.excludedEmails ?? []),
+                ...(gmail?.accountLabel ? [gmail.accountLabel] : []),
+              ],
+            },
+            participants
+          );
+        },
       });
     }
     this.enterpriseIdentityManager = createEnterpriseIdentityManager({

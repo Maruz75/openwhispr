@@ -285,15 +285,15 @@ test("token endpoint failures are distinguishable: login gone, bad client, busy,
         { error: "invalid_grant", error_description: "Token has been expired or revoked." },
         400
       ),
-      { ok: false, outcome: "failed", errorCode: "invalid_grant" },
+      { ok: false, outcome: "failed", errorCode: "invalid_grant", refused: true },
     ],
     [
       json({ error: "invalid_client", error_description: "The OAuth client was not found." }, 401),
-      { ok: false, outcome: "failed", errorCode: "invalid_client" },
+      { ok: false, outcome: "failed", errorCode: "invalid_client", refused: true },
     ],
     [
       json({ error: "unauthorized_client" }, 400),
-      { ok: false, outcome: "failed", errorCode: "unauthorized_client" },
+      { ok: false, outcome: "failed", errorCode: "unauthorized_client", refused: true },
     ],
     [
       json({ error: "temporarily_unavailable" }, 503),

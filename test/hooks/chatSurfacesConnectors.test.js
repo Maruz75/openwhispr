@@ -72,6 +72,25 @@ test("a note's chat offers the connector tools, with the note's attendees", asyn
   assert.deepEqual(options.noteAttendees, JSON.parse(PARTICIPANTS));
 });
 
+test("a team note someone else recorded passes its recorder as an attendee, never the viewer", async (t) => {
+  const options = await streamingOptionsOf(t, "/hooks/useEmbeddedChat.ts", "useEmbeddedChat", {
+    noteId: 7,
+    folderId: null,
+    noteTitle: "Kickoff",
+    noteContent: "",
+    noteParticipants: JSON.stringify([
+      { email: "alice@example.com", displayName: "Alice", responseStatus: null, self: true },
+      { email: "chad@example.com", displayName: "Chad", responseStatus: null, self: false },
+    ]),
+    noteOwnedByUser: false,
+    selfEmail: "chad@example.com",
+  });
+
+  assert.deepEqual(options.noteAttendees, [
+    { email: "alice@example.com", displayName: "Alice", responseStatus: null, self: false },
+  ]);
+});
+
 test("a note whose participants are missing or malformed passes no attendees", async (t) => {
   const options = await streamingOptionsOf(t, "/hooks/useEmbeddedChat.ts", "useEmbeddedChat", {
     noteId: 7,

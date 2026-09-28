@@ -187,3 +187,50 @@ test("an email preview without fields falls back to the plain card", async (t) =
   assert.doesNotMatch(markup, /connectors\.approval\.email\./);
   assert.doesNotMatch(markup, /<button[^>]*disabled/);
 });
+
+// Shows each call's destination, so the header's recipients can be read.
+async function renderCardWithDestinations(t, entry) {
+  installBrowserGlobals(t);
+  const vite = await createRendererServer(t, {
+    cachePrefix: "openwhispr-approval-card-destination-test-",
+    noExternal: ["react-i18next"],
+    mockModules: {
+      "/ui/button": `
+        import React from "react";
+        export function Button(props) { return React.createElement("button", props); }
+      `,
+      "react-i18next": `
+        export function useTranslation() {
+          return {
+            t: (key, values) => (values?.destination ? key + "[" + values.destination + "]" : key),
+          };
+        }
+      `,
+    },
+  });
+  const { ApprovalCard } = await vite.ssrLoadModule("/components/chat/ApprovalCard.tsx");
+  return renderToStaticMarkup(createElement(ApprovalCard, { entry }));
+}
+
+test("an email card names the recipients it shows, and after Send the ones main reports", async (t) => {
+  const edited = { ...EMAIL_PREVIEW.fields, to: ["dana@acme.test"], cc: [] };
+  const pending = await renderCardWithDestinations(t, emailEntry(edited));
+  assert.match(pending, /connectors\.approval\.headers\.email\[dana@acme\.test\]/);
+  assert.doesNotMatch(pending, /josh@acme\.test/);
+
+  const sent = await renderCardWithDestinations(t, {
+    ...emailEntry(edited, "sent"),
+    destinationLabel: "dana@acme.test",
+  });
+  assert.match(sent, /connectors\.approval\.sent\[dana@acme\.test\]/);
+
+  const emptied = await renderCardWithDestinations(
+    t,
+    emailEntry({ ...EMAIL_PREVIEW.fields, to: [], cc: [] })
+  );
+  assert.match(
+    emptied,
+    /connectors\.approval\.headers\.email\[josh@acme\.test \+1\]/,
+    "with no recipients left, the header keeps the prepared label"
+  );
+});

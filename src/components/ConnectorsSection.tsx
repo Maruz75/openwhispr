@@ -50,13 +50,19 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
     mcalAccounts,
     gmailStatus,
   });
-  // Sending from chat needs a working Gmail login. A build without a Google
-  // client never offers it, unless it is already the saved choice (which
-  // then resolves as Automatic).
+  // Sending from chat needs a working Gmail login; a build without a Google
+  // client never offers it.
   const targetOptions = EMAIL_DRAFT_TARGET_SETTINGS.filter(
-    (option) =>
-      option !== "gmailSend" || gmail?.configured !== false || emailDraftTarget === "gmailSend"
+    (option) => option !== "gmailSend" || gmail?.configured !== false
   );
+  // A saved Send from chat whose Gmail login is gone drafts as Automatic, so
+  // the picker says so. The saved choice is kept for when Gmail reconnects.
+  const shownTarget =
+    emailDraftTarget === "gmailSend" &&
+    resolveEmailDraftTarget({ emailDraftTarget, gcalConnected, mcalAccounts, gmailStatus }) !==
+      "gmailSend"
+      ? "auto"
+      : emailDraftTarget;
   const optionLabel = (option: EmailDraftTargetSetting): string =>
     option === "auto"
       ? t("connectors.email.autoResolved", {
@@ -85,7 +91,7 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
           </div>
           {showActions && (
             <Select
-              value={emailDraftTarget}
+              value={shownTarget}
               onValueChange={(value) => setEmailDraftTarget(value as EmailDraftTargetSetting)}
             >
               <SelectTrigger

@@ -227,7 +227,7 @@ function registerConnectorIpc({
       if (attendees.length === 0) return { attendees: [] };
       const refusal = policyRefusal(await getPolicyState(event));
       if (refusal) return { attendees: [], unavailableReason: refusal };
-      return { attendees: noteAttendees(attendees) };
+      return { attendees: await noteAttendees(attendees) };
     });
   }
 }

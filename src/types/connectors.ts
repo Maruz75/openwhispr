@@ -36,10 +36,12 @@ export type ConnectorPrepareResult =
   | { status: "failed"; errorCode: string; message: string }
   | { status: "unavailable"; reason: string };
 
+// destinationLabel: who the action went to, when Send could change the
+// recipients (an edited email card). Absent means the prepared label stands.
 export type ConnectorCommitResult =
-  | { state: "sent"; url?: string }
+  | { state: "sent"; url?: string; destinationLabel?: string }
   | { state: "failed"; errorCode: string; message: string }
-  | { state: "unknown"; checkUrl?: string; errorCode?: string }
+  | { state: "unknown"; checkUrl?: string; errorCode?: string; destinationLabel?: string }
   | { state: "not_sent"; reason: string; retryable?: boolean };
 
 export type ConnectorDirectResult =
@@ -63,9 +65,11 @@ export type ApprovalOutcome =
       finalText?: string;
       /** A fields card's fields as sent, when the user changed any. */
       final?: Record<string, string | string[]>;
+      /** Who it went to, when that differs from the prepared preview's label. */
+      destinationLabel?: string;
     }
   | { state: "failed"; errorCode: string; message: string }
-  | { state: "unknown"; checkUrl?: string }
+  | { state: "unknown"; checkUrl?: string; destinationLabel?: string }
   | { state: "cancelled" }
   | { state: "not_sent"; reason: string };
 

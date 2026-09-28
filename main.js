@@ -479,7 +479,11 @@ function initializeCoreManagers() {
   const { createSlackDirectory } = require("./src/helpers/connectors/slackDirectory");
   const { createSlackConnector } = require("./src/helpers/connectors/slackConnector");
   const { createGmailApi } = require("./src/helpers/connectors/gmailApi");
-  const { createGmailAuth, gmailClientCredentials } = require("./src/helpers/connectors/gmailAuth");
+  const {
+    createGmailAuth,
+    gmailClientCredentials,
+    sharesCalendarGrant,
+  } = require("./src/helpers/connectors/gmailAuth");
   const { createGmailConnector } = require("./src/helpers/connectors/gmailConnector");
   const { renderOAuthResultPage } = require("./src/helpers/connectors/oauthResultPage");
   const { runOAuthLoopbackFlow, OAuthFlowError } = require("./src/helpers/oauthLoopbackFlow");
@@ -535,6 +539,16 @@ function initializeCoreManagers() {
     api: gmailApi,
     credentials: connectorCredentials,
     getClientCredentials: () => gmailClientCredentials(process.env),
+    // Revoking Gmail must not disconnect that account's Google Calendar.
+    sharesGrant: (email) =>
+      sharesCalendarGrant({
+        gmailClientId: gmailClientCredentials(process.env).clientId,
+        calendarClientId: process.env.GOOGLE_CALENDAR_CLIENT_ID,
+        calendarEmails: (googleCalendarManager?.getAccounts() ?? []).map(
+          (account) => account.email
+        ),
+        email,
+      }),
     runOAuthLoopbackFlow,
     OAuthFlowError,
     // Always the local page: the hosted callback page reads an unknown

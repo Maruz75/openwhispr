@@ -1,7 +1,7 @@
 // Gmail send connector (spec §5.1), the second approval connector. The
 // model only prepares; the card's Send commits exactly what the card shows,
 // rebuilt and re-checked here.
-const { isValidEmailAddress, bareEmailAddress, recipientLabel } = require("./emailCompose");
+const { isValidEmailAddress, bareEmailAddress, recipientsLabel } = require("./emailCompose");
 const { buildRawMessage } = require("./gmailMime");
 
 const MAX_RECIPIENTS = 50;
@@ -33,17 +33,6 @@ function normalizeRecipients({ to, cc } = {}) {
   const toList = clean(to);
   const ccList = clean(cc);
   return { to: toList, cc: ccList, invalid };
-}
-
-// What the card header and the receipt show: recipients only, never the
-// subject or body. The shown address carries its punycode form when its
-// domain isn't ASCII (recipientLabel), same as the email_draft tool and
-// emailConnector.js, so a single-script look-alike domain doesn't pass as
-// the real one; the raw address is what fields and the message still carry.
-function destinationLabel(to, cc = []) {
-  const all = [...to, ...cc];
-  if (all.length === 0) return "";
-  return all.length > 1 ? `${recipientLabel(all[0])} +${all.length - 1}` : recipientLabel(all[0]);
 }
 
 // Plan 3 Task 1 checked the #sent/<id> link (spec §10).
@@ -255,7 +244,7 @@ function createGmailConnector({ api, auth, credentials }) {
         payload: fields,
         preview: {
           verbKey: "email",
-          destinationLabel: destinationLabel(recipients.to, recipients.cc),
+          destinationLabel: recipientsLabel(recipients.to, recipients.cc),
           accountLabel: email,
           body,
           fields: { ...fields, to: [...fields.to], cc: [...fields.cc] },
@@ -319,7 +308,7 @@ function createGmailConnector({ api, auth, credentials }) {
       const sent = await sendWithRefresh(built.raw, binding, access);
       const { result } = sent;
       const { email } = sent.access.credential;
-      const label = destinationLabel(recipients.to, recipients.cc);
+      const label = recipientsLabel(recipients.to, recipients.cc);
       if (result.ok)
         return { state: "sent", url: sentMessageUrl(email, result.id), destinationLabel: label };
       if (result.outcome === "failed") return commitFailed(result.errorCode);
@@ -333,14 +322,13 @@ function createGmailConnector({ api, auth, credentials }) {
     },
 
     authorize: (options) => auth.authorize(options),
-    revoke: (credential) => auth.revoke(credential),
+    revoke: (credential, options) => auth.revoke(credential, options),
   };
 }
 
 module.exports = {
   createGmailConnector,
   normalizeRecipients,
-  destinationLabel,
   sentMessageUrl,
   sentFolderUrl,
   MAX_RECIPIENTS,

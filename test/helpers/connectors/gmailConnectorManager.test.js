@@ -65,7 +65,13 @@ function fakeLog() {
 
 const signIn = (options) => options.handleCallback("code-1", "http://127.0.0.1:5000", "verifier-1");
 
-async function setup({ script = {}, credential = null, configured = true, flow = signIn } = {}) {
+async function setup({
+  script = {},
+  credential = null,
+  configured = true,
+  flow = signIn,
+  sharesGrant,
+} = {}) {
   const [
     { createConnectorManager },
     { createPendingActions },
@@ -93,6 +99,7 @@ async function setup({ script = {}, credential = null, configured = true, flow =
     // change the logins while it is "out".
     runOAuthLoopbackFlow: (options) => flow(options, credentials),
     OAuthFlowError: FakeFlowError,
+    sharesGrant,
     now: () => NOW,
   });
   const log = fakeLog();
@@ -326,13 +333,37 @@ test("Disconnect between prepare and Send revokes the grant and cancels the card
   assert.equal(log.rows.get(prepared.actionId).state, "cancelled");
 });
 
-test("disconnectAll (Reset app data) revokes the Gmail grant and clears the login", async () => {
+test("disconnectAll (account deletion) revokes the Gmail grant and clears the login", async () => {
   const { manager, google, credentials } = await setup({ credential: CONNECTED });
 
   await manager.disconnectAll();
 
   assert.deepEqual(revoked(google), [{ token: "refresh-1" }]);
   assert.equal(credentials.read("acct-1", "gmail"), null);
+});
+
+test("Disconnect with a calendar on the same grant clears the login without revoking", async () => {
+  const { manager, google, credentials } = await setup({
+    credential: CONNECTED,
+    sharesGrant: () => true,
+  });
+
+  assert.deepEqual(await manager.disconnect("gmail"), { status: "disconnected" });
+
+  assert.deepEqual(revoked(google), [], "the calendar's grant stays live");
+  assert.equal(credentials.read("acct-1", "gmail"), null);
+});
+
+test("revokeAllStored (Reset app data) revokes Gmail signed out, even on a shared grant", async () => {
+  const { manager, google, credentials } = await setup({
+    credential: CONNECTED,
+    sharesGrant: () => true,
+  });
+  credentials.switchAccount(null);
+
+  await manager.revokeAllStored();
+
+  assert.deepEqual(revoked(google), [{ token: "refresh-1" }]);
 });
 
 test("without a Google client, Gmail reports configured: false and Connect opens no browser", async () => {

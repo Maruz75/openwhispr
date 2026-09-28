@@ -66,6 +66,7 @@ async function setup({
   client = CLIENT,
   logger,
   renderResultPage,
+  sharesGrant,
 } = {}) {
   const [{ createGmailAuth }, { createGmailApi }] = await Promise.all([loadAuth(), loadApi()]);
   const google = fakeGoogleFetch(script);
@@ -78,6 +79,7 @@ async function setup({
     getClientCredentials: () => client,
     OAuthFlowError: FakeFlowError,
     renderResultPage,
+    sharesGrant,
     logger,
     now: () => NOW,
     // Like the real flow: Google redirects to the loopback server itself, and
@@ -487,6 +489,40 @@ test("a refused OAuth client is a build fault: gmail_unavailable, login kept, on
   }
 });
 
+test("Google refusing the refresh is not a network problem: a Workspace block or a reconnect, asked once, logged", async () => {
+  for (const [status, error, expected, needsReconnect] of [
+    [400, "admin_policy_enforced", "domain_policy", false],
+    [400, "org_internal", "domain_policy", false],
+    [400, "invalid_scope", "reconnect_needed", true],
+    [400, "invalid_request", "reconnect_needed", true],
+    [403, "access_denied", "reconnect_needed", true],
+  ]) {
+    const warnings = [];
+    const { auth, google, slot } = await setup({
+      credential: EXPIRED,
+      logger: { warn: (...args) => warnings.push(args) },
+      script: { [TOKEN]: [oauthError(status, error)] },
+    });
+
+    assert.deepEqual(await auth.getAccessToken(BINDING), { ok: false, errorCode: expected }, error);
+    assert.equal(hits(google, TOKEN).length, 1, `${error}: not asked again`);
+    assert.equal(slot().needsReconnect, needsReconnect, error);
+    assert.match(JSON.stringify(warnings), new RegExp(error), `${error} is logged`);
+    assert.doesNotMatch(JSON.stringify(warnings), /refresh-1|access-1|secret-1|you@example/);
+  }
+});
+
+test("a refresh that stays unreachable is logged with its code", async () => {
+  const warnings = [];
+  const { auth } = await setup({
+    credential: EXPIRED,
+    logger: { warn: (...args) => warnings.push(args) },
+    script: { [TOKEN]: [{ status: 503, rawBody: "busy" }] },
+  });
+  assert.deepEqual(await auth.getAccessToken(BINDING), { ok: false, errorCode: "network" });
+  assert.match(JSON.stringify(warnings), /http_503/);
+});
+
 test("a login made before the Google client left the build reports gmail_unavailable without calling Google", async () => {
   const { auth, google, slot } = await setup({
     credential: EXPIRED,
@@ -590,7 +626,8 @@ test("a reconnect flag that can't be saved for a real reason is logged without t
   // Google's answer stands even though the flag couldn't be written.
   assert.deepEqual(await auth.getAccessToken(BINDING), RECONNECT_NEEDED);
   assert.deepEqual(auth.markReconnect(BINDING), RECONNECT_NEEDED);
-  assert.equal(warnings.length, 2);
+  // The refresh failure, then each flag that couldn't be saved.
+  assert.equal(warnings.length, 3);
   const serialized = JSON.stringify(warnings);
   assert.match(serialized, /ENOSPC/);
   assert.doesNotMatch(serialized, /refresh-1|access-1|no space left/);
@@ -644,6 +681,86 @@ test("revoke posts the refresh token, which ends the whole grant, and never thro
   const empty = await setup();
   await empty.auth.revoke({});
   assert.deepEqual(empty.google.calls, []);
+});
+
+test("a Gmail grant shares the calendar's only in the same Cloud project, for a connected calendar account", async () => {
+  const { sharesCalendarGrant } = await loadAuth();
+  const calendar = "123456789012-calendar.apps.googleusercontent.com";
+  const sameProject = "123456789012-gmail.apps.googleusercontent.com";
+  const otherProject = "999999999999-gmail.apps.googleusercontent.com";
+  const shares = (overrides) =>
+    sharesCalendarGrant({
+      gmailClientId: calendar,
+      calendarClientId: calendar,
+      calendarEmails: ["You@Example.test"],
+      email: "you@example.test",
+      ...overrides,
+    });
+
+  assert.equal(shares({}), true, "the calendar's own client, same account (any case)");
+  assert.equal(shares({ gmailClientId: sameProject }), true, "another client of the same project");
+  assert.equal(shares({ gmailClientId: otherProject }), false, "a separate project");
+  assert.equal(shares({ email: "someone@example.test" }), false, "another Google account");
+  assert.equal(shares({ calendarEmails: [] }), false, "no calendar connected");
+  assert.equal(shares({ email: undefined }), true, "an unknown address counts as any account");
+  assert.equal(shares({ calendarClientId: undefined }), false, "no calendar client in the build");
+  assert.equal(
+    shares({ gmailClientId: "dev-client", calendarClientId: "dev-client" }),
+    true,
+    "ids without a project number compare whole"
+  );
+});
+
+test("Disconnect keeps a shared grant alive: no revoke, unless the device is being erased", async () => {
+  const asked = [];
+  const sharesGrant = (email) => {
+    asked.push(email);
+    return true;
+  };
+  const shared = await setup({ script: { [REVOKE]: [REVOKED_OK] }, sharesGrant });
+  await shared.auth.revoke(CONNECTED);
+  assert.deepEqual(hits(shared.google, REVOKE), [], "the calendar's grant stays");
+  assert.deepEqual(asked, ["you@example.test"], "checked for the login's own address");
+
+  const erasing = await setup({ script: { [REVOKE]: [REVOKED_OK] }, sharesGrant });
+  await erasing.auth.revoke(CONNECTED, { erasingDevice: true });
+  assert.deepEqual(
+    hits(erasing.google, REVOKE).map((call) => call.form),
+    [{ token: "refresh-1" }]
+  );
+
+  const unreadable = await setup({
+    script: { [REVOKE]: [REVOKED_OK] },
+    sharesGrant: () => {
+      throw new Error("Database not initialized");
+    },
+  });
+  await assert.doesNotReject(unreadable.auth.revoke(CONNECTED));
+  assert.deepEqual(hits(unreadable.google, REVOKE), [], "a check that can't run keeps the grant");
+});
+
+test("a refused grant shared with a connected calendar is not revoked, and still fails", async () => {
+  const asked = [];
+  const { auth, google, credentials } = await setup({
+    credential: null,
+    script: {
+      [TOKEN]: [exchangeReply({ scope: "openid https://www.googleapis.com/auth/userinfo.email" })],
+      [REVOKE]: [REVOKED_OK],
+    },
+    sharesGrant: (email) => {
+      asked.push(email);
+      return true;
+    },
+  });
+
+  await assert.rejects(
+    auth.authorize(),
+    (error) => error.redirectCode === "permission_not_granted"
+  );
+
+  assert.deepEqual(hits(google, REVOKE), []);
+  assert.deepEqual(asked, ["you@example.test"], "checked for the refused grant's address");
+  assert.equal(credentials.saves.length, 0);
 });
 
 test("the status shows the Google address and the reconnect flag", async () => {

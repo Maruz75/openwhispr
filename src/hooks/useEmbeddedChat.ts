@@ -3,7 +3,7 @@ import { useChatPersistence } from "../components/chat/useChatPersistence";
 import { useChatStreaming } from "../components/chat/useChatStreaming";
 import { useChatMessageSender } from "../components/chat/useChatMessageSender";
 import type { Message, AgentState } from "../components/chat/types";
-import { parseNoteParticipants } from "../utils/noteAttendees";
+import { attendeesForUser, parseNoteParticipants } from "../utils/noteAttendees";
 
 interface UseEmbeddedChatOptions {
   noteId: number | null;
@@ -13,6 +13,10 @@ interface UseEmbeddedChatOptions {
   noteTranscript?: string;
   /** The note's raw `participants` JSON (CalendarAttendee[]), or null. */
   noteParticipants?: string | null;
+  /** Whether the signed-in user owns the note, which decides what `self` means. */
+  noteOwnedByUser?: boolean;
+  /** The signed-in user's OpenWhispr address, never listed as an attendee. */
+  selfEmail?: string | null;
 }
 
 interface NoteConversationItem {
@@ -41,6 +45,8 @@ export function useEmbeddedChat({
   noteContent,
   noteTranscript,
   noteParticipants,
+  noteOwnedByUser = true,
+  selfEmail = null,
 }: UseEmbeddedChatOptions): UseEmbeddedChatReturn {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [noteConversations, setNoteConversations] = useState<NoteConversationItem[]>([]);
@@ -68,7 +74,14 @@ export function useEmbeddedChat({
     [folderId, noteContent, noteId, noteTitle, noteTranscript]
   );
 
-  const noteAttendees = useMemo(() => parseNoteParticipants(noteParticipants), [noteParticipants]);
+  const noteAttendees = useMemo(
+    () =>
+      attendeesForUser(parseNoteParticipants(noteParticipants), {
+        ownNote: noteOwnedByUser,
+        selfEmail,
+      }),
+    [noteOwnedByUser, noteParticipants, selfEmail]
+  );
 
   // A meeting note's chat drafts follow-ups to its attendees, so it offers
   // the connector tools (still subject to plan, sign-in and policy).

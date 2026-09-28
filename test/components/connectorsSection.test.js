@@ -18,7 +18,7 @@ const MOCKS = {
   "/stores/settingsStore": `
     const state = {
       isSignedIn: true,
-      emailDraftTarget: "auto",
+      emailDraftTarget: globalThis.__emailDraftTarget ?? "auto",
       setEmailDraftTarget() {},
       gcalConnected: false,
       mcalAccounts: [{ email: "a@corp.com", tenantId: null }],
@@ -40,7 +40,8 @@ const MOCKS = {
   "/ui/select": `
     import React from "react";
     const Pass = ({ children }) => React.createElement("div", null, children);
-    export const Select = Pass;
+    export const Select = ({ children, value }) =>
+      React.createElement("div", { "data-select-value": value }, children);
     export const SelectContent = Pass;
     export const SelectTrigger = Pass;
     export const SelectValue = () => null;
@@ -98,14 +99,17 @@ function setPlan(
     allowed = !blocked,
     isPaid,
     statuses = {},
+    emailDraftTarget,
   } = {}
 ) {
+  globalThis.__emailDraftTarget = emailDraftTarget;
   globalThis.__usage = usageState ?? usage(Boolean(isPaid));
   globalThis.__subscribedFlag = isPaid ?? subscribedFlag;
   globalThis.__connectorsBlocked = blocked;
   globalThis.__connectorsAllowed = allowed;
   globalThis.__connectorStatuses = statuses;
   t.after(() => {
+    delete globalThis.__emailDraftTarget;
     delete globalThis.__usage;
     delete globalThis.__subscribedFlag;
     delete globalThis.__connectorsBlocked;
@@ -416,6 +420,38 @@ test("a build without a Google client shows no Gmail row and no Send from chat",
   // A boolean, so a failed assertion never tries to print a DOM node.
   assert.equal(Boolean(pickerOption(container, "gmailSend")), false);
   assert.ok(pickerOption(container, "gmail"), "the Gmail compose link stays");
+});
+
+const shownTarget = (container) =>
+  findElement(container, (node) => Boolean(node.getAttribute?.("data-select-value")))?.getAttribute(
+    "data-select-value"
+  );
+
+test("a saved Send from chat shows while Gmail can send, and reads as Automatic once it can't", async (t) => {
+  for (const [label, statuses, expected] of [
+    ["connected", { gmail: GMAIL }, "gmailSend"],
+    ["needs reconnecting", { gmail: { ...GMAIL, needsReconnect: true } }, "gmailSend"],
+    ["disconnected", {}, "auto"],
+    [
+      "build without a Google client",
+      { gmail: { ...GMAIL, connected: false, configured: false, accountLabel: null } },
+      "auto",
+    ],
+  ]) {
+    await t.test(label, async (st) => {
+      const container = await renderSection(st, {
+        isPaid: true,
+        statuses,
+        emailDraftTarget: "gmailSend",
+      });
+      assert.equal(shownTarget(container), expected);
+    });
+  }
+});
+
+test("any other saved target shows as saved", async (t) => {
+  const container = await renderSection(t, { isPaid: true, emailDraftTarget: "mailto" });
+  assert.equal(shownTarget(container), "mailto");
 });
 
 test("a connected Gmail row names the account", async (t) => {

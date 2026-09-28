@@ -400,6 +400,8 @@ export default function NoteEditor({
     noteContent: note.content,
     noteTranscript: note.transcript ?? undefined,
     noteParticipants: note.participants,
+    noteOwnedByUser: ownsNote(note, user?.id),
+    selfEmail: user?.email ?? null,
   });
   const titleRef = useRef<HTMLDivElement>(null);
   const prevNoteIdRef = useRef<number>(note.id);

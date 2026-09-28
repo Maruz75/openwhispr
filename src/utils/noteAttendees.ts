@@ -21,6 +21,22 @@ export function parseNoteParticipants(raw: string | null | undefined): CalendarA
 }
 
 /**
+ * The attendees as the signed-in user sees them. A participant's `self` flag
+ * marks whoever recorded the meeting, so it means "the user" only on the
+ * user's own note; on someone else's (a team note) that person is an
+ * attendee like any other. The user's OpenWhispr address never counts.
+ */
+export function attendeesForUser(
+  attendees: CalendarAttendee[],
+  { ownNote, selfEmail }: { ownNote: boolean; selfEmail: string | null }
+): CalendarAttendee[] {
+  const own = selfEmail?.trim().toLowerCase() || null;
+  return attendees
+    .filter((attendee) => attendee.email.trim().toLowerCase() !== own)
+    .map((attendee) => (ownNote || !attendee.self ? attendee : { ...attendee, self: false }));
+}
+
+/**
  * The note chat's "Meeting attendees" block: the people main kept (never the
  * user or a room), and how to read "everyone" or a first name. Empty when
  * nobody is left, so a note without attendees adds nothing.

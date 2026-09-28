@@ -48,3 +48,42 @@ test("no attendees means no block at all", async () => {
   const { noteAttendeesContext } = await load();
   assert.equal(noteAttendeesContext([]), "");
 });
+
+const attendee = (email, self = false) => ({
+  email,
+  displayName: null,
+  responseStatus: null,
+  self,
+});
+
+test("on the user's own note, the recorder's self flag stays and their own address is dropped", async () => {
+  const { attendeesForUser } = await load();
+  const list = [
+    attendee("me@corp.test", true),
+    attendee("dana@corp.test"),
+    attendee("Me@Home.test"),
+  ];
+
+  assert.deepEqual(attendeesForUser(list, { ownNote: true, selfEmail: " me@home.test " }), [
+    attendee("me@corp.test", true),
+    attendee("dana@corp.test"),
+  ]);
+});
+
+test("on someone else's note, whoever recorded it is an attendee and the viewer is not", async () => {
+  const { attendeesForUser } = await load();
+  // Alice recorded the meeting, so her copy flags her as self; Chad opens it
+  // from a team space.
+  const list = [attendee("alice@corp.test", true), attendee("chad@corp.test")];
+
+  assert.deepEqual(attendeesForUser(list, { ownNote: false, selfEmail: "chad@corp.test" }), [
+    attendee("alice@corp.test", false),
+  ]);
+});
+
+test("without a signed-in address, nobody is dropped for it", async () => {
+  const { attendeesForUser } = await load();
+  const list = [attendee("dana@corp.test")];
+  assert.deepEqual(attendeesForUser(list, { ownNote: true, selfEmail: null }), list);
+  assert.deepEqual(attendeesForUser(list, { ownNote: true, selfEmail: "" }), list);
+});

@@ -513,6 +513,39 @@ test("an email card's fields are frozen once sending starts", async (t) => {
   assert.deepEqual(await outcome, SENT);
 });
 
+test("the recipients main reports after Send reach the card and the outcome", async (t) => {
+  let reply;
+  const { store, request, key } = await emailCards(t, () => reply);
+
+  reply = { ...SENT, destinationLabel: "dana@acme.test" };
+  const sent = request("call-26");
+  store.updateApprovalDraft(key("call-26"), { fields: { to: ["dana@acme.test"] } });
+  await store.approveAction(key("call-26"));
+  assert.equal((await sent).destinationLabel, "dana@acme.test");
+  assert.equal(
+    store.useConnectorApprovalStore.getState().entries[key("call-26")].destinationLabel,
+    "dana@acme.test"
+  );
+
+  reply = {
+    state: "unknown",
+    checkUrl: "https://mail.google.test/#sent",
+    destinationLabel: "dana@acme.test",
+  };
+  const unknown = request("call-27");
+  await store.approveAction(key("call-27"));
+  assert.deepEqual(await unknown, {
+    state: "unknown",
+    checkUrl: "https://mail.google.test/#sent",
+    destinationLabel: "dana@acme.test",
+  });
+
+  reply = { ...SENT, destinationLabel: "" };
+  const blank = request("call-28");
+  await store.approveAction(key("call-28"));
+  assert.deepEqual(await blank, SENT, "an empty label is ignored");
+});
+
 test("a malformed commit result settles an email card as unknown, never sent", async (t) => {
   let reply;
   const { store, request, key } = await emailCards(t, () => reply);

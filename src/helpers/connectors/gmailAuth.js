@@ -22,10 +22,13 @@ const OAUTH_LOGIN_GONE = new Set(["invalid_grant"]);
 // Google refused the OAuth client itself, or the build has none: a
 // configuration fault, not the user's login, and asking again won't help.
 const CLIENT_REFUSED = new Set(["invalid_client", "unauthorized_client", "not_configured"]);
-// Google's authorize redirect carries these as `error` when a Workspace
-// admin blocked the app, or the app is restricted to another org — distinct
-// from an ordinary user decline (e.g. "access_denied"), which stays
-// oauth_denied.
+// The one refusal Google documents as worth asking again.
+const TRANSIENT_OAUTH_ERRORS = new Set(["temporarily_unavailable"]);
+// A Workspace admin blocked the app, or it is restricted to another org.
+// At sign-in Google usually shows its own "Access blocked" page and never
+// redirects back, so these arrive mainly from a refresh after the admin's
+// change; a redirect that does carry one is still distinct from an ordinary
+// decline (e.g. "access_denied"), which stays oauth_denied.
 const DOMAIN_POLICY_ERRORS = new Set(["admin_policy_enforced", "org_internal"]);
 
 // A complete GMAIL_* pair overrides the calendar's client, which lives in
@@ -42,6 +45,29 @@ function gmailClientCredentials(env) {
     if (clientId && clientSecret) return { clientId, clientSecret };
   }
   return { clientId: null, clientSecret: null };
+}
+
+// A Google client id starts with its Cloud project's number
+// ("123456789012-abc.apps.googleusercontent.com").
+function googleProjectOf(clientId) {
+  if (!nonEmptyString(clientId)) return null;
+  return /^(\d+)-/.exec(clientId)?.[1] ?? clientId;
+}
+
+/**
+ * Whether revoking this Gmail login would also end a connected Google
+ * Calendar login. Google's /revoke withdraws the user's whole grant to a
+ * Cloud project, and Gmail falls back to the calendar's client. `email` is
+ * the Gmail login's address; unknown (a grant refused before its identity
+ * was read) counts as any connected calendar account.
+ */
+function sharesCalendarGrant({ gmailClientId, calendarClientId, calendarEmails, email }) {
+  const project = googleProjectOf(gmailClientId);
+  if (!project || project !== googleProjectOf(calendarClientId)) return false;
+  const wanted = nonEmptyString(email) ? email.toLowerCase() : null;
+  return (calendarEmails ?? []).some(
+    (address) => nonEmptyString(address) && (!wanted || address.toLowerCase() === wanted)
+  );
 }
 
 function codedError(code) {
@@ -101,6 +127,10 @@ function createGmailAuth({
   runOAuthLoopbackFlow,
   OAuthFlowError,
   renderResultPage = null,
+  // (email) => true when revoking that Google login would also end a
+  // connected calendar's grant (sharesCalendarGrant). Gmail then drops only
+  // its own tokens, the way disconnecting the calendar never revokes.
+  sharesGrant = () => false,
   // Optional: told about failures worth a log line via
   // logger.warn(message, { errorName, errorCode }, area). Never a token, an
   // address or a raw error.message.
@@ -120,9 +150,28 @@ function createGmailAuth({
     return oauthClient() !== null;
   }
 
-  // Best effort: the local login goes whatever Google answers.
-  async function revokeToken(token) {
+  // A check that can't run (the calendar database unreadable) keeps the
+  // calendar safe: the grant is treated as shared.
+  function grantIsShared(email) {
+    try {
+      return sharesGrant(email) === true;
+    } catch {
+      return true;
+    }
+  }
+
+  // Best effort: the local login goes whatever Google answers. Erasing the
+  // device revokes even a shared grant, since the calendar goes with it.
+  async function revokeToken(token, email, { erasingDevice = false } = {}) {
     if (!nonEmptyString(token)) return;
+    if (!erasingDevice && grantIsShared(email)) {
+      logger?.info?.(
+        "gmail revoke skipped: grant shared with a connected calendar",
+        {},
+        "connectors"
+      );
+      return;
+    }
     try {
       await api.revokeToken(token);
     } catch (error) {
@@ -169,11 +218,13 @@ function createGmailAuth({
           throw new OAuthFlowError("token_exchange_failed", "gmail_token_exchange_failed");
         }
         const data = exchanged.data ?? {};
+        const claims = nonEmptyString(data.id_token) ? idTokenClaims(data.id_token) : null;
         // A grant Google issued that can't become a login is revoked at once,
         // not left live at Google with nothing using it.
         const refuse = async (redirectCode) => {
           await revokeToken(
-            nonEmptyString(data.refresh_token) ? data.refresh_token : data.access_token
+            nonEmptyString(data.refresh_token) ? data.refresh_token : data.access_token,
+            claims?.email
           );
           return new OAuthFlowError(redirectCode, `gmail_${redirectCode}`);
         };
@@ -183,7 +234,6 @@ function createGmailAuth({
         }
         // Granular consent lets the user untick "Send email on your behalf".
         if (!grantsSend(tokens.scope)) throw await refuse("permission_not_granted");
-        const claims = idTokenClaims(data.id_token);
         if (
           claims?.email_verified !== true ||
           !nonEmptyString(claims.email) ||
@@ -246,7 +296,13 @@ function createGmailAuth({
       refresh_token: refreshToken,
       grant_type: "refresh_token",
     });
-    if (!result.ok) return { ok: false, errorCode: result.errorCode };
+    if (!result.ok) {
+      return {
+        ok: false,
+        errorCode: result.errorCode,
+        refused: result.refused === true && !TRANSIENT_OAUTH_ERRORS.has(result.errorCode),
+      };
+    }
     const tokens = parseTokens(result.data, now());
     return tokens ? { ok: true, tokens } : { ok: false, errorCode: "bad_response" };
   }
@@ -262,7 +318,7 @@ function createGmailAuth({
     // safe, but only while the login this refresh started with still holds.
     if (
       !result.ok &&
-      !OAUTH_LOGIN_GONE.has(result.errorCode) &&
+      !result.refused &&
       !CLIENT_REFUSED.has(result.errorCode) &&
       stillBound(binding)
     ) {
@@ -272,15 +328,22 @@ function createGmailAuth({
       // A reconnect or disconnect that landed while the request was out
       // always wins: nothing is written for the old login.
       if (!stillBound(binding)) return { ok: false, errorCode: "connection_changed" };
+      // Google's OAuth error codes name no user or token.
+      logger?.warn(
+        "gmail token refresh failed",
+        { errorName: "GoogleOAuthError", errorCode: result.errorCode },
+        "connectors"
+      );
       if (OAUTH_LOGIN_GONE.has(result.errorCode)) return markReconnect(binding);
-      if (CLIENT_REFUSED.has(result.errorCode)) {
-        logger?.warn(
-          "gmail oauth client refused",
-          { errorName: "GoogleOAuthError", errorCode: result.errorCode },
-          "connectors"
-        );
+      if (CLIENT_REFUSED.has(result.errorCode))
         return { ok: false, errorCode: "gmail_unavailable" };
+      // A Workspace admin restricted the app after it was connected.
+      if (DOMAIN_POLICY_ERRORS.has(result.errorCode)) {
+        return { ok: false, errorCode: "domain_policy" };
       }
+      // Any other refusal (invalid_scope, …) won't change on its own; signing
+      // in again is the one way forward.
+      if (result.refused) return markReconnect(binding);
       return { ok: false, errorCode: "network" };
     }
     const next = {
@@ -326,9 +389,11 @@ function createGmailAuth({
   // Revoking the refresh token ends the whole grant, access tokens included.
   // An expired access token can't be revoked (400 invalid_token), so it is
   // only the fallback.
-  async function revoke(credential) {
+  async function revoke(credential, options) {
     await revokeToken(
-      nonEmptyString(credential?.refreshToken) ? credential.refreshToken : credential?.accessToken
+      nonEmptyString(credential?.refreshToken) ? credential.refreshToken : credential?.accessToken,
+      credential?.email,
+      options
     );
   }
 
@@ -347,6 +412,7 @@ function createGmailAuth({
 module.exports = {
   createGmailAuth,
   gmailClientCredentials,
+  sharesCalendarGrant,
   GMAIL_SCOPES,
   GMAIL_SEND_SCOPE,
   GMAIL_LOOPBACK,

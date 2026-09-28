@@ -509,8 +509,9 @@ test("a 5xx, a reset after the write or a 200 without an id is unknown, with a l
 });
 
 test("recipient helpers de-duplicate, keep To over Cc, and build Gmail links", async () => {
-  const { normalizeRecipients, destinationLabel, sentMessageUrl, sentFolderUrl } =
+  const { normalizeRecipients, sentMessageUrl, sentFolderUrl } =
     await import("../../../src/helpers/connectors/gmailConnector.js");
+  const { recipientsLabel } = await import("../../../src/helpers/connectors/emailCompose.js");
 
   assert.deepEqual(
     normalizeRecipients({
@@ -520,18 +521,18 @@ test("recipient helpers de-duplicate, keep To over Cc, and build Gmail links", a
     { to: ["A@x.test", "b@x.test"], cc: ["c@x.test"], invalid: ["bad address"] }
   );
   assert.deepEqual(normalizeRecipients({}), { to: [], cc: [], invalid: [] });
-  assert.equal(destinationLabel(["a@x.test"], []), "a@x.test");
-  assert.equal(destinationLabel(["a@x.test", "b@x.test"], ["c@x.test"]), "a@x.test +2");
+  assert.equal(recipientsLabel(["a@x.test"], []), "a@x.test");
+  assert.equal(recipientsLabel(["a@x.test", "b@x.test"], ["c@x.test"]), "a@x.test +2");
   // A single-script look-alike of apple.com: isValidEmailAddress lets it
   // through (one script, not a mix), so the card must show its ASCII form
   // rather than the raw address alone.
   assert.equal(
-    destinationLabel(["a@аррӏе.com"], []),
+    recipientsLabel(["a@аррӏе.com"], []),
     "a@аррӏе.com (xn--80ak6aa92e.com)",
     "a non-ASCII domain shows its punycode form"
   );
   assert.equal(
-    destinationLabel(["a@аррӏе.com", "b@x.test"], []),
+    recipientsLabel(["a@аррӏе.com", "b@x.test"], []),
     "a@аррӏе.com (xn--80ak6aa92e.com) +1"
   );
   assert.equal(

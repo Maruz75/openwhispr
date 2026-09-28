@@ -24,8 +24,10 @@ export async function runApprovalAction(
     connectorId,
     preview: prepared.preview,
   });
-  return approvalOutcomeResult(outcome, prepared.preview.destinationLabel, {
-    ...options,
-    connectorId,
-  });
+  // An edited card may have gone to other recipients than the model chose.
+  const destination =
+    (outcome.state === "sent" || outcome.state === "unknown") && outcome.destinationLabel
+      ? outcome.destinationLabel
+      : prepared.preview.destinationLabel;
+  return approvalOutcomeResult(outcome, destination, { ...options, connectorId });
 }

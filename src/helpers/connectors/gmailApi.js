@@ -164,10 +164,14 @@ function createGmailApi({
         : { ok: false, outcome: "unknown", errorCode: "bad_response" };
     }
     const oauthError = isPlainObject(body) && typeof body.error === "string" ? body.error : "";
+    const outcome = classifyHttpStatus(response.status);
     return {
       ok: false,
-      outcome: classifyHttpStatus(response.status),
+      outcome,
       errorCode: oauthError || `http_${response.status}`,
+      // Google answered and said no (a 4xx with an OAuth error), as opposed to
+      // a network failure or an outage, which may pass.
+      ...(oauthError && outcome === "failed" ? { refused: true } : {}),
     };
   }
 

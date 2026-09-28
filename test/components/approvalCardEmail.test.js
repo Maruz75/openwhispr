@@ -55,7 +55,10 @@ const PROPOSED = {
   body: "Numbers attached.",
 };
 
-async function mountEmailCard(t) {
+async function mountEmailCard(
+  t,
+  { commitReply = { state: "sent", url: "https://mail.google.test/#sent/1" } } = {}
+) {
   let root = null;
   let store;
   let key;
@@ -85,7 +88,7 @@ async function mountEmailCard(t) {
         }),
         connectorCommit: async (actionId, edits) => {
           calls.commit.push({ actionId, edits });
-          return { state: "sent", url: "https://mail.google.test/#sent/1" };
+          return commitReply;
         },
         connectorCancel: async () => ({ cancelled: true }),
       },
@@ -191,6 +194,30 @@ test("Send commits exactly the edited fields the card shows, and reports them to
   // Out of edit mode, the card still shows what was sent.
   assert.match(container.textContent, /josh@acme\.test, dana@acme\.test/);
   assert.match(container.textContent, /Q3 numbers Bcc: evil@attacker\.test/);
+});
+
+test("after a recipient edit, the model and the card name who it actually went to", async (t) => {
+  const { container, toolResult } = await mountEmailCard(t, {
+    commitReply: {
+      state: "sent",
+      url: "https://mail.google.test/#sent/1",
+      destinationLabel: "dana@acme.test +1",
+    },
+  });
+  await React.act(async () => click(button(container, "connectors.approval.edit")));
+  await React.act(async () => type(field(container, "toLabel"), "dana@acme.test"));
+
+  await React.act(async () => click(button(container, "connectors.approval.send")));
+  const result = await toolResult();
+
+  assert.equal(result.data.destination, "dana@acme.test +1", "not the proposed josh@acme.test");
+  assert.deepEqual(result.data.final.to, ["dana@acme.test"]);
+});
+
+test("a send whose result names no recipients keeps the prepared label", async (t) => {
+  const { container, toolResult } = await mountEmailCard(t);
+  await React.act(async () => click(button(container, "connectors.approval.send")));
+  assert.equal((await toolResult()).data.destination, "josh@acme.test");
 });
 
 test("Esc in an email field ends editing and keeps the edit", async (t) => {

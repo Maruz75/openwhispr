@@ -8,6 +8,7 @@ import {
   type ApprovalEntry,
 } from "../../stores/connectorApprovalStore";
 import { connectorErrorText } from "../../utils/connectorErrorCopy";
+import { recipientsLabel } from "../../helpers/connectors/emailCompose";
 import { EmailApprovalFields, emailFieldProblems, toEmailFields } from "./EmailApprovalFields";
 
 // The draft lives in the store, so edit mode only changes how it is shown:
@@ -17,13 +18,17 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
   const { preview, draft } = entry;
   const [editing, setEditing] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
-  const destination = preview.destinationLabel;
   // The fields exist only while the card can still change.
   const showEditor = editing && entry.state === "pending";
   // An email card lays out its fields; a malformed one without them falls
   // back to the plain layout rather than showing empty fields.
   const emailFields =
     preview.verbKey === "email" && draft.fields ? toEmailFields(draft.fields) : null;
+  // Who it goes to follows the user's edits: main's answer once sent,
+  // otherwise the card's own To and Cc.
+  const destination =
+    entry.destinationLabel ??
+    ((emailFields && recipientsLabel(emailFields.to, emailFields.cc)) || preview.destinationLabel);
   const problems = emailFields ? emailFieldProblems(emailFields) : null;
   // Send commits exactly what the card shows, so it waits until every
   // address on it is one the email can go to.
