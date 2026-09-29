@@ -423,7 +423,12 @@ function createGithubConnector({
         query: { q: built.q, sort: "updated", order: "desc", per_page: MAX_RESULTS },
       })
     );
-    if (!found.ok) return failed(found.errorCode);
+    // A transport failure (offline, DNS, reset, timeout) would otherwise
+    // reach normalizeQueryResult as an unrecognized code and get rewritten to
+    // generic "query_failed" copy; "network" is a code it accepts as is.
+    if (!found.ok) {
+      return failed(TRANSPORT_CODE.test(found.errorCode ?? "") ? "network" : found.errorCode);
+    }
     const searched = new Map(built.repos.map((fullName) => [fullName.toLowerCase(), fullName]));
     const raws = Array.isArray(found.data?.items) ? found.data.items : [];
     const items = [];

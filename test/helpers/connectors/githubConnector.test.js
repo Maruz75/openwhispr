@@ -570,6 +570,7 @@ test("a rate-limited or unreachable search fails with its code", async () => {
   const down = await setupGithub({ [SEARCH]: [offline()] });
   const result = await down.connector.query("search_issues", { query: "x" }, BOUND);
   assert.equal(result.status, "failed");
+  assert.equal(result.errorCode, "network");
   assert.equal(result.message, "Couldn't reach GitHub.");
 });
 
