@@ -391,11 +391,7 @@ test("a transient refresh failure is asked once more, and the login is kept eith
     ["ghr-1", "ghr-1"]
   );
 
-  for (const failure of [
-    reset(),
-    json({ message: "Server Error" }, 502),
-    oauthError("slow_down"),
-  ]) {
+  for (const failure of [reset(), json({ message: "Server Error" }, 502)]) {
     const { auth, github, credentials, logger } = await setup({
       credential: EXPIRED,
       script: { [TOKEN]: [failure] },
@@ -407,6 +403,28 @@ test("a transient refresh failure is asked once more, and the login is kept eith
     assert.equal(credentials.saves.length, 0);
     assert.equal(logger.lines.length, 1);
     assert.doesNotMatch(JSON.stringify(logger.lines), /ghr-|ghu-|synthetic/);
+  }
+});
+
+test("any other refused OAuth refresh answer means reconnect too, asked once and the login flagged", async () => {
+  // GitHub answers a refused OAuth request with HTTP 200 and an `error`
+  // field: that is a definitive "no", never worth a second try, whatever the
+  // code is. slow_down is refused the same way (it isn't a transient network
+  // condition, even though its name suggests pacing).
+  for (const code of ["incorrect_client_credentials", "unsupported_grant_type", "slow_down"]) {
+    const { auth, github, credentials, logger } = await setup({
+      credential: EXPIRED,
+      script: { [TOKEN]: [oauthError(code)] },
+    });
+
+    assert.deepEqual(await auth.getAccessToken(BINDING), RECONNECT_NEEDED, code);
+    assert.equal(hits(github, TOKEN).length, 1, code);
+    assert.equal(slot(credentials).needsReconnect, true, code);
+    assert.equal(logger.lines.length, 1, code);
+    assert.doesNotMatch(JSON.stringify(logger.lines), /ghr-|ghu-|synthetic/);
+    // Flagged: the next use doesn't ask GitHub again.
+    assert.deepEqual(await auth.getAccessToken(BINDING), RECONNECT_NEEDED, code);
+    assert.equal(hits(github, TOKEN).length, 1, code);
   }
 });
 

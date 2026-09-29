@@ -8,9 +8,13 @@ const { createDeviceFlow } = require("./githubDeviceFlow");
 // User access tokens live 8 hours. Refreshing 5 minutes early keeps a comment
 // from starting with a token that expires on the way.
 const EXPIRY_SKEW_MS = 5 * 60 * 1000;
-// Refresh errors that mean the login itself is gone: the refresh token
-// expired (6 months), was revoked, or was already used; or the App was
-// deleted. Every other error keeps the login.
+// A refused OAuth refresh (GitHub answered with an `error`, not a 5xx or a
+// transport failure) always means the login can't be used as is: the refresh
+// token expired (6 months), was revoked, or was already used; the App was
+// deleted; or any other code GitHub might answer with (an app misconfigured
+// for this grant type, say). These three are the ones seen in practice and
+// stay named for the tests and the log line; refresh() below treats every
+// refused answer the same way, not only these.
 const OAUTH_LOGIN_GONE = new Set(["bad_refresh_token", "invalid_grant", "unauthorized_client"]);
 const CONNECTION_CHANGED = { ok: false, errorCode: "connection_changed" };
 
@@ -134,9 +138,12 @@ function createGithubAuth({
     // here, but it isn't gone either.
     if (!id) return { ok: false, errorCode: "not_configured" };
     let result = await requestRefresh(id, credential.refreshToken);
-    // Network errors, 5xx and unreadable answers may pass, so ask once more,
-    // but only while the login this refresh started with still holds.
-    if (!result.ok && !OAUTH_LOGIN_GONE.has(result.errorCode) && login.stillBound(binding)) {
+    // A refused answer (GitHub said no, with a 2xx/4xx carrying its own
+    // `error`) is definitive: retrying wastes a request and the refresh token
+    // is single-use besides. Only a network error, a 5xx or an unreadable
+    // answer may pass, so only those get a second try, and only while the
+    // login this refresh started with still holds.
+    if (!result.ok && !result.refused && login.stillBound(binding)) {
       result = await requestRefresh(id, credential.refreshToken);
     }
     if (!result.ok) {
@@ -149,7 +156,12 @@ function createGithubAuth({
         { errorName: "GithubOAuthError", errorCode: result.errorCode },
         "connectors"
       );
-      if (OAUTH_LOGIN_GONE.has(result.errorCode)) return login.markReconnect(binding);
+      // Any refused answer means the login can't be used as is, whether it's
+      // one of the known dead-login codes or one never seen before: reporting
+      // it as an indefinite "network" failure would leave every action
+      // saying "Couldn't reach GitHub" forever while the row still reads
+      // connected.
+      if (result.refused) return login.markReconnect(binding);
       return { ok: false, errorCode: "network" };
     }
     // GitHub rotates the refresh token on every refresh and the old one stops
