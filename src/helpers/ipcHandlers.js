@@ -1,4 +1,4 @@
-const { OrukeetStreaming } = require("./orukeetStreaming");
+const { OrukeetStreaming, MANAGED_STREAM_OPTIONS } = require("./orukeetStreaming");
 const { connectManagedOrukeet } = require("./orukeetCloudSession");
 const { ipcMain, app, shell, BrowserWindow, systemPreferences, net, session } = require("electron");
 const path = require("path");
@@ -33,6 +33,12 @@ const {
 } = require("./policyResponseError");
 const { classifyAndLog } = require("./networkErrors");
 const { resolveSystemDefaultMicrophone } = require("./systemDefaultMicrophone");
+const {
+  registerConnectorIpc,
+  createConnectorPolicyResolver,
+  createConnectorAuthLookup,
+} = require("./connectors/connectorIpc");
+const { createNoteAttendeesLookup, searchContacts } = require("./connectors/contactSearch");
 // The renderer's ModelRegistry is not main-loadable; the raw registry data is
 // packaged, and the route resolver only needs {id, baseUrl} per provider.
 const transcriptionProviderBaseUrls = () =>
@@ -609,6 +615,7 @@ class IPCHandlers {
     this.whisperCudaManager = managers.whisperCudaManager;
     this.whisperVulkanManager = managers.whisperVulkanManager;
     this.googleCalendarManager = managers.googleCalendarManager;
+    this.connectorManager = managers.connectorManager;
     this.microsoftCalendarManager = managers.microsoftCalendarManager;
     this.appleCalendarManager = managers.appleCalendarManager;
     this.meetingDetectionEngine = managers.meetingDetectionEngine;
@@ -685,6 +692,8 @@ class IPCHandlers {
         generation,
         hasToken: Boolean(token),
       });
+      // A sign-out or another account changes whose login shows.
+      void this.connectorManager?.notifyStatusChanged();
     });
 
     if (this.whisperManager?.serverManager) {
@@ -2207,6 +2216,7 @@ class IPCHandlers {
         "active-account-scope-changed",
         accountId !== null ? { accountId, authGeneration: state.generation } : null
       );
+      void this.connectorManager?.notifyStatusChanged();
       return { success: true };
     });
 
@@ -2217,31 +2227,41 @@ class IPCHandlers {
       })
     );
 
-    ipcMain.handle("delete-account-data", async (_event, accountId, expectedGeneration) => {
-      const state = tokenStore.getState();
-      if (
-        typeof accountId !== "string" ||
-        accountId.trim().length === 0 ||
-        !state.token ||
-        state.generation !== expectedGeneration
-      ) {
-        return {
-          success: false,
-          code: "AUTH_CONTEXT_CHANGED",
-          error: "Authentication context changed before local account cleanup",
-        };
-      }
-      try {
-        const result = this.databaseManager.deleteAccountData(accountId);
-        this.notifyVectorChanges();
-        for (const noteId of result.deletedNoteIds) {
-          this._asyncMirrorDelete(noteId);
+    ipcMain.handle(
+      "delete-account-data",
+      async (_event, accountId, expectedGeneration, options) => {
+        const state = tokenStore.getState();
+        if (
+          typeof accountId !== "string" ||
+          accountId.trim().length === 0 ||
+          !state.token ||
+          state.generation !== expectedGeneration
+        ) {
+          return {
+            success: false,
+            code: "AUTH_CONTEXT_CHANGED",
+            error: "Authentication context changed before local account cleanup",
+          };
         }
-        return { success: true, ...result };
-      } catch (error) {
-        return { success: false, code: "LOCAL_ACCOUNT_CLEANUP_FAILED", error: error.message };
+        try {
+          // Best effort; each revoke has a 5s deadline (connectorManager.js).
+          // Erasing the device takes the calendar logins with it, so a grant
+          // Gmail shares with a calendar is revoked too: cleanup-app runs
+          // after this and finds no Gmail login left to revoke.
+          await this.connectorManager?.disconnectAll({
+            erasingDevice: options?.erasingDevice === true,
+          });
+          const result = this.databaseManager.deleteAccountData(accountId);
+          this.notifyVectorChanges();
+          for (const noteId of result.deletedNoteIds) {
+            this._asyncMirrorDelete(noteId);
+          }
+          return { success: true, ...result };
+        } catch (error) {
+          return { success: false, code: "LOCAL_ACCOUNT_CLEANUP_FAILED", error: error.message };
+        }
       }
-    });
+    );
 
     ipcMain.handle("db-update-space", async (event, id, updates) => {
       const result = this.databaseManager.updateSpace(id, updates);
@@ -3922,6 +3942,19 @@ class IPCHandlers {
         errors.push(`GCal revoke: ${e.message}`);
       }
 
+      // Revoke every connector login stored on this device (Slack, Gmail) at
+      // its provider, for every account: Settings signs out before this
+      // runs, so there may be no signed-in account left. It must run before
+      // the connectors directory is deleted below. Best effort: the revokes
+      // run in parallel under a 5 s deadline and never block the reset.
+      try {
+        await this.connectorManager?.revokeAllStored();
+      } catch (e) {
+        const { describeError } = require("./connectors/errorSummary");
+        const { errorName, errorCode } = describeError(e);
+        errors.push(`Connector revoke: ${errorCode ?? errorName}`);
+      }
+
       // Close DB connection before deleting the file
       try {
         this.databaseManager?.db?.close();
@@ -4015,7 +4048,9 @@ class IPCHandlers {
       } catch (e) {
         errors.push(`Device setting files: ${e.message}`);
       }
-      for (const directoryName of ["bin", "llama-cpp"]) {
+      // "connectors" holds encrypted connector logins (Slack, Gmail), all
+      // revoked above.
+      for (const directoryName of ["bin", "llama-cpp", "connectors"]) {
         try {
           fs.rmSync(path.join(app.getPath("userData"), directoryName), {
             recursive: true,
@@ -6046,6 +6081,40 @@ class IPCHandlers {
       broadcast: (snapshot) => broadcastToWindows("workspace-policy-changed", snapshot),
       logger: debugLogger,
     });
+    if (this.connectorManager) {
+      registerConnectorIpc({
+        ipcMain,
+        manager: this.connectorManager,
+        getPolicyState: createConnectorPolicyResolver({
+          getAuthHeader: createConnectorAuthLookup({
+            hasBearerToken: () => Boolean(tokenStore.get()),
+            windowFor: (event) => BrowserWindow.fromWebContents(event.sender),
+            authHeaderFor: getAuthHeaderFromWindow,
+          }),
+          getPolicy: (options) => workspacePolicyManager.getPolicy(options),
+          peekPolicy: (options) => workspacePolicyManager.peekPolicy(options),
+          getAuthGeneration: () => tokenStore.getState().generation,
+        }),
+        // The account bound to the credential in use, the same binding
+        // get-active-account-scope serves (not the separately synced
+        // database scope, which lags a sign-in or account switch).
+        getAccountScope: () =>
+          accountScopeBinding.resolveActiveAccountScope({
+            ...tokenStore.getState(),
+            binding: accountScopeBinding.read(),
+          }),
+        findContacts: (query) =>
+          searchContacts(this.databaseManager.getContactLookupSources(), query),
+        noteAttendees: createNoteAttendeesLookup({
+          getContactLookupSources: () => this.databaseManager.getContactLookupSources(),
+          getCalendarEventById: (id) => this.databaseManager.getCalendarEventById(id),
+          getSpeakerMappings: (noteId) => this.databaseManager.getSpeakerMappings(noteId),
+          getSpeakerProfiles: () => this.databaseManager.getSpeakerProfiles(),
+          getGmailAddress: async () =>
+            (await this.connectorManager.connectorStatus("gmail"))?.accountLabel ?? null,
+        }),
+      });
+    }
     this.enterpriseIdentityManager = createEnterpriseIdentityManager({
       cachePath: path.join(app.getPath("userData"), "managed-enterprise-config.json"),
       getApiUrl,
@@ -8397,11 +8466,9 @@ class IPCHandlers {
         // default lives here, at the boundary, so the token allowlist stays
         // fail-closed for genuinely unknown providers (#1624).
         const provider = options.provider ?? "openai-realtime";
-        // Managed Cloud retains the capture for batch fallback. A refused
-        // commit must close this attempt instead of retrying for 30 seconds.
         const streaming =
           provider === "orukeet"
-            ? new OrukeetStreaming({ retryCapacity: !isCloud })
+            ? new OrukeetStreaming(isCloud ? MANAGED_STREAM_OPTIONS : {})
             : new OpenAIRealtimeStreaming();
         setupDictationCallbacks(streaming, event);
         // Assign before the token fetch (a real network round trip) so
@@ -11535,7 +11602,7 @@ class IPCHandlers {
 
     ipcMain.handle("upsert-contact", async (_event, contact) => {
       try {
-        this.databaseManager.upsertContacts([contact]);
+        this.databaseManager.addManualContact(contact);
         return { success: true };
       } catch (error) {
         return { success: false };

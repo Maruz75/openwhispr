@@ -330,6 +330,7 @@ let windowManager = null;
 let hotkeyManager = null;
 let databaseManager = null;
 let clipboardManager = null;
+let connectorManager = null;
 let whisperManager = null;
 let parakeetManager = null;
 let diarizationManager = null;
@@ -468,6 +469,57 @@ function initializeCoreManagers() {
   });
   if (bootAccountId) databaseManager.setActiveAccountId(bootAccountId);
   clipboardManager = new ClipboardManager();
+  const { createConnectorManager } = require("./src/helpers/connectors/connectorManager");
+  const { createPendingActions } = require("./src/helpers/connectors/pendingActions");
+  const { createActionLog } = require("./src/helpers/connectors/actionLog");
+  const { createCredentialStore } = require("./src/helpers/connectors/credentialStore");
+  const { createConnectorCredentials } = require("./src/helpers/connectors/connectorCredentials");
+  const { createConnectors } = require("./src/helpers/connectors/createConnectors");
+  const { runOAuthLoopbackFlow, OAuthFlowError } = require("./src/helpers/oauthLoopbackFlow");
+  const { broadcastToWindows } = require("./src/helpers/windowBroadcast");
+  const { connectorAccountIdFrom } = require("./src/helpers/connectors/connectorIpc");
+  // The same account receipts are filed under (ipcHandlers' getAccountScope):
+  // the one bound to the credential in use. databaseManager's scope doesn't
+  // move when one signed-in token replaces another.
+  const getConnectorAccountScope = () =>
+    accountScopeBinding.resolveActiveAccountScope({
+      ...require("./src/helpers/tokenStore").getState(),
+      binding: accountScopeBinding.read(),
+    });
+  const getConnectorAccountId = connectorAccountIdFrom(getConnectorAccountScope);
+  const connectorCredentials = createConnectorCredentials({
+    store: createCredentialStore({
+      dir: path.join(app.getPath("userData"), "connectors"),
+      secretCrypto: require("./src/helpers/secretCrypto"),
+      logger: debugLogger,
+    }),
+    getAccountId: getConnectorAccountId,
+  });
+  connectorManager = createConnectorManager({
+    connectors: createConnectors({
+      fetch: (url, init) => net.fetch(url, { ...init, useSessionCookies: false }),
+      i18n: i18nMain,
+      runOAuthLoopbackFlow,
+      OAuthFlowError,
+      credentials: connectorCredentials,
+      logger: debugLogger,
+      env: process.env,
+      openExternal: (url) => require("./src/helpers/externalUrlOpener").openExternalUrl(url),
+      writeClipboard: (text, webContents) => clipboardManager.writeClipboard(text, webContents),
+      // Read only when revoking a Gmail login on the calendar's Google project;
+      // the calendar manager is created below.
+      getGoogleCalendarAccounts: () => googleCalendarManager?.getAccounts() ?? [],
+      broadcast: broadcastToWindows,
+    }),
+    pendingActions: createPendingActions(),
+    actionLog: createActionLog(databaseManager),
+    logger: debugLogger,
+    getAccountId: getConnectorAccountId,
+    credentials: connectorCredentials,
+    onStatusChanged: (statuses) => broadcastToWindows("connector-status-changed", statuses),
+  });
+  // Pending cards expire in main even when no renderer ever answers them.
+  setInterval(() => connectorManager.sweepExpired(), 60 * 1000).unref();
   whisperManager = new WhisperManager();
   if (process.platform !== "darwin") {
     whisperCudaManager = new WhisperCudaManager();
@@ -577,6 +629,7 @@ function initializeCoreManagers() {
     googleCalendarManager,
     microsoftCalendarManager,
     appleCalendarManager,
+    connectorManager,
     meetingDetectionEngine,
     audioTapManager,
     linuxPortalAudioManager,
