@@ -279,6 +279,9 @@ const CONNECT_ERROR_CODES = new Set([
   "email_not_verified",
   // Gmail: a Workspace admin blocked the app, or it's restricted to another org.
   "domain_policy",
+  // GitHub: the device code ran out (15 minutes), or the App has Device Flow off.
+  "code_expired",
+  "device_flow_disabled",
 ]);
 
 // A revoke is best effort: nothing may hang on an unreachable provider. The
