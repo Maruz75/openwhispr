@@ -145,7 +145,7 @@ test("authorize asks for read, issues:create and comments:create only, with PKCE
     organizationName: "Acme",
     organizationUrlKey: "acme",
     // FIXTURES.exchange.scope is Linear's space-separated
-    // "comments:create issues:create read" (Task 3, TOKEN_SHAPE); the stored
+    // "comments:create issues:create read"; the stored
     // scope preserves that order, comma-joined.
     scope: "comments:create,issues:create,read",
     needsReconnect: false,
@@ -470,7 +470,7 @@ test("concurrent callers share one refresh, with no client secret, saved under t
     expiresAt: NOW + 86399 * 1000,
     refreshToken: "refresh-2",
     // FIXTURES.refresh.scope is also Linear's space-separated
-    // "comments:create issues:create read" (Task 3, TOKEN_SHAPE).
+    // "comments:create issues:create read".
     scope: "comments:create,issues:create,read",
     needsReconnect: false,
   });

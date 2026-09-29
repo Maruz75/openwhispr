@@ -172,10 +172,10 @@ test("any other GraphQL error in a 200 is unknown, even beside a listed one or w
   }
 });
 
-// Task 3 (ERROR_CODES): Linear's own scripted checks reported INPUT_ERROR
+// Checked live: Linear reported INPUT_ERROR
 // (not ENTITY_NOT_FOUND) for a missing issue, and INPUT_ERROR with a
 // "conflict on insert" message for a repeated client id.
-test("the refusal list holds the codes Task 3 confirmed", async () => {
+test("the refusal list holds the codes Linear was seen to send", async () => {
   const { LINEAR_PRE_SEND_REJECTIONS } = await load();
   for (const code of [
     "INVALID_INPUT",

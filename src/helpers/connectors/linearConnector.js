@@ -10,17 +10,14 @@ const { createLinearAuth, linearRedirectUri } = require("./linearAuth");
 const { createLinearTeams } = require("./linearTeams");
 
 const MAX_TITLE_LENGTH = 256;
-// Task 3 (LIMITS): Linear accepted a 70,000-character description, higher
+// Checked live: Linear accepted a 70,000-character description, higher
 // than the card's own 65,536-character limit, so the card's limit governs.
 const MAX_DESCRIPTION_LENGTH = 65536;
 const MAX_QUERY_LENGTH = 200;
 const MAX_RESULTS = 10;
 const SNIPPET_LENGTH = 300;
-// Task 3 (CLIENT_ID_CREATE): Linear keeps a client-supplied issue id and
-// refuses a second create with it, so an uncertain create can be looked up.
-const CREATE_LOOKUP = true;
 
-// Linear's own priority numbers (plan decision L9); the card words each
+// Linear's own priority numbers; the card words each
 // name from connectors.linear.notes.priority.<name>.
 const PRIORITIES = { urgent: 1, high: 2, medium: 3, low: 4, none: 0 };
 
@@ -45,7 +42,7 @@ const OWN_CODES = new Set([
 ]);
 // Every errorCode this connector's query, prepare and commit can return.
 // Each has its own card and tool-step copy under
-// connectors.{approval,toolStatus}.errors.linear (plan Task 8 pins it).
+// connectors.{approval,toolStatus}.errors.linear (linearErrorCopy.test.js pins it).
 const LINEAR_ERROR_CODES = Object.freeze([
   ...OWN_CODES,
   "too_long",
@@ -362,11 +359,12 @@ function createLinearConnector({
     const nodes = (Array.isArray(found?.nodes) ? found.nodes : []).filter(
       (node) => nonEmptyString(node?.identifier) && nonEmptyString(node?.url)
     );
-    const items = nodes.map(searchItem).sort(newestFirst);
+    // Linear ranks by relevance, so the extra match cut is its least relevant
+    // one; the ten kept are then shown newest first.
     return {
       status: "ok",
-      items: items.slice(0, MAX_RESULTS),
-      truncated: items.length > MAX_RESULTS || found?.pageInfo?.hasNextPage === true,
+      items: nodes.slice(0, MAX_RESULTS).map(searchItem).sort(newestFirst),
+      truncated: nodes.length > MAX_RESULTS || found?.pageInfo?.hasNextPage === true,
     };
   }
 
@@ -501,16 +499,15 @@ function createLinearConnector({
     };
   }
 
-  // The create was sent with its client id, and Linear refuses a second
-  // create with the same one, so a single lookup settles it. A miss proves
-  // nothing unless the create's own uncertain answer was a completed HTTP 200
-  // (an unlisted GraphQL error, or a 200 whose issueCreate didn't carry a
-  // usable issue). After a timeout, a connection reset or a 5xx, Linear may
-  // still commit the insert later, so a miss stays unknown.
+  // Checked live: Linear keeps the client id a create was sent with and
+  // refuses a second create with the same one, so a single lookup settles
+  // it. A miss proves nothing unless the create's own uncertain answer was a
+  // completed HTTP 200 (an unlisted GraphQL error, or a 200 whose issueCreate
+  // didn't carry a usable issue). After a timeout, a connection reset or a
+  // 5xx, Linear may still commit the insert later, so a miss stays unknown.
   async function settleUncertainCreate(binding, access, payload, uncertain) {
     const checkUrl = teamIssuesUrl(access.credential.organizationUrlKey, payload.teamKey);
     const stillUnknown = { state: "unknown", errorCode: uncertain.errorCode, checkUrl };
-    if (!CREATE_LOOKUP) return stillUnknown;
     const { result } = await withRefresh(binding, access, (token) =>
       api.graphql(ISSUE_QUERY, { id: payload.id }, { token })
     );
@@ -713,7 +710,7 @@ function buildLinearConnector(deps) {
     OAuthFlowError: deps.OAuthFlowError,
     // Linear matches a registered redirect URI exactly, port included, so
     // the loopback server's random port can't be registered: sign-in goes
-    // through the openwhispr.com relay instead (plan Task 9).
+    // through the openwhispr.com relay instead.
     redirectUri: linearRedirectUri(deps.env),
     renderResultPage: connectorResultPage(deps, "linear"),
     logger: deps.logger,

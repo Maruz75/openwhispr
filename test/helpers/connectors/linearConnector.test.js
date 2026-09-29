@@ -84,7 +84,7 @@ const NOT_CONNECTED = {
 };
 const CRASH = { team: "ENG", title: "Crash on launch", description: "It crashes." };
 
-// linearTeams (plan Task 6) behind its interface: named teams resolve by key
+// linearTeams behind its interface: named teams resolve by key
 // or name, an omitted team resolves only in a one-team workspace, and a
 // project not in the team is a question. `replies` answer resolveTeam first.
 function stubTeams({ teams = [ENG, DES], projects = { "team-eng": [Q4] }, replies = [] } = {}) {
@@ -269,7 +269,9 @@ test("an issue reference is a key or a link to an issue in this workspace", asyn
   }
 });
 
-test("search sends one filtered query and returns compact results, newest first", async () => {
+test("search sends one filtered query and returns Linear's ten most relevant, newest first", async () => {
+  // Linear's order is relevance; here the least relevant match is also the
+  // newest, so a date sort before the cut would keep it.
   const nodes = Array.from({ length: 11 }, (_, index) => issueNode(index));
   const { connector, linear, teams } = await setupLinear({
     [GRAPHQL]: { LinearSearchIssues: [searchReply(nodes)] },
@@ -287,7 +289,6 @@ test("search sends one filtered query and returns compact results, newest first"
   assert.deepEqual(
     result.items.map((item) => item.reference),
     [
-      "ENG-110",
       "ENG-109",
       "ENG-108",
       "ENG-107",
@@ -297,18 +298,20 @@ test("search sends one filtered query and returns compact results, newest first"
       "ENG-103",
       "ENG-102",
       "ENG-101",
-    ]
+      "ENG-100",
+    ],
+    "the 11th by relevance (ENG-110) is the one cut, though it is the newest"
   );
   assert.deepEqual(result.items[0], {
-    reference: "ENG-110",
-    title: "Issue 10",
+    reference: "ENG-109",
+    title: "Issue 9",
     state: "In Progress",
-    url: "https://linear.app/acme/issue/ENG-110/issue-10",
-    updatedAt: "2026-09-11T00:00:00.000Z",
+    url: "https://linear.app/acme/issue/ENG-109/issue-9",
+    updatedAt: "2026-09-10T00:00:00.000Z",
     assignee: "Dana",
     team: "ENG",
     labels: ["bug"],
-    snippet: "Description 10",
+    snippet: "Description 9",
   });
   const [search] = ops(linear, "LinearSearchIssues");
   assert.deepEqual(search.variables, {

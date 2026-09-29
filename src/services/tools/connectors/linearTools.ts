@@ -193,7 +193,11 @@ export const linearCreateIssueTool: ToolDefinition = {
       team: { type: "string", description: "Team key (ENG) or name, if the user named one" },
       title: { type: "string", description: "One line, 256 characters at most" },
       description: { type: "string", description: "Markdown" },
-      priority: { type: "string", enum: [...PRIORITIES] },
+      priority: {
+        type: "string",
+        enum: [...PRIORITIES],
+        description: "Only if the user said how urgent it is",
+      },
       assignToMe: { type: "boolean", description: "Assign the issue to the user" },
       project: {
         type: "string",

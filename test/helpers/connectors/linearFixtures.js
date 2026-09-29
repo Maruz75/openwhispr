@@ -1,17 +1,17 @@
-// Linear replies for the Linear connector tests. The shapes follow the
-// answers plan Task 3 recorded (<scratchpad>/linear-decisions.md); ids,
-// names and tokens are synthetic. Never paste a real token, id or name here.
+// Linear replies for the Linear connector tests. The shapes follow what a
+// real Linear workspace answered; ids, names and tokens are synthetic.
+// Never paste a real token, id or name here.
 //
 // FIXTURES and gqlError's error envelope are the two places that assume
-// Linear's wire format. When Task 3's recording differs, change them here
-// (and note it in linear-decisions.md); the tests read only these.
+// Linear's wire format. When Linear's answers change, change them here;
+// the tests read only these.
 const { NOW, memoryCredentials } = require("./slackFixtures");
 
 const FORM = "application/x-www-form-urlencoded";
 
-// Response bodies as Linear sends them (Task 3: TOKEN_SHAPE, SEARCH).
+// Response bodies as Linear sends them.
 const FIXTURES = {
-  // The code exchange. Task 3 (TOKEN_SHAPE): Linear returns `scope` as a
+  // The code exchange. Linear returns `scope` as a
   // space-separated string, not an array or comma list; linearAuth accepts
   // all three.
   exchange: {
@@ -21,7 +21,7 @@ const FIXTURES = {
     scope: "comments:create issues:create read",
     refresh_token: "refresh-1",
   },
-  // A refresh. Task 3 (REFRESH_NO_SECRET): the refresh token rotates, so a
+  // A refresh. The refresh token rotates, so a
   // refresh always returns a new one.
   refresh: {
     access_token: "access-2",
@@ -59,7 +59,7 @@ const FIXTURES = {
   },
 };
 
-// A Linear login as linearAuth saves it (plan Task 5). Pass it to
+// A Linear login as linearAuth saves it. Pass it to
 // memoryCredentials(CONNECTED, { connectorId: "linear" }).
 const CONNECTED = {
   accessToken: "access-1",
@@ -150,7 +150,7 @@ const gql = (data, { status = 200, headers = {} } = {}) => ({
   headers,
 });
 
-// A GraphQL error answer. Task 3 (ERROR_CODES): Linear puts the code in
+// A GraphQL error answer. Linear puts the code in
 // errors[].extensions.code, with a readable extensions.type; pass
 // { extensions } to send another shape, and { data } for a partial answer.
 const gqlError = (

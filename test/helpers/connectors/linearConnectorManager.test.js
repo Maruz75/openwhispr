@@ -41,7 +41,7 @@ const SEARCHED = gql({
 const CRASH = { team: "ENG", title: "Crash on launch", description: "It crashes on start." };
 const silentLogger = { info() {}, warn() {}, error() {} };
 
-// linearTeams (plan Task 6) behind its interface, for a one-team workspace.
+// linearTeams behind its interface, for a one-team workspace.
 const oneTeam = {
   list: async () => ({ ok: true, teams: [ENG] }),
   resolveTeam: async () => ({ ok: true, team: ENG }),

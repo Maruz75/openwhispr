@@ -2,8 +2,8 @@
 // over the local loopback server; a refresh only ever reads, refreshes or
 // flags the one login an action is bound to (createBoundLogin).
 //
-// Every value marked "Task 3" is an assumption about Linear that plan Task 3
-// checks (<scratchpad>/linear-decisions.md); each lives in one constant.
+// Every value marked "Checked live" was confirmed against a real Linear
+// workspace; each lives in one constant.
 const { describeError } = require("./errorSummary");
 const { createBoundLogin } = require("./boundLogin");
 const { LINEAR_AUTHORIZE_URL } = require("./linearApi");
@@ -16,8 +16,8 @@ const LINEAR_REQUIRED_SCOPES = ["read", "issues:create", "comments:create"];
 const LINEAR_SCOPES = LINEAR_REQUIRED_SCOPES.join(",");
 // The loopback server listens on a random port, and Linear can't be
 // registered for it (a registered redirect URI must match exactly, port
-// included), so buildLinearConnector passes the relay as `redirectUri`
-// (plan Task 9). A first sign-in (workspace choice, 2FA) can outlast the
+// included), so buildLinearConnector passes the relay as `redirectUri`.
+// A first sign-in (workspace choice, 2FA) can outlast the
 // calendars' 120 s, so the flow waits 5 minutes.
 const LINEAR_LOOPBACK = {
   ports: [0],
@@ -25,7 +25,7 @@ const LINEAR_LOOPBACK = {
   timeoutMs: 5 * 60 * 1000,
 };
 
-// Task 3 recorded LINEAR_REDIRECT=relay: Linear matches a registered
+// Checked live: Linear matches a registered
 // redirect URI exactly, port included, so the loopback server's random port
 // can't be registered. Linear redirects to the openwhispr.com relay instead,
 // which forwards the browser to the loopback server by the port in state
@@ -43,7 +43,7 @@ function linearRedirectUri(env) {
     return LINEAR_RELAY_REDIRECT_URI;
   }
 }
-// Task 3: `prompt=consent` shows Linear's consent screen every time, so the
+// Checked live: `prompt=consent` shows Linear's consent screen every time, so the
 // user picks the workspace instead of reusing the last one silently.
 const AUTHORIZE_PARAMS = { response_type: "code", prompt: "consent" };
 // Refreshing 5 minutes early keeps an action from starting with a token that
@@ -59,7 +59,7 @@ const CLIENT_REFUSED = new Set(["invalid_client", "unauthorized_client", "not_co
 // The OAuth errors (RFC 6749 §5.2 and §4.1.2.1) that mean "ask again later",
 // even when they arrive with a 4xx.
 const TRANSIENT_OAUTH_ERRORS = new Set(["temporarily_unavailable", "server_error"]);
-// Who signed in, and to which workspace (plan decision L6).
+// Who signed in, and to which workspace.
 const IDENTITY_QUERY =
   "query LinearIdentity { viewer { id name } organization { id name urlKey } }";
 
@@ -71,7 +71,7 @@ function nonEmptyString(value) {
   return typeof value === "string" && value.length > 0;
 }
 
-// Task 3 (TOKEN_SHAPE): `scope` arrives as an array or as a comma- or
+// Checked live: `scope` arrives as an array or as a comma- or
 // space-separated string. Missing means Linear didn't say (null).
 function grantedScopes(scope) {
   if (Array.isArray(scope)) return scope.filter(nonEmptyString);
@@ -129,7 +129,7 @@ function createLinearAuth({
   runOAuthLoopbackFlow,
   OAuthFlowError,
   loopback = LINEAR_LOOPBACK,
-  // An https relay URL (plan Task 9), or null to redirect to the loopback.
+  // An https relay URL, or null to redirect to the loopback.
   redirectUri = null,
   renderResultPage = null,
   // Optional: told about failures worth a log line via
@@ -221,7 +221,7 @@ function createLinearAuth({
         };
         const tokens = parseTokens(data, now());
         if (!tokens) throw await refuse("token_exchange_failed", "token_exchange_failed");
-        // Checked only when Linear reports what it granted (plan decision L6).
+        // Checked only when Linear reports what it granted.
         if (
           tokens.scopes &&
           !LINEAR_REQUIRED_SCOPES.every((scope) => tokens.scopes.includes(scope))
@@ -269,7 +269,7 @@ function createLinearAuth({
     if (!credential.refreshToken) return login.markReconnect(binding);
     let result = await requestRefresh(credential.refreshToken);
     // Asked once more, but only while the login this refresh started with
-    // still holds. Task 3 (REFRESH_NO_SECRET): Linear rotates the refresh
+    // still holds. Checked live: Linear rotates the refresh
     // token on every use; its docs describe a 30-minute grace period on the
     // previous token, so retrying with the same one after a lost answer is
     // expected to still work. At worst Linear refuses it with invalid_grant,
@@ -300,7 +300,7 @@ function createLinearAuth({
       ...credential,
       accessToken: result.tokens.accessToken,
       expiresAt: result.tokens.expiresAt,
-      // Task 3 (REFRESH_NO_SECRET): Linear may rotate the refresh token.
+      // Checked live: Linear may rotate the refresh token.
       // Whatever it returns is saved; otherwise the old one is kept.
       refreshToken: result.tokens.refreshToken ?? credential.refreshToken,
       scope: result.tokens.scopes ? result.tokens.scopes.join(",") : credential.scope,

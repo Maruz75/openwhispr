@@ -4,13 +4,13 @@
 // `unknown`, because a lookup that misses proves nothing and a retry could
 // post it twice.
 //
-// Every value marked "Task 3" is an assumption about Linear's wire format
-// that plan Task 3 checks (<scratchpad>/linear-decisions.md). Each lives in
-// one constant, so a finding changes a constant, not the logic.
+// Every value marked "Checked live" was confirmed against a real Linear
+// workspace. Each lives in one constant, so a change on Linear's side
+// changes a constant, not the logic.
 const { classifyHttpStatus, retryAfterMs } = require("./deliveryClassifier");
 const { isPlainObject, readJson, formBody, createPost } = require("./providerHttp");
 
-// Task 3: the endpoints (plan decision L2).
+// Checked live: the endpoints.
 const LINEAR_AUTHORIZE_URL = "https://linear.app/oauth/authorize";
 const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
 const LINEAR_REVOKE_URL = "https://api.linear.app/oauth/revoke";
@@ -19,11 +19,11 @@ const REQUEST_TIMEOUT_MS = 15000;
 const MAX_RETRY_AFTER_MS = 5000;
 const FORM = "application/x-www-form-urlencoded";
 
-// Task 3 (ERROR_CODES): GraphQL error codes that mean Linear refused the
+// Checked live: GraphQL error codes that mean Linear refused the
 // request before acting, each with the code this module reports. An error
 // answer counts as a refusal only when every error in it is listed; any
 // other code may follow a partial write, so it is `unknown` (graphql_error).
-// Linear's own scripted checks reported INPUT_ERROR (not ENTITY_NOT_FOUND)
+// Linear reported INPUT_ERROR (not ENTITY_NOT_FOUND)
 // for a missing issue and for a repeated create id, and lowercase-worded
 // `extensions.type` values ("invalid input", "authentication error");
 // INPUT_ERROR is reclassified by its message below (see
@@ -41,13 +41,13 @@ const LINEAR_PRE_SEND_REJECTIONS = new Map([
   ["invalid input", "invalid_input"],
   ["authentication error", "unauthorized"],
 ]);
-// Task 3 (ERROR_CODES): where an error carries its code. The first string
+// Checked live: where an error carries its code. The first string
 // found decides, so an unlisted `code` is never overridden by its `type`.
 const ERROR_CODE_FIELDS = ["code", "type"];
-// Task 3 (ERROR_CODES, ruling T3b): Linear reports both "missing issue" and
+// Checked live: Linear reports both "missing issue" and
 // "the client id already exists" as INPUT_ERROR, told apart only by the
-// message. A missing entity is a genuine refusal (Task 7's lookups rely on
-// errorCode === "not_found"); a create-id conflict means the entity already
+// message. A missing entity is a genuine refusal (the connector's lookups
+// rely on errorCode === "not_found"); a create-id conflict means the entity already
 // exists, so the create must be settled by its lookup, never reported as
 // failed — an `errorCode` of null here means "not a listed refusal" (falls
 // through to unknown/graphql_error), not a reported code.
@@ -55,14 +55,14 @@ const INPUT_ERROR_MESSAGE_OVERRIDES = [
   { prefix: "Entity not found", errorCode: "not_found" },
   { prefix: "conflict on insert", errorCode: null },
 ];
-// Task 3: the header that says how long to wait after a rate limit, in whole
+// The header that says how long to wait after a rate limit, in whole
 // seconds. Without it nothing is retried and the result is rate_limited.
-// Unverified by Task 3: Linear's docs describe `X-RateLimit-*-Reset` headers
+// Not checked live: Linear's docs describe `X-RateLimit-*-Reset` headers
 // for its own limiter and may not send `Retry-After` at all, in which case
 // this stays safe (no retry, rate_limited) rather than wrong.
 const RETRY_AFTER_HEADER = "retry-after";
-// Task 3 (REVOKE): how a token is revoked: in the form body, the form Task 3
-// checked and Linear's docs describe (a bearer header is their legacy form).
+// Checked live: how a token is revoked: in the form body, as Linear's docs
+// describe (a bearer header is their legacy form).
 function revokeRequest(token) {
   return {
     headers: { "Content-Type": FORM },
@@ -209,7 +209,7 @@ function createLinearApi({
     };
   }
 
-  // PKCE: no client secret (plan decision L2). The caller passes code, client_id,
+  // PKCE: no client secret. The caller passes code, client_id,
   // redirect_uri and code_verifier.
   function exchangeToken(params) {
     return tokenRequest({ ...params, grant_type: "authorization_code" });

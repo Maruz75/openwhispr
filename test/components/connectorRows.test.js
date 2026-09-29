@@ -53,7 +53,7 @@ async function loadRows(t, electronAPI = {}) {
   return { container, rows, ConnectorLoginRow };
 }
 
-test("the shipped rows are Gmail then Slack, with their account summaries", async (t) => {
+test("the shipped rows are Gmail, Slack then Linear, with their account summaries", async (t) => {
   const { rows } = await loadRows(t);
   const status = { accountLabel: "chad", workspaceLabel: "Acme" };
 
