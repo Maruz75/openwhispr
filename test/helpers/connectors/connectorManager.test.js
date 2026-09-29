@@ -2254,3 +2254,91 @@ test("a sent commit may name what it created; nothing else keeps a result label"
     { state: "failed", errorCode: "rate_limited", message: "busy" },
   ]);
 });
+
+// A sign-in that waits until it's aborted, then fails the way the device
+// flow does (oauth_cancelled).
+function abortableSignIn() {
+  const signals = [];
+  return {
+    signals,
+    authorize: ({ signal }) => {
+      signals.push(signal);
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () =>
+          reject(Object.assign(new Error("cancelled"), { code: "oauth_cancelled" }))
+        );
+      });
+    },
+  };
+}
+
+test("cancelConnect stops the account's connect in progress, and nothing is saved", async () => {
+  const credentials = memoryCredentials(null, { connectorId: "fake" });
+  const signIn = abortableSignIn();
+  const { manager } = await setup(connectable({ authorize: signIn.authorize }), undefined, {
+    credentials,
+  });
+
+  const connecting = manager.connect("fake", "allowed");
+  await Promise.resolve();
+
+  assert.deepEqual(manager.cancelConnect("fake"), { status: "cancelled" });
+  assert.equal(signIn.signals[0].aborted, true);
+  assert.deepEqual(await connecting, { status: "failed", errorCode: "oauth_cancelled" });
+  assert.equal(credentials.read("acct-1", "fake"), null);
+  // The flow is gone once it ended.
+  assert.deepEqual(manager.cancelConnect("fake"), { status: "idle" });
+});
+
+test("a login that arrives after cancelConnect is revoked, never saved", async () => {
+  const credentials = memoryCredentials(null, { connectorId: "fake" });
+  const flow = deferred();
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      // Like a provider that answered just before the abort.
+      authorize: () => flow.promise,
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials }
+  );
+
+  const connecting = manager.connect("fake", "allowed");
+  assert.deepEqual(manager.cancelConnect("fake"), { status: "cancelled" });
+  flow.resolve({ accessToken: "late" });
+
+  assert.deepEqual(await connecting, { status: "failed", errorCode: "oauth_cancelled" });
+  assert.deepEqual(revoked, [{ accessToken: "late" }]);
+  assert.equal(credentials.read("acct-1", "fake"), null);
+});
+
+test("cancelConnect never touches another account's connect", async () => {
+  let accountId = "acct-a";
+  const signIn = abortableSignIn();
+  const { manager } = await setup(connectable({ authorize: signIn.authorize }), undefined, {
+    credentials: memoryCredentials(null, { connectorId: "fake" }),
+    getAccountId: () => accountId,
+  });
+
+  const connecting = manager.connect("fake", "allowed");
+  await Promise.resolve();
+  accountId = "acct-b";
+
+  assert.deepEqual(manager.cancelConnect("fake"), { status: "idle" });
+  assert.equal(signIn.signals[0].aborted, false);
+
+  accountId = "acct-a";
+  assert.deepEqual(manager.cancelConnect("fake"), { status: "cancelled" });
+  assert.deepEqual(await connecting, { status: "failed", errorCode: "oauth_cancelled" });
+});
+
+test("cancelConnect with no connect in progress, or for an unknown connector, is idle", async () => {
+  const { manager } = await setup(connectable(), undefined, {
+    credentials: memoryCredentials(null, { connectorId: "fake" }),
+  });
+  assert.deepEqual(manager.cancelConnect("fake"), { status: "idle" });
+  assert.deepEqual(manager.cancelConnect("nope"), { status: "idle" });
+});

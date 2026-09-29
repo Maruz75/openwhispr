@@ -4174,6 +4174,48 @@
         "failedBody": "Kehre zu OpenWhispr zurück, um es erneut zu versuchen."
       }
     },
+    "github": {
+      "title": "GitHub",
+      "description": "Der Assistent kann Issues und Pull Requests durchsuchen, Issues erstellen und in deinem Namen kommentieren, nur in den Repositorys, die du auswählst. Er kann deinen Code nicht lesen, und du bestätigst jedes Issue und jeden Kommentar, bevor er gepostet wird.",
+      "connect": "Verbinden",
+      "reconnect": "Erneut verbinden",
+      "disconnect": "Trennen",
+      "connecting": "Verbindung mit GitHub wird hergestellt…",
+      "connectedAs": "Verbunden als {{account}} · Repositorys: {{repositories}}",
+      "connectedAs_empty": "Verbunden als {{account}} · noch keine Repositorys",
+      "connectedAs_unknown": "Verbunden als {{account}}",
+      "needsReconnect": "GitHub muss erneut verbunden werden.",
+      "proRequired": "Upgrade auf einen kostenpflichtigen Plan, damit der Assistent für dich mit GitHub-Issues arbeitet.",
+      "reviewOnGithub": "Auf GitHub prüfen",
+      "disconnectedHint": "Von diesem Computer getrennt. GitHub behält die Autorisierung von OpenWhispr, bis du sie dort entfernst.",
+      "errors": {
+        "connect_failed": "GitHub konnte nicht verbunden werden. Versuche es erneut.",
+        "disconnect_failed": "GitHub konnte nicht getrennt werden. Versuche es erneut.",
+        "oauth_denied": "Der Zugriff auf GitHub wurde abgelehnt.",
+        "oauth_timeout": "Die Verbindung hat zu lange gedauert. Versuche es erneut.",
+        "oauth_state_mismatch": "Dieser Anmeldelink war veraltet. Versuche es erneut.",
+        "ports_busy": "Eine andere App verwendet die Ports, die OpenWhispr zum Verbinden benötigt. Schließe sie und versuche es erneut.",
+        "token_exchange_failed": "GitHub hat die Verbindung nicht abgeschlossen. Versuche es erneut.",
+        "not_configured": "GitHub ist in dieser Version nicht verfügbar.",
+        "connection_changed": "Dein Konto oder die GitHub-Verbindung hat sich während der Verbindung geändert. Versuche es erneut.",
+        "signed_out": "Melde dich bei OpenWhispr an, um GitHub zu verbinden.",
+        "policy_blocked": "Konnektoren wurden von deiner Organisation deaktiviert.",
+        "policy_unavailable": "Die Einstellungen deiner Organisation konnten nicht geprüft werden. Versuche es erneut.",
+        "code_expired": "Der Code ist abgelaufen. Versuche es erneut.",
+        "device_flow_disabled": "Die Anmeldung bei GitHub mit einem Code ist in dieser Version nicht eingerichtet."
+      },
+      "deviceCode": {
+        "instructions": "Gib diesen Code auf GitHub ein:",
+        "copyAndOpen": "Kopieren & GitHub öffnen",
+        "copied": "Code kopiert.",
+        "cancel": "Abbrechen",
+        "expires": "Der Code läuft um {{time}} ab."
+      },
+      "repositories": {
+        "choose": "Repositorys auswählen",
+        "manage": "Repositorys verwalten"
+      }
+    },
     "gmail": {
       "title": "Gmail",
       "description": "Der Assistent kann E-Mails über dein Gmail-Konto senden. Er kann deine E-Mails nicht lesen, und du klickst bei jeder E-Mail selbst auf Senden.",

@@ -26,6 +26,10 @@ const ROW_ERRORS = new Set([
   "permission_not_granted",
   "email_not_verified",
   "domain_policy",
+  // GitHub's device flow: the code wasn't entered in time, or the GitHub App
+  // has the device flow turned off.
+  "code_expired",
+  "device_flow_disabled",
 ]);
 
 export interface ConnectorLoginRowProps {
@@ -52,6 +56,8 @@ export function ConnectorLoginRow({
     brandIcon = false,
     accountSummary,
     connectingDetail: ConnectingDetail,
+    rowActions: RowActions,
+    disconnectedDetail: DisconnectedDetail,
   } = row;
   const { t } = useTranslation();
   const status = useConnectorStatusStore((state) => state.statuses[connectorId]);
@@ -59,12 +65,19 @@ export function ConnectorLoginRow({
   const [errorCode, setErrorCode] = useState<string | null>(null);
   // Gmail's disconnect kept a Google grant the calendar shares.
   const [grantKept, setGrantKept] = useState(false);
+  // This row's own Disconnect succeeded; cleared by the next Connect.
+  const [disconnected, setDisconnected] = useState(false);
   const latestAttempt = useRef(0);
+  // Set while a connect the row should stop on leaving is still waiting.
+  const cancelOnLeave = useRef<(() => void) | null>(null);
 
   // Loaded for every plan: a lapsed plan must still see, and remove, its login.
   useEffect(() => {
     void ensureConnectorStatus();
   }, []);
+
+  // Leaving Settings mid-connect stops it, for rows that ask (GitHub).
+  useEffect(() => () => cancelOnLeave.current?.(), []);
 
   const connected = Boolean(status?.connected);
   const needsReconnect = connected && Boolean(status?.needsReconnect);
@@ -81,6 +94,10 @@ export function ConnectorLoginRow({
     setPhase("connecting");
     setErrorCode(null);
     setGrantKept(false);
+    setDisconnected(false);
+    cancelOnLeave.current = row.cancelConnectOnLeave
+      ? () => void window.electronAPI?.connectorCancelConnect?.(connectorId)
+      : null;
     try {
       const result = await window.electronAPI?.connectorConnect?.(connectorId);
       if (!isLatest()) return;
@@ -91,7 +108,10 @@ export function ConnectorLoginRow({
     } catch {
       if (isLatest()) setErrorCode("connect_failed");
     } finally {
-      if (isLatest()) setPhase("idle");
+      if (isLatest()) {
+        cancelOnLeave.current = null;
+        setPhase("idle");
+      }
     }
   };
 
@@ -102,8 +122,10 @@ export function ConnectorLoginRow({
     try {
       const result = await window.electronAPI?.connectorDisconnect?.(connectorId);
       if (!result) setErrorCode("disconnect_failed");
-      else if (result.status === "disconnected") setGrantKept(result.grantKept === true);
-      else if (result.status === "failed") setErrorCode(result.errorCode);
+      else if (result.status === "disconnected") {
+        setGrantKept(result.grantKept === true);
+        setDisconnected(true);
+      } else if (result.status === "failed") setErrorCode(result.errorCode);
       else if (result.status === "unavailable") setErrorCode(result.reason);
     } catch {
       setErrorCode("disconnect_failed");
@@ -148,6 +170,9 @@ export function ConnectorLoginRow({
           {phase === "connecting" && ConnectingDetail && (
             <ConnectingDetail connectorId={connectorId} />
           )}
+          {disconnected && !connected && DisconnectedDetail && (
+            <DisconnectedDetail connectorId={connectorId} />
+          )}
           {/* Mounted before the note arrives, so a screen reader announces it. */}
           <div role="status" className="text-xs text-muted-foreground" dir="auto">
             {grantKept && <p className="mt-1">{copy("grantKept")}</p>}
@@ -164,6 +189,7 @@ export function ConnectorLoginRow({
               {copy("reconnect")}
             </Button>
           )}
+          {connected && canConnect && status && RowActions && <RowActions status={status} />}
           {connected && (
             <Button
               size="sm"

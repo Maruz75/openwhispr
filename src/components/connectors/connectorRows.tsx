@@ -1,7 +1,10 @@
 import type { ComponentType, ReactNode } from "react";
 import gmailMark from "../../assets/icons/gmail.svg";
-import { MessageSquare } from "../icons";
+import { Code2, MessageSquare } from "../icons";
 import type { ConnectorStatus } from "../../types/connectors";
+import { GithubDeviceCode } from "./GithubDeviceCode";
+import { GithubRepositoriesButton } from "./GithubRepositoriesButton";
+import { GithubReviewAccess } from "./GithubReviewAccess";
 
 /** One connector's row in Settings → Integrations → Connectors. */
 export interface ConnectorRowSpec {
@@ -13,6 +16,12 @@ export interface ConnectorRowSpec {
   brandIcon?: boolean;
   /** Shown under the row's summary while Connect is in progress (GitHub's device code). */
   connectingDetail?: ComponentType<{ connectorId: string }>;
+  /** Buttons beside Disconnect while connected (GitHub's Choose or Manage repositories). */
+  rowActions?: ComponentType<{ status: ConnectorStatus }>;
+  /** Shown after this row's Disconnect, until the next Connect (GitHub's Review on GitHub). */
+  disconnectedDetail?: ComponentType<{ connectorId: string }>;
+  /** Stop a connect still in progress when the row goes away (the user left Settings). */
+  cancelConnectOnLeave?: boolean;
 }
 
 export function accountLabelSummary(
@@ -28,6 +37,25 @@ export function accountWorkspaceSummary(
 }
 
 const ICON_CLASS = "w-4 h-4 text-primary";
+
+const githubRow: ConnectorRowSpec = {
+  id: "github",
+  icon: <Code2 className={ICON_CLASS} aria-hidden="true" />,
+  // getStatus reports the installed repository count as workspaceLabel, or
+  // null when the installations couldn't be read. The i18next context picks
+  // connectedAs_empty ("no repositories yet") or connectedAs_unknown (no count).
+  accountSummary: (status) => {
+    const account = status.accountLabel ?? "";
+    const count = status.workspaceLabel;
+    if (count === null) return { account, context: "unknown" };
+    return count === "0" ? { account, context: "empty" } : { account, repositories: count };
+  },
+  connectingDetail: GithubDeviceCode,
+  rowActions: GithubRepositoriesButton,
+  disconnectedDetail: GithubReviewAccess,
+  // GitHub polls for up to 15 minutes; leaving Settings means the user gave up.
+  cancelConnectOnLeave: true,
+};
 
 /** Every connector login row, in the order Settings shows them. New connectors append here. */
 export const CONNECTOR_ROWS: readonly ConnectorRowSpec[] = [
@@ -55,4 +83,5 @@ export const CONNECTOR_ROWS: readonly ConnectorRowSpec[] = [
     icon: <MessageSquare className={ICON_CLASS} aria-hidden="true" />,
     accountSummary: accountWorkspaceSummary,
   },
+  githubRow,
 ];

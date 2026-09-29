@@ -4174,6 +4174,48 @@
         "failedBody": "Return to OpenWhispr to try again."
       }
     },
+    "github": {
+      "title": "GitHub",
+      "description": "The assistant can search issues and pull requests, create issues and comment as you, only in the repositories you choose. It can't read your code, and you approve every issue and comment before it's posted.",
+      "connect": "Connect",
+      "reconnect": "Reconnect",
+      "disconnect": "Disconnect",
+      "connecting": "Connecting to GitHub…",
+      "connectedAs": "Connected as {{account}} · Repositories: {{repositories}}",
+      "connectedAs_empty": "Connected as {{account}} · no repositories yet",
+      "connectedAs_unknown": "Connected as {{account}}",
+      "needsReconnect": "GitHub needs to be reconnected.",
+      "proRequired": "Upgrade to a paid plan to let the assistant work with GitHub issues for you.",
+      "reviewOnGithub": "Review on GitHub",
+      "disconnectedHint": "Disconnected from this computer. GitHub keeps OpenWhispr's authorization until you remove it there.",
+      "errors": {
+        "connect_failed": "Couldn't connect GitHub. Try again.",
+        "disconnect_failed": "Couldn't disconnect GitHub. Try again.",
+        "oauth_denied": "GitHub access was declined.",
+        "oauth_timeout": "Connecting took too long. Try again.",
+        "oauth_state_mismatch": "That sign-in link was out of date. Try again.",
+        "ports_busy": "Another app is using the ports OpenWhispr needs to connect. Close it and try again.",
+        "token_exchange_failed": "GitHub didn't finish connecting. Try again.",
+        "not_configured": "GitHub isn't available in this build.",
+        "connection_changed": "Your account or GitHub connection changed while connecting. Try again.",
+        "signed_out": "Sign in to OpenWhispr to connect GitHub.",
+        "policy_blocked": "Connectors are turned off by your organization.",
+        "policy_unavailable": "Couldn't check your organization's settings. Try again.",
+        "code_expired": "The code expired. Try again.",
+        "device_flow_disabled": "Signing in to GitHub with a code isn't set up for this build."
+      },
+      "deviceCode": {
+        "instructions": "Enter this code on GitHub:",
+        "copyAndOpen": "Copy & open GitHub",
+        "copied": "Code copied.",
+        "cancel": "Cancel",
+        "expires": "The code expires at {{time}}."
+      },
+      "repositories": {
+        "choose": "Choose repositories",
+        "manage": "Manage repositories"
+      }
+    },
     "gmail": {
       "title": "Gmail",
       "description": "The assistant can send emails from your Gmail account. It can't read your mail, and you press Send on every email yourself.",

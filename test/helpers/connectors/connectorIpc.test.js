@@ -724,3 +724,34 @@ test("a query reaches the manager with the call's auth; malformed requests don't
   }
   assert.equal(calls.length, 1);
 });
+
+test("cancelling a connect needs no policy, and a malformed id never reaches the manager", async () => {
+  const { registerConnectorIpc } = await load();
+  const ipcMain = fakeIpcMain();
+  const cancels = [];
+  const manager = {
+    ...fakeManager(),
+    cancelConnect: (connectorId) => {
+      cancels.push(connectorId);
+      return { status: "cancelled" };
+    },
+  };
+  let policyCalls = 0;
+  registerConnectorIpc({
+    ipcMain,
+    manager,
+    getPolicyState: async () => {
+      policyCalls += 1;
+      return "blocked";
+    },
+  });
+  const cancel = ipcMain.handlers.get("connector-cancel-connect");
+
+  assert.deepEqual(await cancel({}, "github"), { status: "cancelled" });
+  for (const bad of [undefined, "", 7, { id: "github" }]) {
+    assert.deepEqual(await cancel({}, bad), { status: "unavailable", reason: "invalid_request" });
+  }
+
+  assert.deepEqual(cancels, ["github"]);
+  assert.equal(policyCalls, 0);
+});

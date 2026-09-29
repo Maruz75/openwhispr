@@ -867,6 +867,48 @@
         "failedBody": "عد إلى OpenWhispr للمحاولة مرة أخرى."
       }
     },
+    "github": {
+      "title": "GitHub",
+      "description": "يمكن للمساعد البحث في المشكلات وطلبات السحب وإنشاء المشكلات والتعليق نيابةً عنك، في المستودعات التي تختارها فقط. لا يمكنه قراءة الكود الخاص بك، وتوافق على كل مشكلة وكل تعليق قبل نشره.",
+      "connect": "ربط",
+      "reconnect": "إعادة الربط",
+      "disconnect": "قطع الربط",
+      "connecting": "جارٍ الربط مع GitHub…",
+      "connectedAs": "متصل بصفتك {{account}} · المستودعات: {{repositories}}",
+      "connectedAs_empty": "متصل بصفتك {{account}} · لا توجد مستودعات بعد",
+      "connectedAs_unknown": "متصل بصفتك {{account}}",
+      "needsReconnect": "يلزم إعادة ربط GitHub.",
+      "proRequired": "قم بالترقية إلى خطة مدفوعة ليتمكن المساعد من العمل على مشكلات GitHub نيابةً عنك.",
+      "reviewOnGithub": "المراجعة على GitHub",
+      "disconnectedHint": "تم قطع الربط على هذا الكمبيوتر. يحتفظ GitHub بتفويض OpenWhispr إلى أن تزيله من هناك.",
+      "errors": {
+        "connect_failed": "تعذّر ربط GitHub. حاول مرة أخرى.",
+        "disconnect_failed": "تعذّر قطع ربط GitHub. حاول مرة أخرى.",
+        "oauth_denied": "تم رفض الوصول إلى GitHub.",
+        "oauth_timeout": "استغرق الربط وقتًا طويلاً. حاول مرة أخرى.",
+        "oauth_state_mismatch": "رابط تسجيل الدخول هذا كان قديمًا. حاول مرة أخرى.",
+        "ports_busy": "يستخدم تطبيق آخر المنافذ التي يحتاجها OpenWhispr للربط. أغلقه وحاول مرة أخرى.",
+        "token_exchange_failed": "لم يكمل GitHub عملية الربط. حاول مرة أخرى.",
+        "not_configured": "GitHub غير متاح في هذا الإصدار.",
+        "connection_changed": "تغيّر حسابك أو اتصال GitHub أثناء الربط. حاول مرة أخرى.",
+        "signed_out": "سجّل الدخول إلى OpenWhispr لربط GitHub.",
+        "policy_blocked": "أوقفت مؤسستك تشغيل الموصلات.",
+        "policy_unavailable": "تعذّر التحقق من إعدادات مؤسستك. حاول مرة أخرى.",
+        "code_expired": "انتهت صلاحية الرمز. حاول مرة أخرى.",
+        "device_flow_disabled": "تسجيل الدخول إلى GitHub برمز غير مُعدّ في هذا الإصدار."
+      },
+      "deviceCode": {
+        "instructions": "أدخل هذا الرمز على GitHub:",
+        "copyAndOpen": "نسخ وفتح GitHub",
+        "copied": "تم نسخ الرمز.",
+        "cancel": "إلغاء",
+        "expires": "تنتهي صلاحية الرمز في {{time}}."
+      },
+      "repositories": {
+        "choose": "اختيار المستودعات",
+        "manage": "إدارة المستودعات"
+      }
+    },
     "gmail": {
       "title": "Gmail",
       "description": "يمكن للمساعد إرسال الرسائل الإلكترونية من حسابك على Gmail. لا يمكنه قراءة بريدك، وتضغط إرسال بنفسك لكل رسالة.",

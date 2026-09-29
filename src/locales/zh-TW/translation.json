@@ -4005,6 +4005,48 @@
         "failedBody": "請返回 OpenWhispr 重試。"
       }
     },
+    "github": {
+      "title": "GitHub",
+      "description": "助理可以僅在您選擇的存放庫中，以您的身分搜尋 Issue 和提取要求、建立 Issue 以及發表留言。它無法讀取您的程式碼，每個 Issue 和留言在發佈前都需要您核准。",
+      "connect": "連接",
+      "reconnect": "重新連接",
+      "disconnect": "中斷連接",
+      "connecting": "正在連接 GitHub…",
+      "connectedAs": "已以 {{account}} 身分連接 · 存放庫：{{repositories}}",
+      "connectedAs_empty": "已以 {{account}} 身分連接 · 尚無存放庫",
+      "connectedAs_unknown": "已以 {{account}} 身分連接",
+      "needsReconnect": "需要重新連接 GitHub。",
+      "proRequired": "升級到付費方案，讓助理為您處理 GitHub Issue。",
+      "reviewOnGithub": "在 GitHub 上查看",
+      "disconnectedHint": "已在這台電腦上中斷連接。在您於 GitHub 上移除之前，GitHub 會保留 OpenWhispr 的授權。",
+      "errors": {
+        "connect_failed": "無法連接 GitHub，請重試。",
+        "disconnect_failed": "無法中斷 GitHub 連接，請重試。",
+        "oauth_denied": "GitHub 存取遭到拒絕。",
+        "oauth_timeout": "連接耗時過長，請重試。",
+        "oauth_state_mismatch": "該登入連結已過期，請重試。",
+        "ports_busy": "另一個應用程式正在使用 OpenWhispr 連接所需的連接埠。請關閉它後重試。",
+        "token_exchange_failed": "GitHub 未完成連接，請重試。",
+        "not_configured": "此版本中 GitHub 不可用。",
+        "connection_changed": "連接過程中您的帳戶或 GitHub 連接發生了變化，請重試。",
+        "signed_out": "請登入 OpenWhispr 以連接 GitHub。",
+        "policy_blocked": "您的組織已關閉連接器。",
+        "policy_unavailable": "無法檢查您的組織設定，請重試。",
+        "code_expired": "代碼已過期，請重試。",
+        "device_flow_disabled": "此版本未設定使用代碼登入 GitHub。"
+      },
+      "deviceCode": {
+        "instructions": "請在 GitHub 上輸入此代碼：",
+        "copyAndOpen": "複製並開啟 GitHub",
+        "copied": "代碼已複製。",
+        "cancel": "取消",
+        "expires": "代碼將於 {{time}} 到期。"
+      },
+      "repositories": {
+        "choose": "選擇存放庫",
+        "manage": "管理存放庫"
+      }
+    },
     "gmail": {
       "title": "Gmail",
       "description": "助理可以透過您的 Gmail 帳戶傳送郵件。它無法讀取您的郵件，每封郵件都由您親自按下傳送。",

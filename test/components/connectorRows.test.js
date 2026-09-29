@@ -58,7 +58,7 @@ test("the shipped rows are Gmail then Slack, with their account summaries", asyn
   const status = { accountLabel: "chad", workspaceLabel: "Acme" };
 
   assert.deepEqual(
-    rows.CONNECTOR_ROWS.map((row) => row.id),
+    rows.CONNECTOR_ROWS.slice(0, 2).map((row) => row.id),
     ["gmail", "slack"]
   );
   assert.deepEqual(rows.CONNECTOR_ROWS[0].accountSummary(status), { account: "chad" });

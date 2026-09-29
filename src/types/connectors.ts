@@ -103,10 +103,23 @@ export interface ConnectorStatus {
   manageUrl?: string;
 }
 
+/** What a connect in progress asks the user to do: GitHub's device code. */
+export interface ConnectorConnectProgress {
+  connectorId: string;
+  userCode: string;
+  verificationUri: string;
+  /** When the code stops working, in epoch milliseconds. */
+  expiresAt: number;
+}
+
 export type ConnectorConnectResult =
   | { status: "connected"; accountLabel: string | null; workspaceLabel: string | null }
   | { status: "failed"; errorCode: string }
   | { status: "unavailable"; reason: string };
+
+/** Whether a connect in progress was there to stop. */
+export type ConnectorCancelConnectResult =
+  { status: "cancelled" } | { status: "idle" } | { status: "unavailable"; reason: string };
 
 export type ConnectorDisconnectResult =
   /** grantKept: another login (Google Calendar) shares the provider's grant, so it wasn't revoked. */

@@ -519,6 +519,17 @@ function createConnectorManager({
     }
   }
 
+  // Stops this account's connect in progress: the row's Cancel, or the user
+  // leaving Settings while GitHub's device code is showing. The connect then
+  // ends as oauth_cancelled, and a login that arrives anyway is revoked, as
+  // when a newer Connect replaces it. Stopping is always allowed.
+  function cancelConnect(connectorId) {
+    const controller = connecting.get(`${getAccountId()}:${connectorId}`);
+    if (!controller) return { status: "idle" };
+    controller.abort();
+    return { status: "cancelled" };
+  }
+
   // Removing access is always allowed: no policy or plan check.
   // `erasingDevice` (Delete account with device erase) revokes a grant the
   // connector would otherwise keep because another login shares it.
@@ -870,6 +881,7 @@ function createConnectorManager({
     recentActions,
     sweepExpired,
     connect,
+    cancelConnect,
     disconnect,
     disconnectAll,
     revokeAllStored,

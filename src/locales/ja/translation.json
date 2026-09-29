@@ -4005,6 +4005,48 @@
         "failedBody": "OpenWhisprに戻ってもう一度お試しください。"
       }
     },
+    "github": {
+      "title": "GitHub",
+      "description": "アシスタントは、あなたが選んだリポジトリでのみ、あなたとしてIssueとプルリクエストの検索、Issueの作成、コメントができます。コードを読むことはできず、Issueやコメントは投稿前に必ずあなたが承認します。",
+      "connect": "接続",
+      "reconnect": "再接続",
+      "disconnect": "接続を解除",
+      "connecting": "GitHubに接続しています…",
+      "connectedAs": "{{account}} として接続済み · リポジトリ: {{repositories}}",
+      "connectedAs_empty": "{{account}} として接続済み · リポジトリはまだありません",
+      "connectedAs_unknown": "{{account}} として接続済み",
+      "needsReconnect": "GitHubを再接続する必要があります。",
+      "proRequired": "アシスタントにGitHubのIssueを扱わせるには、有料プランへのアップグレードが必要です。",
+      "reviewOnGithub": "GitHubで確認",
+      "disconnectedHint": "このコンピューターから接続を解除しました。GitHub側でOpenWhisprの認可を削除するまで、認可はGitHubに残ります。",
+      "errors": {
+        "connect_failed": "GitHubを接続できませんでした。もう一度お試しください。",
+        "disconnect_failed": "GitHubの接続を解除できませんでした。もう一度お試しください。",
+        "oauth_denied": "GitHubへのアクセスが拒否されました。",
+        "oauth_timeout": "接続に時間がかかりすぎました。もう一度お試しください。",
+        "oauth_state_mismatch": "そのサインインリンクは期限切れでした。もう一度お試しください。",
+        "ports_busy": "OpenWhisprが接続に必要なポートを別のアプリが使用しています。そのアプリを閉じてから、もう一度お試しください。",
+        "token_exchange_failed": "GitHubの接続が完了しませんでした。もう一度お試しください。",
+        "not_configured": "このビルドではGitHubを利用できません。",
+        "connection_changed": "接続中にアカウントまたはGitHubの接続が変わりました。もう一度お試しください。",
+        "signed_out": "GitHubを接続するにはOpenWhisprにサインインしてください。",
+        "policy_blocked": "組織によってコネクタが無効にされています。",
+        "policy_unavailable": "組織の設定を確認できませんでした。もう一度お試しください。",
+        "code_expired": "コードの有効期限が切れました。もう一度お試しください。",
+        "device_flow_disabled": "このビルドでは、コードによるGitHubへのサインインが設定されていません。"
+      },
+      "deviceCode": {
+        "instructions": "GitHubでこのコードを入力してください:",
+        "copyAndOpen": "コピーしてGitHubを開く",
+        "copied": "コードをコピーしました。",
+        "cancel": "キャンセル",
+        "expires": "コードの有効期限は {{time}} です。"
+      },
+      "repositories": {
+        "choose": "リポジトリを選択",
+        "manage": "リポジトリを管理"
+      }
+    },
     "gmail": {
       "title": "Gmail",
       "description": "アシスタントはあなたのGmailアカウントからメールを送信できます。メールを読むことはできず、各メールはあなた自身が送信を押して送ります。",

@@ -13,8 +13,10 @@ import type {
 } from "./calendar";
 import type {
   ConnectorActionRecord,
+  ConnectorCancelConnectResult,
   ConnectorCancelReason,
   ConnectorCommitResult,
+  ConnectorConnectProgress,
   ConnectorConnectResult,
   ConnectorDirectResult,
   ConnectorDisconnectResult,
@@ -2959,8 +2961,13 @@ declare global {
         request: NoteAttendeesRequest
       ) => Promise<{ attendees: NoteAttendee[]; unavailableReason?: string }>;
       connectorConnect?: (connectorId: string) => Promise<ConnectorConnectResult>;
+      /** Stops this account's connect in progress; the connect ends as oauth_cancelled. */
+      connectorCancelConnect?: (connectorId: string) => Promise<ConnectorCancelConnectResult>;
       connectorDisconnect?: (connectorId: string) => Promise<ConnectorDisconnectResult>;
       onConnectorStatusChanged?: (callback: (statuses: ConnectorStatus[]) => void) => () => void;
+      onConnectorConnectProgress?: (
+        callback: (progress: ConnectorConnectProgress) => void
+      ) => () => void;
       calendarGetAvailability?: (
         request: CalendarAvailabilityRequest
       ) => Promise<

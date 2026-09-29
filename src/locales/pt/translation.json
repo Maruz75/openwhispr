@@ -4005,6 +4005,48 @@
         "failedBody": "Volte para o OpenWhispr para tentar novamente."
       }
     },
+    "github": {
+      "title": "GitHub",
+      "description": "O assistente pode pesquisar issues e pull requests, criar issues e comentar em seu nome, apenas nos repositórios que você escolher. Ele não consegue ler seu código, e você aprova cada issue e comentário antes de ser publicado.",
+      "connect": "Conectar",
+      "reconnect": "Reconectar",
+      "disconnect": "Desconectar",
+      "connecting": "Conectando ao GitHub…",
+      "connectedAs": "Conectado como {{account}} · Repositórios: {{repositories}}",
+      "connectedAs_empty": "Conectado como {{account}} · nenhum repositório ainda",
+      "connectedAs_unknown": "Conectado como {{account}}",
+      "needsReconnect": "O GitHub precisa ser reconectado.",
+      "proRequired": "Atualize para um plano pago para que o assistente trabalhe com issues do GitHub por você.",
+      "reviewOnGithub": "Revisar no GitHub",
+      "disconnectedHint": "Desconectado deste computador. O GitHub mantém a autorização do OpenWhispr até você removê-la lá.",
+      "errors": {
+        "connect_failed": "Não foi possível conectar o GitHub. Tente novamente.",
+        "disconnect_failed": "Não foi possível desconectar o GitHub. Tente novamente.",
+        "oauth_denied": "O acesso ao GitHub foi recusado.",
+        "oauth_timeout": "A conexão demorou demais. Tente novamente.",
+        "oauth_state_mismatch": "Esse link de login estava desatualizado. Tente novamente.",
+        "ports_busy": "Outro aplicativo está usando as portas que o OpenWhispr precisa para conectar. Feche-o e tente novamente.",
+        "token_exchange_failed": "O GitHub não concluiu a conexão. Tente novamente.",
+        "not_configured": "O GitHub não está disponível nesta versão.",
+        "connection_changed": "Sua conta ou a conexão do GitHub mudou durante a conexão. Tente novamente.",
+        "signed_out": "Entre no OpenWhispr para conectar o GitHub.",
+        "policy_blocked": "Sua organização desativou os conectores.",
+        "policy_unavailable": "Não foi possível verificar as configurações da sua organização. Tente novamente.",
+        "code_expired": "O código expirou. Tente novamente.",
+        "device_flow_disabled": "O login no GitHub com um código não está configurado nesta versão."
+      },
+      "deviceCode": {
+        "instructions": "Digite este código no GitHub:",
+        "copyAndOpen": "Copiar e abrir o GitHub",
+        "copied": "Código copiado.",
+        "cancel": "Cancelar",
+        "expires": "O código expira às {{time}}."
+      },
+      "repositories": {
+        "choose": "Escolher repositórios",
+        "manage": "Gerenciar repositórios"
+      }
+    },
     "gmail": {
       "title": "Gmail",
       "description": "O assistente pode enviar e-mails pela sua conta do Gmail. Ele não consegue ler seus e-mails, e você aperta Enviar em cada e-mail.",

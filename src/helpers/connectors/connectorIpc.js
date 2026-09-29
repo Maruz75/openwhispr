@@ -209,6 +209,12 @@ function registerConnectorIpc({
     return manager.connect(connectorId, await getPolicyState(event));
   });
 
+  // Stopping a connect is always allowed, so it skips the policy check too.
+  ipcMain.handle("connector-cancel-connect", (_event, connectorId) => {
+    if (!isNonEmptyString(connectorId)) return { status: "unavailable", reason: "invalid_request" };
+    return manager.cancelConnect(connectorId);
+  });
+
   // Removing access is always allowed, so disconnect skips the policy check.
   ipcMain.handle("connector-disconnect", (_event, connectorId) => {
     if (!isNonEmptyString(connectorId)) return { status: "unavailable", reason: "invalid_request" };
