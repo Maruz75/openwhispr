@@ -22,11 +22,28 @@ const GROUP_ICON: Partial<Record<NoteAccessPrincipalType, IconPair>> = {
 };
 const MAIL_ICON: IconPair = ['envelope', 'Mail'];
 
+interface RowIconProps {
+  name: string;
+  mdName: LucideIconName;
+  /** Brand marks the row's current state; neutral is for everything else. */
+  tone?: 'neutral' | 'brand';
+}
+
 /** The leading icon of a row in the share sheet's cards. */
-export function RowIcon({ name, mdName }: { name: string; mdName: LucideIconName }) {
+export function RowIcon({ name, mdName, tone = 'neutral' }: RowIconProps) {
+  const brand = tone === 'brand';
   return (
-    <View className="h-8 w-8 items-center justify-center rounded-full bg-tertiarySystemFill">
-      <SystemIcon name={name} mdName={mdName} size={15} color="secondaryLabel" />
+    <View
+      className={`h-8 w-8 items-center justify-center rounded-full ${
+        brand ? 'bg-brand/10' : 'bg-tertiarySystemFill'
+      }`}
+    >
+      <SystemIcon
+        name={name}
+        mdName={mdName}
+        size={15}
+        color={brand ? 'brand' : 'secondaryLabel'}
+      />
     </View>
   );
 }
@@ -39,7 +56,7 @@ interface PrincipalAvatarProps {
 
 /** A person's initial, or an icon for groups and addresses without an account. */
 export function PrincipalAvatar({ type, name, email }: PrincipalAvatarProps) {
-  const icon = GROUP_ICON[type] ?? (type === 'email' || !name ? MAIL_ICON : undefined);
+  const icon = GROUP_ICON[type] ?? (type === 'email' ? MAIL_ICON : undefined);
   if (icon) return <RowIcon name={icon[0]} mdName={icon[1]} />;
   const initial = (name || email || '?').trim().charAt(0).toUpperCase();
   return (

@@ -12,6 +12,7 @@ import { AppFont } from '@/lib/fonts';
 import { isValidEmail } from '@/lib/utils';
 import { isGroupPrincipal } from '@/lib/notes/noteShareAccess';
 import { GroupedList } from './GroupedList';
+import { NOTES_ROW_CONTENT_INSET } from './tokens';
 import { PRINCIPAL_LABEL, PrincipalAvatar, RowIcon } from './NoteSharePrincipal';
 
 const PLACEHOLDER_COLOR = iosColor('tertiaryLabel');
@@ -67,18 +68,21 @@ export function NoteShareInviteField({
 
   const grants = access?.grants ?? [];
   const existingIds = new Set(grants.map((grant) => grant.principal.id).filter(Boolean));
-  const existingEmails = new Set([
-    access?.owner.email?.toLowerCase(),
-    ...grants.map((grant) => grant.principal.email?.toLowerCase()),
-    ...invitations
-      .filter((invite) => !invite.revoked_at)
-      .map((invite) => invite.email.toLowerCase()),
-  ]);
+  // Groups have no email, so a missing one must never count as a match.
+  const existingEmails = new Set(
+    [
+      access?.owner.email,
+      ...grants.map((grant) => grant.principal.email),
+      ...invitations.filter((invite) => !invite.revoked_at).map((invite) => invite.email),
+    ]
+      .filter((email): email is string => Boolean(email))
+      .map((email) => email.toLowerCase()),
+  );
   const available = suggestions.filter(
     (principal) =>
       !principal.existing_grant_id &&
       !existingIds.has(principal.id) &&
-      !existingEmails.has(principal.email?.toLowerCase()) &&
+      !(principal.email && existingEmails.has(principal.email.toLowerCase())) &&
       (!isGroupPrincipal(principal.type) || access?.can_manage_inherited_access),
   );
   const typedEmail = query.toLowerCase();
@@ -168,6 +172,13 @@ function withDividers(rows: ReactElement[]): ReactNode[] {
   return rows.flatMap((row, index) =>
     index === 0
       ? [row]
-      : [<View key={`divider-${row.key}`} className="ml-14 h-px bg-separator" />, row],
+      : [
+          <View
+            key={`divider-${row.key}`}
+            className="h-px bg-separator"
+            style={{ marginLeft: NOTES_ROW_CONTENT_INSET }}
+          />,
+          row,
+        ],
   );
 }

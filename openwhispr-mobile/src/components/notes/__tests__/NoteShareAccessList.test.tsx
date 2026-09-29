@@ -367,3 +367,19 @@ it('leaves per-person menus reachable by VoiceOver', () => {
     expect(insideAccessibleElement(screen.getByLabelText(label))).toBe(false);
   }
 });
+
+it('gives a person without a name the initial of their email', () => {
+  const screen = render(
+    <NoteShareAccessList
+      access={{ ...access, grants: [], owner: { ...owner, name: null, email: 'sam@example.com' } }}
+      invitations={[]}
+      busy={false}
+      onUpdateGrant={jest.fn()}
+      onRemoveGrant={jest.fn()}
+      onRevokeInvitation={jest.fn()}
+      onResendInvitation={jest.fn()}
+    />,
+  );
+  expect(screen.getByText('S')).toBeTruthy();
+  expect(screen.getByText('sam@example.com')).toBeTruthy();
+});

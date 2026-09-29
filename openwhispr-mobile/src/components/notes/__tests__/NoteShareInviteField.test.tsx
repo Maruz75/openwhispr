@@ -170,3 +170,30 @@ it('reports a failed search', async () => {
   await settleSearch();
   await waitFor(() => expect(screen.getByText('Search unavailable. Try again.')).toBeTruthy());
 });
+
+it('still offers groups when an existing grant has no email', async () => {
+  mockSearch.mockResolvedValue({ suggestions: [engineering] });
+  const designGrant = {
+    id: 'grant-team',
+    principal: { ...owner, type: 'team' as const, id: 'team-1', email: null, name: 'Design' },
+    permission: 'viewer' as const,
+    source: 'team' as const,
+    inherited: true,
+    pending: false,
+    created_at: '',
+    updated_at: '',
+  };
+  const screen = render(
+    <NoteShareInviteField
+      value="eng"
+      onChangeText={jest.fn()}
+      onInvite={jest.fn()}
+      remoteId="remote-1"
+      access={{ ...access, can_manage_inherited_access: true, grants: [designGrant] }}
+      busy={false}
+      onAddPrincipal={jest.fn()}
+    />,
+  );
+  await settleSearch();
+  await waitFor(() => expect(screen.getByText('Engineering')).toBeTruthy());
+});

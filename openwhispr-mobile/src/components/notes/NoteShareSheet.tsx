@@ -69,6 +69,23 @@ const VISIBILITY_ACTION_PREFIX = 'visibility:';
 const REPLACE_LINK_ID = 'replace-link';
 const DISABLE_SHARING_ID = 'disable-sharing';
 
+function describeAccess(
+  visibility: ShareVisibility | undefined,
+  domains: string[],
+  isTeamNote: boolean,
+): string {
+  switch (visibility) {
+    case 'link':
+      return 'Anyone with the link can view';
+    case 'domain':
+      return `Anyone at ${domains.join(', ')} with the link can view`;
+    case 'invited':
+      return 'Only people you add can open it';
+    default:
+      return isTeamNote ? 'Not shared outside this space' : 'Not shared with anyone';
+  }
+}
+
 /** Announces each new message to VoiceOver. */
 function useAnnouncement(text: string | null): void {
   useEffect(() => {
@@ -352,25 +369,13 @@ export function NoteShareSheet({ noteId, onClose, onFlushDraft, onExport }: Note
     shared || !isTeamNote
       ? VISIBILITY_LABEL[visibility ?? 'private']
       : 'Everyone in this team space';
-  const accessDetail = ((): string => {
-    if (pausedAccess) return 'External sharing is off';
-    switch (visibility) {
-      case 'link':
-        return 'Anyone with the link can view';
-      case 'domain':
-        return `Anyone at ${sharing.state?.share.domain_allowlist.join(', ')} with the link can view`;
-      case 'invited':
-        return 'Only people you add can open it';
-      default:
-        return isTeamNote ? 'Not shared outside this space' : 'Not shared with anyone';
-    }
-  })();
+  const accessDetail = pausedAccess
+    ? 'External sharing is off'
+    : describeAccess(visibility, sharing.state?.share.domain_allowlist ?? [], isTeamNote);
   const [accessIcon, accessMdIcon] = VISIBILITY_ICON[shared && visibility ? visibility : 'private'];
   const accessRowContent = (
     <View className="flex-row items-center gap-3 px-4 py-3">
-      <View className="h-8 w-8 items-center justify-center rounded-full bg-brand/10">
-        <SystemIcon name={accessIcon} mdName={accessMdIcon} size={16} color="brand" />
-      </View>
+      <RowIcon name={accessIcon} mdName={accessMdIcon} tone="brand" />
       <View className="min-w-0 flex-1">
         <Text className="text-[15px] font-medium text-label">{accessTitle}</Text>
         <Text className="text-[12px] text-secondaryLabel">{accessDetail}</Text>
