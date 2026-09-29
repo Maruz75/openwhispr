@@ -3,9 +3,19 @@ import { Platform } from 'react-native';
 
 interface PipTutorialNativeModule {
   isAvailable(): boolean;
-  start(videoName: string): Promise<boolean>;
+  // Builds before start reported an outcome resolve a boolean, and an OTA update can run this JS
+  // on one of them.
+  start(videoName: string): Promise<string | boolean>;
   stop(): Promise<void>;
 }
+
+/**
+ * `started`, or why the overlay isn't showing: `unsupported`, `video_missing`, `no_root_view`,
+ * `controller_failed`, `timeout:possible=<bool>`, `failed:<error>`, `stopped` (a later start or a
+ * stop replaced it), `unavailable` (module not linked), `error` (the call threw) or `failed`
+ * (an older native build gave no reason).
+ */
+export type PipStartOutcome = string;
 
 let NativeModule: PipTutorialNativeModule | null = null;
 if (Platform.OS === 'ios') {
@@ -42,16 +52,17 @@ export const PipTutorial = {
    * The video must be bundled in modules/pip-tutorial/ios/Resources/ as
    * `<videoName>.mp4` so it ends up in the main app bundle at runtime.
    *
-   * Returns `true` if PiP was successfully prepared, `false` if the device
-   * doesn't support PiP or the named video isn't bundled. Caller should fall
-   * back to a static overlay when this returns false.
+   * Resolves `started` once the overlay is showing, otherwise the reason it
+   * isn't (see `PipStartOutcome`). Never rejects.
    */
-  async start(videoName: string): Promise<boolean> {
-    if (!NativeModule) return false;
+  async start(videoName: string): Promise<PipStartOutcome> {
+    if (!NativeModule) return 'unavailable';
     try {
-      return await NativeModule.start(videoName);
+      const outcome = await NativeModule.start(videoName);
+      if (typeof outcome === 'string') return outcome;
+      return outcome ? 'started' : 'failed';
     } catch {
-      return false;
+      return 'error';
     }
   },
 
