@@ -227,7 +227,7 @@
     "fast-xml-builder": "1.2.0",
     "fast-xml-parser": "5.7.2",
     "ip-address": "10.2.0",
-    "markdown-it": "14.2.0",
+    "markdown-it": "14.3.2",
     "tmp": "0.2.7"
   }
 }
