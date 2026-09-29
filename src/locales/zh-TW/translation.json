@@ -3902,7 +3902,7 @@
           "connection_changed": "發佈前 GitHub 連線發生了變化，因此未發佈任何內容。",
           "credential_save_failed": "無法在這台電腦上儲存 GitHub 登入資訊，未發佈任何內容。請再試一次。",
           "generic": "發生問題，未在 GitHub 上發佈任何內容。",
-          "not_installed": "此存放庫未安裝 OpenWhispr GitHub App，未發佈任何內容。",
+          "not_installed": "此存放庫未安裝 OpenWhispr GitHub App。請在設定中新增。未發佈任何內容。",
           "no_repositories": "尚未為 OpenWhispr GitHub App 選擇存放庫。請在設定中選擇。未發佈任何內容。",
           "forbidden": "您沒有在此存放庫中執行此操作的權限，未發佈任何內容。",
           "not_found": "找不到該 Issue 或提取要求，未發佈任何內容。",

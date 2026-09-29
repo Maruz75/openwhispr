@@ -519,15 +519,36 @@ function createConnectorManager({
     }
   }
 
-  // Stops this account's connect in progress: the row's Cancel, or the user
-  // leaving Settings while GitHub's device code is showing. The connect then
-  // ends as oauth_cancelled, and a login that arrives anyway is revoked, as
-  // when a newer Connect replaces it. Stopping is always allowed.
+  // Aborts the connects in progress that `matches(accountId, connectorId)`;
+  // each then ends as oauth_cancelled, and a login that arrives anyway is
+  // revoked, as when a newer Connect replaces it. True when any was running.
+  function abortConnects(matches) {
+    let aborted = false;
+    for (const [flowKey, controller] of connecting) {
+      const split = flowKey.lastIndexOf(":");
+      if (matches(flowKey.slice(0, split), flowKey.slice(split + 1))) {
+        controller.abort();
+        aborted = true;
+      }
+    }
+    return aborted;
+  }
+
+  // The row's Cancel, or the user leaving Settings while GitHub's device code
+  // is showing. A connect started before an account switch or sign-out is
+  // stopped too: it can't be saved, and nothing else would end its polling.
+  // Stopping is always allowed.
   function cancelConnect(connectorId) {
-    const controller = connecting.get(`${getAccountId()}:${connectorId}`);
-    if (!controller) return { status: "idle" };
-    controller.abort();
-    return { status: "cancelled" };
+    return abortConnects((_accountId, id) => id === connectorId)
+      ? { status: "cancelled" }
+      : { status: "idle" };
+  }
+
+  // The signed-in account changed: a connect started under another one can
+  // only be refused when it finishes, so it stops now.
+  function accountChanged() {
+    const accountId = getAccountId();
+    abortConnects((flowAccountId) => flowAccountId !== String(accountId));
   }
 
   // Removing access is always allowed: no policy or plan check.
@@ -882,6 +903,7 @@ function createConnectorManager({
     sweepExpired,
     connect,
     cancelConnect,
+    accountChanged,
     disconnect,
     disconnectAll,
     revokeAllStored,

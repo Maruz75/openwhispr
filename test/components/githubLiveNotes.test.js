@@ -139,6 +139,16 @@ test("the note follows the user's edits: added, changed and gone", async (t) => 
   assert.ok(container.textContent.includes(note("@dana")));
 });
 
+test("the note speaks of Send, so a cancelled card no longer shows it", async (t) => {
+  const container = await mountCard(t, { connectorId: "github", preview: ISSUE });
+  assert.ok(container.textContent.includes(note("@alice, @acme/infra")));
+
+  await React.act(async () => click(button(container, "connectors.approval.cancel")));
+
+  assert.ok(container.textContent.includes("connectors.approval.cancelled"));
+  assert.equal(container.textContent.includes(NOTE_KEY), false);
+});
+
 test("a GitHub comment card counts mentions outside code only", async (t) => {
   const text = "Thanks @erin!\n```\n@not-me\n```\nmail ops@acme.test";
   const container = await mountCard(t, {

@@ -1,25 +1,12 @@
 import type { ConnectorPreviewNote } from "../../types/connectors";
-import { githubMentions } from "../../utils/githubMentions";
+import { githubFieldMentions } from "../../utils/githubMentions";
 
 type LiveCardFields = Record<string, string | string[]>;
 
 // GitHub notifies everyone a title or body mentions, and a team mention
 // notifies the whole team, so the card says who before Send.
 function githubLiveNotes(fields: LiveCardFields): ConnectorPreviewNote[] {
-  const text = (name: string): string => {
-    const value = fields[name];
-    return typeof value === "string" ? value : "";
-  };
-  // Title and body apart: a title can't open a code block over the body.
-  const seen = new Set<string>();
-  const mentions = [...githubMentions(text("title")), ...githubMentions(text("body"))].filter(
-    (mention) => {
-      const key = mention.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }
-  );
+  const mentions = githubFieldMentions(fields);
   return mentions.length > 0
     ? [
         {

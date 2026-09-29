@@ -122,3 +122,43 @@ test("no text, no mentions", async () => {
   assert.deepEqual(githubMentions(""), []);
   assert.deepEqual(githubMentions("Nothing to see here."), []);
 });
+
+test("part of a longer backtick run opens no code span", async () => {
+  const { githubMentions } = await load();
+  // The ``` mid-line is literal text, so only `x` is code and @alice counts.
+  assert.deepEqual(githubMentions("Wrap it in ``` then ping @alice about `x`"), ["@alice"]);
+  assert.deepEqual(githubMentions("``@alice`"), ["@alice"]);
+});
+
+test("a backtick that opened no code span doesn't hide the mention after it", async () => {
+  const { githubMentions } = await load();
+  assert.deepEqual(githubMentions("hey `@alice please"), ["@alice"]);
+  assert.deepEqual(githubMentions("see `@bob` and @carol"), ["@carol"]);
+});
+
+test("a code span never leaves its list item, heading or table row", async () => {
+  const { githubMentions } = await load();
+  assert.deepEqual(githubMentions("- Run `npm test\n- cc @alice\n- the ` key"), ["@alice"]);
+  assert.deepEqual(githubMentions("# Fix `parser\n@alice please look at the ` handling"), [
+    "@alice",
+  ]);
+  assert.deepEqual(githubMentions("| a ` b |\n| --- |\n| @alice ` |"), ["@alice"]);
+  // Inside one paragraph a span still runs across a line break.
+  assert.deepEqual(githubMentions("a `code\nspan @dan` here"), []);
+});
+
+test("a fence closes only on its own character", async () => {
+  const { githubMentions } = await load();
+  assert.deepEqual(githubMentions("```\n@eve\n~~~\n@frank\n```\n@gina"), ["@gina"]);
+  assert.deepEqual(githubMentions("~~~\n@eve\n```\n@frank\n~~~\n@gina"), ["@gina"]);
+});
+
+test("githubFieldMentions reads title and body apart, each mention once", async () => {
+  const { githubFieldMentions } = await load();
+  // A title ending in an open code span can't hide the body's mentions.
+  assert.deepEqual(githubFieldMentions({ title: "Fix `parser and @Ann", body: "cc @ann ` @bo" }), [
+    "@Ann",
+    "@bo",
+  ]);
+  assert.deepEqual(githubFieldMentions({ title: "Crash", body: 7 }), []);
+});

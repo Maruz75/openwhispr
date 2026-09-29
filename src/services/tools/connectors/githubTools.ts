@@ -2,6 +2,8 @@ import i18n from "../../../i18n";
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "../ToolRegistry";
 import { useConnectorStatusStore } from "../../../stores/connectorStatusStore";
 import { connectorErrorText } from "../../../utils/connectorErrorCopy";
+import { githubFieldMentions } from "../../../utils/githubMentions";
+import { MAX_ISSUE_BODY_LENGTH, MAX_ISSUE_TITLE_LENGTH } from "../../../utils/issueApprovalFields";
 import type { ConnectorToolModule } from "./connectorToolModules";
 import { runApprovalAction } from "./runApprovalAction";
 import { runQueryAction } from "./runQueryAction";
@@ -10,11 +12,14 @@ import { failedResult, needsClarificationResult, unavailableResult } from "./too
 export const GITHUB_RECONNECT_GUIDANCE =
   "Tell the user to reconnect GitHub under Settings → Integrations → Connectors. Don't retry.";
 
-// The limits main enforces (githubConnector.js). Checked here too, so an
-// oversized call never crosses IPC.
+// The limits main enforces (githubConnector.js), counted in characters as
+// main and the card count them. Checked here too, so an oversized call never
+// crosses IPC.
 const MAX_QUERY_LENGTH = 200;
-const MAX_TITLE_LENGTH = 256;
-const MAX_BODY_LENGTH = 65536;
+
+function characterCount(value: string): number {
+  return [...value].length;
+}
 
 // The target forms main's parseGithubTarget accepts: owner/repo#12, or an
 // issue or pull request link on github.com (with anything after the
@@ -67,6 +72,15 @@ function withGithubGuidance(result: ToolResult): ToolResult {
   return { ...result, data: { ...data, guidance, ...(installUrl ? { installUrl } : {}) } };
 }
 
+// A sent issue or comment tells the model who GitHub notified, read from
+// what was actually sent (the card's final fields, edits included).
+function withNotified(result: ToolResult): ToolResult {
+  const data = result.data as { status?: unknown; final?: Record<string, unknown> } | null;
+  if (data?.status !== "sent" || !data.final) return result;
+  const notified = githubFieldMentions(data.final);
+  return notified.length > 0 ? { ...result, data: { ...data, notified } } : result;
+}
+
 function tooLong(what: string, max: number): ToolResult {
   return failedResult("too_long", `The ${what} is over ${max} characters. Shorten it.`, "github");
 }
@@ -95,9 +109,12 @@ export const githubSearchIssuesTool: ToolDefinition = {
     args: Record<string, unknown>,
     context?: ToolExecutionContext
   ): Promise<ToolResult> {
+    // Results are other people's text; an answer shaped by them stays in the
+    // panel rather than being pasted into the user's document.
+    context?.onHoldDelivery();
     const query = text(args, "query").trim();
     if (!query) return needsClarificationResult("Ask the user what to search GitHub for.");
-    if (query.length > MAX_QUERY_LENGTH) return tooLong("search", MAX_QUERY_LENGTH);
+    if (characterCount(query) > MAX_QUERY_LENGTH) return tooLong("search", MAX_QUERY_LENGTH);
     if (needsReconnect()) return githubReconnectResult();
     const repo = text(args, "repo").trim();
     const result = await runQueryAction(context, "github", "search_issues", {
@@ -147,8 +164,12 @@ export const githubCreateIssueTool: ToolDefinition = {
         "The issue needs a title. Write a short one from the user's request and call github_create_issue again."
       );
     }
-    if (title.length > MAX_TITLE_LENGTH) return tooLong("title", MAX_TITLE_LENGTH);
-    if (body.length > MAX_BODY_LENGTH) return tooLong("description", MAX_BODY_LENGTH);
+    if (characterCount(title) > MAX_ISSUE_TITLE_LENGTH) {
+      return tooLong("title", MAX_ISSUE_TITLE_LENGTH);
+    }
+    if (characterCount(body) > MAX_ISSUE_BODY_LENGTH) {
+      return tooLong("description", MAX_ISSUE_BODY_LENGTH);
+    }
     if (needsReconnect()) return githubReconnectResult();
     const repo = text(args, "repo").trim();
     const labels = Array.isArray(args.labels)
@@ -160,7 +181,7 @@ export const githubCreateIssueTool: ToolDefinition = {
       body,
       ...(labels.length > 0 ? { labels } : {}),
     });
-    return withGithubGuidance(result);
+    return withNotified(withGithubGuidance(result));
   },
 };
 
@@ -197,10 +218,12 @@ export const githubCommentTool: ToolDefinition = {
       );
     }
     if (!body.trim()) return needsClarificationResult("Ask the user what the comment should say.");
-    if (body.length > MAX_BODY_LENGTH) return tooLong("comment", MAX_BODY_LENGTH);
+    if (characterCount(body) > MAX_ISSUE_BODY_LENGTH) {
+      return tooLong("comment", MAX_ISSUE_BODY_LENGTH);
+    }
     if (needsReconnect()) return githubReconnectResult();
     const result = await runApprovalAction(context, "github", "comment", { target, body });
-    return withGithubGuidance(result);
+    return withNotified(withGithubGuidance(result));
   },
 };
 

@@ -343,6 +343,29 @@ test("forceRefresh refreshes a fresh token, as a 401 retry needs", async () => {
   assert.equal(hits(github, TOKEN).length, 1);
 });
 
+test("a 401 on a token another request already replaced uses the replacement, with no second refresh", async () => {
+  const REFRESHED_AGAIN = json({
+    access_token: "ghu-3",
+    expires_in: 28800,
+    refresh_token: "ghr-3",
+    refresh_token_expires_in: 15897600,
+  });
+  const { auth, github, credentials } = await setup({
+    script: { [TOKEN]: [REFRESHED, REFRESHED_AGAIN] },
+  });
+
+  // Two requests both sent ghu-1; the first 401 refreshes it to ghu-2.
+  assert.equal((await auth.refreshRejected(BINDING, "ghu-1")).token, "ghu-2");
+  // The second 401 on ghu-1 must not refresh again: that would end ghu-2,
+  // which the first request is now retrying with.
+  assert.equal((await auth.refreshRejected(BINDING, "ghu-1")).token, "ghu-2");
+  assert.equal(hits(github, TOKEN).length, 1);
+  // A 401 on the current token still refreshes.
+  assert.equal((await auth.refreshRejected(BINDING, "ghu-2")).token, "ghu-3");
+  assert.equal(hits(github, TOKEN).length, 2);
+  assert.equal(slot(credentials).accessToken, "ghu-3");
+});
+
 test("an expired, revoked or used refresh token means reconnect, asked once and flagged", async () => {
   const { OAUTH_LOGIN_GONE } = await loadAuth();
   assert.deepEqual([...OAUTH_LOGIN_GONE].sort(), [

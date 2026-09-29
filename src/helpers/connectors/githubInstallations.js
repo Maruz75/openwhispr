@@ -15,6 +15,8 @@ function toRepo(raw) {
     name: raw.name,
     fullName: raw.full_name,
     private: raw.private === true,
+    // Tells a deleted issue's 410 apart from a repo with issues turned off.
+    hasIssues: raw.has_issues !== false,
     updatedAt: nonEmptyString(raw.updated_at) ? raw.updated_at : null,
   };
 }

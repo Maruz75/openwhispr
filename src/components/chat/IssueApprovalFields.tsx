@@ -83,20 +83,22 @@ function IssueFieldsLayout({
 
 /**
  * The card's fields, then the notes that follow them as the user edits
- * (GitHub's "This will notify @…"). The preview's own notes are fixed at
- * prepare; the card renders them after this.
+ * (GitHub's "This will notify @…"). They speak of what Send will do, so
+ * they show only while the card is pending. The preview's own notes are
+ * fixed at prepare; the card renders them after this.
  */
 export function IssueApprovalFields({
   connectorId,
+  pending,
   ...props
-}: Parameters<typeof IssueFieldsLayout>[0] & { connectorId: string }): ReactElement {
+}: IssueApprovalFieldsProps & { connectorId: string; pending: boolean }): ReactElement {
   const { t } = useTranslation();
-  const liveNotes = liveCardNotesFor(connectorId, { ...props.fields });
+  const liveNotes = pending ? liveCardNotesFor(connectorId, { ...props.fields }) : [];
   return (
     <>
       <IssueFieldsLayout {...props} />
       {liveNotes.map((note) => (
-        <p key={note.key} className="mt-1 text-xs text-muted-foreground">
+        <p key={note.key} className="mt-1 text-xs text-muted-foreground" dir="auto">
           {t(note.key, note.values)}
         </p>
       ))}

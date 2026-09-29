@@ -253,7 +253,7 @@ test("buildSearchQuery drops the user's repo:, org: and user: qualifiers and kee
 
   assert.deepEqual(built, {
     ok: true,
-    q: "timeout label:bug author:sam is:pr state:open repo:acme/api",
+    q: "timeout label:bug author:sam is:pull-request state:open repo:acme/api",
     repos: ["acme/api"],
     truncated: false,
   });
@@ -261,29 +261,42 @@ test("buildSearchQuery drops the user's repo:, org: and user: qualifiers and kee
     buildSearchQuery({ query: "crash", type: "issue", state: "all", repos: ["a/b"] }).q,
     "crash is:issue repo:a/b"
   );
-  assert.equal(buildSearchQuery({ query: "crash", repos: ["a/b"] }).q, "crash state:open repo:a/b");
+  assert.equal(
+    buildSearchQuery({ query: "crash", type: "pr", repos: ["a/b"] }).q,
+    "crash is:pull-request state:open repo:a/b"
+  );
 });
 
-test("buildSearchQuery names repos in the order given until q would pass GitHub's limit", async () => {
+test("buildSearchQuery names repos in the order given until q would pass the request budget", async () => {
   const { buildSearchQuery } = await setupGithub();
-  const repos = Array.from({ length: 30 }, (_, index) => `acme-organization/service-${index}`);
+  // GitHub's 256-character limit counts only the words: 30 installed repos
+  // all fit, however long their qualifiers make q.
+  const thirty = Array.from({ length: 30 }, (_, index) => `acme-organization/service-${index}`);
+  const all = buildSearchQuery({ query: "login crash", type: "issue", repos: thirty });
+  assert.deepEqual(all.repos, thirty);
+  assert.equal(all.truncated, false);
+  assert.ok(all.q.length > 256);
 
-  const built = buildSearchQuery({ query: "timeout", repos });
+  const repos = Array.from({ length: 300 }, (_, index) => `acme-organization/service-${index}`);
+  const built = buildSearchQuery({ query: "timeout", type: "issue", repos });
 
   assert.equal(built.ok, true);
   assert.equal(built.truncated, true);
-  assert.ok(built.q.length <= 256, `${built.q.length}`);
+  assert.ok(built.q.length <= 4000, `${built.q.length}`);
   assert.deepEqual(built.repos, repos.slice(0, built.repos.length));
-  assert.ok(built.repos.length > 1 && built.repos.length < 30);
+  assert.ok(built.repos.length > 30 && built.repos.length < 300);
   // The next repo would not have fitted.
-  assert.ok(`${built.q} repo:${repos[built.repos.length]}`.length > 256);
+  assert.ok(`${built.q} repo:${repos[built.repos.length]}`.length > 4000);
 
   // A search that leaves no room for even one repo would span every repo the
   // user can see, so it is refused instead.
-  assert.deepEqual(buildSearchQuery({ query: "x".repeat(250), repos: ["acme/api"] }), {
-    ok: false,
-    errorCode: "too_long",
-  });
+  assert.deepEqual(
+    buildSearchQuery({ query: "x".repeat(3990), type: "issue", repos: ["acme/api"] }),
+    {
+      ok: false,
+      errorCode: "too_long",
+    }
+  );
 });
 
 // --- search ---
@@ -291,8 +304,8 @@ test("buildSearchQuery names repos in the order given until q would pass GitHub'
 test("search scopes the query to the installed repos and returns compact results", async () => {
   const { connector, github } = await setupGithub({
     [SEARCH]: [
+      searchPage([searchHit("acme/api", 45, { assignee: { login: "dana" } })]),
       searchPage([
-        searchHit("acme/api", 45, { assignee: { login: "dana" } }),
         searchHit("dana/api", 7, {
           title: "Fix the timeout",
           state: "closed",
@@ -312,14 +325,18 @@ test("search scopes the query to the installed repos and returns compact results
 
   const result = await connector.query("search_issues", { query: "timeout" }, BOUND);
 
-  const [search] = hits(github, SEARCH);
-  assert.deepEqual(search.query, {
-    q: "timeout state:open repo:acme/api repo:dana/api repo:acme/web",
-    sort: "updated",
-    order: "desc",
-    per_page: "10",
-  });
-  assert.equal(search.authorization, "Bearer ghu-1");
+  // A GitHub App user token can't search issues and pull requests together,
+  // so a search for either is one of each.
+  assert.deepEqual(
+    hits(github, SEARCH).map((search) => search.query),
+    ["is:issue", "is:pull-request"].map((type) => ({
+      q: `timeout ${type} state:open repo:acme/api repo:dana/api repo:acme/web`,
+      sort: "updated",
+      order: "desc",
+      per_page: "10",
+    }))
+  );
+  assert.ok(hits(github, SEARCH).every((search) => search.authorization === "Bearer ghu-1"));
   assert.deepEqual(result, {
     status: "ok",
     truncated: false,
@@ -376,6 +393,7 @@ test("search results from repos the App isn't installed on are dropped", async (
         { ...searchHit("acme/api", 4), repository_url: undefined },
         searchHit("acme/api", 5),
       ]),
+      searchPage([]),
     ],
   });
 
@@ -395,6 +413,7 @@ test("snippets keep at most 300 characters, cut on a whole character, whitespace
         searchHit("acme/api", 1, { body: long, title: `  Spaced \n\n title ${"t".repeat(300)}` }),
         searchHit("acme/api", 2, { body: "line one\n\n  line two\t\tend" }),
       ]),
+      searchPage([]),
     ],
   });
 
@@ -417,6 +436,7 @@ test("an email address in a search result's title or body never reaches the mode
           body: "mail sam@example.test for details, cc @alice",
         }),
       ]),
+      searchPage([]),
     ],
   });
 
@@ -428,6 +448,25 @@ test("an email address in a search result's title or body never reaches the mode
   assert.doesNotMatch(item.snippet, /@example\.test/);
   // A GitHub mention has no local part before the @, so it stays as-is.
   assert.match(item.snippet, /@alice/);
+});
+
+test("internationalized and full-width email addresses are redacted too", async () => {
+  const { connector } = await setupGithub({
+    [SEARCH]: [
+      searchPage([
+        searchHit("acme/api", 1, {
+          title: "Ask josé@example.com",
+          body: "or bob@exämple.com, or ｍａｒｙ＠example.com; left-pad@1.2.3 is a version",
+        }),
+      ]),
+      searchPage([]),
+    ],
+  });
+
+  const [item] = (await connector.query("search_issues", { query: "x" }, BOUND)).items;
+
+  assert.equal(item.title, "Ask [email]");
+  assert.equal(item.snippet, "or [email], or [email]; left-pad@1.2.3 is a version");
 });
 
 test("a named repo narrows the search to it, and the type and state reach the query", async () => {
@@ -444,7 +483,7 @@ test("a named repo narrows the search to it, and the type and state reach the qu
 });
 
 test("a search that can't name every installed repo says it was cut, and so does GitHub's own count", async () => {
-  const many = Array.from({ length: 30 }, (_, index) =>
+  const many = Array.from({ length: 300 }, (_, index) =>
     repo(
       `acme-organization/service-${index}`,
       `2026-09-${String(28 - (index % 28)).padStart(2, "0")}T00:00:00Z`
@@ -453,9 +492,11 @@ test("a search that can't name every installed repo says it was cut, and so does
   const cut = await setupGithub({ ...installedScript(many), [SEARCH]: [searchPage([])] });
   const result = await cut.connector.query("search_issues", { query: "timeout" }, BOUND);
   assert.equal(result.truncated, true);
-  assert.ok(hits(cut.github, SEARCH)[0].query.q.length <= 256);
+  assert.ok(hits(cut.github, SEARCH)[0].query.q.length <= 4000);
 
-  const more = await setupGithub({ [SEARCH]: [searchPage([searchHit("acme/api", 1)], 57)] });
+  const more = await setupGithub({
+    [SEARCH]: [searchPage([searchHit("acme/api", 1)], 57), searchPage([])],
+  });
   assert.equal(
     (await more.connector.query("search_issues", { query: "x" }, BOUND)).truncated,
     true
@@ -539,7 +580,11 @@ test("a 401 on search is refreshed once under the same login; a second means rec
     [SEARCH]: [UNAUTHORIZED, searchPage([searchHit("acme/api", 1)])],
     [TOKEN]: [REFRESHED],
   });
-  const result = await recovered.connector.query("search_issues", { query: "x" }, BOUND);
+  const result = await recovered.connector.query(
+    "search_issues",
+    { query: "x", type: "issue" },
+    BOUND
+  );
   assert.equal(result.items.length, 1);
   assert.deepEqual(
     hits(recovered.github, SEARCH).map((call) => call.authorization),
@@ -547,10 +592,80 @@ test("a 401 on search is refreshed once under the same login; a second means rec
   );
 
   const gone = await setupGithub({ [SEARCH]: [UNAUTHORIZED], [TOKEN]: [REFRESHED] });
-  const refused = await gone.connector.query("search_issues", { query: "x" }, BOUND);
+  const refused = await gone.connector.query("search_issues", { query: "x", type: "issue" }, BOUND);
   assert.equal(refused.errorCode, "reconnect_needed");
   assert.equal(slot(gone.credentials).needsReconnect, true);
   assert.equal(hits(gone.github, SEARCH).length, 2);
+});
+
+test("a search for either type merges the issue and pull-request searches, newest first, up to 10", async () => {
+  const at = (day) => ({ updated_at: `2026-09-${day}T10:00:00Z` });
+  const { connector } = await setupGithub({
+    [SEARCH]: [
+      searchPage(
+        Array.from({ length: 6 }, (_, index) =>
+          searchHit("acme/api", index + 1, at(10 + index * 2))
+        )
+      ),
+      searchPage(
+        Array.from({ length: 6 }, (_, index) =>
+          searchHit("acme/api", index + 101, { ...at(11 + index * 2), pull_request: {} })
+        )
+      ),
+    ],
+  });
+
+  const result = await connector.query("search_issues", { query: "x" }, BOUND);
+
+  assert.deepEqual(
+    result.items.map((item) => item.reference),
+    [106, 6, 105, 5, 104, 4, 103, 3, 102, 2].map((number) => `acme/api#${number}`)
+  );
+  // Two results didn't fit.
+  assert.equal(result.truncated, true);
+});
+
+test("a search for either type fails when either of its two searches does", async () => {
+  const { connector } = await setupGithub({
+    [SEARCH]: [searchPage([searchHit("acme/api", 1)]), json({ message: "Validation Failed" }, 422)],
+  });
+
+  const result = await connector.query("search_issues", { query: "x" }, BOUND);
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.errorCode, "invalid");
+});
+
+test("a 401 on a token another request already replaced retries with the replacement, with no second refresh", async () => {
+  const { connector, github, credentials } = await setupGithub({
+    [SEARCH]: [
+      {
+        ...UNAUTHORIZED,
+        // Another request's refresh lands while this one is out: GitHub has
+        // already ended ghu-1 and handed out ghu-2.
+        during: () =>
+          credentials.save(
+            "acct-1",
+            "github",
+            { ...CONNECTED, accessToken: "ghu-2", refreshToken: "ghr-2" },
+            1
+          ),
+      },
+      searchPage([searchHit("acme/api", 1)]),
+    ],
+    [TOKEN]: [REFRESHED],
+  });
+
+  const result = await connector.query("search_issues", { query: "x", type: "issue" }, BOUND);
+
+  assert.equal(result.items.length, 1);
+  assert.deepEqual(
+    hits(github, SEARCH).map((call) => call.authorization),
+    ["Bearer ghu-1", "Bearer ghu-2"]
+  );
+  // Refreshing again would have ended ghu-2 under the other request.
+  assert.equal(hits(github, TOKEN).length, 0);
+  assert.equal(slot(credentials).needsReconnect, false);
 });
 
 test("a rate-limited or unreachable search fails with its code", async () => {
@@ -730,6 +845,30 @@ test("the card's edits are checked again at Send, before any request", async () 
     assert.equal(result.errorCode, errorCode, JSON.stringify(edits).slice(0, 30));
   }
   assert.equal(github.calls.length, 0);
+});
+
+test("Send refuses a repo removed from the App since prepare, before any write", async () => {
+  const { connector, github } = await setupGithub({
+    [REPOSITORIES]: [
+      json({ total_count: INSTALLED_REPOS.length, repositories: INSTALLED_REPOS }),
+      json({
+        total_count: 2,
+        repositories: INSTALLED_REPOS.filter((entry) => entry.full_name !== "acme/api"),
+      }),
+    ],
+    [LABELS]: [json([])],
+    [CREATE]: [CREATED],
+  });
+  const { payload } = await prepareIssue(connector);
+  // The user removes acme/api on GitHub's install page; Settings re-reads
+  // the list when they come back.
+  await connector.getStatus();
+
+  const result = await connector.commit("create_issue", payload, {}, BOUND);
+
+  assert.equal(result.state, "failed");
+  assert.equal(result.errorCode, "not_installed");
+  assert.equal(writes(github).length, 0);
 });
 
 test("a card never creates under a login other than the one it was prepared with", async () => {
@@ -916,6 +1055,29 @@ test("a comment on a locked, missing or uninstalled target, or a bad reference, 
     "too_long"
   );
   assert.equal(bad.github.calls.length, 0);
+});
+
+test("a deleted issue reads as not found, and a repo with issues turned off as issues_disabled", async () => {
+  const GONE = json({ message: "This issue was deleted" }, 410);
+  const deleted = await setupGithub({ [ISSUE_45]: [GONE] });
+  assert.deepEqual(
+    await deleted.connector.prepare("comment", { target: "acme/api#45", body: "x" }, BOUND),
+    { status: "failed", errorCode: "not_found", message: "acme/api#45 was deleted." }
+  );
+
+  const disabled = await setupGithub({
+    ...installedScript(
+      INSTALLED_REPOS.map((entry) =>
+        entry.full_name === "acme/api" ? { ...entry, has_issues: false } : entry
+      )
+    ),
+    [ISSUE_45]: [json({ message: "Issues are disabled for this repo" }, 410)],
+  });
+  assert.equal(
+    (await disabled.connector.prepare("comment", { target: "acme/api#45", body: "x" }, BOUND))
+      .errorCode,
+    "issues_disabled"
+  );
 });
 
 test("Send posts the card's comment and links to it", async () => {
@@ -1129,9 +1291,13 @@ test("without a login the status says whether this build can connect; a login al
   });
   const leftOver = await setupGithub({}, { clientId: null });
   assert.equal((await leftOver.connector.getStatus()).configured, true);
-  // A slug that isn't one builds no link.
+  // Without the App's slug the user could never choose repositories, so the
+  // row stays hidden; a slug that isn't one builds no link either.
+  const noSlug = await setupGithub({}, { credential: null, slug: null });
+  assert.equal((await noSlug.connector.getStatus()).configured, false);
   const odd = await setupGithub({}, { credential: null, slug: "../evil" });
   assert.equal((await odd.connector.getStatus()).manageUrl, undefined);
+  assert.equal((await odd.connector.getStatus()).configured, false);
 });
 
 test("a login that needs reconnecting reports it without asking GitHub", async () => {

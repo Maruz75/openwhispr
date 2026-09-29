@@ -120,12 +120,15 @@ test("github_search_issues searches through the query path with its defaults", a
   });
   await setGithubStatus(t);
   const { githubSearchIssuesTool } = await loadTools();
-  const { context } = await turn();
+  const { context, holds } = await turn();
 
   const result = await githubSearchIssuesTool.execute(
     { query: "  timeout  ", state: "closed", type: "bug" },
     context()
   );
+  // Other people's text shapes the answer, so a voice turn keeps it in the
+  // panel rather than pasting it at the caret.
+  assert.equal(holds.count, 1);
   await githubSearchIssuesTool.execute(
     { query: "flaky", repo: " acme/api ", state: "all", type: "pr" },
     context()
@@ -215,7 +218,7 @@ test("a login already marked for reconnecting is refused before any IPC", async 
     ]
   );
   assert.equal(calls, 0);
-  assert.equal(holds.count, 2, "create and comment still keep the turn in the panel");
+  assert.equal(holds.count, 3, "every GitHub tool still keeps the turn in the panel");
 });
 
 test("no chosen repositories: the model is sent to Settings with the install page", async (t) => {
@@ -492,6 +495,70 @@ test("create and comment hold delivery on every outcome", async (t) => {
     "unknown",
   ]);
   assert.equal(holds.count, 5);
+});
+
+test("a sent issue tells the model who GitHub notified, from the card as sent", async (t) => {
+  const answers = [
+    { ...ISSUE_PREVIEW, fields: { title: "Ping @alice", body: "See `@bob` and @Alice" } },
+    ISSUE_PREVIEW,
+  ];
+  let prepared = 0;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => ({
+          status: "ready",
+          actionId: `a${++prepared}`,
+          preview: answers.shift(),
+        }),
+        connectorCommit: async () => ({
+          state: "sent",
+          url: "https://github.com/acme/api/issues/212",
+          resultLabel: "acme/api#212",
+        }),
+        connectorCancel: async () => ({ cancelled: true }),
+      },
+    },
+  });
+  await setGithubStatus(t);
+  const [{ githubCreateIssueTool }, approvals] = await Promise.all([loadTools(), resetApprovals()]);
+  const { context } = await turn();
+
+  const mentioned = githubCreateIssueTool.execute({ title: "Ping @alice" }, context());
+  const key = await cardFor(approvals, "call-1");
+  // The user adds someone on the card before Send.
+  approvals.updateApprovalDraft(key, { fields: { body: "See `@bob` and @Alice, cc @carol" } });
+  await approvals.approveAction(key);
+  const quiet = githubCreateIssueTool.execute({ title: "Login times out" }, context());
+  await approvals.approveAction(await cardFor(approvals, "call-2"));
+
+  assert.deepEqual((await mentioned).data.notified, ["@alice", "@carol"]);
+  assert.equal("notified" in (await quiet).data, false);
+});
+
+test("titles and bodies are measured in characters, as the card and main measure them", async (t) => {
+  let prepared = 0;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => {
+          prepared += 1;
+          return { status: "failed", errorCode: "invalid", message: "stop here" };
+        },
+      },
+    },
+  });
+  await setGithubStatus(t);
+  const { githubCreateIssueTool } = await loadTools();
+  const { context } = await turn();
+
+  // 256 emoji are 512 UTF-16 units but 256 characters: within the limit.
+  const fits = await githubCreateIssueTool.execute({ title: "😀".repeat(256) }, context());
+  const over = await githubCreateIssueTool.execute({ title: "😀".repeat(257) }, context());
+
+  assert.equal(fits.data.errorCode, "invalid");
+  assert.equal(over.data.errorCode, "too_long");
+  assert.equal(prepared, 1);
 });
 
 test("a sixth card in one turn is refused by the shared card cap", async (t) => {

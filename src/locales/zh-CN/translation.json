@@ -3902,7 +3902,7 @@
           "connection_changed": "发布前 GitHub 连接发生了变化，因此未发布任何内容。",
           "credential_save_failed": "无法在此电脑上保存 GitHub 登录信息，未发布任何内容。请重试。",
           "generic": "出了点问题，未向 GitHub 发布任何内容。",
-          "not_installed": "此仓库未安装 OpenWhispr GitHub App，未发布任何内容。",
+          "not_installed": "此仓库未安装 OpenWhispr GitHub App。请在设置中添加。未发布任何内容。",
           "no_repositories": "尚未为 OpenWhispr GitHub App 选择仓库。请在设置中选择。未发布任何内容。",
           "forbidden": "您没有在此仓库中执行此操作的权限，未发布任何内容。",
           "not_found": "找不到该 Issue 或拉取请求，未发布任何内容。",

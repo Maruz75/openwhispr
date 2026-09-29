@@ -12,14 +12,21 @@ const MAX_LABELS = 10;
 const MAX_QUERY_LENGTH = 200;
 const MAX_RESULTS = 10;
 const SNIPPET_LENGTH = 300;
-// GitHub refuses a search `q` longer than this (Task 3).
-const MAX_SEARCH_QUERY_LENGTH = 256;
+// GitHub's 256-character search limit counts only the words, never the
+// qualifiers, and MAX_QUERY_LENGTH already keeps the words under it. What
+// bounds the `repo:` list is the request itself: GitHub answered 250
+// qualifiers (a 5 KB URL) and failed with a 5xx near 8 KB.
+const MAX_SEARCH_QUERY_LENGTH = 4000;
 // Settings waits this long for the installed repository count, then shows
 // the login without it.
 const STATUS_REPOSITORIES_TIMEOUT_MS = 5000;
 
 const STATES = new Set(["open", "all"]);
 const TYPES = new Set(["issue", "pr", "any"]);
+// A GitHub App user token can't search issues and pull requests together:
+// GitHub refuses a `q` without one of these with a 422, so `any` is two
+// searches.
+const TYPE_QUALIFIERS = { issue: "is:issue", pr: "is:pull-request" };
 // The scope is always the installed repos, so the user's own scope
 // qualifiers (negated or quoted too) are removed; every other qualifier
 // (label:, author:, is:, …) passes through.
@@ -32,9 +39,10 @@ const SHORT_REFERENCE = /^([^/\s#]+)\/([^/\s#]+)#(\d+)$/;
 const SEARCH_REPO_URL = /^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)$/;
 const TRANSPORT_CODE = /^(E[A-Z0-9_]+|ERR_[A-Z0-9_]+|UND_ERR_[A-Z0-9_]+|timeout|network_error)$/;
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,99}$/i;
-// spec §6.1: no email address reaches the model. Conservative on purpose, so
-// a GitHub mention ("@alice", no local part before the @) is left alone.
-const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+// spec §6.1: no email address reaches the model, internationalized ones
+// (josé@example.com, bob@exämple.com, a full-width ＠) included. A GitHub
+// mention ("@alice", no local part before the @) is left alone.
+const EMAIL_PATTERN = /[\p{L}\p{N}._%+-]+[@＠][\p{L}\p{N}.-]+\.\p{L}{2,}/gu;
 
 const NO_REPOSITORIES_MESSAGE =
   "The OpenWhispr GitHub App isn't installed on any repository yet. Tell the user to choose repositories for it in Settings → Integrations → Connectors.";
@@ -108,15 +116,15 @@ function parseGithubTarget(input) {
 
 /**
  * The `q` for GET /search/issues: the user's words without their own scope
- * qualifiers, the type and state, then one `repo:` per installed repo in the
- * order given (most recently updated first) while `q` stays within GitHub's
- * limit. `truncated` says some repos were left out.
+ * qualifiers, the type (`issue` or `pr`) and state, then one `repo:` per
+ * installed repo in the order given (most recently updated first) while `q`
+ * stays within MAX_SEARCH_QUERY_LENGTH. `truncated` says some repos were
+ * left out.
  */
-function buildSearchQuery({ query, type = "any", state = "open", repos = [] }) {
+function buildSearchQuery({ query, type, state = "open", repos = [] }) {
   const words = collapseWhitespace(String(query ?? "").replace(SCOPE_QUALIFIER, " "));
-  const typeQualifier = type === "issue" ? "is:issue" : type === "pr" ? "is:pr" : "";
   const stateQualifier = state === "all" ? "" : "state:open";
-  let q = [words, typeQualifier, stateQualifier].filter(Boolean).join(" ");
+  let q = [words, TYPE_QUALIFIERS[type], stateQualifier].filter(Boolean).join(" ");
   const searched = [];
   for (const fullName of repos) {
     const next = [q, `repo:${fullName}`].filter(Boolean).join(" ");
@@ -272,7 +280,7 @@ function createGithubConnector({
   async function call(session, send) {
     const first = await send(session.token);
     if (first.ok || first.errorCode !== "unauthorized") return first;
-    const refreshed = await auth.getAccessToken(session.binding, { forceRefresh: true });
+    const refreshed = await auth.refreshRejected(session.binding, session.token);
     if (!refreshed.ok) return { ok: false, outcome: "failed", errorCode: refreshed.errorCode };
     session.token = refreshed.token;
     const second = await send(session.token);
@@ -332,7 +340,19 @@ function createGithubConnector({
     const read = await call(session, (token) =>
       api.rest("GET", `${repoPath(repo)}/issues/${target.number}`, { token })
     );
-    if (!read.ok) return { failure: await refusal(session, read, repo) };
+    if (!read.ok) {
+      // GitHub answers 410 both when a repo's issues are off and when the
+      // issue was deleted; the installed repo says which.
+      if (read.errorCode === "issues_disabled" && repo.hasIssues) {
+        return {
+          failure: {
+            errorCode: "not_found",
+            message: `${repo.fullName}#${target.number} was deleted.`,
+          },
+        };
+      }
+      return { failure: await refusal(session, read, repo) };
+    }
     const issue = read.data;
     if (!Number.isInteger(issue?.number) || !nonEmptyString(issue?.html_url)) {
       return {
@@ -384,7 +404,7 @@ function createGithubConnector({
   async function searchIssues(args, binding) {
     const query = typeof args?.query === "string" ? args.query.trim() : "";
     if (!query) return clarify("Ask the user what to search GitHub for.");
-    if (query.length > MAX_QUERY_LENGTH) {
+    if (characterCount(query) > MAX_QUERY_LENGTH) {
       return failed("too_long", `Keep the search to ${MAX_QUERY_LENGTH} characters or fewer.`);
     }
     const state = args?.state ?? "open";
@@ -410,45 +430,59 @@ function createGithubConnector({
       scope = installed.repos;
     }
 
-    const built = buildSearchQuery({ query, type, state, repos: scope.map((r) => r.fullName) });
-    if (!built.ok) {
+    const repoNames = scope.map((r) => r.fullName);
+    const searches = (type === "any" ? ["issue", "pr"] : [type]).map((kind) =>
+      buildSearchQuery({ query, type: kind, state, repos: repoNames })
+    );
+    if (searches.some((built) => !built.ok)) {
       return failed(
         "too_long",
         "The search is too long to limit to the user's repositories. Ask for a shorter search."
       );
     }
-    const found = await call(session, (token) =>
-      api.rest("GET", "/search/issues", {
-        token,
-        query: { q: built.q, sort: "updated", order: "desc", per_page: MAX_RESULTS },
-      })
+    const pages = await Promise.all(
+      searches.map((built) =>
+        call(session, (token) =>
+          api.rest("GET", "/search/issues", {
+            token,
+            query: { q: built.q, sort: "updated", order: "desc", per_page: MAX_RESULTS },
+          })
+        )
+      )
     );
+    const failure = pages.find((found) => !found.ok);
     // A transport failure (offline, DNS, reset, timeout) would otherwise
     // reach normalizeQueryResult as an unrecognized code and get rewritten to
     // generic "query_failed" copy; "network" is a code it accepts as is.
-    if (!found.ok) {
-      return failed(TRANSPORT_CODE.test(found.errorCode ?? "") ? "network" : found.errorCode);
+    if (failure) {
+      return failed(TRANSPORT_CODE.test(failure.errorCode ?? "") ? "network" : failure.errorCode);
     }
-    const searched = new Map(built.repos.map((fullName) => [fullName.toLowerCase(), fullName]));
-    const raws = Array.isArray(found.data?.items) ? found.data.items : [];
     const items = [];
-    for (const raw of raws) {
-      const match = SEARCH_REPO_URL.exec(raw?.repository_url ?? "");
-      // GitHub may answer with repos the user can see but didn't install the
-      // App on; those never reach the model.
-      const fullName = match ? searched.get(`${match[1]}/${match[2]}`.toLowerCase()) : null;
-      const item = fullName ? searchItem(raw, fullName) : null;
-      if (item) items.push(item);
-      if (items.length === MAX_RESULTS) break;
-    }
-    const total = found.data?.total_count;
-    return {
-      status: "ok",
-      items,
-      truncated:
+    let truncated = false;
+    searches.forEach((built, index) => {
+      const found = pages[index];
+      const searched = new Map(built.repos.map((fullName) => [fullName.toLowerCase(), fullName]));
+      const raws = Array.isArray(found.data?.items) ? found.data.items : [];
+      for (const raw of raws) {
+        const match = SEARCH_REPO_URL.exec(raw?.repository_url ?? "");
+        // GitHub may answer with repos the user can see but didn't install
+        // the App on; those never reach the model.
+        const fullName = match ? searched.get(`${match[1]}/${match[2]}`.toLowerCase()) : null;
+        const item = fullName ? searchItem(raw, fullName) : null;
+        if (item) items.push(item);
+      }
+      const total = found.data?.total_count;
+      truncated ||=
         built.truncated ||
         found.data?.incomplete_results === true ||
-        (Number.isInteger(total) && total > raws.length),
+        (Number.isInteger(total) && total > raws.length);
+    });
+    // Most recently updated first across both searches, as each one is.
+    items.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+    return {
+      status: "ok",
+      items: items.slice(0, MAX_RESULTS),
+      truncated: truncated || items.length > MAX_RESULTS,
     };
   }
 
@@ -699,7 +733,9 @@ function createGithubConnector({
       if (!entry) {
         return withManage({
           connected: false,
-          configured: auth.isConfigured(),
+          // Without the App's slug there's no way to choose repositories, and
+          // every action would end in no_repositories.
+          configured: auth.isConfigured() && url !== null,
           accountLabel: null,
           workspaceLabel: null,
           needsReconnect: false,

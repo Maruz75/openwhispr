@@ -13,11 +13,11 @@ function deviceUrl(verificationUri: string): string {
 
 /**
  * The code GitHub's device flow asks the user to enter, shown in the row
- * while it connects. Mounted only while the row is connecting, so it
+ * while it connects, with Cancel from the moment Connect is pressed. Mounted only while the row is connecting, so it
  * listens only then; the latest code for this connector wins, since a new
  * Connect replaces the attempt before it.
  */
-export function GithubDeviceCode({ connectorId }: { connectorId: string }): ReactElement | null {
+export function GithubDeviceCode({ connectorId }: { connectorId: string }): ReactElement {
   const { t, i18n } = useTranslation();
   const [progress, setProgress] = useState<ConnectorConnectProgress | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -29,18 +29,28 @@ export function GithubDeviceCode({ connectorId }: { connectorId: string }): Reac
     return () => unsubscribe?.();
   }, [connectorId]);
 
-  if (!progress) return null;
+  // Cancel is there from the start: asking GitHub for a code can take a while.
+  const cancel = (
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={() => void window.electronAPI?.connectorCancelConnect?.(connectorId)}
+    >
+      {t("connectors.github.deviceCode.cancel")}
+    </Button>
+  );
+  if (!progress) return <div className="mt-2">{cancel}</div>;
   const { userCode, verificationUri, expiresAt } = progress;
 
   // GitHub's page opens even when the copy fails: the code is on screen to type.
   const copyAndOpen = async (): Promise<void> => {
+    void window.electronAPI?.openExternal?.(deviceUrl(verificationUri));
     try {
       const result = await window.electronAPI?.writeClipboard?.(userCode);
       if (result?.success) setCopiedCode(userCode);
     } catch {
       // Nothing to undo; the code stays visible.
     }
-    void window.electronAPI?.openExternal?.(deviceUrl(verificationUri));
   };
 
   const expiry = new Intl.DateTimeFormat(i18n.language, {
@@ -64,18 +74,11 @@ export function GithubDeviceCode({ connectorId }: { connectorId: string }): Reac
           {t("connectors.github.deviceCode.copyAndOpen")}
         </Button>
         {/* Stops main's polling at once; the row then reads as before Connect. */}
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => void window.electronAPI?.connectorCancelConnect?.(connectorId)}
-        >
-          {t("connectors.github.deviceCode.cancel")}
-        </Button>
-        {copiedCode === userCode && (
-          <span role="status" className="text-xs text-muted-foreground">
-            {t("connectors.github.deviceCode.copied")}
-          </span>
-        )}
+        {cancel}
+        {/* Mounted before the note arrives, so a screen reader announces it. */}
+        <span role="status" className="text-xs text-muted-foreground">
+          {copiedCode === userCode && t("connectors.github.deviceCode.copied")}
+        </span>
       </div>
       <p className="text-xs text-muted-foreground/70">
         {t("connectors.github.deviceCode.expires", { time: expiry })}

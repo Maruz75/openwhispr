@@ -20,8 +20,13 @@ export interface ConnectorRowSpec {
   rowActions?: ComponentType<{ status: ConnectorStatus }>;
   /** Shown after this row's Disconnect, until the next Connect (GitHub's Review on GitHub). */
   disconnectedDetail?: ComponentType<{ connectorId: string }>;
-  /** Stop a connect still in progress when the row goes away (the user left Settings). */
-  cancelConnectOnLeave?: boolean;
+  /**
+   * The connect runs in the row (GitHub's device code) rather than a browser
+   * round trip: the row's detail has its own Cancel, Connect isn't offered
+   * again while it waits (a new code would silently replace one the user may
+   * have typed), and it stops when the row goes away (the user left Settings).
+   */
+  connectInRow?: boolean;
 }
 
 export function accountLabelSummary(
@@ -54,7 +59,7 @@ const githubRow: ConnectorRowSpec = {
   rowActions: GithubRepositoriesButton,
   disconnectedDetail: GithubReviewAccess,
   // GitHub polls for up to 15 minutes; leaving Settings means the user gave up.
-  cancelConnectOnLeave: true,
+  connectInRow: true,
 };
 
 /** Every connector login row, in the order Settings shows them. New connectors append here. */

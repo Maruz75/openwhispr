@@ -3955,7 +3955,7 @@
           "connection_changed": "La conexión de GitHub cambió antes de publicar, así que no se publicó nada.",
           "credential_save_failed": "No se pudo guardar el inicio de sesión de GitHub en este equipo. No se publicó nada. Inténtalo de nuevo.",
           "generic": "Algo salió mal. No se publicó nada en GitHub.",
-          "not_installed": "La aplicación OpenWhispr de GitHub no está instalada en este repositorio. No se publicó nada.",
+          "not_installed": "La aplicación OpenWhispr de GitHub no está instalada en este repositorio. Añádela en Configuración. No se publicó nada.",
           "no_repositories": "Aún no hay repositorios elegidos para la aplicación OpenWhispr de GitHub. Elígelos en Configuración. No se publicó nada.",
           "forbidden": "No tienes permiso para hacer esto en el repositorio. No se publicó nada.",
           "not_found": "No se encontró el issue o la pull request. No se publicó nada.",

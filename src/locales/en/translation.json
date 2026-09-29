@@ -4071,7 +4071,7 @@
           "connection_changed": "The GitHub connection changed before posting, so nothing was posted.",
           "credential_save_failed": "The GitHub login couldn't be saved on this computer. Nothing was posted. Try again.",
           "generic": "Something went wrong. Nothing was posted to GitHub.",
-          "not_installed": "The OpenWhispr GitHub App isn't installed on this repository. Nothing was posted.",
+          "not_installed": "The OpenWhispr GitHub App isn't installed on this repository. Add it in Settings. Nothing was posted.",
           "no_repositories": "No repositories are chosen for the OpenWhispr GitHub App yet. Choose them in Settings. Nothing was posted.",
           "forbidden": "You don't have permission to do this in the repository. Nothing was posted.",
           "not_found": "The issue or pull request couldn't be found. Nothing was posted.",

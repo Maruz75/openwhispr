@@ -186,6 +186,16 @@ function createGithubAuth({
     logger,
   });
 
+  // The token after GitHub answered 401 to `rejectedToken`. Every refresh ends
+  // the previous access token, so when another request has already replaced
+  // it, that replacement is used: refreshing again would end the token the
+  // other request is using and leave it with a 401 that reads as a dead login.
+  function refreshRejected(binding, rejectedToken) {
+    const credential = login.boundCredential(binding);
+    const replaced = Boolean(credential) && credential.accessToken !== rejectedToken;
+    return login.getAccessToken(binding, { forceRefresh: !replaced });
+  }
+
   // Revoking a GitHub App user token needs the App's client secret, which
   // never ships in the app. Disconnect deletes the login locally and the row
   // links to github.com/settings/apps/authorizations instead.
@@ -205,6 +215,7 @@ function createGithubAuth({
   return {
     authorize,
     getAccessToken: login.getAccessToken,
+    refreshRejected,
     markReconnect: login.markReconnect,
     revoke,
     statusOf,

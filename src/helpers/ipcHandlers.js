@@ -2216,6 +2216,7 @@ class IPCHandlers {
         "active-account-scope-changed",
         accountId !== null ? { accountId, authGeneration: state.generation } : null
       );
+      this.connectorManager?.accountChanged();
       void this.connectorManager?.notifyStatusChanged();
       return { success: true };
     });

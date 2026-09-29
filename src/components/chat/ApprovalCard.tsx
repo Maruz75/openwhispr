@@ -163,6 +163,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
         <div className="mt-2">
           <IssueApprovalFields
             connectorId={entry.connectorId}
+            pending={entry.state === "pending"}
             verb={verb}
             fields={issueFields}
             editing={showEditor}

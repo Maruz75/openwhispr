@@ -76,16 +76,18 @@ export function ConnectorLoginRow({
     void ensureConnectorStatus();
   }, []);
 
-  // Leaving Settings mid-connect stops it, for rows that ask (GitHub).
+  // Leaving Settings mid-connect stops it, for rows that connect in place (GitHub).
   useEffect(() => () => cancelOnLeave.current?.(), []);
 
   const connected = Boolean(status?.connected);
   const needsReconnect = connected && Boolean(status?.needsReconnect);
   const canConnect = isPaid && !blockedByOrg;
+  // A connect that runs in the row ends with its own Cancel, not a new Connect.
+  const offerConnect = canConnect && !(row.connectInRow && phase === "connecting");
 
   // The status broadcast from main updates the row; results only carry a
-  // failure to show. Connect stays clickable while the browser is open: a
-  // new attempt replaces an abandoned one, which main cancels
+  // failure to show. For a browser sign-in, Connect stays clickable while the
+  // browser is open: a new attempt replaces an abandoned one, which main cancels
   // ("oauth_cancelled", not an error), so only the latest attempt's result
   // reaches the row.
   const connect = async (): Promise<void> => {
@@ -95,7 +97,7 @@ export function ConnectorLoginRow({
     setErrorCode(null);
     setGrantKept(false);
     setDisconnected(false);
-    cancelOnLeave.current = row.cancelConnectOnLeave
+    cancelOnLeave.current = row.connectInRow
       ? () => void window.electronAPI?.connectorCancelConnect?.(connectorId)
       : null;
     try {
@@ -184,7 +186,7 @@ export function ConnectorLoginRow({
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {needsReconnect && canConnect && (
+          {needsReconnect && offerConnect && (
             <Button size="sm" disabled={phase === "disconnecting"} onClick={() => void connect()}>
               {copy("reconnect")}
             </Button>
@@ -200,7 +202,7 @@ export function ConnectorLoginRow({
               {copy("disconnect")}
             </Button>
           )}
-          {!connected && canConnect && (
+          {!connected && offerConnect && (
             <Button size="sm" disabled={phase === "disconnecting"} onClick={() => void connect()}>
               {copy("connect")}
             </Button>

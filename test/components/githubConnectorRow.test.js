@@ -357,6 +357,28 @@ test("Cancel stops GitHub's connect, and the row reads as before Connect", async
   assert.equal(hasButton(container, "connectors.github.connect"), true);
 });
 
+test("while GitHub's connect waits, Cancel is there before the code and Connect isn't offered again", async (t) => {
+  const connect = pendingConnect();
+  const { container, emitProgress, cancels } = await renderGithubRow(t, {
+    status: DISCONNECTED,
+    electronAPI: { connectorConnect: connect.connectorConnect },
+  });
+  await React.act(async () => click(button(container, "connectors.github.connect")));
+
+  // Asking GitHub for a code can take a while: the user can already stop it.
+  assert.equal(hasButton(container, "connectors.github.deviceCode.cancel"), true);
+  // A second Connect would silently replace a code the user may have typed.
+  assert.equal(hasButton(container, "connectors.github.connect"), false);
+  await emitProgress(PROGRESS);
+  assert.equal(hasButton(container, "connectors.github.connect"), false);
+
+  await React.act(async () => click(button(container, "connectors.github.deviceCode.cancel")));
+  assert.deepEqual(cancels, ["github"]);
+  await React.act(async () => connect.settle({ status: "failed", errorCode: "oauth_cancelled" }));
+  assert.equal(hasButton(container, "connectors.github.connect"), true);
+  assert.deepEqual(connect.calls, ["github"]);
+});
+
 test("leaving Settings while the code is showing stops the connect, once", async (t) => {
   const connect = pendingConnect();
   const { container, emitProgress, unmount, cancels } = await renderGithubRow(t, {

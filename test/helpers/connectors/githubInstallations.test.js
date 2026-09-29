@@ -33,7 +33,8 @@ const reposPage = (repositories, headers = {}) =>
 
 const ACME_API = repo("acme/api", "2026-09-27T10:00:00Z", { private: true });
 const ACME_WEB = repo("acme/web", "2026-09-20T10:00:00Z");
-const DANA_API = repo("dana/api", "2026-09-25T10:00:00Z");
+// Issues turned off: a 410 on its issues means that, not a deleted issue.
+const DANA_API = repo("dana/api", "2026-09-25T10:00:00Z", { has_issues: false });
 const DANA_NOTES = repo("dana/notes", "2026-09-28T09:00:00Z");
 
 // Two installations (an org and the user), the first split over two pages,
@@ -88,6 +89,7 @@ test("lists every installed repository across installations and pages, most rece
       name: "notes",
       fullName: "dana/notes",
       private: false,
+      hasIssues: true,
       updatedAt: "2026-09-28T09:00:00Z",
     },
     {
@@ -95,6 +97,7 @@ test("lists every installed repository across installations and pages, most rece
       name: "api",
       fullName: "acme/api",
       private: true,
+      hasIssues: true,
       updatedAt: "2026-09-27T10:00:00Z",
     },
     {
@@ -102,6 +105,7 @@ test("lists every installed repository across installations and pages, most rece
       name: "api",
       fullName: "dana/api",
       private: false,
+      hasIssues: false,
       updatedAt: "2026-09-25T10:00:00Z",
     },
     {
@@ -109,6 +113,7 @@ test("lists every installed repository across installations and pages, most rece
       name: "web",
       fullName: "acme/web",
       private: false,
+      hasIssues: true,
       updatedAt: "2026-09-20T10:00:00Z",
     },
   ]);
@@ -240,6 +245,7 @@ test("a repo is resolved by owner/name in any case, or by a bare name only one r
       name: "api",
       fullName: "acme/api",
       private: true,
+      hasIssues: true,
       updatedAt: "2026-09-27T10:00:00Z",
     },
   });

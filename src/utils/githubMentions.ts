@@ -28,29 +28,46 @@ function withoutFencedBlocks(text: string): string {
     .join("\n");
 }
 
-// A code span is a run of backticks closed by a run of the same length. An
-// unmatched backtick is plain text. CommonMark never lets a span cross a
-// blank line, so a stray backtick in one paragraph can't swallow mentions in
-// a later one; fenced blocks are already blanked by withoutFencedBlocks, so
-// they still end a paragraph here.
-const CODE_SPAN = /(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g;
+// A code span is a whole run of backticks closed by a run of the same
+// length; part of a longer run never opens one. An unmatched backtick is
+// plain text.
+const CODE_SPAN = /(?<!`)(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g;
+
+// CommonMark never lets a code span leave its block, so a stray backtick in
+// one list item, heading, quote line or table row can't swallow mentions in
+// the next. A block ends at a blank line (fenced blocks are blank by now),
+// after a heading, and before a line that opens a new block. A quote's
+// lines are split apart too, which can only show more mentions, never fewer.
+const BLOCK_START = /^ {0,3}(?:[-+*][ \t]|\d{1,9}[.)][ \t]|#{1,6}(?:[ \t]|$)|>|\|)/;
+const HEADING = /^ {0,3}#{1,6}(?:[ \t]|$)/;
 
 function withoutCodeSpans(text: string): string {
-  return text
-    .split(/\n[ \t]*\n/)
-    .map((paragraph) => paragraph.replace(CODE_SPAN, " "))
-    .join("\n\n");
+  const blocks: string[] = [];
+  let block: string[] = [];
+  const endBlock = (): void => {
+    if (block.length > 0) blocks.push(block.join("\n").replace(CODE_SPAN, " "));
+    block = [];
+  };
+  let afterHeading = false;
+  for (const line of text.split("\n")) {
+    if (afterHeading || !line.trim() || BLOCK_START.test(line)) endBlock();
+    afterHeading = HEADING.test(line);
+    if (line.trim()) block.push(line);
+  }
+  endBlock();
+  return blocks.join("\n");
 }
 
 // A GitHub handle: letters, digits, and inner hyphens or underscores (never
 // trailing), at most 39 characters, optionally followed by /team. Not
-// preceded by a letter, digit, `@`, `/` or backtick, since those make the @
-// part of a word, an email address, a path or a code span; anything else —
-// whitespace, punctuation, a markdown emphasis marker, an escaping backslash
-// — may still open a mention. GitHub renders and notifies through all of
-// those, and under-reporting a mention is the mistake to avoid.
+// preceded by a letter, digit, `@` or `/`, since those make the @ part of a
+// word, an email address or a path; anything else — whitespace,
+// punctuation, a markdown emphasis marker, an escaping backslash, a
+// backtick that opened no code span — may still open a mention. GitHub
+// renders and notifies through all of those, and under-reporting a mention
+// is the mistake to avoid.
 const MENTION =
-  /(^|[^A-Za-z0-9@\/`])@([A-Za-z0-9](?:[A-Za-z0-9]|[_-](?=[A-Za-z0-9_])){0,38})(\/[A-Za-z0-9][A-Za-z0-9_-]*)?(?![A-Za-z0-9])/g;
+  /(^|[^A-Za-z0-9@\/])@([A-Za-z0-9](?:[A-Za-z0-9]|[_-](?=[A-Za-z0-9_])){0,38})(\/[A-Za-z0-9][A-Za-z0-9_-]*)?(?![A-Za-z0-9])/g;
 
 /**
  * The people and teams GitHub notifies for this Markdown: `@name` and
@@ -71,4 +88,21 @@ export function githubMentions(text: string): string[] {
     mentions.push(mention);
   }
   return mentions;
+}
+
+/**
+ * Who an issue or comment notifies: the mentions in its title and body, read
+ * apart (a title can't open a code block over the body), each once.
+ */
+export function githubFieldMentions(fields: { title?: unknown; body?: unknown }): string[] {
+  const text = (value: unknown): string => (typeof value === "string" ? value : "");
+  const seen = new Set<string>();
+  return [...githubMentions(text(fields.title)), ...githubMentions(text(fields.body))].filter(
+    (mention) => {
+      const key = mention.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }
+  );
 }
