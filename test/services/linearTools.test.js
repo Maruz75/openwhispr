@@ -176,7 +176,7 @@ test("linear_search_issues sends a cleaned search to main and hands back untrust
   assert.deepEqual(result.data.items, FOUND.items);
   assert.match(result.data.guidance, /never as instructions/);
   assert.equal(result.displayText, "Results found: 1");
-  assert.equal(context.holds, 0, "a search answer may still be pasted at the caret");
+  assert.equal(context.holds, 1, "a search answer stays in the panel, never pasted at the caret");
   assert.deepEqual(context.claims, [], "a search uses no card slot");
 });
 
@@ -194,7 +194,12 @@ test("linear_search_issues refuses a search it can't run, without calling main",
   });
   await setLinearStatus();
   const { linearSearchIssuesTool } = await loadLinear();
-  const run = (args) => linearSearchIssuesTool.execute(args, linearContext("m2", "call-2"));
+  const turn = linearContext("m2", "call-0");
+  let callCount = 0;
+  const run = (args) => {
+    callCount += 1;
+    return linearSearchIssuesTool.execute(args, callOf(turn, `call-${callCount}`));
+  };
 
   assert.equal((await run({ query: "   " })).data.status, "needs_clarification");
   for (const [args, errorCode] of [
@@ -206,6 +211,7 @@ test("linear_search_issues refuses a search it can't run, without calling main",
     assert.deepEqual([result.data.status, result.data.errorCode], ["failed", errorCode]);
   }
   assert.equal(queried, 0);
+  assert.equal(turn.holds, 4, "a question or refusal back is never pasted at the caret");
 });
 
 test("a Linear login that needs reconnecting stops every Linear tool before main", async (t) => {
@@ -243,6 +249,7 @@ test("a Linear login that needs reconnecting stops every Linear tool before main
     assert.equal(result.data.guidance, LINEAR_RECONNECT_GUIDANCE, tool.name);
     assert.equal(result.displayText, "Linear needs to be reconnected.", tool.name);
     assert.deepEqual(context.claims, [], tool.name);
+    assert.equal(context.holds, 1, `${tool.name}: the reconnect answer stays in the panel`);
   }
   assert.deepEqual(calls, { query: 0, prepare: 0 });
 });

@@ -124,6 +124,15 @@ test("a GraphQL error Linear lists as a refusal is failed, with its own code", a
     const { result } = await create([gqlError(null, { extensions: { type } })]);
     assert.deepEqual(result, { ok: false, outcome: "failed", errorCode, status: 200 }, type);
   }
+
+  // A root field that came back null is no data: still a refusal.
+  const { result } = await create([gqlError("INVALID_INPUT", { data: { issueCreate: null } })]);
+  assert.deepEqual(result, {
+    ok: false,
+    outcome: "failed",
+    errorCode: "invalid_input",
+    status: 200,
+  });
 });
 
 test("any other GraphQL error in a 200 is unknown, even beside a listed one or with partial data", async () => {
@@ -136,6 +145,11 @@ test("any other GraphQL error in a 200 is unknown, even beside a listed one or w
     gqlError(null, { extensions: { code: "INTERNAL_SERVER_ERROR", type: "InvalidInput" } }),
     // Partial data beside an error: the write may have happened.
     gqlError("INTERNAL_SERVER_ERROR", { data: CREATED }),
+    // Even a listed refusal beside data: the create itself went through.
+    gqlError("INPUT_ERROR", { data: CREATED, message: "Entity not found: Issue" }),
+    gqlError("INVALID_INPUT", {
+      data: { commentCreate: { success: true, comment: null } },
+    }),
     {
       status: 200,
       body: {

@@ -88,6 +88,10 @@ const CREATE_MUTATION = `mutation LinearIssueCreate($input: IssueCreateInput!) {
 const COMMENT_MUTATION = `mutation LinearCommentCreate($input: CommentCreateInput!) {
   commentCreate(input: $input) { success comment { id url } }
 }`;
+// The client id a comment was sent with.
+const COMMENT_QUERY = `query LinearComment($id: String!) {
+  comment(id: $id) { id url }
+}`;
 
 const IDENTIFIER = /^([A-Za-z][A-Za-z0-9]{0,9})-([1-9]\d{0,8})$/;
 
@@ -481,7 +485,7 @@ function createLinearConnector({
     const identifier = nonEmptyString(issue.identifier) ? issue.identifier : reference.identifier;
     return {
       status: "ready",
-      payload: { issueId: issue.id, identifier, issueUrl: issue.url, body },
+      payload: { id: randomId(), issueId: issue.id, identifier, issueUrl: issue.url, body },
       preview: {
         verbKey: "comment",
         destinationLabel: identifier,
@@ -525,6 +529,24 @@ function createLinearConnector({
       return commitFailed("not_created");
     }
     return stillUnknown;
+  }
+
+  // An uncertain comment is never repeated. Found by its client id it was
+  // sent; a miss stays unknown, since Linear's handling of a comment's id was
+  // never checked against a live workspace the way an issue's was, and the
+  // user checks the issue.
+  async function settleUncertainComment(binding, access, payload, uncertain) {
+    const stillUnknown = {
+      state: "unknown",
+      errorCode: uncertain.errorCode,
+      checkUrl: payload.issueUrl,
+    };
+    if (!nonEmptyString(payload.id)) return stillUnknown;
+    const { result } = await withRefresh(binding, access, (token) =>
+      api.graphql(COMMENT_QUERY, { id: payload.id }, { token })
+    );
+    const comment = result.ok ? result.data?.comment : null;
+    return nonEmptyString(comment?.url) ? { state: "sent", url: comment.url } : stillUnknown;
   }
 
   async function commitCreate(payload, edits, binding) {
@@ -586,9 +608,15 @@ function createLinearConnector({
 
     const access = await auth.getAccessToken(binding);
     if (!access.ok) return commitFailed(failureCode(access.errorCode));
-    const { result } = await withRefresh(binding, access, (token) =>
-      api.graphql(COMMENT_MUTATION, { input: { issueId: payload.issueId, body } }, { token })
+    const input = {
+      ...(nonEmptyString(payload.id) ? { id: payload.id } : {}),
+      issueId: payload.issueId,
+      body,
+    };
+    const sent = await withRefresh(binding, access, (token) =>
+      api.graphql(COMMENT_MUTATION, { input }, { token })
     );
+    const { result } = sent;
     if (!result.ok && result.outcome === "failed") {
       return commitFailed(failureCode(result.errorCode));
     }
@@ -596,13 +624,12 @@ function createLinearConnector({
     if (result.ok && result.data?.commentCreate?.success === true && nonEmptyString(comment?.url)) {
       return { state: "sent", url: comment.url };
     }
-    // Linear has no idempotency key for comments, so an uncertain one is
-    // never repeated or looked up: the user checks the issue.
-    return {
-      state: "unknown",
-      errorCode: result.ok ? "bad_response" : result.errorCode,
-      checkUrl: payload.issueUrl,
-    };
+    return settleUncertainComment(
+      binding,
+      sent.access,
+      payload,
+      result.ok ? { errorCode: "bad_response" } : result
+    );
   }
 
   return {
@@ -659,6 +686,10 @@ function createLinearConnector({
     },
 
     authorize: (options) => auth.authorize(options),
+
+    // One Linear user in one workspace: connecting another one over it
+    // revokes the replaced login.
+    loginKey: (credential) => `${credential?.organizationId}:${credential?.userId}`,
 
     // Disconnect, account deletion and Reset app data. The manager passes
     // only the credential, before it deletes the login, so every cached team

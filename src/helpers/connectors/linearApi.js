@@ -1,8 +1,8 @@
 // Linear's GraphQL API and its OAuth token and revoke endpoints, with the
 // Linear spec §6.3 classification. `failed` needs evidence that Linear did
 // not act; anything that may have reached Linear and changed something is
-// `unknown`, because a comment can't be looked up afterwards and a retry
-// could post it twice.
+// `unknown`, because a lookup that misses proves nothing and a retry could
+// post it twice.
 //
 // Every value marked "Task 3" is an assumption about Linear's wire format
 // that plan Task 3 checks (<scratchpad>/linear-decisions.md). Each lives in
@@ -124,6 +124,15 @@ function rejectionOf(errors) {
   return codes.every(Boolean) ? codes[0] : null;
 }
 
+// A 200 can carry data beside its errors (a partial success), e.g. an
+// issueCreate that succeeded while one of its fields failed to resolve.
+function hasPartialData(body) {
+  return (
+    isPlainObject(body?.data) &&
+    Object.values(body.data).some((value) => value !== null && value !== undefined)
+  );
+}
+
 function createLinearApi({
   fetchImpl,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -180,8 +189,9 @@ function createLinearApi({
     }
     if (status === 401) return failed("unauthorized");
     if (httpOutcome === "failed") return failed(rejection ?? `http_${status}`);
+    // Listed errors beside data may follow a write, so they are unknown.
     if (errors) {
-      return rejection
+      return rejection && !hasPartialData(body)
         ? failed(rejection)
         : { ok: false, outcome: "unknown", errorCode: "graphql_error", status };
     }

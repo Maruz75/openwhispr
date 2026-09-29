@@ -162,6 +162,10 @@ export const linearSearchIssuesTool: ToolDefinition = {
     args: Record<string, unknown>,
     context?: ToolExecutionContext
   ): Promise<ToolResult> {
+    // A search is usually followed by a question for the user ("which team?",
+    // "which of these?"), and its answer is built from other people's text, so
+    // it stays in the panel whatever it finds, like find_contact.
+    context?.onHoldDelivery();
     const checked = searchArgs(args);
     if (isToolResult(checked)) return checked;
     if (needsReconnectNow()) return linearReconnectResult();

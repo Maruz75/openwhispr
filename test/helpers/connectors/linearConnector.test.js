@@ -136,7 +136,12 @@ function stubTeams({ teams = [ENG, DES], projects = { "team-eng": [Q4] }, replie
 
 async function setupLinear(
   script = {},
-  { credential = CONNECTED, configured = true, teams = stubTeams() } = {}
+  {
+    credential = CONNECTED,
+    configured = true,
+    teams = stubTeams(),
+    randomId = () => CLIENT_UUID,
+  } = {}
 ) {
   const [connectorModule, { createLinearApi }, { createLinearAuth }] = await Promise.all([
     import("../../../src/helpers/connectors/linearConnector.js"),
@@ -161,7 +166,7 @@ async function setupLinear(
     auth,
     teams,
     credentials,
-    randomId: () => CLIENT_UUID,
+    randomId,
   });
   return { connector, linear, credentials, teams, ...connectorModule };
 }
@@ -572,6 +577,56 @@ test("Send creates exactly the card's issue, with its client id, and reports the
   assert.deepEqual(linear.operations(), ["LinearIssueCreate"]);
 });
 
+test("a write's client id is made once at prepare and reused by every attempt and its lookup", async () => {
+  let made = 0;
+  const randomId = () => `client-id-${(made += 1)}`;
+
+  const create = await setupLinear(
+    {
+      [GRAPHQL]: { LinearIssueCreate: [HTTP_401, reset()], LinearIssue: [FOUND_CREATED] },
+      [TOKEN]: [REFRESHED],
+    },
+    { randomId }
+  );
+  const prepared = await prepareCrash(create.connector);
+  assert.equal(prepared.payload.id, "client-id-1");
+  const created = await create.connector.commit("create_issue", prepared.payload, {}, BOUND);
+  assert.equal(created.state, "sent");
+  const creates = ops(create.linear, "LinearIssueCreate");
+  assert.deepEqual(
+    creates.map((call) => call.variables.input.id),
+    ["client-id-1", "client-id-1"],
+    "the retry after a refresh sends the same id"
+  );
+  assert.deepEqual(ops(create.linear, "LinearIssue")[0].variables, { id: "client-id-1" });
+
+  const comment = await setupLinear(
+    {
+      [GRAPHQL]: {
+        LinearIssue: [gql({ issue: ENG_123 })],
+        LinearCommentCreate: [HTTP_401, reset()],
+        LinearComment: [gql({ comment: { id: "c", url: `${ISSUE_URL}#comment-1` } })],
+      },
+      [TOKEN]: [REFRESHED],
+    },
+    { randomId }
+  );
+  const drafted = await comment.connector.prepare(
+    "comment",
+    { issue: "ENG-123", body: "hi" },
+    BOUND
+  );
+  assert.equal(drafted.payload.id, "client-id-2");
+  const posted = await comment.connector.commit("comment", drafted.payload, {}, BOUND);
+  assert.equal(posted.state, "sent");
+  assert.deepEqual(
+    ops(comment.linear, "LinearCommentCreate").map((call) => call.variables.input.id),
+    ["client-id-2", "client-id-2"]
+  );
+  assert.deepEqual(ops(comment.linear, "LinearComment")[0].variables, { id: "client-id-2" });
+  assert.equal(made, 2, "one id per prepared write, none made at Send");
+});
+
 test("an edit that breaks a rule at Send is refused without calling Linear", async () => {
   const { connector, linear } = await setupLinear({
     [GRAPHQL]: { LinearIssueCreate: [CREATED] },
@@ -814,6 +869,7 @@ test("a comment card names the issue it goes on, from a key or a link", async ()
     assert.deepEqual(prepared, {
       status: "ready",
       payload: {
+        id: CLIENT_UUID,
         issueId: "issue-123",
         identifier: "ENG-123",
         issueUrl: ISSUE_URL,
@@ -882,13 +938,13 @@ test("Send posts the card's comment once and links to it", async () => {
   const result = await connector.commit(
     "comment",
     { ...prepared.payload, issueId: prepared.payload.issueId },
-    { body: "Fixed in 1.9.1, edited.", issueId: "issue-999" },
+    { body: "Fixed in 1.9.1, edited.", issueId: "issue-999", id: "another-id" },
     BOUND
   );
 
   assert.deepEqual(result, { state: "sent", url: `${ISSUE_URL}#comment-1` });
   assert.deepEqual(ops(linear, "LinearCommentCreate")[0].variables, {
-    input: { issueId: "issue-123", body: "Fixed in 1.9.1, edited." },
+    input: { id: CLIENT_UUID, issueId: "issue-123", body: "Fixed in 1.9.1, edited." },
   });
 });
 
@@ -907,22 +963,55 @@ test("a comment prepared by key whose Linear issue.url carries a different works
 
   assert.deepEqual(result, { state: "sent", url: `${ISSUE_URL}#comment-1` });
   assert.deepEqual(ops(linear, "LinearCommentCreate")[0].variables, {
-    input: { issueId: "issue-123", body: "hi" },
+    input: { id: CLIENT_UUID, issueId: "issue-123", body: "hi" },
   });
 });
 
-test("an uncertain comment stays unknown, points at the issue, and is never repeated", async () => {
+test("an uncertain comment found by its client id is sent, and is never repeated", async () => {
   for (const reply of [httpStatus(503), reset(), gqlError("INTERNAL_SERVER_ERROR"), gql({})]) {
     const { connector, linear } = await setupLinear({
-      [GRAPHQL]: { LinearIssue: [gql({ issue: ENG_123 })], LinearCommentCreate: [reply] },
+      [GRAPHQL]: {
+        LinearIssue: [gql({ issue: ENG_123 })],
+        LinearCommentCreate: [reply],
+        LinearComment: [gql({ comment: { id: CLIENT_UUID, url: `${ISSUE_URL}#comment-1` } })],
+      },
     });
     const prepared = await connector.prepare("comment", { issue: "ENG-123", body: "hi" }, BOUND);
 
     const result = await connector.commit("comment", prepared.payload, {}, BOUND);
 
-    assert.equal(result.state, "unknown");
-    assert.equal(result.checkUrl, ISSUE_URL);
+    assert.deepEqual(result, { state: "sent", url: `${ISSUE_URL}#comment-1` });
     assert.equal(ops(linear, "LinearCommentCreate").length, 1);
+    assert.deepEqual(ops(linear, "LinearComment")[0].variables, { id: CLIENT_UUID });
+  }
+});
+
+test("an uncertain comment its lookup doesn't find stays unknown, points at the issue, and is never repeated", async () => {
+  // Unlike a create, even a completed answer's miss never reads as "not
+  // posted": a comment's client id was never checked against a live workspace.
+  for (const reply of [httpStatus(503), reset(), gqlError("INTERNAL_SERVER_ERROR"), gql({})]) {
+    for (const lookup of [
+      gqlError("INPUT_ERROR", { message: "Entity not found: Comment" }),
+      gql({ comment: null }),
+      httpStatus(503),
+      reset(),
+    ]) {
+      const { connector, linear } = await setupLinear({
+        [GRAPHQL]: {
+          LinearIssue: [gql({ issue: ENG_123 })],
+          LinearCommentCreate: [reply],
+          LinearComment: [lookup],
+        },
+      });
+      const prepared = await connector.prepare("comment", { issue: "ENG-123", body: "hi" }, BOUND);
+
+      const result = await connector.commit("comment", prepared.payload, {}, BOUND);
+
+      assert.equal(result.state, "unknown");
+      assert.equal(result.checkUrl, ISSUE_URL);
+      assert.deepEqual(ops(linear, "LinearCommentCreate").length, 1);
+      assert.equal(ops(linear, "LinearComment").length, 1);
+    }
   }
 });
 
@@ -1008,6 +1097,21 @@ test("without a client id the row is hidden, unless a login is left to disconnec
   const status = await leftover.connector.getStatus();
   assert.equal(status.connected, true);
   assert.equal(status.configured, true);
+});
+
+test("a Linear login is the same account only for the same user in the same workspace", async () => {
+  const { createLinearConnector } =
+    await import("../../../src/helpers/connectors/linearConnector.js");
+  const { loginKey } = createLinearConnector({
+    api: null,
+    auth: null,
+    teams: null,
+    credentials: null,
+  });
+  const login = { userId: "u-1", organizationId: "org-1" };
+  assert.equal(loginKey(login), loginKey({ ...login, accessToken: "newer" }));
+  assert.notEqual(loginKey(login), loginKey({ ...login, userId: "u-2" }));
+  assert.notEqual(loginKey(login), loginKey({ ...login, organizationId: "org-2" }));
 });
 
 test("authorize and revoke go to Linear auth, and revoking forgets the cached teams", async () => {
