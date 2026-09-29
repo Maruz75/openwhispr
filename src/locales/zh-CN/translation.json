@@ -3682,6 +3682,9 @@
       "email_draftName": "邮件草稿",
       "find_contactName": "查找联系人",
       "slack_send_messageName": "Slack 消息",
+      "linear_search_issuesName": "搜索 Linear",
+      "linear_create_issueName": "Linear 议题",
+      "linear_commentName": "Linear 评论",
       "get_noteName": "获取笔记",
       "create_noteName": "创建笔记",
       "update_noteName": "更新笔记",
@@ -3697,6 +3700,9 @@
       "email_draftStatus": "正在准备邮件...",
       "find_contactStatus": "正在查找联系人...",
       "slack_send_messageStatus": "正在准备 Slack 消息...",
+      "linear_search_issuesStatus": "正在搜索 Linear...",
+      "linear_create_issueStatus": "正在准备 Linear 议题...",
+      "linear_commentStatus": "正在准备 Linear 评论...",
       "web_searchStatus": "正在搜索网页...",
       "copy_to_clipboardStatus": "正在复制到剪贴板...",
       "get_calendar_eventsStatus": "正在查看日历...",
@@ -3903,6 +3909,26 @@
           "refused": "Gmail 拒绝发送，未发送任何内容。",
           "connection_changed": "发送前 Gmail 连接发生了变化，因此未发送任何内容。",
           "credential_save_failed": "无法在此电脑上保存 Gmail 登录信息，未发送任何内容。请重试。"
+        },
+        "linear": {
+          "reconnect_needed": "需要在设置中重新连接 Linear。",
+          "connection_changed": "发送前 Linear 连接发生了变化，因此未发送任何内容。",
+          "credential_save_failed": "无法在此电脑上保存 Linear 登录信息，未发送任何内容。请重试。",
+          "linear_unavailable": "Linear 目前不可用，未发送任何内容。",
+          "network": "无法连接到 Linear，未发送任何内容。",
+          "rate_limited": "Linear 正忙，请稍后重试。",
+          "not_found": "Linear 找不到该团队、项目或议题了，未发送任何内容。",
+          "forbidden": "您的 Linear 账户无权执行此操作，未发送任何内容。",
+          "invalid_input": "Linear 无法接受当前内容，未发送任何内容。",
+          "too_long": "对 Linear 来说太长，未发送任何内容。",
+          "missing_title": "Linear 议题需要标题，未发送任何内容。",
+          "missing_body": "Linear 评论为空，未发送任何内容。",
+          "not_created": "Linear 未创建该议题。",
+          "wrong_workspace": "该议题位于另一个 Linear 工作区，未发送任何内容。",
+          "invalid_reference": "这不是 Linear 议题，未发送任何内容。",
+          "refused": "Linear 拒绝了请求，未发送任何内容。",
+          "unknown_action": "OpenWhispr 无法在 Linear 中执行此操作，未发送任何内容。",
+          "generic": "出了点问题，未向 Linear 发送任何内容。"
         }
       },
       "email": {
@@ -3922,7 +3948,8 @@
         "unknown": "无法确认是否已发送，请检查“已发送”文件夹。"
       },
       "openIn": {
-        "gmail": "在 Gmail 中打开"
+        "gmail": "在 Gmail 中打开",
+        "linear": "在 Linear 中打开"
       },
       "sendLabel": {
         "issue": "创建问题",
@@ -4040,17 +4067,56 @@
         "failedBody": "请返回 OpenWhispr 重试。"
       }
     },
+    "linear": {
+      "title": "Linear",
+      "description": "助手可以搜索您的 Linear 议题，并以您的身份创建议题和评论。每个议题和评论发送前都需要您批准。",
+      "connect": "连接",
+      "reconnect": "重新连接",
+      "disconnect": "断开连接",
+      "connecting": "请在浏览器中完成连接…",
+      "connectedAs": "已以 {{account}} 身份连接到 {{workspace}}",
+      "needsReconnect": "需要重新连接 Linear。",
+      "proRequired": "升级到付费计划，让助手为您在 Linear 中工作。",
+      "errors": {
+        "connect_failed": "无法连接 Linear，请重试。",
+        "disconnect_failed": "无法断开 Linear 连接，请重试。",
+        "oauth_denied": "由于未获得授权，Linear 未连接。",
+        "oauth_timeout": "连接耗时过长，请重试。",
+        "oauth_state_mismatch": "该登录链接已过期，请重试。",
+        "ports_busy": "另一个应用正在使用 OpenWhispr 连接所需的端口。请关闭它后重试。",
+        "token_exchange_failed": "Linear 未完成连接，请重试。",
+        "not_configured": "此版本中 Linear 不可用。",
+        "connection_changed": "连接过程中您的账户或 Linear 连接发生了变化，请重试。",
+        "signed_out": "请登录 OpenWhispr 以连接 Linear。",
+        "policy_blocked": "您的组织已关闭连接器。",
+        "policy_unavailable": "无法检查您的组织设置，请重试。",
+        "permission_not_granted": "由于未授予全部权限，Linear 未连接。请重新连接并允许所有权限。"
+      },
+      "browser": {
+        "connectedTitle": "Linear 已连接",
+        "connectedBody": "您可以关闭此标签页并返回 OpenWhispr。",
+        "failedTitle": "Linear 未连接",
+        "failedBody": "请返回 OpenWhispr 重试。"
+      },
+      "notes": {
+        "projectNotFound": "未设置项目：{{destination}} 中没有 {{project}}。"
+      }
+    },
     "recent": {
       "title": "最近的操作",
       "actions": {
         "email_draft": "发送给 {{destination}} 的草稿",
         "slack_send_message": "发送给 {{destination}} 的消息",
-        "gmail_send": "发送给 {{destination}} 的邮件"
+        "gmail_send": "发送给 {{destination}} 的邮件",
+        "linear_create_issue": "{{destination}} 中的新议题",
+        "linear_comment": "对 {{destination}} 的评论"
       },
       "unlabeledActions": {
         "email_draft": "邮件草稿",
         "slack_send_message": "Slack 消息",
-        "gmail_send": "Gmail 邮件"
+        "gmail_send": "Gmail 邮件",
+        "linear_create_issue": "Linear 议题",
+        "linear_comment": "Linear 评论"
       },
       "states": {
         "pending": "等待中",
@@ -4106,10 +4172,31 @@
           "refused": "Gmail 拒绝发送。",
           "connection_changed": "Gmail 连接已更改。未发送任何内容。",
           "credential_save_failed": "无法在此电脑上保存 Gmail 登录信息。未发送任何内容。"
+        },
+        "linear": {
+          "reconnect_needed": "需要重新连接 Linear。",
+          "connection_changed": "Linear 连接已更改。未发送任何内容。",
+          "credential_save_failed": "无法在此电脑上保存 Linear 登录信息。",
+          "linear_unavailable": "Linear 目前不可用。",
+          "network": "无法连接到 Linear。",
+          "rate_limited": "Linear 正忙。",
+          "not_found": "在 Linear 中未找到。",
+          "forbidden": "在 Linear 中无权执行。",
+          "invalid_input": "Linear 无法接受。",
+          "too_long": "对 Linear 来说太长。",
+          "missing_title": "Linear 议题需要标题。",
+          "missing_body": "Linear 评论为空。",
+          "not_created": "Linear 未创建该议题。",
+          "wrong_workspace": "该议题位于另一个 Linear 工作区。",
+          "invalid_reference": "不是 Linear 议题。",
+          "refused": "Linear 拒绝了请求。",
+          "unknown_action": "在 Linear 中不可用。",
+          "generic": "在 Linear 中操作未成功。"
         }
       },
       "unknownSent": {
-        "gmail": "无法确认发给 {{destination}} 的邮件是否已发送，请检查 Gmail 的“已发送”文件夹。"
+        "gmail": "无法确认发给 {{destination}} 的邮件是否已发送，请检查 Gmail 的“已发送”文件夹。",
+        "linear": "无法确认是否已送达 Linear。重试前请先在 Linear 中检查 {{destination}}。"
       },
       "gmailDraftLimit": "每次请求最多只能准备 {{max}} 封邮件。",
       "queryResults": "找到的结果：{{total}}",

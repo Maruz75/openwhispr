@@ -59,7 +59,7 @@ test("the shipped rows are Gmail then Slack, with their account summaries", asyn
 
   assert.deepEqual(
     rows.CONNECTOR_ROWS.map((row) => row.id),
-    ["gmail", "slack"]
+    ["gmail", "slack", "linear"]
   );
   assert.deepEqual(rows.CONNECTOR_ROWS[0].accountSummary(status), { account: "chad" });
   assert.deepEqual(rows.CONNECTOR_ROWS[1].accountSummary(status), {

@@ -3851,6 +3851,9 @@
       "email_draftName": "Brouillon d'e-mail",
       "find_contactName": "Rechercher un contact",
       "slack_send_messageName": "Message Slack",
+      "linear_search_issuesName": "Rechercher dans Linear",
+      "linear_create_issueName": "Ticket Linear",
+      "linear_commentName": "Commentaire Linear",
       "get_noteName": "Obtenir une note",
       "create_noteName": "Créer une note",
       "update_noteName": "Mettre à jour une note",
@@ -3866,6 +3869,9 @@
       "email_draftStatus": "Préparation d'un e-mail...",
       "find_contactStatus": "Recherche de contacts...",
       "slack_send_messageStatus": "Préparation d'un message Slack...",
+      "linear_search_issuesStatus": "Recherche dans Linear...",
+      "linear_create_issueStatus": "Préparation d'un ticket Linear...",
+      "linear_commentStatus": "Préparation d'un commentaire Linear...",
       "web_searchStatus": "Recherche sur le web...",
       "copy_to_clipboardStatus": "Copie dans le presse-papiers...",
       "get_calendar_eventsStatus": "Vérification du calendrier...",
@@ -4072,6 +4078,26 @@
           "refused": "Gmail a refusé de l'envoyer. Rien n'a été envoyé.",
           "connection_changed": "La connexion Gmail a changé avant l'envoi, donc rien n'a été envoyé.",
           "credential_save_failed": "La connexion Gmail n'a pas pu être enregistrée sur cet ordinateur. Rien n'a été envoyé. Réessayez."
+        },
+        "linear": {
+          "reconnect_needed": "Linear doit être reconnecté dans les Paramètres.",
+          "connection_changed": "La connexion Linear a changé avant l'envoi, donc rien n'a été envoyé.",
+          "credential_save_failed": "La connexion Linear n'a pas pu être enregistrée sur cet ordinateur. Rien n'a été envoyé. Réessayez.",
+          "linear_unavailable": "Linear n'est pas disponible pour le moment. Rien n'a été envoyé.",
+          "network": "Linear est injoignable. Rien n'a été envoyé.",
+          "rate_limited": "Linear est occupé. Réessayez sous peu.",
+          "not_found": "Linear ne trouve plus l'équipe, le projet ou le ticket. Rien n'a été envoyé.",
+          "forbidden": "Votre compte Linear n'est pas autorisé à le faire. Rien n'a été envoyé.",
+          "invalid_input": "Linear n'a pas pu l'accepter tel quel. Rien n'a été envoyé.",
+          "too_long": "Trop long pour Linear. Rien n'a été envoyé.",
+          "missing_title": "Le ticket Linear a besoin d'un titre. Rien n'a été envoyé.",
+          "missing_body": "Le commentaire Linear est vide. Rien n'a été envoyé.",
+          "not_created": "Linear n'a pas créé le ticket.",
+          "wrong_workspace": "Ce ticket se trouve dans un autre espace de travail Linear. Rien n'a été envoyé.",
+          "invalid_reference": "Ce n'est pas un ticket Linear. Rien n'a été envoyé.",
+          "refused": "Linear a refusé la demande. Rien n'a été envoyé.",
+          "unknown_action": "OpenWhispr ne peut pas faire cela dans Linear. Rien n'a été envoyé.",
+          "generic": "Un problème est survenu. Rien n'a été envoyé à Linear."
         }
       },
       "email": {
@@ -4091,7 +4117,8 @@
         "unknown": "Impossible de confirmer l'envoi. Vérifiez votre dossier Messages envoyés."
       },
       "openIn": {
-        "gmail": "Ouvrir dans Gmail"
+        "gmail": "Ouvrir dans Gmail",
+        "linear": "Ouvrir dans Linear"
       },
       "sendLabel": {
         "issue": "Créer le ticket",
@@ -4209,17 +4236,56 @@
         "failedBody": "Retournez à OpenWhispr pour réessayer."
       }
     },
+    "linear": {
+      "title": "Linear",
+      "description": "L'assistant peut rechercher vos tickets Linear et créer des tickets et des commentaires en votre nom. Vous approuvez chaque ticket et chaque commentaire avant son envoi.",
+      "connect": "Connecter",
+      "reconnect": "Reconnecter",
+      "disconnect": "Déconnecter",
+      "connecting": "Terminez la connexion dans votre navigateur…",
+      "connectedAs": "Connecté en tant que {{account}} dans {{workspace}}",
+      "needsReconnect": "Linear doit être reconnecté.",
+      "proRequired": "Passez à un plan payant pour que l'assistant travaille dans Linear pour vous.",
+      "errors": {
+        "connect_failed": "Impossible de connecter Linear. Réessayez.",
+        "disconnect_failed": "Impossible de déconnecter Linear. Réessayez.",
+        "oauth_denied": "Linear n'a pas été connecté car l'accès n'a pas été autorisé.",
+        "oauth_timeout": "La connexion a pris trop de temps. Réessayez.",
+        "oauth_state_mismatch": "Ce lien de connexion était périmé. Réessayez.",
+        "ports_busy": "Une autre application utilise les ports dont OpenWhispr a besoin pour se connecter. Fermez-la et réessayez.",
+        "token_exchange_failed": "Linear n'a pas terminé la connexion. Réessayez.",
+        "not_configured": "Linear n'est pas disponible dans cette version.",
+        "connection_changed": "Votre compte ou la connexion Linear a changé pendant la connexion. Réessayez.",
+        "signed_out": "Connectez-vous à OpenWhispr pour connecter Linear.",
+        "policy_blocked": "Votre organisation a désactivé les connecteurs.",
+        "policy_unavailable": "Impossible de vérifier les paramètres de votre organisation. Réessayez.",
+        "permission_not_granted": "Linear n'a pas été connecté car toutes les autorisations n'ont pas été accordées. Reconnectez-vous et autorisez-les toutes."
+      },
+      "browser": {
+        "connectedTitle": "Linear est connecté",
+        "connectedBody": "Vous pouvez fermer cet onglet et retourner à OpenWhispr.",
+        "failedTitle": "Linear n'a pas été connecté",
+        "failedBody": "Retournez à OpenWhispr pour réessayer."
+      },
+      "notes": {
+        "projectNotFound": "Projet non défini : {{project}} n'existe pas dans {{destination}}."
+      }
+    },
     "recent": {
       "title": "Actions récentes",
       "actions": {
         "email_draft": "Brouillon à {{destination}}",
         "slack_send_message": "Message à {{destination}}",
-        "gmail_send": "E-mail à {{destination}}"
+        "gmail_send": "E-mail à {{destination}}",
+        "linear_create_issue": "Nouveau ticket dans {{destination}}",
+        "linear_comment": "Commentaire sur {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "Brouillon d'e-mail",
         "slack_send_message": "Message Slack",
-        "gmail_send": "E-mail Gmail"
+        "gmail_send": "E-mail Gmail",
+        "linear_create_issue": "Ticket Linear",
+        "linear_comment": "Commentaire Linear"
       },
       "states": {
         "pending": "En attente",
@@ -4275,10 +4341,31 @@
           "refused": "Gmail a refusé de l'envoyer.",
           "connection_changed": "La connexion Gmail a changé. Rien n'a été envoyé.",
           "credential_save_failed": "Impossible d'enregistrer la connexion Gmail sur cet ordinateur. Rien n'a été envoyé."
+        },
+        "linear": {
+          "reconnect_needed": "Linear doit être reconnecté.",
+          "connection_changed": "La connexion Linear a changé. Rien n'a été envoyé.",
+          "credential_save_failed": "Impossible d'enregistrer la connexion Linear sur cet ordinateur.",
+          "linear_unavailable": "Linear n'est pas disponible pour le moment.",
+          "network": "Impossible de joindre Linear.",
+          "rate_limited": "Linear est occupé.",
+          "not_found": "Introuvable dans Linear.",
+          "forbidden": "Non autorisé dans Linear.",
+          "invalid_input": "Linear n'a pas pu l'accepter.",
+          "too_long": "Trop long pour Linear.",
+          "missing_title": "Le ticket Linear a besoin d'un titre.",
+          "missing_body": "Le commentaire Linear est vide.",
+          "not_created": "Linear n'a pas créé le ticket.",
+          "wrong_workspace": "Ce ticket se trouve dans un autre espace de travail Linear.",
+          "invalid_reference": "Pas un ticket Linear.",
+          "refused": "Linear a refusé la demande.",
+          "unknown_action": "Non disponible dans Linear.",
+          "generic": "Cela n'a pas fonctionné dans Linear."
         }
       },
       "unknownSent": {
-        "gmail": "Impossible de confirmer l'envoi de l'e-mail à {{destination}}. Vérifiez le dossier Messages envoyés de Gmail."
+        "gmail": "Impossible de confirmer l'envoi de l'e-mail à {{destination}}. Vérifiez le dossier Messages envoyés de Gmail.",
+        "linear": "Impossible de confirmer que c'est arrivé dans Linear. Vérifiez {{destination}} dans Linear avant de réessayer."
       },
       "gmailDraftLimit": "Seuls {{max}} e-mails peuvent être préparés par demande.",
       "queryResults": "Résultats trouvés : {{total}}",

@@ -102,6 +102,7 @@ test("the shipped list is email then Slack, and every connector tool names its c
     [
       ["email", false],
       ["slack", true],
+      ["linear", true],
     ]
   );
   for (const entry of CONNECTOR_TOOL_MODULES) {
