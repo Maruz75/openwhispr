@@ -3681,6 +3681,9 @@
       "search_notesName": "搜索笔记",
       "email_draftName": "邮件草稿",
       "find_contactName": "查找联系人",
+      "github_search_issuesName": "搜索 GitHub",
+      "github_create_issueName": "GitHub Issue",
+      "github_commentName": "GitHub 评论",
       "slack_send_messageName": "Slack 消息",
       "get_noteName": "获取笔记",
       "create_noteName": "创建笔记",
@@ -3696,6 +3699,9 @@
       "search_notesStatus": "正在搜索笔记...",
       "email_draftStatus": "正在准备邮件...",
       "find_contactStatus": "正在查找联系人...",
+      "github_search_issuesStatus": "正在搜索 GitHub...",
+      "github_create_issueStatus": "正在准备 GitHub Issue...",
+      "github_commentStatus": "正在准备 GitHub 评论...",
       "slack_send_messageStatus": "正在准备 Slack 消息...",
       "web_searchStatus": "正在搜索网页...",
       "copy_to_clipboardStatus": "正在复制到剪贴板...",
@@ -3889,6 +3895,24 @@
         "dm_failed": "无法打开与 {{destination}} 的私信，未发送任何内容。",
         "restricted": "{{destination}} 对您是只读或受限的。",
         "generic": "出了点问题，未发送任何内容。",
+        "github": {
+          "reconnect_needed": "需要在设置中重新连接 GitHub。",
+          "network": "无法连接到 GitHub，未发布任何内容。",
+          "rate_limited": "GitHub 正忙，请稍后重试。",
+          "connection_changed": "发布前 GitHub 连接发生了变化，因此未发布任何内容。",
+          "credential_save_failed": "无法在此电脑上保存 GitHub 登录信息，未发布任何内容。请重试。",
+          "generic": "出了点问题，未向 GitHub 发布任何内容。",
+          "not_installed": "此仓库未安装 OpenWhispr GitHub App，未发布任何内容。",
+          "no_repositories": "尚未为 OpenWhispr GitHub App 选择仓库。请在设置中选择。未发布任何内容。",
+          "forbidden": "您没有在此仓库中执行此操作的权限，未发布任何内容。",
+          "not_found": "找不到该 Issue 或拉取请求，未发布任何内容。",
+          "issues_disabled": "此仓库已关闭 Issue，未发布任何内容。",
+          "invalid": "GitHub 认为其无效并拒绝了，未发布任何内容。",
+          "locked": "该对话已锁定，未发布任何内容。",
+          "invalid_reference": "这不是 GitHub Issue 或拉取请求，未发布任何内容。",
+          "too_long": "标题或正文对 GitHub 来说太长，未发布任何内容。",
+          "not_configured": "此版本中 GitHub 不可用，未发布任何内容。"
+        },
         "gmail": {
           "reconnect_needed": "需要在设置中重新连接 Gmail。",
           "network": "无法连接到 Gmail，未发送任何内容。",
@@ -3921,7 +3945,15 @@
         "bodyTooLong": "邮件正文过长，无法通过 Gmail 发送。请缩短后再发送。",
         "unknown": "无法确认是否已发送，请检查“已发送”文件夹。"
       },
+      "github": {
+        "notes": {
+          "mentions": "将通知 {{mentions}}",
+          "pullRequest": "针对拉取请求",
+          "labelsMayNotApply": "只有在您对此仓库有写入权限时才会添加标签。"
+        }
+      },
       "openIn": {
+        "github": "在 GitHub 中打开",
         "gmail": "在 Gmail 中打开"
       },
       "sendLabel": {
@@ -4086,11 +4118,15 @@
       "title": "最近的操作",
       "actions": {
         "email_draft": "发送给 {{destination}} 的草稿",
+        "github_create_issue": "{{destination}} 中的新 Issue",
+        "github_comment": "对 {{destination}} 的评论",
         "slack_send_message": "发送给 {{destination}} 的消息",
         "gmail_send": "发送给 {{destination}} 的邮件"
       },
       "unlabeledActions": {
         "email_draft": "邮件草稿",
+        "github_create_issue": "GitHub Issue",
+        "github_comment": "GitHub 评论",
         "slack_send_message": "Slack 消息",
         "gmail_send": "Gmail 邮件"
       },
@@ -4134,6 +4170,24 @@
         "dm_failed": "无法打开私信。未发送任何内容。",
         "restricted": "该频道为只读或受限。",
         "generic": "操作未成功。",
+        "github": {
+          "reconnect_needed": "需要重新连接 GitHub。",
+          "network": "无法连接到 GitHub。",
+          "rate_limited": "GitHub 正忙。",
+          "connection_changed": "GitHub 连接已更改。",
+          "credential_save_failed": "无法在此电脑上保存 GitHub 登录信息。",
+          "generic": "在 GitHub 上操作未成功。",
+          "not_installed": "那里未安装 OpenWhispr GitHub App。",
+          "no_repositories": "尚未选择 GitHub 仓库。",
+          "forbidden": "在该仓库中没有权限。",
+          "not_found": "找不到该 Issue 或拉取请求。",
+          "issues_disabled": "该仓库已关闭 Issue。",
+          "invalid": "GitHub 认为其无效并拒绝了。",
+          "locked": "该对话已锁定。",
+          "invalid_reference": "不是 GitHub Issue 或拉取请求。",
+          "too_long": "对 GitHub 来说太长。",
+          "not_configured": "此版本中 GitHub 不可用。"
+        },
         "gmail": {
           "reconnect_needed": "需要重新连接 Gmail。",
           "network": "无法连接到 Gmail。未发送任何内容。",
@@ -4151,6 +4205,7 @@
         }
       },
       "unknownSent": {
+        "github": "无法确认是否已发布到 {{destination}}，重试前请先在 GitHub 上检查。",
         "gmail": "无法确认发给 {{destination}} 的邮件是否已发送，请检查 Gmail 的“已发送”文件夹。"
       },
       "gmailDraftLimit": "每次请求最多只能准备 {{max}} 封邮件。",

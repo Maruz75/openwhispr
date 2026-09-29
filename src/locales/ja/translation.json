@@ -3681,6 +3681,9 @@
       "search_notesName": "ノートを検索",
       "email_draftName": "メールの下書き",
       "find_contactName": "連絡先を検索",
+      "github_search_issuesName": "GitHubを検索",
+      "github_create_issueName": "GitHubのIssue",
+      "github_commentName": "GitHubのコメント",
       "slack_send_messageName": "Slackメッセージ",
       "get_noteName": "ノートを取得",
       "create_noteName": "ノートを作成",
@@ -3696,6 +3699,9 @@
       "search_notesStatus": "ノートを検索中...",
       "email_draftStatus": "メールを準備しています...",
       "find_contactStatus": "連絡先を検索中...",
+      "github_search_issuesStatus": "GitHubを検索中...",
+      "github_create_issueStatus": "GitHubのIssueを準備しています...",
+      "github_commentStatus": "GitHubのコメントを準備しています...",
       "slack_send_messageStatus": "Slackメッセージを準備しています...",
       "web_searchStatus": "ウェブを検索中...",
       "copy_to_clipboardStatus": "クリップボードにコピー中...",
@@ -3889,6 +3895,24 @@
         "dm_failed": "{{destination}}とのダイレクトメッセージを開けませんでした。何も送信されていません。",
         "restricted": "{{destination}}は読み取り専用か、あなたには制限されています。",
         "generic": "問題が発生しました。何も送信されていません。",
+        "github": {
+          "reconnect_needed": "設定でGitHubを再接続する必要があります。",
+          "network": "GitHubに接続できませんでした。何も投稿されていません。",
+          "rate_limited": "GitHubが混み合っています。しばらくしてからもう一度お試しください。",
+          "connection_changed": "投稿前にGitHubの接続が変わったため、何も投稿されませんでした。",
+          "credential_save_failed": "このコンピューターにGitHubのログイン情報を保存できませんでした。何も投稿されていません。もう一度お試しください。",
+          "generic": "問題が発生しました。GitHubには何も投稿されていません。",
+          "not_installed": "このリポジトリにはOpenWhisprのGitHub Appがインストールされていません。何も投稿されていません。",
+          "no_repositories": "OpenWhisprのGitHub Appにリポジトリがまだ選択されていません。設定で選択してください。何も投稿されていません。",
+          "forbidden": "このリポジトリでこの操作を行う権限がありません。何も投稿されていません。",
+          "not_found": "Issueまたはプルリクエストが見つかりませんでした。何も投稿されていません。",
+          "issues_disabled": "このリポジトリではIssueが無効になっています。何も投稿されていません。",
+          "invalid": "GitHubに無効として拒否されました。何も投稿されていません。",
+          "locked": "この会話はロックされています。何も投稿されていません。",
+          "invalid_reference": "GitHubのIssueまたはプルリクエストではありません。何も投稿されていません。",
+          "too_long": "タイトルまたは本文がGitHubには長すぎます。何も投稿されていません。",
+          "not_configured": "このビルドではGitHubを利用できません。何も投稿されていません。"
+        },
         "gmail": {
           "reconnect_needed": "設定でGmailを再接続する必要があります。",
           "network": "Gmailに接続できませんでした。何も送信されていません。",
@@ -3921,7 +3945,15 @@
         "bodyTooLong": "メッセージが長すぎて Gmail で送信できません。短くしてから送信してください。",
         "unknown": "送信されたか確認できませんでした。送信済みフォルダを確認してください。"
       },
+      "github": {
+        "notes": {
+          "mentions": "{{mentions}} に通知されます",
+          "pullRequest": "プルリクエストへのコメント",
+          "labelsMayNotApply": "ラベルは、このリポジトリへの書き込み権限がある場合にのみ追加されます。"
+        }
+      },
       "openIn": {
+        "github": "GitHubで開く",
         "gmail": "Gmailで開く"
       },
       "sendLabel": {
@@ -4086,11 +4118,15 @@
       "title": "最近のアクション",
       "actions": {
         "email_draft": "{{destination}} 宛ての下書き",
+        "github_create_issue": "{{destination}} の新しいIssue",
+        "github_comment": "{{destination}} へのコメント",
         "slack_send_message": "{{destination}} 宛てのメッセージ",
         "gmail_send": "{{destination}} 宛てのメール"
       },
       "unlabeledActions": {
         "email_draft": "メール下書き",
+        "github_create_issue": "GitHubのIssue",
+        "github_comment": "GitHubのコメント",
         "slack_send_message": "Slackメッセージ",
         "gmail_send": "Gmailのメール"
       },
@@ -4134,6 +4170,24 @@
         "dm_failed": "ダイレクトメッセージを開けませんでした。何も送信されていません。",
         "restricted": "そのチャンネルは読み取り専用か、制限されています。",
         "generic": "うまくいきませんでした。",
+        "github": {
+          "reconnect_needed": "GitHubを再接続する必要があります。",
+          "network": "GitHubに接続できませんでした。",
+          "rate_limited": "GitHubが混み合っています。",
+          "connection_changed": "GitHubの接続が変わりました。",
+          "credential_save_failed": "このコンピューターにGitHubのログイン情報を保存できませんでした。",
+          "generic": "GitHubでうまくいきませんでした。",
+          "not_installed": "そこにはOpenWhisprのGitHub Appがインストールされていません。",
+          "no_repositories": "GitHubのリポジトリがまだ選択されていません。",
+          "forbidden": "そのリポジトリでの権限がありません。",
+          "not_found": "そのIssueまたはプルリクエストが見つかりませんでした。",
+          "issues_disabled": "そのリポジトリではIssueが無効です。",
+          "invalid": "GitHubに無効として拒否されました。",
+          "locked": "その会話はロックされています。",
+          "invalid_reference": "GitHubのIssueまたはプルリクエストではありません。",
+          "too_long": "GitHubには長すぎます。",
+          "not_configured": "このビルドではGitHubを利用できません。"
+        },
         "gmail": {
           "reconnect_needed": "Gmailを再接続する必要があります。",
           "network": "Gmailに接続できませんでした。何も送信されていません。",
@@ -4151,6 +4205,7 @@
         }
       },
       "unknownSent": {
+        "github": "{{destination}} に投稿されたか確認できませんでした。もう一度試す前にGitHubを確認してください。",
         "gmail": "{{destination}} 宛てのメールが送信されたか確認できませんでした。Gmailの送信済みフォルダを確認してください。"
       },
       "gmailDraftLimit": "1回のリクエストで準備できるメールは{{max}}件までです。",

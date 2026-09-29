@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { liveCardNotesFor } from "./liveCardNotes";
 import type { IssueFieldProblem, IssueFields, IssueVerb } from "../../utils/issueApprovalFields";
 
 const FIELD_CLASS = "w-full rounded-md border border-border/70 bg-background px-2 py-1";
@@ -23,7 +24,7 @@ interface IssueApprovalFieldsProps {
 }
 
 /** An issue's title and description, or a comment's text, shown or edited. */
-export function IssueApprovalFields({
+function IssueFieldsLayout({
   verb,
   fields,
   editing,
@@ -77,5 +78,28 @@ export function IssueApprovalFields({
         onChange={(event) => onChange({ body: event.target.value })}
       />
     </div>
+  );
+}
+
+/**
+ * The card's fields, then the notes that follow them as the user edits
+ * (GitHub's "This will notify @…"). The preview's own notes are fixed at
+ * prepare; the card renders them after this.
+ */
+export function IssueApprovalFields({
+  connectorId,
+  ...props
+}: Parameters<typeof IssueFieldsLayout>[0] & { connectorId: string }): ReactElement {
+  const { t } = useTranslation();
+  const liveNotes = liveCardNotesFor(connectorId, { ...props.fields });
+  return (
+    <>
+      <IssueFieldsLayout {...props} />
+      {liveNotes.map((note) => (
+        <p key={note.key} className="mt-1 text-xs text-muted-foreground">
+          {t(note.key, note.values)}
+        </p>
+      ))}
+    </>
   );
 }

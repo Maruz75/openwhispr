@@ -751,6 +751,24 @@
         "dm_failed": "تعذّر فتح الرسالة المباشرة إلى {{destination}}. لم يُرسل شيء.",
         "restricted": "{{destination}} للقراءة فقط أو مقيّدة بالنسبة لك.",
         "generic": "حدث خطأ ما. لم يُرسل شيء.",
+        "github": {
+          "reconnect_needed": "يلزم إعادة ربط GitHub من الإعدادات.",
+          "network": "تعذّر الوصول إلى GitHub. لم يُنشر شيء.",
+          "rate_limited": "GitHub مشغول حاليًا. حاول مرة أخرى بعد قليل.",
+          "connection_changed": "تغيّر اتصال GitHub قبل النشر، لذا لم يُنشر شيء.",
+          "credential_save_failed": "تعذّر حفظ تسجيل الدخول إلى GitHub على هذا الكمبيوتر. لم يُنشر شيء. حاول مرة أخرى.",
+          "generic": "حدث خطأ ما. لم يُنشر شيء على GitHub.",
+          "not_installed": "تطبيق OpenWhispr على GitHub غير مثبّت في هذا المستودع. لم يُنشر شيء.",
+          "no_repositories": "لم يتم اختيار مستودعات لتطبيق OpenWhispr على GitHub بعد. اخترها من الإعدادات. لم يُنشر شيء.",
+          "forbidden": "ليس لديك إذن للقيام بذلك في هذا المستودع. لم يُنشر شيء.",
+          "not_found": "تعذّر العثور على المشكلة أو طلب السحب. لم يُنشر شيء.",
+          "issues_disabled": "المشكلات متوقفة في هذا المستودع. لم يُنشر شيء.",
+          "invalid": "رفضه GitHub لأنه غير صالح. لم يُنشر شيء.",
+          "locked": "المحادثة مقفلة. لم يُنشر شيء.",
+          "invalid_reference": "هذه ليست مشكلة ولا طلب سحب على GitHub. لم يُنشر شيء.",
+          "too_long": "العنوان أو النص طويل جدًا بالنسبة إلى GitHub. لم يُنشر شيء.",
+          "not_configured": "GitHub غير متاح في هذا الإصدار. لم يُنشر شيء."
+        },
         "gmail": {
           "reconnect_needed": "يلزم إعادة ربط Gmail من الإعدادات.",
           "network": "تعذّر الوصول إلى Gmail. لم يُرسل شيء.",
@@ -783,7 +801,15 @@
         "bodyTooLong": "الرسالة طويلة جدًا بالنسبة إلى Gmail. اختصرها لإرسالها.",
         "unknown": "تعذّر تأكيد الإرسال. تحقق من مجلد البريد المُرسل."
       },
+      "github": {
+        "notes": {
+          "mentions": "سيتم إشعار {{mentions}}",
+          "pullRequest": "على طلب سحب",
+          "labelsMayNotApply": "تُضاف التصنيفات فقط إذا كان لديك إذن الكتابة في هذا المستودع."
+        }
+      },
       "openIn": {
+        "github": "فتح في GitHub",
         "gmail": "فتح في Gmail"
       },
       "sendLabel": {
@@ -948,11 +974,15 @@
       "title": "الإجراءات الأخيرة",
       "actions": {
         "email_draft": "مسودة إلى {{destination}}",
+        "github_create_issue": "مشكلة جديدة في {{destination}}",
+        "github_comment": "تعليق على {{destination}}",
         "slack_send_message": "رسالة إلى {{destination}}",
         "gmail_send": "رسالة إلكترونية إلى {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "مسودة بريد إلكتروني",
+        "github_create_issue": "مشكلة GitHub",
+        "github_comment": "تعليق GitHub",
         "slack_send_message": "رسالة Slack",
         "gmail_send": "رسالة Gmail"
       },
@@ -996,6 +1026,24 @@
         "dm_failed": "تعذّر فتح الرسالة المباشرة. لم يُرسل شيء.",
         "restricted": "تلك القناة للقراءة فقط أو مقيّدة.",
         "generic": "لم ينجح ذلك.",
+        "github": {
+          "reconnect_needed": "يلزم إعادة ربط GitHub.",
+          "network": "تعذّر الوصول إلى GitHub.",
+          "rate_limited": "GitHub مشغول حاليًا.",
+          "connection_changed": "تغيّر اتصال GitHub.",
+          "credential_save_failed": "تعذّر حفظ تسجيل الدخول إلى GitHub على هذا الكمبيوتر.",
+          "generic": "لم ينجح ذلك على GitHub.",
+          "not_installed": "تطبيق OpenWhispr على GitHub غير مثبّت هناك.",
+          "no_repositories": "لم يتم اختيار مستودعات GitHub بعد.",
+          "forbidden": "لا يوجد إذن في هذا المستودع.",
+          "not_found": "تعذّر العثور على تلك المشكلة أو طلب السحب.",
+          "issues_disabled": "المشكلات متوقفة في هذا المستودع.",
+          "invalid": "رفضه GitHub لأنه غير صالح.",
+          "locked": "تلك المحادثة مقفلة.",
+          "invalid_reference": "ليست مشكلة ولا طلب سحب على GitHub.",
+          "too_long": "طويل جدًا بالنسبة إلى GitHub.",
+          "not_configured": "GitHub غير متاح في هذا الإصدار."
+        },
         "gmail": {
           "reconnect_needed": "يلزم إعادة ربط Gmail.",
           "network": "تعذّر الوصول إلى Gmail. لم يُرسل شيء.",
@@ -1013,6 +1061,7 @@
         }
       },
       "unknownSent": {
+        "github": "تعذّر تأكيد النشر في {{destination}}. تحقق من GitHub قبل المحاولة مرة أخرى.",
         "gmail": "تعذّر تأكيد إرسال البريد الإلكتروني إلى {{destination}}. تحقق من مجلد البريد المُرسل في Gmail."
       },
       "gmailDraftLimit": "يمكن تجهيز {{max}} رسائل بريد إلكتروني فقط لكل طلب.",
@@ -1560,6 +1609,9 @@
       "search_notesName": "البحث في الملاحظات",
       "email_draftName": "مسودة بريد إلكتروني",
       "find_contactName": "البحث عن جهة اتصال",
+      "github_search_issuesName": "البحث في GitHub",
+      "github_create_issueName": "مشكلة GitHub",
+      "github_commentName": "تعليق GitHub",
       "slack_send_messageName": "رسالة Slack",
       "get_noteName": "الحصول على الملاحظة",
       "create_noteName": "إنشاء ملاحظة",
@@ -1575,6 +1627,9 @@
       "search_notesStatus": "جاري البحث في الملاحظات...",
       "email_draftStatus": "جارٍ تحضير بريد إلكتروني...",
       "find_contactStatus": "جارٍ البحث عن جهات الاتصال...",
+      "github_search_issuesStatus": "جارٍ البحث في GitHub...",
+      "github_create_issueStatus": "جارٍ تحضير مشكلة GitHub...",
+      "github_commentStatus": "جارٍ تحضير تعليق GitHub...",
       "slack_send_messageStatus": "جارٍ تحضير رسالة Slack...",
       "web_searchStatus": "جاري البحث في الويب...",
       "copy_to_clipboardStatus": "جاري النسخ إلى الحافظة...",

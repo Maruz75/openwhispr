@@ -162,6 +162,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
       ) : issueFields && verb ? (
         <div className="mt-2">
           <IssueApprovalFields
+            connectorId={entry.connectorId}
             verb={verb}
             fields={issueFields}
             editing={showEditor}

@@ -3850,6 +3850,9 @@
       "search_notesName": "Search notes",
       "email_draftName": "Email draft",
       "find_contactName": "Find contact",
+      "github_search_issuesName": "GitHub search",
+      "github_create_issueName": "GitHub issue",
+      "github_commentName": "GitHub comment",
       "slack_send_messageName": "Slack message",
       "get_noteName": "Get note",
       "create_noteName": "Create note",
@@ -3865,6 +3868,9 @@
       "search_notesStatus": "Searching notes...",
       "email_draftStatus": "Preparing an email...",
       "find_contactStatus": "Looking up contacts...",
+      "github_search_issuesStatus": "Searching GitHub...",
+      "github_create_issueStatus": "Preparing the GitHub issue...",
+      "github_commentStatus": "Preparing the GitHub comment...",
       "slack_send_messageStatus": "Preparing a Slack message...",
       "web_searchStatus": "Searching the web...",
       "copy_to_clipboardStatus": "Copying to clipboard...",
@@ -4058,6 +4064,24 @@
         "dm_failed": "The direct message to {{destination}} couldn't be opened. Nothing was sent.",
         "restricted": "{{destination}} is read-only or restricted for you.",
         "generic": "Something went wrong. Nothing was sent.",
+        "github": {
+          "reconnect_needed": "GitHub needs to be reconnected in Settings.",
+          "network": "GitHub couldn't be reached. Nothing was posted.",
+          "rate_limited": "GitHub is busy. Try again shortly.",
+          "connection_changed": "The GitHub connection changed before posting, so nothing was posted.",
+          "credential_save_failed": "The GitHub login couldn't be saved on this computer. Nothing was posted. Try again.",
+          "generic": "Something went wrong. Nothing was posted to GitHub.",
+          "not_installed": "The OpenWhispr GitHub App isn't installed on this repository. Nothing was posted.",
+          "no_repositories": "No repositories are chosen for the OpenWhispr GitHub App yet. Choose them in Settings. Nothing was posted.",
+          "forbidden": "You don't have permission to do this in the repository. Nothing was posted.",
+          "not_found": "The issue or pull request couldn't be found. Nothing was posted.",
+          "issues_disabled": "Issues are turned off in this repository. Nothing was posted.",
+          "invalid": "GitHub refused it as invalid. Nothing was posted.",
+          "locked": "The conversation is locked. Nothing was posted.",
+          "invalid_reference": "That isn't a GitHub issue or pull request. Nothing was posted.",
+          "too_long": "The title or text is too long for GitHub. Nothing was posted.",
+          "not_configured": "GitHub isn't available in this build. Nothing was posted."
+        },
         "gmail": {
           "reconnect_needed": "Gmail needs to be reconnected in Settings.",
           "network": "Gmail couldn't be reached. Nothing was sent.",
@@ -4090,7 +4114,15 @@
         "bodyTooLong": "The message is too long for Gmail. Shorten it to send.",
         "unknown": "Couldn't confirm it was sent. Check your Sent folder."
       },
+      "github": {
+        "notes": {
+          "mentions": "This will notify {{mentions}}",
+          "pullRequest": "On a pull request",
+          "labelsMayNotApply": "Labels are added only if you have write access to this repository."
+        }
+      },
       "openIn": {
+        "github": "Open in GitHub",
         "gmail": "Open in Gmail"
       },
       "sendLabel": {
@@ -4255,11 +4287,15 @@
       "title": "Recent actions",
       "actions": {
         "email_draft": "Draft to {{destination}}",
+        "github_create_issue": "New issue in {{destination}}",
+        "github_comment": "Comment on {{destination}}",
         "slack_send_message": "Message to {{destination}}",
         "gmail_send": "Email to {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "Email draft",
+        "github_create_issue": "GitHub issue",
+        "github_comment": "GitHub comment",
         "slack_send_message": "Slack message",
         "gmail_send": "Gmail email"
       },
@@ -4303,6 +4339,24 @@
         "dm_failed": "Couldn't open the direct message. Nothing was sent.",
         "restricted": "That channel is read-only or restricted.",
         "generic": "That didn't work.",
+        "github": {
+          "reconnect_needed": "GitHub needs to be reconnected.",
+          "network": "Couldn't reach GitHub.",
+          "rate_limited": "GitHub is busy.",
+          "connection_changed": "The GitHub connection changed.",
+          "credential_save_failed": "Couldn't save the GitHub login on this computer.",
+          "generic": "That didn't work on GitHub.",
+          "not_installed": "The OpenWhispr GitHub App isn't installed there.",
+          "no_repositories": "No GitHub repositories chosen yet.",
+          "forbidden": "No permission in that repository.",
+          "not_found": "Couldn't find that issue or pull request.",
+          "issues_disabled": "Issues are turned off in that repository.",
+          "invalid": "GitHub refused it as invalid.",
+          "locked": "That conversation is locked.",
+          "invalid_reference": "Not a GitHub issue or pull request.",
+          "too_long": "Too long for GitHub.",
+          "not_configured": "GitHub isn't available in this build."
+        },
         "gmail": {
           "reconnect_needed": "Gmail needs to be reconnected.",
           "network": "Couldn't reach Gmail. Nothing was sent.",
@@ -4320,6 +4374,7 @@
         }
       },
       "unknownSent": {
+        "github": "Couldn't confirm it was posted to {{destination}}. Check GitHub before trying again.",
         "gmail": "Couldn't confirm the email to {{destination}} was sent. Check your Gmail Sent folder."
       },
       "gmailDraftLimit": "Only {{max}} emails can be prepared per request.",

@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Search,
+  Code2,
   Globe,
   ClipboardCheck,
   Calendar,
@@ -28,5 +29,8 @@ export const toolIcons: Record<string, typeof Search> = {
   update_dictionary: BookOpen,
   email_draft: Mail,
   find_contact: Users,
+  github_search_issues: Search,
+  github_create_issue: Code2,
+  github_comment: Code2,
   slack_send_message: MessageSquare,
 };

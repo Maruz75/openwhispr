@@ -3725,6 +3725,9 @@
       "search_notesName": "Поиск заметок",
       "email_draftName": "Черновик письма",
       "find_contactName": "Найти контакт",
+      "github_search_issuesName": "Поиск в GitHub",
+      "github_create_issueName": "Issue в GitHub",
+      "github_commentName": "Комментарий в GitHub",
       "slack_send_messageName": "Сообщение Slack",
       "get_noteName": "Получить заметку",
       "create_noteName": "Создать заметку",
@@ -3740,6 +3743,9 @@
       "search_notesStatus": "Поиск в заметках...",
       "email_draftStatus": "Подготовка письма...",
       "find_contactStatus": "Поиск контактов...",
+      "github_search_issuesStatus": "Поиск в GitHub...",
+      "github_create_issueStatus": "Подготовка issue в GitHub...",
+      "github_commentStatus": "Подготовка комментария в GitHub...",
       "slack_send_messageStatus": "Подготовка сообщения Slack...",
       "web_searchStatus": "Поиск в интернете...",
       "copy_to_clipboardStatus": "Копирование в буфер обмена...",
@@ -3933,6 +3939,24 @@
         "dm_failed": "Не удалось открыть личные сообщения с {{destination}}. Ничего не отправлено.",
         "restricted": "{{destination}} доступен вам только для чтения или ограничен.",
         "generic": "Что-то пошло не так. Ничего не отправлено.",
+        "github": {
+          "reconnect_needed": "GitHub нужно переподключить в настройках.",
+          "network": "Не удалось связаться с GitHub. Ничего не опубликовано.",
+          "rate_limited": "GitHub сейчас перегружен. Повторите попытку чуть позже.",
+          "connection_changed": "Подключение к GitHub изменилось перед публикацией, поэтому ничего не было опубликовано.",
+          "credential_save_failed": "Не удалось сохранить вход в GitHub на этом компьютере. Ничего не опубликовано. Попробуйте снова.",
+          "generic": "Что-то пошло не так. В GitHub ничего не опубликовано.",
+          "not_installed": "Приложение OpenWhispr для GitHub не установлено в этом репозитории. Ничего не опубликовано.",
+          "no_repositories": "Для приложения OpenWhispr в GitHub ещё не выбраны репозитории. Выберите их в настройках. Ничего не опубликовано.",
+          "forbidden": "У вас нет прав на это действие в репозитории. Ничего не опубликовано.",
+          "not_found": "Issue или pull request не найдены. Ничего не опубликовано.",
+          "issues_disabled": "В этом репозитории отключены issues. Ничего не опубликовано.",
+          "invalid": "GitHub отклонил это как недопустимое. Ничего не опубликовано.",
+          "locked": "Обсуждение заблокировано. Ничего не опубликовано.",
+          "invalid_reference": "Это не issue и не pull request в GitHub. Ничего не опубликовано.",
+          "too_long": "Заголовок или текст слишком длинные для GitHub. Ничего не опубликовано.",
+          "not_configured": "GitHub недоступен в этой сборке. Ничего не опубликовано."
+        },
         "gmail": {
           "reconnect_needed": "Gmail нужно переподключить в настройках.",
           "network": "Не удалось связаться с Gmail. Ничего не отправлено.",
@@ -3965,7 +3989,15 @@
         "bodyTooLong": "Сообщение слишком длинное для Gmail. Сократите его, чтобы отправить.",
         "unknown": "Не удалось подтвердить отправку. Проверьте папку «Отправленные»."
       },
+      "github": {
+        "notes": {
+          "mentions": "Уведомление получат: {{mentions}}",
+          "pullRequest": "К pull request",
+          "labelsMayNotApply": "Метки добавляются, только если у вас есть права на запись в этот репозиторий."
+        }
+      },
       "openIn": {
+        "github": "Открыть в GitHub",
         "gmail": "Открыть в Gmail"
       },
       "sendLabel": {
@@ -4130,11 +4162,15 @@
       "title": "Последние действия",
       "actions": {
         "email_draft": "Черновик для {{destination}}",
+        "github_create_issue": "Новое issue в {{destination}}",
+        "github_comment": "Комментарий к {{destination}}",
         "slack_send_message": "Сообщение для {{destination}}",
         "gmail_send": "Письмо для {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "Черновик письма",
+        "github_create_issue": "Issue в GitHub",
+        "github_comment": "Комментарий в GitHub",
         "slack_send_message": "Сообщение в Slack",
         "gmail_send": "Письмо Gmail"
       },
@@ -4178,6 +4214,24 @@
         "dm_failed": "Не удалось открыть личные сообщения. Ничего не отправлено.",
         "restricted": "Этот канал только для чтения или ограничен.",
         "generic": "Не получилось.",
+        "github": {
+          "reconnect_needed": "GitHub нужно переподключить.",
+          "network": "Не удалось связаться с GitHub.",
+          "rate_limited": "GitHub сейчас перегружен.",
+          "connection_changed": "Подключение к GitHub изменилось.",
+          "credential_save_failed": "Не удалось сохранить вход в GitHub на этом компьютере.",
+          "generic": "В GitHub не получилось.",
+          "not_installed": "Приложение OpenWhispr для GitHub там не установлено.",
+          "no_repositories": "Репозитории GitHub ещё не выбраны.",
+          "forbidden": "Нет прав в этом репозитории.",
+          "not_found": "Issue или pull request не найдены.",
+          "issues_disabled": "В этом репозитории отключены issues.",
+          "invalid": "GitHub отклонил это как недопустимое.",
+          "locked": "Это обсуждение заблокировано.",
+          "invalid_reference": "Это не issue и не pull request в GitHub.",
+          "too_long": "Слишком длинно для GitHub.",
+          "not_configured": "GitHub недоступен в этой сборке."
+        },
         "gmail": {
           "reconnect_needed": "Gmail нужно переподключить.",
           "network": "Не удалось связаться с Gmail. Ничего не отправлено.",
@@ -4195,6 +4249,7 @@
         }
       },
       "unknownSent": {
+        "github": "Не удалось подтвердить публикацию в {{destination}}. Проверьте GitHub, прежде чем пробовать снова.",
         "gmail": "Не удалось подтвердить отправку письма для {{destination}}. Проверьте папку «Отправленные» в Gmail."
       },
       "gmailDraftLimit": "Лимит писем на один запрос: {{max}}.",

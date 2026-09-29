@@ -3681,6 +3681,9 @@
       "search_notesName": "搜尋筆記",
       "email_draftName": "郵件草稿",
       "find_contactName": "尋找聯絡人",
+      "github_search_issuesName": "搜尋 GitHub",
+      "github_create_issueName": "GitHub Issue",
+      "github_commentName": "GitHub 留言",
       "slack_send_messageName": "Slack 訊息",
       "get_noteName": "取得筆記",
       "create_noteName": "建立筆記",
@@ -3696,6 +3699,9 @@
       "search_notesStatus": "正在搜尋筆記...",
       "email_draftStatus": "正在準備郵件...",
       "find_contactStatus": "正在尋找聯絡人...",
+      "github_search_issuesStatus": "正在搜尋 GitHub...",
+      "github_create_issueStatus": "正在準備 GitHub Issue...",
+      "github_commentStatus": "正在準備 GitHub 留言...",
       "slack_send_messageStatus": "正在準備 Slack 訊息...",
       "web_searchStatus": "正在搜尋網頁...",
       "copy_to_clipboardStatus": "正在複製到剪貼簿...",
@@ -3889,6 +3895,24 @@
         "dm_failed": "無法開啟與 {{destination}} 的私訊，未傳送任何內容。",
         "restricted": "{{destination}} 對您是唯讀或受限的。",
         "generic": "發生問題，未傳送任何內容。",
+        "github": {
+          "reconnect_needed": "需要在設定中重新連接 GitHub。",
+          "network": "無法連線到 GitHub，未發佈任何內容。",
+          "rate_limited": "GitHub 忙碌中，請稍後再試。",
+          "connection_changed": "發佈前 GitHub 連線發生了變化，因此未發佈任何內容。",
+          "credential_save_failed": "無法在這台電腦上儲存 GitHub 登入資訊，未發佈任何內容。請再試一次。",
+          "generic": "發生問題，未在 GitHub 上發佈任何內容。",
+          "not_installed": "此存放庫未安裝 OpenWhispr GitHub App，未發佈任何內容。",
+          "no_repositories": "尚未為 OpenWhispr GitHub App 選擇存放庫。請在設定中選擇。未發佈任何內容。",
+          "forbidden": "您沒有在此存放庫中執行此操作的權限，未發佈任何內容。",
+          "not_found": "找不到該 Issue 或提取要求，未發佈任何內容。",
+          "issues_disabled": "此存放庫已關閉 Issue，未發佈任何內容。",
+          "invalid": "GitHub 認為其無效並拒絕了，未發佈任何內容。",
+          "locked": "該對話已鎖定，未發佈任何內容。",
+          "invalid_reference": "這不是 GitHub Issue 或提取要求，未發佈任何內容。",
+          "too_long": "標題或內文對 GitHub 來說太長，未發佈任何內容。",
+          "not_configured": "此版本中 GitHub 不可用，未發佈任何內容。"
+        },
         "gmail": {
           "reconnect_needed": "需要在設定中重新連接 Gmail。",
           "network": "無法連線到 Gmail，未傳送任何內容。",
@@ -3921,7 +3945,15 @@
         "bodyTooLong": "郵件內文過長，無法透過 Gmail 傳送。請縮短後再傳送。",
         "unknown": "無法確認是否已傳送，請檢查「寄件備份」資料夾。"
       },
+      "github": {
+        "notes": {
+          "mentions": "將通知 {{mentions}}",
+          "pullRequest": "針對提取要求",
+          "labelsMayNotApply": "只有在您對此存放庫有寫入權限時才會加上標籤。"
+        }
+      },
       "openIn": {
+        "github": "在 GitHub 中開啟",
         "gmail": "在 Gmail 中開啟"
       },
       "sendLabel": {
@@ -4086,11 +4118,15 @@
       "title": "近期操作",
       "actions": {
         "email_draft": "傳送給 {{destination}} 的草稿",
+        "github_create_issue": "{{destination}} 中的新 Issue",
+        "github_comment": "對 {{destination}} 的留言",
         "slack_send_message": "傳送給 {{destination}} 的訊息",
         "gmail_send": "傳送給 {{destination}} 的郵件"
       },
       "unlabeledActions": {
         "email_draft": "郵件草稿",
+        "github_create_issue": "GitHub Issue",
+        "github_comment": "GitHub 留言",
         "slack_send_message": "Slack 訊息",
         "gmail_send": "Gmail 郵件"
       },
@@ -4134,6 +4170,24 @@
         "dm_failed": "無法開啟私訊。未傳送任何內容。",
         "restricted": "該頻道為唯讀或受限。",
         "generic": "操作未成功。",
+        "github": {
+          "reconnect_needed": "需要重新連接 GitHub。",
+          "network": "無法連線到 GitHub。",
+          "rate_limited": "GitHub 忙碌中。",
+          "connection_changed": "GitHub 連線已變更。",
+          "credential_save_failed": "無法在這台電腦上儲存 GitHub 登入資訊。",
+          "generic": "在 GitHub 上操作未成功。",
+          "not_installed": "那裡未安裝 OpenWhispr GitHub App。",
+          "no_repositories": "尚未選擇 GitHub 存放庫。",
+          "forbidden": "在該存放庫中沒有權限。",
+          "not_found": "找不到該 Issue 或提取要求。",
+          "issues_disabled": "該存放庫已關閉 Issue。",
+          "invalid": "GitHub 認為其無效並拒絕了。",
+          "locked": "該對話已鎖定。",
+          "invalid_reference": "不是 GitHub Issue 或提取要求。",
+          "too_long": "對 GitHub 來說太長。",
+          "not_configured": "此版本中 GitHub 不可用。"
+        },
         "gmail": {
           "reconnect_needed": "需要重新連接 Gmail。",
           "network": "無法連線到 Gmail。未傳送任何內容。",
@@ -4151,6 +4205,7 @@
         }
       },
       "unknownSent": {
+        "github": "無法確認是否已發佈到 {{destination}}，重試前請先在 GitHub 上檢查。",
         "gmail": "無法確認寄給 {{destination}} 的郵件是否已傳送，請檢查 Gmail 的「寄件備份」資料夾。"
       },
       "gmailDraftLimit": "每次請求最多只能準備 {{max}} 封郵件。",

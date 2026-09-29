@@ -3734,6 +3734,9 @@
       "search_notesName": "Buscar notas",
       "email_draftName": "Borrador de correo",
       "find_contactName": "Buscar contacto",
+      "github_search_issuesName": "Búsqueda en GitHub",
+      "github_create_issueName": "Issue de GitHub",
+      "github_commentName": "Comentario de GitHub",
       "slack_send_messageName": "Mensaje de Slack",
       "get_noteName": "Obtener nota",
       "create_noteName": "Crear nota",
@@ -3749,6 +3752,9 @@
       "search_notesStatus": "Buscando notas...",
       "email_draftStatus": "Preparando un correo...",
       "find_contactStatus": "Buscando contactos...",
+      "github_search_issuesStatus": "Buscando en GitHub...",
+      "github_create_issueStatus": "Preparando el issue de GitHub...",
+      "github_commentStatus": "Preparando el comentario de GitHub...",
       "slack_send_messageStatus": "Preparando un mensaje de Slack...",
       "web_searchStatus": "Buscando en la web...",
       "copy_to_clipboardStatus": "Copiando al portapapeles...",
@@ -3942,6 +3948,24 @@
         "dm_failed": "No se pudo abrir el mensaje directo a {{destination}}. No se envió nada.",
         "restricted": "{{destination}} es de solo lectura o está restringido para ti.",
         "generic": "Algo salió mal. No se envió nada.",
+        "github": {
+          "reconnect_needed": "GitHub debe reconectarse en Configuración.",
+          "network": "No se pudo conectar con GitHub. No se publicó nada.",
+          "rate_limited": "GitHub está ocupado. Vuelve a intentarlo en breve.",
+          "connection_changed": "La conexión de GitHub cambió antes de publicar, así que no se publicó nada.",
+          "credential_save_failed": "No se pudo guardar el inicio de sesión de GitHub en este equipo. No se publicó nada. Inténtalo de nuevo.",
+          "generic": "Algo salió mal. No se publicó nada en GitHub.",
+          "not_installed": "La aplicación OpenWhispr de GitHub no está instalada en este repositorio. No se publicó nada.",
+          "no_repositories": "Aún no hay repositorios elegidos para la aplicación OpenWhispr de GitHub. Elígelos en Configuración. No se publicó nada.",
+          "forbidden": "No tienes permiso para hacer esto en el repositorio. No se publicó nada.",
+          "not_found": "No se encontró el issue o la pull request. No se publicó nada.",
+          "issues_disabled": "Los issues están desactivados en este repositorio. No se publicó nada.",
+          "invalid": "GitHub lo rechazó por no ser válido. No se publicó nada.",
+          "locked": "La conversación está bloqueada. No se publicó nada.",
+          "invalid_reference": "Eso no es un issue ni una pull request de GitHub. No se publicó nada.",
+          "too_long": "El título o el texto es demasiado largo para GitHub. No se publicó nada.",
+          "not_configured": "GitHub no está disponible en esta versión. No se publicó nada."
+        },
         "gmail": {
           "reconnect_needed": "Gmail debe reconectarse en Configuración.",
           "network": "No se pudo conectar con Gmail. No se envió nada.",
@@ -3974,7 +3998,15 @@
         "bodyTooLong": "El mensaje es demasiado largo para Gmail. Acórtalo para enviarlo.",
         "unknown": "No se pudo confirmar el envío. Revisa tu carpeta de enviados."
       },
+      "github": {
+        "notes": {
+          "mentions": "Se notificará a {{mentions}}",
+          "pullRequest": "En una pull request",
+          "labelsMayNotApply": "Las etiquetas solo se añaden si tienes acceso de escritura a este repositorio."
+        }
+      },
       "openIn": {
+        "github": "Abrir en GitHub",
         "gmail": "Abrir en Gmail"
       },
       "sendLabel": {
@@ -4139,11 +4171,15 @@
       "title": "Acciones recientes",
       "actions": {
         "email_draft": "Borrador a {{destination}}",
+        "github_create_issue": "Nuevo issue en {{destination}}",
+        "github_comment": "Comentario en {{destination}}",
         "slack_send_message": "Mensaje a {{destination}}",
         "gmail_send": "Correo a {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "Borrador de correo",
+        "github_create_issue": "Issue de GitHub",
+        "github_comment": "Comentario de GitHub",
         "slack_send_message": "Mensaje de Slack",
         "gmail_send": "Correo de Gmail"
       },
@@ -4187,6 +4223,24 @@
         "dm_failed": "No se pudo abrir el mensaje directo. No se envió nada.",
         "restricted": "Ese canal es de solo lectura o está restringido.",
         "generic": "No funcionó.",
+        "github": {
+          "reconnect_needed": "GitHub debe reconectarse.",
+          "network": "No se pudo conectar con GitHub.",
+          "rate_limited": "GitHub está ocupado.",
+          "connection_changed": "La conexión de GitHub cambió.",
+          "credential_save_failed": "No se pudo guardar el inicio de sesión de GitHub en este equipo.",
+          "generic": "No funcionó en GitHub.",
+          "not_installed": "La aplicación OpenWhispr de GitHub no está instalada ahí.",
+          "no_repositories": "Aún no hay repositorios de GitHub elegidos.",
+          "forbidden": "Sin permiso en ese repositorio.",
+          "not_found": "No se encontró ese issue o pull request.",
+          "issues_disabled": "Los issues están desactivados en ese repositorio.",
+          "invalid": "GitHub lo rechazó por no ser válido.",
+          "locked": "Esa conversación está bloqueada.",
+          "invalid_reference": "No es un issue ni una pull request de GitHub.",
+          "too_long": "Demasiado largo para GitHub.",
+          "not_configured": "GitHub no está disponible en esta versión."
+        },
         "gmail": {
           "reconnect_needed": "Gmail debe reconectarse.",
           "network": "No se pudo conectar con Gmail. No se envió nada.",
@@ -4204,6 +4258,7 @@
         }
       },
       "unknownSent": {
+        "github": "No se pudo confirmar que se publicó en {{destination}}. Revisa GitHub antes de volver a intentarlo.",
         "gmail": "No se pudo confirmar que el correo para {{destination}} se envió. Revisa la carpeta Enviados de Gmail."
       },
       "gmailDraftLimit": "Solo se pueden preparar {{max}} correos por solicitud.",
