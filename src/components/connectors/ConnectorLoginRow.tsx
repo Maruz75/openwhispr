@@ -70,6 +70,8 @@ export function ConnectorLoginRow({
   const latestAttempt = useRef(0);
   // Set while a connect the row should stop on leaving is still waiting.
   const cancelOnLeave = useRef<(() => void) | null>(null);
+  const connectButton = useRef<HTMLButtonElement>(null);
+  const wasConnecting = useRef(false);
 
   // Loaded for every plan: a lapsed plan must still see, and remove, its login.
   useEffect(() => {
@@ -78,6 +80,19 @@ export function ConnectorLoginRow({
 
   // Leaving Settings mid-connect stops it, for rows that connect in place (GitHub).
   useEffect(() => () => cancelOnLeave.current?.(), []);
+
+  // A connect in the row ends by unmounting its own Cancel, which usually
+  // held focus; focus then goes to Connect rather than dropping to the page.
+  useEffect(() => {
+    if (phase === "connecting") {
+      wasConnecting.current = true;
+      return;
+    }
+    if (!wasConnecting.current || !row.connectInRow) return;
+    wasConnecting.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) connectButton.current?.focus();
+  }, [phase, row.connectInRow]);
 
   const connected = Boolean(status?.connected);
   const needsReconnect = connected && Boolean(status?.needsReconnect);
@@ -187,7 +202,12 @@ export function ConnectorLoginRow({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {needsReconnect && offerConnect && (
-            <Button size="sm" disabled={phase === "disconnecting"} onClick={() => void connect()}>
+            <Button
+              ref={connectButton}
+              size="sm"
+              disabled={phase === "disconnecting"}
+              onClick={() => void connect()}
+            >
               {copy("reconnect")}
             </Button>
           )}
@@ -203,7 +223,12 @@ export function ConnectorLoginRow({
             </Button>
           )}
           {!connected && offerConnect && (
-            <Button size="sm" disabled={phase === "disconnecting"} onClick={() => void connect()}>
+            <Button
+              ref={connectButton}
+              size="sm"
+              disabled={phase === "disconnecting"}
+              onClick={() => void connect()}
+            >
               {copy("connect")}
             </Button>
           )}

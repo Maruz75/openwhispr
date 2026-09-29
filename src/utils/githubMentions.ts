@@ -74,12 +74,17 @@ const MENTION =
  * `@org/team`, outside code spans and fenced code blocks. Each appears once
  * (GitHub handles ignore case), as first written, in first-seen order.
  */
+// An HTML comment never renders, so it notifies no one. Only a closed one
+// outside code counts: `<!--` written in code or left open could otherwise
+// hide real mentions after it.
+const HTML_COMMENT = /<!--[\s\S]*?-->/g;
+
 export function githubMentions(text: string): string[] {
   const seen = new Set<string>();
   const mentions: string[] = [];
   // Paragraph, fence and code-span detection all key off "\n".
   const normalized = text.replace(/\r\n/g, "\n");
-  const prose = withoutCodeSpans(withoutFencedBlocks(normalized));
+  const prose = withoutCodeSpans(withoutFencedBlocks(normalized)).replace(HTML_COMMENT, " ");
   for (const match of prose.matchAll(MENTION)) {
     const mention = `@${match[2]}${match[3] ?? ""}`;
     const key = mention.toLowerCase();

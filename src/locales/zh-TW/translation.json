@@ -4056,8 +4056,6 @@
         "disconnect_failed": "無法中斷 GitHub 連接，請重試。",
         "oauth_denied": "GitHub 存取遭到拒絕。",
         "oauth_timeout": "連接耗時過長，請重試。",
-        "oauth_state_mismatch": "該登入連結已過期，請重試。",
-        "ports_busy": "另一個應用程式正在使用 OpenWhispr 連接所需的連接埠。請關閉它後重試。",
         "token_exchange_failed": "GitHub 未完成連接，請重試。",
         "not_configured": "此版本中 GitHub 不可用。",
         "connection_changed": "連接過程中您的帳戶或 GitHub 連接發生了變化，請重試。",

@@ -4056,8 +4056,6 @@
         "disconnect_failed": "Não foi possível desconectar o GitHub. Tente novamente.",
         "oauth_denied": "O acesso ao GitHub foi recusado.",
         "oauth_timeout": "A conexão demorou demais. Tente novamente.",
-        "oauth_state_mismatch": "Esse link de login estava desatualizado. Tente novamente.",
-        "ports_busy": "Outro aplicativo está usando as portas que o OpenWhispr precisa para conectar. Feche-o e tente novamente.",
         "token_exchange_failed": "O GitHub não concluiu a conexão. Tente novamente.",
         "not_configured": "O GitHub não está disponível nesta versão.",
         "connection_changed": "Sua conta ou a conexão do GitHub mudou durante a conexão. Tente novamente.",

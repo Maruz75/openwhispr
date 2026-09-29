@@ -2375,6 +2375,39 @@ test(
   }
 );
 
+test(
+  "a Cancel that lands once the login is saved has nothing left to stop",
+  { timeout: 5000 },
+  async () => {
+    const credentials = memoryCredentials(null, { connectorId: "fake" });
+    let finishStatus = () => {};
+    let statusWaiting = false;
+    const { manager } = await setup(
+      connectable({
+        // Holds the connect just after the save, while it announces the change.
+        getStatus: () => {
+          if (!credentials.read("acct-1", "fake") || statusWaiting) {
+            return { connected: true, accountLabel: "chad" };
+          }
+          statusWaiting = true;
+          return new Promise((resolve) => {
+            finishStatus = () => resolve({ connected: true, accountLabel: "chad" });
+          });
+        },
+      }),
+      undefined,
+      { credentials }
+    );
+
+    const connecting = manager.connect("fake", "allowed");
+    while (!statusWaiting) await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(manager.cancelConnect("fake"), { status: "idle" });
+    finishStatus();
+    assert.equal((await connecting).status, "connected");
+  }
+);
+
 test("cancelConnect with no connect in progress, or for an unknown connector, is idle", async () => {
   const { manager } = await setup(connectable(), undefined, {
     credentials: memoryCredentials(null, { connectorId: "fake" }),

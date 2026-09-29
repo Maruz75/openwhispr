@@ -912,8 +912,6 @@
         "disconnect_failed": "تعذّر قطع ربط GitHub. حاول مرة أخرى.",
         "oauth_denied": "تم رفض الوصول إلى GitHub.",
         "oauth_timeout": "استغرق الربط وقتًا طويلاً. حاول مرة أخرى.",
-        "oauth_state_mismatch": "رابط تسجيل الدخول هذا كان قديمًا. حاول مرة أخرى.",
-        "ports_busy": "يستخدم تطبيق آخر المنافذ التي يحتاجها OpenWhispr للربط. أغلقه وحاول مرة أخرى.",
         "token_exchange_failed": "لم يكمل GitHub عملية الربط. حاول مرة أخرى.",
         "not_configured": "GitHub غير متاح في هذا الإصدار.",
         "connection_changed": "تغيّر حسابك أو اتصال GitHub أثناء الربط. حاول مرة أخرى.",

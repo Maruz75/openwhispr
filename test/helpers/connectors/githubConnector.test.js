@@ -261,6 +261,15 @@ test("buildSearchQuery drops the user's repo:, org: and user: qualifiers and kee
     buildSearchQuery({ query: "crash", type: "issue", state: "all", repos: ["a/b"] }).q,
     "crash is:issue repo:a/b"
   );
+  // A NOT left in front of a removed qualifier would negate the next word.
+  assert.equal(
+    buildSearchQuery({
+      query: "crash NOT repo:evil/secret state:closed",
+      type: "issue",
+      repos: ["a/b"],
+    }).q,
+    "crash state:closed is:issue state:open repo:a/b"
+  );
   assert.equal(
     buildSearchQuery({ query: "crash", type: "pr", repos: ["a/b"] }).q,
     "crash is:pull-request state:open repo:a/b"
@@ -668,6 +677,26 @@ test("a 401 on a token another request already replaced retries with the replace
   assert.equal(slot(credentials).needsReconnect, false);
 });
 
+test("installations listing more repos than OpenWhispr reads mark a search cut, and a missing repo as maybe installed", async () => {
+  const PAGED = {
+    [INSTALLATIONS]: [json({ total_count: 1, installations: [{ id: 7 }] })],
+    // Every page links to another, so restAll stops at its page cap.
+    [REPOSITORIES]: [
+      json({ total_count: 3000, repositories: INSTALLED_REPOS }, 200, {
+        link: '<https://api.github.com/user/installations/7/repositories?page=2>; rel="next"',
+      }),
+    ],
+  };
+  const { connector } = await setupGithub({ ...PAGED, [SEARCH]: [searchPage([]), searchPage([])] });
+
+  const searched = await connector.query("search_issues", { query: "x" }, BOUND);
+  assert.equal(searched.truncated, true);
+
+  const missing = await connector.query("search_issues", { query: "x", repo: "acme/far" }, BOUND);
+  assert.equal(missing.errorCode, "not_installed");
+  assert.match(missing.message, /first 1,000 repositories/);
+});
+
 test("a rate-limited or unreachable search fails with its code", async () => {
   const limited = await setupGithub({
     [SEARCH]: [
@@ -728,6 +757,66 @@ test("prepare shows the issue card, with the repo's own labels and the ones it d
   });
   assert.equal(hits(github, LABELS)[0].query.per_page, "100");
   assert.equal(writes(github).length, 0);
+});
+
+test("someone who can push to the repo gets no 'labels may not apply' note", async () => {
+  const { connector } = await setupGithub({
+    ...installedScript(
+      INSTALLED_REPOS.map((entry) =>
+        entry.full_name === "acme/api" ? { ...entry, permissions: { push: true } } : entry
+      )
+    ),
+    [LABELS]: [json([{ name: "bug" }])],
+  });
+
+  const prepared = await prepareIssue(connector, { labels: ["bug"] });
+
+  assert.deepEqual(prepared.payload.labels, ["bug"]);
+  assert.equal(
+    prepared.preview.notes.some(
+      (note) => note.key === "connectors.approval.github.notes.labelsMayNotApply"
+    ),
+    false
+  );
+});
+
+test("an archived repo takes no new issue or comment, at prepare or at Send", async () => {
+  const archived = installedScript(
+    INSTALLED_REPOS.map((entry) =>
+      entry.full_name === "acme/api" ? { ...entry, archived: true } : entry
+    )
+  );
+  const ARCHIVED = {
+    status: "failed",
+    errorCode: "archived",
+    message: "acme/api is archived, so it can't take new issues or comments.",
+  };
+
+  const issue = await setupGithub(archived);
+  assert.deepEqual(
+    await issue.connector.prepare("create_issue", { repo: "acme/api", title: "Crash" }, BOUND),
+    ARCHIVED
+  );
+  const comment = await setupGithub(archived);
+  assert.deepEqual(
+    await comment.connector.prepare("comment", { target: "acme/api#45", body: "x" }, BOUND),
+    ARCHIVED
+  );
+
+  // Archived between prepare and Send: the Settings re-read picks it up.
+  const later = await setupGithub({
+    [REPOSITORIES]: [
+      json({ total_count: 3, repositories: INSTALLED_REPOS }),
+      archived[REPOSITORIES][0],
+    ],
+    [CREATE]: [CREATED],
+  });
+  const { payload } = await prepareIssue(later.connector);
+  await later.connector.getStatus();
+  const sent = await later.connector.commit("create_issue", payload, {}, BOUND);
+  assert.equal(sent.errorCode, "archived");
+  assert.equal(writes(later.github).length, 0);
+  for (const setup of [issue, comment]) assert.equal(writes(setup.github).length, 0);
 });
 
 test("more than 10 labels are capped at 10, and no labels means no labels request", async () => {
@@ -1078,6 +1167,21 @@ test("a deleted issue reads as not found, and a repo with issues turned off as i
       .errorCode,
     "issues_disabled"
   );
+});
+
+test("a locked conversation still takes a comment from someone who can push to the repo", async () => {
+  const { connector } = await setupGithub({
+    ...installedScript(
+      INSTALLED_REPOS.map((entry) =>
+        entry.full_name === "acme/api" ? { ...entry, permissions: { push: true } } : entry
+      )
+    ),
+    [ISSUE_45]: [json({ ...ISSUE.body, locked: true, active_lock_reason: "too heated" })],
+  });
+
+  const prepared = await connector.prepare("comment", { target: "acme/api#45", body: "x" }, BOUND);
+
+  assert.equal(prepared.status, "ready");
 });
 
 test("Send posts the card's comment and links to it", async () => {

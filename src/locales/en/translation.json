@@ -4225,8 +4225,6 @@
         "disconnect_failed": "Couldn't disconnect GitHub. Try again.",
         "oauth_denied": "GitHub access was declined.",
         "oauth_timeout": "Connecting took too long. Try again.",
-        "oauth_state_mismatch": "That sign-in link was out of date. Try again.",
-        "ports_busy": "Another app is using the ports OpenWhispr needs to connect. Close it and try again.",
         "token_exchange_failed": "GitHub didn't finish connecting. Try again.",
         "not_configured": "GitHub isn't available in this build.",
         "connection_changed": "Your account or GitHub connection changed while connecting. Try again.",

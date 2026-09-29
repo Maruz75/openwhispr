@@ -4056,8 +4056,6 @@
         "disconnect_failed": "GitHubの接続を解除できませんでした。もう一度お試しください。",
         "oauth_denied": "GitHubへのアクセスが拒否されました。",
         "oauth_timeout": "接続に時間がかかりすぎました。もう一度お試しください。",
-        "oauth_state_mismatch": "そのサインインリンクは期限切れでした。もう一度お試しください。",
-        "ports_busy": "OpenWhisprが接続に必要なポートを別のアプリが使用しています。そのアプリを閉じてから、もう一度お試しください。",
         "token_exchange_failed": "GitHubの接続が完了しませんでした。もう一度お試しください。",
         "not_configured": "このビルドではGitHubを利用できません。",
         "connection_changed": "接続中にアカウントまたはGitHubの接続が変わりました。もう一度お試しください。",

@@ -17,6 +17,11 @@ function toRepo(raw) {
     private: raw.private === true,
     // Tells a deleted issue's 410 apart from a repo with issues turned off.
     hasIssues: raw.has_issues !== false,
+    // An archived repo is read-only: nothing can be created or commented.
+    archived: raw.archived === true,
+    // The user's own access: with push they can still comment on a locked
+    // conversation.
+    canPush: raw.permissions?.push === true,
     updatedAt: nonEmptyString(raw.updated_at) ? raw.updated_at : null,
   };
 }
@@ -31,11 +36,12 @@ function candidatesOf(repos) {
   return repos.slice(0, MAX_CANDIDATES).map((repo) => repo.fullName);
 }
 
-function notInstalled(name) {
+function notInstalled(name, truncated) {
   return {
     ok: false,
     errorCode: "not_installed",
     message: `The OpenWhispr GitHub App isn't installed on ${name}.`,
+    truncated,
   };
 }
 
@@ -52,31 +58,36 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
   const cache = new Map();
   const keyOf = (binding) => `${binding?.ownerAccountId}:${binding?.generation}`;
 
-  async function load(token) {
+  // `truncated` says an installation had more repositories than restAll
+  // reads (1,000), so a repo missing from the list may still be installed.
+  async function load(token, signal) {
     const installations = await api.restAll("/user/installations", {
       token,
       query: { per_page: 100 },
       key: "installations",
+      signal,
     });
     if (!installations.ok) return installations;
-    const repos = [];
-    for (const installation of installations.items) {
-      if (!Number.isInteger(installation?.id)) continue;
-      const listed = await api.restAll(`/user/installations/${installation.id}/repositories`, {
-        token,
-        query: { per_page: 100 },
-        key: "repositories",
-      });
-      if (!listed.ok) return listed;
-      for (const raw of listed.items) {
-        const repo = toRepo(raw);
-        if (repo) repos.push(repo);
-      }
-    }
+    const lists = await Promise.all(
+      installations.items
+        .filter((installation) => Number.isInteger(installation?.id))
+        .map((installation) =>
+          api.restAll(`/user/installations/${installation.id}/repositories`, {
+            token,
+            query: { per_page: 100 },
+            key: "repositories",
+            signal,
+          })
+        )
+    );
+    const failure = lists.find((listed) => !listed.ok);
+    if (failure) return failure;
+    const repos = lists.flatMap((listed) => listed.items.map(toRepo).filter(Boolean));
     return {
       ok: true,
       repos: repos.sort(byRecentUpdate),
       installationCount: installations.items.length,
+      truncated: lists.some((listed) => listed.truncated) || installations.truncated === true,
     };
   }
 
@@ -86,8 +97,10 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
     const key = keyOf(binding);
     const hit = cache.get(key);
     if (hit && now() - hit.at < ttlMs) return hit.result;
+    // The signal also stops the requests, so a read given up on doesn't keep
+    // paging through GitHub in the background.
     const result = signal
-      ? await Promise.race([load(token), whenAborted(signal)])
+      ? await Promise.race([load(token, signal), whenAborted(signal)])
       : await load(token);
     // Only a full answer is cached: a failure is asked again next time.
     if (result.ok && !signal?.aborted) cache.set(key, { at: now(), result });
@@ -123,7 +136,7 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
     const lower = wanted.toLowerCase();
     if (wanted.includes("/")) {
       const match = repos.find((repo) => repo.fullName.toLowerCase() === lower);
-      return match ? { ok: true, repo: match } : notInstalled(wanted);
+      return match ? { ok: true, repo: match } : notInstalled(wanted, listed.truncated);
     }
     const named = repos.filter((repo) => repo.name.toLowerCase() === lower);
     if (named.length === 1) return { ok: true, repo: named[0] };
@@ -136,7 +149,7 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
         },
       };
     }
-    return notInstalled(wanted);
+    return notInstalled(wanted, listed.truncated);
   }
 
   function clear(binding) {

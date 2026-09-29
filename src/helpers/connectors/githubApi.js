@@ -112,7 +112,7 @@ function createGithubApi({
     return null;
   }
 
-  async function restOnce(method, url, { token, body }) {
+  async function restOnce(method, url, { token, body, signal }) {
     const headers = {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": GITHUB_API_VERSION,
@@ -124,7 +124,7 @@ function createGithubApi({
       headers["Content-Type"] = "application/json";
       init.body = JSON.stringify(body);
     }
-    const { response, failure } = await send(url, init);
+    const { response, failure } = await send(url, init, signal);
     if (!response) return failure;
     const { status } = response;
     if (status >= 200 && status < 300) {
@@ -170,20 +170,20 @@ function createGithubApi({
 
   // `path` is always a literal API path ("/user/installations"). Anything
   // else could send the token to another host.
-  function rest(method, path, { token, query, body } = {}) {
+  function rest(method, path, { token, query, body, signal } = {}) {
     if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//")) {
       throw new TypeError("githubApi.rest needs a path that starts with a single /");
     }
     const search = query ? formBody(query) : "";
     const url = `${GITHUB_API_BASE}${path}${search ? `?${search}` : ""}`;
-    return restWithRetry(method, url, { token, body });
+    return restWithRetry(method, url, { token, body, signal });
   }
 
   // Every page of a list endpoint, following Link rel="next" for up to
   // `maxPages` pages. The list is the body itself, or `body[key]`.
-  async function restAll(path, { token, query, key, maxPages = 10 } = {}) {
+  async function restAll(path, { token, query, key, maxPages = 10, signal } = {}) {
     const items = [];
-    let result = await rest("GET", path, { token, query });
+    let result = await rest("GET", path, { token, query, signal });
     for (let page = 1; ; page += 1) {
       if (!result.ok) return result;
       const list = key ? result.data?.[key] : result.data;
@@ -199,7 +199,7 @@ function createGithubApi({
         return { ok: false, outcome: "unknown", errorCode: "bad_response", status: result.status };
       }
       if (page >= maxPages) return { ok: true, items, truncated: true, status: result.status };
-      result = await restWithRetry("GET", next, { token });
+      result = await restWithRetry("GET", next, { token, signal });
     }
   }
 

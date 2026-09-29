@@ -39,50 +39,61 @@ export function GithubDeviceCode({ connectorId }: { connectorId: string }): Reac
       {t("connectors.github.deviceCode.cancel")}
     </Button>
   );
-  if (!progress) return <div className="mt-2">{cancel}</div>;
-  const { userCode, verificationUri, expiresAt } = progress;
-
   // GitHub's page opens even when the copy fails: the code is on screen to type.
-  const copyAndOpen = async (): Promise<void> => {
+  const copyAndOpen = async (code: string, verificationUri: string): Promise<void> => {
     void window.electronAPI?.openExternal?.(deviceUrl(verificationUri));
     try {
-      const result = await window.electronAPI?.writeClipboard?.(userCode);
-      if (result?.success) setCopiedCode(userCode);
+      const result = await window.electronAPI?.writeClipboard?.(code);
+      if (result?.success) setCopiedCode(code);
     } catch {
       // Nothing to undo; the code stays visible.
     }
   };
 
-  const expiry = new Intl.DateTimeFormat(i18n.language, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(expiresAt);
-
   return (
     <div className="mt-2 space-y-1.5">
-      <p className="text-xs text-muted-foreground">
-        {t("connectors.github.deviceCode.instructions")}
-      </p>
-      <p
-        className="font-mono text-lg font-semibold tracking-[0.2em] text-foreground select-all"
-        dir="ltr"
-      >
-        {userCode}
-      </p>
+      {/* Mounted before the code arrives, so a screen reader announces it. */}
+      <div aria-live="polite" className="space-y-1.5">
+        {progress && (
+          <>
+            <p className="text-xs text-muted-foreground">
+              {t("connectors.github.deviceCode.instructions")}
+            </p>
+            <p
+              className="font-mono text-lg font-semibold tracking-[0.2em] text-foreground select-all"
+              dir="ltr"
+            >
+              {progress.userCode}
+            </p>
+          </>
+        )}
+      </div>
       <div className="flex items-center gap-2">
-        <Button size="sm" onClick={() => void copyAndOpen()}>
-          {t("connectors.github.deviceCode.copyAndOpen")}
-        </Button>
+        {progress && (
+          <Button
+            size="sm"
+            onClick={() => void copyAndOpen(progress.userCode, progress.verificationUri)}
+          >
+            {t("connectors.github.deviceCode.copyAndOpen")}
+          </Button>
+        )}
         {/* Stops main's polling at once; the row then reads as before Connect. */}
         {cancel}
         {/* Mounted before the note arrives, so a screen reader announces it. */}
         <span role="status" className="text-xs text-muted-foreground">
-          {copiedCode === userCode && t("connectors.github.deviceCode.copied")}
+          {progress && copiedCode === progress.userCode && t("connectors.github.deviceCode.copied")}
         </span>
       </div>
-      <p className="text-xs text-muted-foreground/70">
-        {t("connectors.github.deviceCode.expires", { time: expiry })}
-      </p>
+      {progress && (
+        <p className="text-xs text-muted-foreground/70">
+          {t("connectors.github.deviceCode.expires", {
+            time: new Intl.DateTimeFormat(i18n.language, {
+              hour: "numeric",
+              minute: "2-digit",
+            }).format(progress.expiresAt),
+          })}
+        </p>
+      )}
     </div>
   );
 }

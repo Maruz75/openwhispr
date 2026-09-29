@@ -379,6 +379,51 @@ test("while GitHub's connect waits, Cancel is there before the code and Connect 
   assert.deepEqual(connect.calls, ["github"]);
 });
 
+test("the code lands in a live region that was there first, and Cancel hands focus back to Connect", async (t) => {
+  const connect = pendingConnect();
+  const { container, emitProgress } = await renderGithubRow(t, {
+    status: DISCONNECTED,
+    electronAPI: { connectorConnect: connect.connectorConnect },
+  });
+  await React.act(async () => click(button(container, "connectors.github.connect")));
+  const live = findElement(
+    container,
+    (element) => element.getAttribute?.("aria-live") === "polite"
+  );
+  assert.ok(live, "a polite live region is mounted before the code arrives");
+  assert.equal(live.textContent, "");
+
+  await emitProgress(PROGRESS);
+  assert.match(live.textContent, /WDJB-MJHT/);
+
+  const cancel = button(container, "connectors.github.deviceCode.cancel");
+  cancel.focus();
+  await React.act(async () => click(cancel));
+  await React.act(async () => connect.settle({ status: "failed", errorCode: "oauth_cancelled" }));
+
+  // Cancel is gone; focus moves to Connect instead of dropping to the page.
+  assert.equal(
+    container.ownerDocument.activeElement,
+    button(container, "connectors.github.connect")
+  );
+});
+
+test("a connect that ends while focus is elsewhere leaves focus where it is", async (t) => {
+  const connect = pendingConnect();
+  const { container } = await renderGithubRow(t, {
+    status: DISCONNECTED,
+    electronAPI: { connectorConnect: connect.connectorConnect },
+  });
+  await React.act(async () => click(button(container, "connectors.github.connect")));
+  const elsewhere = container.ownerDocument.createElement("input");
+  elsewhere.isConnected = true;
+  elsewhere.focus();
+
+  await React.act(async () => connect.settle({ status: "failed", errorCode: "code_expired" }));
+
+  assert.equal(container.ownerDocument.activeElement, elsewhere);
+});
+
 test("leaving Settings while the code is showing stops the connect, once", async (t) => {
   const connect = pendingConnect();
   const { container, emitProgress, unmount, cancels } = await renderGithubRow(t, {

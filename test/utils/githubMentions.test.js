@@ -153,6 +153,14 @@ test("a fence closes only on its own character", async () => {
   assert.deepEqual(githubMentions("~~~\n@eve\n```\n@frank\n~~~\n@gina"), ["@gina"]);
 });
 
+test("a closed HTML comment notifies no one; code or an unclosed one hides nothing", async () => {
+  const { githubMentions } = await load();
+  assert.deepEqual(githubMentions("<!-- @alice --> @bob"), ["@bob"]);
+  assert.deepEqual(githubMentions("a\n<!--\n@eve\n-->\n@fay"), ["@fay"]);
+  assert.deepEqual(githubMentions("Use `<!--` to start one. cc @carol"), ["@carol"]);
+  assert.deepEqual(githubMentions("<!-- never closed @dan"), ["@dan"]);
+});
+
 test("githubFieldMentions reads title and body apart, each mention once", async () => {
   const { githubFieldMentions } = await load();
   // A title ending in an open code span can't hide the body's mentions.

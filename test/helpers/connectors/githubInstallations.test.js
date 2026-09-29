@@ -90,6 +90,8 @@ test("lists every installed repository across installations and pages, most rece
       fullName: "dana/notes",
       private: false,
       hasIssues: true,
+      archived: false,
+      canPush: false,
       updatedAt: "2026-09-28T09:00:00Z",
     },
     {
@@ -98,6 +100,8 @@ test("lists every installed repository across installations and pages, most rece
       fullName: "acme/api",
       private: true,
       hasIssues: true,
+      archived: false,
+      canPush: false,
       updatedAt: "2026-09-27T10:00:00Z",
     },
     {
@@ -106,6 +110,8 @@ test("lists every installed repository across installations and pages, most rece
       fullName: "dana/api",
       private: false,
       hasIssues: false,
+      archived: false,
+      canPush: false,
       updatedAt: "2026-09-25T10:00:00Z",
     },
     {
@@ -114,23 +120,65 @@ test("lists every installed repository across installations and pages, most rece
       fullName: "acme/web",
       private: false,
       hasIssues: true,
+      archived: false,
+      canPush: false,
       updatedAt: "2026-09-20T10:00:00Z",
     },
   ]);
-  assert.deepEqual(
-    github.calls.map((call) => [call.path, call.query.page ?? "1"]),
-    [
-      ["/user/installations", "1"],
-      ["/user/installations", "2"],
-      ["/user/installations/1/repositories", "1"],
-      ["/user/installations/1/repositories", "2"],
-      ["/user/installations/2/repositories", "1"],
-    ]
-  );
+  const pages = github.calls.map((call) => [call.path, call.query.page ?? "1"]);
+  assert.deepEqual(pages.slice(0, 2), [
+    ["/user/installations", "1"],
+    ["/user/installations", "2"],
+  ]);
+  // Each installation's repositories are read side by side.
+  assert.deepEqual(pages.slice(2).sort(), [
+    ["/user/installations/1/repositories", "1"],
+    ["/user/installations/1/repositories", "2"],
+    ["/user/installations/2/repositories", "1"],
+  ]);
+  assert.equal(listed.truncated, false);
   for (const call of github.calls) {
     assert.equal(call.query.per_page, "100");
     assert.equal(call.authorization, "Bearer ghu-1");
   }
+});
+
+test("an archived repo, and the user's push access, come from the listing", async () => {
+  const { installations } = await setup({
+    [INSTALLATIONS]: [installationsPage([installation(2, "dana")])],
+    [reposOf(2)]: [
+      reposPage([
+        { ...DANA_NOTES, archived: true, permissions: { push: false, pull: true } },
+        { ...DANA_API, permissions: { push: true } },
+      ]),
+    ],
+  });
+
+  const { repos } = await installations.list(BINDING, TOKEN);
+
+  assert.deepEqual(
+    repos.map((repo) => [repo.fullName, repo.archived, repo.canPush]),
+    [
+      ["dana/notes", true, false],
+      ["dana/api", false, true],
+    ]
+  );
+});
+
+test("an installation with more repositories than OpenWhispr reads marks the list cut", async () => {
+  const { installations } = await setup({
+    [INSTALLATIONS]: [installationsPage([installation(2, "dana")])],
+    // Every page links to another, so the read stops at its page cap.
+    [reposOf(2)]: [reposPage([DANA_API], next("/user/installations/2/repositories", 2))],
+  });
+
+  const listed = await installations.list(BINDING, TOKEN);
+
+  assert.equal(listed.ok, true);
+  assert.equal(listed.truncated, true);
+  const missing = await installations.resolveRepo(BINDING, TOKEN, "dana/far");
+  assert.equal(missing.errorCode, "not_installed");
+  assert.equal(missing.truncated, true);
 });
 
 test("repository entries without an owner, name or full name are skipped", async () => {
@@ -189,6 +237,7 @@ test("a failed read is reported, never cached, and never half a list", async () 
     ok: true,
     repos: [],
     installationCount: 0,
+    truncated: false,
   });
 
   const partial = await setup({
@@ -211,9 +260,11 @@ test("a read the caller gave up on reports a timeout and is never cached, even w
   const held = new Promise((resolve) => {
     release = resolve;
   });
+  const signals = [];
   // GitHub answers only once the test lets it, after the caller gave up.
   const api = createGithubApi({
     fetchImpl: async (url, init) => {
+      signals.push(init.signal);
       await held;
       return github.fetchImpl(url, init);
     },
@@ -226,6 +277,8 @@ test("a read the caller gave up on reports a timeout and is never cached, even w
   const pending = installations.list(BINDING, TOKEN, { signal: controller.signal });
   controller.abort();
   assert.deepEqual(await pending, { ok: false, outcome: "unknown", errorCode: "timeout" });
+  // The request itself is stopped, not left paging through GitHub.
+  assert.ok(signals.length > 0 && signals.every((signal) => signal.aborted));
 
   release();
   await new Promise((resolve) => setImmediate(resolve));
@@ -246,6 +299,8 @@ test("a repo is resolved by owner/name in any case, or by a bare name only one r
       fullName: "acme/api",
       private: true,
       hasIssues: true,
+      archived: false,
+      canPush: false,
       updatedAt: "2026-09-27T10:00:00Z",
     },
   });
@@ -298,6 +353,7 @@ test("a repo the App isn't installed on is named in the refusal; none installed 
     ok: false,
     errorCode: "not_installed",
     message: "The OpenWhispr GitHub App isn't installed on acme/secret.",
+    truncated: false,
   });
   assert.equal(
     (await installations.resolveRepo(BINDING, TOKEN, "infra")).errorCode,

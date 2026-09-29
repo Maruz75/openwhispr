@@ -28,9 +28,10 @@ const TYPES = new Set(["issue", "pr", "any"]);
 // searches.
 const TYPE_QUALIFIERS = { issue: "is:issue", pr: "is:pull-request" };
 // The scope is always the installed repos, so the user's own scope
-// qualifiers (negated or quoted too) are removed; every other qualifier
-// (label:, author:, is:, …) passes through.
-const SCOPE_QUALIFIER = /(^|\s)-?(?:repo|org|user):(?:"[^"]*"?|\S*)/gi;
+// qualifiers (negated, quoted or after NOT too) are removed; every other
+// qualifier (label:, author:, is:, …) passes through. A NOT left behind
+// would negate whatever came next.
+const SCOPE_QUALIFIER = /(^|\s)(?:NOT\s+)?-?(?:repo|org|user):(?:"[^"]*"?|\S*)/gi;
 const LINE_BREAK = /[\r\n]/;
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
@@ -156,6 +157,8 @@ function failureMessage(errorCode) {
       return "GitHub couldn't find that issue or pull request.";
     case "issues_disabled":
       return "Issues are turned off in that repository.";
+    case "archived":
+      return "That repository is archived, so it can't take new issues or comments.";
     case "invalid":
       return "GitHub couldn't accept this as written.";
     case "too_long":
@@ -262,9 +265,13 @@ function createGithubConnector({
       : null;
   }
 
-  function notInstalled(fullName) {
+  // `truncated`: the installations listed more repositories than OpenWhispr
+  // reads, so the repo may be installed after all.
+  function notInstalled(fullName, truncated = false) {
     const installUrl = manageUrl();
-    const message = `The OpenWhispr GitHub App isn't installed on ${fullName}.`;
+    const message = truncated
+      ? `The OpenWhispr GitHub App isn't installed on ${fullName}, as far as OpenWhispr can tell: it reads the first 1,000 repositories of each installation. Ask the user to check the name.`
+      : `The OpenWhispr GitHub App isn't installed on ${fullName}.`;
     return {
       errorCode: "not_installed",
       message: installUrl
@@ -304,7 +311,21 @@ function createGithubConnector({
     const listed = await call(session, (token) => installations.list(session.binding, token));
     if (!listed.ok) return { failure: { errorCode: listed.errorCode } };
     if (listed.repos.length === 0) return { failure: { errorCode: "no_repositories" } };
-    return { repos: listed.repos };
+    return { repos: listed.repos, truncated: listed.truncated === true };
+  }
+
+  // An installed repo that can take new issues and comments, or why not.
+  function writableRepo(repo, fullName, truncated) {
+    if (!repo) return { failure: notInstalled(fullName, truncated) };
+    if (repo.archived) {
+      return {
+        failure: {
+          errorCode: "archived",
+          message: `${repo.fullName} is archived, so it can't take new issues or comments.`,
+        },
+      };
+    }
+    return { repo };
   }
 
   async function resolveRepo(session, input) {
@@ -313,7 +334,9 @@ function createGithubConnector({
     );
     if (resolved.ok) return { repo: resolved.repo };
     if (resolved.clarification) return { clarification: resolved.clarification };
-    if (resolved.errorCode === "not_installed") return { failure: notInstalled(input.trim()) };
+    if (resolved.errorCode === "not_installed") {
+      return { failure: notInstalled(input.trim(), resolved.truncated === true) };
+    }
     return { failure: { errorCode: resolved.errorCode } };
   }
 
@@ -324,7 +347,7 @@ function createGithubConnector({
       installations.clear(session.binding);
       const listed = await call(session, (token) => installations.list(session.binding, token));
       if (listed.ok && !findInstalled(listed.repos, repo.owner, repo.name)) {
-        return notInstalled(repo.fullName);
+        return notInstalled(repo.fullName, listed.truncated === true);
       }
     }
     return { errorCode: result.errorCode };
@@ -335,8 +358,13 @@ function createGithubConnector({
   async function readTarget(session, target) {
     const installed = await installedRepos(session);
     if (installed.failure) return installed;
-    const repo = findInstalled(installed.repos, target.owner, target.repo);
-    if (!repo) return { failure: notInstalled(`${target.owner}/${target.repo}`) };
+    const writable = writableRepo(
+      findInstalled(installed.repos, target.owner, target.repo),
+      `${target.owner}/${target.repo}`,
+      installed.truncated
+    );
+    if (writable.failure) return writable;
+    const { repo } = writable;
     const read = await call(session, (token) =>
       api.rest("GET", `${repoPath(repo)}/issues/${target.number}`, { token })
     );
@@ -381,7 +409,9 @@ function createGithubConnector({
       };
     }
     const destination = `${repo.fullName}#${target.number}`;
-    if (issue.locked === true) {
+    // GitHub still takes comments on a locked conversation from people who
+    // can push to the repo.
+    if (issue.locked === true && !repo.canPush) {
       return {
         failure: {
           errorCode: "locked",
@@ -417,6 +447,9 @@ function createGithubConnector({
     const { session } = opened;
 
     let scope;
+    // The installations listed more repos than OpenWhispr reads: some went
+    // unsearched.
+    let unlisted = false;
     if (typeof args?.repo === "string" && args.repo.trim()) {
       const resolved = await resolveRepo(session, args.repo);
       if (resolved.clarification) {
@@ -428,6 +461,7 @@ function createGithubConnector({
       const installed = await installedRepos(session);
       if (installed.failure) return failedWith(installed.failure);
       scope = installed.repos;
+      unlisted = installed.truncated;
     }
 
     const repoNames = scope.map((r) => r.fullName);
@@ -458,7 +492,7 @@ function createGithubConnector({
       return failed(TRANSPORT_CODE.test(failure.errorCode ?? "") ? "network" : failure.errorCode);
     }
     const items = [];
-    let truncated = false;
+    let truncated = unlisted;
     searches.forEach((built, index) => {
       const found = pages[index];
       const searched = new Map(built.repos.map((fullName) => [fullName.toLowerCase(), fullName]));
@@ -510,7 +544,9 @@ function createGithubConnector({
       );
     }
     if (resolved.failure) return failedWith(resolved.failure);
-    const { repo } = resolved;
+    const writable = writableRepo(resolved.repo);
+    if (writable.failure) return failedWith(writable.failure);
+    const { repo } = writable;
 
     const labels = [];
     const dropped = [];
@@ -548,8 +584,9 @@ function createGithubConnector({
       });
     }
     // GitHub silently drops labels when the user can't push to the repo.
-    if (labels.length > 0)
+    if (labels.length > 0 && !repo.canPush) {
       notes.push({ key: "connectors.approval.github.notes.labelsMayNotApply" });
+    }
 
     return {
       status: "ready",
@@ -626,11 +663,13 @@ function createGithubConnector({
     const { session } = opened;
     const installed = await installedRepos(session);
     if (installed.failure) return commitFailedWith(installed.failure);
-    const repo = findInstalled(installed.repos, payload.owner, payload.repo);
-    if (!repo) {
-      const refused = notInstalled(`${payload.owner}/${payload.repo}`);
-      return commitFailedWith(refused);
-    }
+    const writable = writableRepo(
+      findInstalled(installed.repos, payload.owner, payload.repo),
+      `${payload.owner}/${payload.repo}`,
+      installed.truncated
+    );
+    if (writable.failure) return commitFailedWith(writable.failure);
+    const { repo } = writable;
     const created = await call(session, (token) =>
       api.rest("POST", `${repoPath(repo)}/issues`, {
         token,

@@ -93,7 +93,7 @@ export function IssueApprovalFields({
   ...props
 }: IssueApprovalFieldsProps & { connectorId: string; pending: boolean }): ReactElement {
   const { t } = useTranslation();
-  const liveNotes = pending ? liveCardNotesFor(connectorId, { ...props.fields }) : [];
+  const liveNotes = pending ? liveCardNotesFor(connectorId, props.fields) : [];
   return (
     <>
       <IssueFieldsLayout {...props} />

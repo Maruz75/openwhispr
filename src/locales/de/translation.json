@@ -4225,8 +4225,6 @@
         "disconnect_failed": "GitHub konnte nicht getrennt werden. Versuche es erneut.",
         "oauth_denied": "Der Zugriff auf GitHub wurde abgelehnt.",
         "oauth_timeout": "Die Verbindung hat zu lange gedauert. Versuche es erneut.",
-        "oauth_state_mismatch": "Dieser Anmeldelink war veraltet. Versuche es erneut.",
-        "ports_busy": "Eine andere App verwendet die Ports, die OpenWhispr zum Verbinden benötigt. Schließe sie und versuche es erneut.",
         "token_exchange_failed": "GitHub hat die Verbindung nicht abgeschlossen. Versuche es erneut.",
         "not_configured": "GitHub ist in dieser Version nicht verfügbar.",
         "connection_changed": "Dein Konto oder die GitHub-Verbindung hat sich während der Verbindung geändert. Versuche es erneut.",

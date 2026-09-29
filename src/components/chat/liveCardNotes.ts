@@ -1,7 +1,8 @@
 import type { ConnectorPreviewNote } from "../../types/connectors";
 import { githubFieldMentions } from "../../utils/githubMentions";
 
-type LiveCardFields = Record<string, string | string[]>;
+// The fields an issue or comment card edits.
+type LiveCardFields = Readonly<{ title?: string; body?: string }>;
 
 // GitHub notifies everyone a title or body mentions, and a team mention
 // notifies the whole team, so the card says who before Send.

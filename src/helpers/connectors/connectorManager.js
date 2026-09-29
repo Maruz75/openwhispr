@@ -485,6 +485,8 @@ function createConnectorManager({
         // A new login: approvals prepared under the old one must not send.
         replaced = credentials.read(accountId, connectorId)?.credential ?? null;
         credentials.replace(accountId, connectorId, credential, startGeneration);
+        // Saved: from here a Cancel has nothing left to stop.
+        if (connecting.get(flowKey) === controller) connecting.delete(flowKey);
       } catch (error) {
         // Nobody will use this login, so it is revoked rather than left live.
         await revokeQuietly(connector, credential);
@@ -521,7 +523,9 @@ function createConnectorManager({
 
   // Aborts the connects in progress that `matches(accountId, connectorId)`;
   // each then ends as oauth_cancelled, and a login that arrives anyway is
-  // revoked, as when a newer Connect replaces it. True when any was running.
+  // never saved and is revoked where the provider allows it (GitHub's needs a
+  // client secret, so its authorization stays on github.com), as when a
+  // newer Connect replaces it. True when any was running.
   function abortConnects(matches) {
     let aborted = false;
     for (const [flowKey, controller] of connecting) {
