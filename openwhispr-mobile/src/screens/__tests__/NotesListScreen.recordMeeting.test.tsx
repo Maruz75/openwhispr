@@ -69,9 +69,6 @@ jest.mock('@/components/notes/SectionHeader', () => ({ SectionHeader: () => null
 jest.mock('@/components/notes/MoveToFolderSheet', () => ({ MoveToFolderSheet: () => null }));
 jest.mock('@/components/notes/NewFolderSheet', () => ({ NewFolderSheet: () => null }));
 jest.mock('@/components/notes/SyncStatusLabel', () => ({ SyncStatusLabel: () => null }));
-jest.mock('@/components/notes/VoiceProfilePromptCard', () => ({
-  VoiceProfilePromptCard: () => null,
-}));
 jest.mock('@/lib/utils', () => ({ safeHaptics: jest.fn() }));
 jest.mock('@/lib/alerts', () => ({ confirmDestructive: jest.fn() }));
 
