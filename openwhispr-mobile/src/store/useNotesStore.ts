@@ -5,6 +5,7 @@ import { notesRepository, spacesRepository } from '@/data';
 import type { Note, Folder, NoteUpdate, Space } from '@/data';
 import type { ConflictedNote, Segment, Speaker, SpeakerProfile } from '@/data/types';
 import type { CalendarParticipant } from '@/data/calendarTypes';
+import type { Diarizer } from '@/lib/diarization/diarizer';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import { useConfigStore } from '@/store/useConfigStore';
@@ -19,8 +20,11 @@ import { buildMergeTargetPatch, buildRenameSpeakerPatch } from '@/lib/diarizatio
 import {
   buildConfirmedSpeakerPatch,
   buildRejectedSuggestionPatch,
+  hasFiniteNonZeroNorm,
+  l2Normalize,
   runningMeanEmbedding,
 } from '@/lib/diarization/voiceprints';
+import { SpeakerProfileOwnerAlreadyExistsError } from '@/data/local/notesRepository';
 import {
   buildActionSystemPrompt,
   isDefaultGenerateNotesAction,
@@ -111,6 +115,37 @@ const loadLocalTranscriptionService = () => {
 
 const reloadVoiceProfiles = (): Pick<NotesStore, 'voiceProfiles'> => ({
   voiceProfiles: notesRepository.getSpeakerProfiles(),
+});
+
+/** Labels a meeting's speakers from the saved voice profiles; true when any speaker changed. */
+const identifyMeetingSpeakers = (
+  noteId: number,
+  speakerEmbeddingsByLabel: Record<string, number[]>,
+  onlyProfileId?: number,
+): boolean => {
+  const note = notesRepository.getNoteById(noteId);
+  const preferredProfileEmails = getCalendarParticipantEmails(
+    parseCalendarParticipants(note?.participants ?? null) ?? [],
+  );
+  const identification = identifyNoteSpeakers(
+    noteId,
+    speakerEmbeddingsByLabel,
+    { repo: notesRepository },
+    { preferredProfileEmails, onlyProfileId },
+  );
+  return identification.updatedSpeakerIds.length > 0;
+};
+
+let diarizerModelDownload: Promise<void> | null = null;
+
+// Diarizing with the model missing downloads it natively, into the folder a download
+// already running is writing, so it waits for that download first.
+const diarizerAfterModelDownload = (diarizer: Diarizer): Diarizer => ({
+  ...diarizer,
+  diarize: async (wavUri, numberOfSpeakers) => {
+    await diarizerModelDownload?.catch(() => undefined);
+    return diarizer.diarize(wavUri, numberOfSpeakers);
+  },
 });
 
 const DEFAULT_FOLDER_ID = 1;
@@ -425,6 +460,7 @@ interface NotesStore {
   isDiarizerModelReady: () => Promise<boolean>;
   isLocalAsrModelReady: () => Promise<boolean>;
   downloadDiarizerModel: () => Promise<void>;
+  isDiarizerModelDownloading: () => boolean;
   deleteDiarizerModel: () => Promise<void>;
   getNoteSegments: (noteId: number) => Segment[];
   getNoteSpeakers: (noteId: number) => Speaker[];
@@ -444,6 +480,13 @@ interface NotesStore {
   ) => void;
   rejectSpeakerSuggestion: (noteId: number, speakerId: number) => void;
   renameSpeaker: (noteId: number, speakerId: number, displayName: string) => void;
+  /** Makes a speaker from a meeting just processed on this device your voice profile. */
+  claimSpeakerAsMe: (noteId: number, speakerId: number) => void;
+  /**
+   * Labels a meeting processed since launch with a newly added or retrained voice profile,
+   * leaving speakers already linked to another profile alone.
+   */
+  relabelMeetingSpeakers: (noteId: number, profileId: number) => void;
   mergeSpeakers: (noteId: number, sourceSpeakerId: number, targetSpeakerId: number) => void;
 }
 
@@ -732,7 +775,7 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
               language: opts.language,
               wordTimestamps: opts.wordTimestamps,
             }),
-          diarizer: getDiarizer(),
+          diarizer: diarizerAfterModelDownload(getDiarizer()),
           repo: notesRepository,
         },
       );
@@ -745,21 +788,7 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
           [noteId]: result.speakerEmbeddingsByLabel,
         },
       }));
-      const note = notesRepository.getNoteById(noteId);
-      const preferredProfileEmails = getCalendarParticipantEmails(
-        parseCalendarParticipants(note?.participants ?? null) ?? [],
-      );
-      const identification = identifyNoteSpeakers(
-        noteId,
-        result.speakerEmbeddingsByLabel,
-        {
-          repo: notesRepository,
-        },
-        {
-          preferredProfileEmails,
-        },
-      );
-      if (identification.updatedSpeakerIds.length > 0) {
+      if (identifyMeetingSpeakers(noteId, result.speakerEmbeddingsByLabel)) {
         set((state) => ({ transcriptRevision: state.transcriptRevision + 1 }));
       }
       await finalizeMeetingNoteContent(noteId);
@@ -799,7 +828,9 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
 
   isDiarizerAvailable: async () => loadDiarizer().isAvailable(),
 
-  isDiarizerModelReady: async () => loadDiarizer().isModelDownloaded(),
+  // A download in flight has created some model files, which reads as downloaded.
+  isDiarizerModelReady: async () =>
+    diarizerModelDownload === null && loadDiarizer().isModelDownloaded(),
 
   // True only if the local ASR model the meeting path would route to is actually downloaded.
   isLocalAsrModelReady: async () => {
@@ -808,9 +839,16 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
     return LocalTranscriptionService.isReadyForLanguage();
   },
 
-  downloadDiarizerModel: async () => {
-    await loadDiarizer().downloadModel();
+  // Shared, so a second caller can't start another download into the same model folder.
+  downloadDiarizerModel: () => {
+    diarizerModelDownload ??= loadDiarizer()
+      .downloadModel()
+      .finally(() => {
+        diarizerModelDownload = null;
+      });
+    return diarizerModelDownload;
   },
+  isDiarizerModelDownloading: () => diarizerModelDownload !== null,
 
   deleteDiarizerModel: async () => {
     await loadDiarizer().deleteModel();
@@ -925,6 +963,49 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
     const patch = buildRenameSpeakerPatch(speaker, displayName);
     if (Object.keys(patch).length === 0) return;
     notesRepository.updateSpeaker(speaker.id, patch);
+    set((state) => ({ transcriptRevision: state.transcriptRevision + 1 }));
+  },
+  claimSpeakerAsMe: (noteId, speakerId) => {
+    if (notesRepository.getSpeakerProfiles().some((profile) => profile.isOwner === 1)) {
+      throw new SpeakerProfileOwnerAlreadyExistsError();
+    }
+    // A retry rewrites the speakers under new labels before it replaces the samples.
+    if (notesRepository.getTranscriptionStatus(noteId) !== 'done') {
+      throw new Error('This meeting is still being processed.');
+    }
+    const speaker = notesRepository.getSpeakers(noteId).find((row) => row.id === speakerId);
+    if (!speaker) throw new Error('Speaker not found');
+    // Only held in memory for meetings processed since the app started.
+    const embeddings = get().meetingSpeakerEmbeddingsByNoteId[noteId] ?? {};
+    const embedding = embeddings[speaker.speakerLabel];
+    if (!hasFiniteNonZeroNorm(embedding)) {
+      throw new Error("This meeting's voice sample is no longer available.");
+    }
+
+    const profile = notesRepository.createOwnerProfileForSpeaker(
+      speaker.id,
+      {
+        displayName: 'Me',
+        embedding: l2Normalize(embedding),
+        sampleCount: 1,
+        consentAt: new Date().toISOString(),
+      },
+      buildRenameSpeakerPatch(speaker, 'Me'),
+    );
+    set((state) => ({
+      ...reloadVoiceProfiles(),
+      transcriptRevision: state.transcriptRevision + 1,
+    }));
+    // The claim is saved; labelling the rest of the meeting is a bonus that must not undo it.
+    try {
+      get().relabelMeetingSpeakers(noteId, profile.id);
+    } catch (error) {
+      Sentry.captureException(error, { tags: { feature: 'voice-setup' } });
+    }
+  },
+  relabelMeetingSpeakers: (noteId, profileId) => {
+    const embeddings = get().meetingSpeakerEmbeddingsByNoteId[noteId];
+    if (!embeddings || !identifyMeetingSpeakers(noteId, embeddings, profileId)) return;
     set((state) => ({ transcriptRevision: state.transcriptRevision + 1 }));
   },
   mergeSpeakers: (noteId, sourceSpeakerId, targetSpeakerId) => {

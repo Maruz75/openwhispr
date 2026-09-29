@@ -882,7 +882,11 @@ export class LocalNotesRepository implements NotesRepository {
         content: remote.content,
         folderId: unsyncedFolder ? unsyncedFolder.id : localFolderId,
         noteType: remote.note_type,
-        sourceFile: remote.source_file,
+        // Device-local recordings push as null, so a null coming back must not erase the
+        // path this device still plays and reprocesses from.
+        sourceFile:
+          remote.source_file ??
+          (isManagedMeetingAudioUri(local.id, local.sourceFile) ? local.sourceFile : null),
         audioDurationSeconds: remote.audio_duration_seconds,
         calendarEventId: remote.calendar_event_id ?? null,
         participants: remote.participants ?? null,
@@ -1481,9 +1485,22 @@ export class LocalNotesRepository implements NotesRepository {
 
   upsertSpeakers(noteId: number, rows: NewSpeaker[]): void {
     this.database.transaction((tx) => {
+      // Numbered after the note's existing speakers, so a re-diarization that adds one
+      // never shows a second "Speaker 1".
+      const nextSortOrder = tx
+        .select({ sortOrder: speakers.sortOrder })
+        .from(speakers)
+        .where(and(eq(speakers.noteId, noteId), isNull(speakers.deletedAt)))
+        .all()
+        .reduce((next, row) => Math.max(next, row.sortOrder + 1), 0);
       rows.forEach((row, index) => {
         tx.insert(speakers)
-          .values({ ...row, noteId, sortOrder: row.sortOrder ?? index, pendingSync: 1 })
+          .values({
+            ...row,
+            noteId,
+            sortOrder: row.sortOrder ?? nextSortOrder + index,
+            pendingSync: 1,
+          })
           .run();
       });
     });
@@ -1611,6 +1628,49 @@ export class LocalNotesRepository implements NotesRepository {
     }
   }
 
+  createOwnerProfileForSpeaker(
+    speakerId: number,
+    profileInput: Omit<NewSpeakerProfile, 'isOwner'>,
+    speakerPatch: Partial<Speaker>,
+  ): SpeakerProfile {
+    this.validateSpeakerProfileEmbedding(profileInput.embedding);
+
+    let result: { profile: SpeakerProfile; noteId: number };
+    try {
+      result = this.database.transaction((tx) => {
+        const row = tx
+          .insert(speakerProfiles)
+          .values({
+            ...profileInput,
+            isOwner: 1,
+            embedding: encodeSpeakerProfileEmbedding(profileInput.embedding),
+          })
+          .returning()
+          .get();
+        const profile = this.mapSpeakerProfile(row);
+        const [linked] = tx
+          .update(speakers)
+          .set({
+            ...speakerPatch,
+            profileId: profile.id,
+            pendingSync: 1,
+            updatedAt: sql`datetime('now')`,
+          })
+          .where(and(eq(speakers.id, speakerId), isNull(speakers.deletedAt)))
+          .returning({ noteId: speakers.noteId })
+          .all();
+        // Throwing rolls back the insert, so no owner profile is saved without its speaker.
+        if (!linked) throw new Error(`Speaker ${speakerId} not found`);
+        return { profile, noteId: linked.noteId };
+      });
+    } catch (error) {
+      mapSpeakerProfileOwnerConstraint(error);
+    }
+
+    this.markNoteTranscriptDirty(result.noteId);
+    return result.profile;
+  }
+
   updateSpeakerProfile(id: number, updates: Partial<SpeakerProfile>): void {
     const { embedding, ...rest } = updates;
     delete rest.id;
@@ -1698,6 +1758,14 @@ export class LocalNotesRepository implements NotesRepository {
       .update(notes)
       .set({ ...updates, updatedAt: sql`datetime('now')` })
       .where(eq(notes.id, noteId))
+      .run();
+  }
+
+  restoreMeetingRecordingPath(noteId: number, sourceFile: string): void {
+    this.database
+      .update(notes)
+      .set({ sourceFile })
+      .where(and(eq(notes.id, noteId), isNull(notes.sourceFile)))
       .run();
   }
 
