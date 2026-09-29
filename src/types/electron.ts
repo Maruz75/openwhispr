@@ -2961,7 +2961,10 @@ declare global {
         request: NoteAttendeesRequest
       ) => Promise<{ attendees: NoteAttendee[]; unavailableReason?: string }>;
       connectorConnect?: (connectorId: string) => Promise<ConnectorConnectResult>;
-      /** Stops this account's connect in progress; the connect ends as oauth_cancelled. */
+      /**
+       * Stops this connector's connect in progress, whichever account started it
+       * (including one still waiting on policy); the connect ends as oauth_cancelled.
+       */
       connectorCancelConnect?: (connectorId: string) => Promise<ConnectorCancelConnectResult>;
       connectorDisconnect?: (connectorId: string) => Promise<ConnectorDisconnectResult>;
       onConnectorStatusChanged?: (callback: (statuses: ConnectorStatus[]) => void) => () => void;

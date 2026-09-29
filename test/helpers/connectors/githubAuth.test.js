@@ -8,6 +8,8 @@ const {
   fakeGithubFetch,
   json,
   reset,
+  offline,
+  hang,
   memoryCredentials,
 } = require("./githubFixtures");
 
@@ -97,8 +99,10 @@ async function setup({
   broadcast,
   events = [],
 } = {}) {
-  const [{ createGithubAuth, EXPIRY_SKEW_MS, OAUTH_LOGIN_GONE }, { createGithubApi }] =
-    await Promise.all([loadAuth(), loadApi()]);
+  const [{ createGithubAuth, EXPIRY_SKEW_MS }, { createGithubApi }] = await Promise.all([
+    loadAuth(),
+    loadApi(),
+  ]);
   const github = fakeGithubFetch(script);
   const api = createGithubApi({
     fetchImpl: github.fetchImpl,
@@ -132,7 +136,6 @@ async function setup({
     logger,
     deviceFlow: flow,
     EXPIRY_SKEW_MS,
-    OAUTH_LOGIN_GONE,
   };
 }
 
@@ -282,6 +285,64 @@ test("a token without a readable GitHub user is refused as token_exchange_failed
   }
 });
 
+test("a blip reading the GitHub user after the code is approved gets one more try", async () => {
+  for (const [label, blip] of [
+    ["5xx", json({ message: "Server Error" }, 502)],
+    ["reset", reset()],
+    ["offline", offline()],
+    ["unreadable", { status: 200, rawBody: "<html>" }],
+  ]) {
+    const { auth, github } = await setup({ credential: null, script: { [USER]: [blip, DANA] } });
+
+    assert.equal((await auth.authorize()).login, "dana", label);
+    assert.equal(hits(github, USER).length, 2, label);
+  }
+
+  const { auth, github } = await setup({
+    credential: null,
+    script: { [USER]: [json({ message: "Server Error" }, 502)] },
+  });
+  await assert.rejects(auth.authorize(), { code: "token_exchange_failed" });
+  assert.equal(hits(github, USER).length, 2, "only one more try");
+});
+
+test("GitHub refusing the user read ends Connect with no second try", async () => {
+  for (const refusal of [json({ message: "Bad credentials" }, 401), json({ message: "No" }, 403)]) {
+    const { auth, github } = await setup({
+      credential: null,
+      script: { [USER]: [refusal, DANA] },
+    });
+
+    await assert.rejects(auth.authorize(), { code: "token_exchange_failed" });
+    assert.equal(hits(github, USER).length, 1, String(refusal.status));
+  }
+});
+
+test("a cancel while the GitHub user is read ends Connect at once as oauth_cancelled", async () => {
+  const hanging = await setup({ credential: null, script: { [USER]: [hang(), DANA] } });
+  const controller = new AbortController();
+  const pending = hanging.auth.authorize({ signal: controller.signal });
+  setTimeout(() => controller.abort(), 5);
+  const started = Date.now();
+
+  await assert.rejects(pending, { code: "oauth_cancelled" });
+  assert.ok(Date.now() - started < 1000, "does not wait for the 15 s request timeout");
+  assert.equal(hits(hanging.github, USER).length, 1, "no retry after a cancel");
+
+  // A cancel that lands with a failed read isn't retried either.
+  const late = new AbortController();
+  const failing = await setup({
+    credential: null,
+    script: {
+      [USER]: [{ ...json({ message: "Server Error" }, 502), during: () => late.abort() }, DANA],
+    },
+  });
+  await assert.rejects(failing.auth.authorize({ signal: late.signal }), {
+    code: "oauth_cancelled",
+  });
+  assert.equal(hits(failing.github, USER).length, 1);
+});
+
 test("a progress broadcast that throws doesn't stop a sign-in the user completes", async () => {
   const { auth, logger } = await setup({
     credential: null,
@@ -367,13 +428,7 @@ test("a 401 on a token another request already replaced uses the replacement, wi
 });
 
 test("an expired, revoked or used refresh token means reconnect, asked once and flagged", async () => {
-  const { OAUTH_LOGIN_GONE } = await loadAuth();
-  assert.deepEqual([...OAUTH_LOGIN_GONE].sort(), [
-    "bad_refresh_token",
-    "invalid_grant",
-    "unauthorized_client",
-  ]);
-  for (const code of OAUTH_LOGIN_GONE) {
+  for (const code of ["bad_refresh_token", "invalid_grant", "unauthorized_client"]) {
     const { auth, github, credentials } = await setup({
       credential: EXPIRED,
       script: { [TOKEN]: [oauthError(code)] },
@@ -448,6 +503,29 @@ test("any other refused OAuth refresh answer means reconnect too, asked once and
     // Flagged: the next use doesn't ask GitHub again.
     assert.deepEqual(await auth.getAccessToken(BINDING), RECONNECT_NEEDED, code);
     assert.equal(hits(github, TOKEN).length, 1, code);
+  }
+});
+
+test("a throttled or try-later refresh keeps the login, whatever its OAuth error", async () => {
+  for (const failure of [
+    json({ error: "bad_refresh_token" }, 429),
+    json({ error: "slow_down" }, 408),
+    oauthError("temporarily_unavailable"),
+    oauthError("server_error"),
+  ]) {
+    const label = `${failure.status} ${failure.body.error}`;
+    const { auth, github, credentials } = await setup({
+      credential: EXPIRED,
+      script: { [TOKEN]: [failure] },
+    });
+
+    assert.deepEqual(
+      await auth.getAccessToken(BINDING),
+      { ok: false, errorCode: "network" },
+      label
+    );
+    assert.equal(hits(github, TOKEN).length, 2, label);
+    assert.deepEqual(slot(credentials), EXPIRED, label);
   }
 });
 

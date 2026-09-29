@@ -38,6 +38,12 @@ function button(root, label) {
   return found;
 }
 
+// Compared by identity: a failed assert.equal on DOM nodes would try to
+// print the whole fake DOM.
+function assertFocused(root, label) {
+  assert.ok(root.ownerDocument.activeElement === button(root, label), `${label} has focus`);
+}
+
 const GITHUB = {
   id: "github",
   connected: true,
@@ -136,6 +142,11 @@ async function renderGithubRow(
     },
   });
   const container = installInteractiveDom(t);
+  // The minimal DOM has no selectors; the row only asks for its first button.
+  Object.getPrototypeOf(container).querySelector = function querySelector(selector) {
+    assert.equal(selector, "button");
+    return findElement(this, (element) => element !== this && element.tagName === "BUTTON");
+  };
   const vite = await createRendererServer(t, {
     cachePrefix: "openwhispr-github-connector-row-test-",
     noExternal: ["react-i18next"],
@@ -163,11 +174,19 @@ async function renderGithubRow(
   assert.ok(row, `CONNECTOR_ROWS has a ${rowId} entry`);
   const { createRoot } = require("react-dom/client");
   root = createRoot(container);
-  await React.act(async () =>
-    root.render(
-      React.createElement(ConnectorLoginRow, { row, isPaid, blockedByOrg, onUpgrade() {} })
-    )
-  );
+  const render = (props = {}) =>
+    React.act(async () =>
+      root.render(
+        React.createElement(ConnectorLoginRow, {
+          row,
+          isPaid,
+          blockedByOrg,
+          onUpgrade() {},
+          ...props,
+        })
+      )
+    );
+  await render();
   // Let the status load from the mount effect commit.
   await React.act(async () => {});
   const emitProgress = (progress) =>
@@ -195,6 +214,7 @@ async function renderGithubRow(
     emitProgress,
     progressListeners,
     broadcastStatus,
+    render,
     unmount,
     opened,
     copied,
@@ -402,10 +422,78 @@ test("the code lands in a live region that was there first, and Cancel hands foc
   await React.act(async () => connect.settle({ status: "failed", errorCode: "oauth_cancelled" }));
 
   // Cancel is gone; focus moves to Connect instead of dropping to the page.
-  assert.equal(
-    container.ownerDocument.activeElement,
-    button(container, "connectors.github.connect")
-  );
+  assertFocused(container, "connectors.github.connect");
+});
+
+test("Cancel before the code arrives stops the connect and hands focus back to Connect", async (t) => {
+  const connect = pendingConnect();
+  const { container, cancels } = await renderGithubRow(t, {
+    status: DISCONNECTED,
+    electronAPI: { connectorConnect: connect.connectorConnect },
+  });
+  await React.act(async () => click(button(container, "connectors.github.connect")));
+  const cancel = button(container, "connectors.github.deviceCode.cancel");
+  cancel.focus();
+
+  await React.act(async () => click(cancel));
+  assert.deepEqual(cancels, ["github"]);
+  await React.act(async () => connect.settle({ status: "failed", errorCode: "oauth_cancelled" }));
+
+  assert.doesNotMatch(container.textContent, /connectors\.github\.errors\./);
+  assertFocused(container, "connectors.github.connect");
+});
+
+// Main broadcasts the new login before the connect resolves, so the row is
+// connected by the time Copy & open (which held focus) unmounts.
+async function connectWhileFocused(t, connectedStatus) {
+  const connect = pendingConnect();
+  let current = DISCONNECTED;
+  const row = await renderGithubRow(t, {
+    status: DISCONNECTED,
+    electronAPI: {
+      connectorConnect: connect.connectorConnect,
+      connectorStatus: async () => [current],
+    },
+  });
+  await React.act(async () => click(button(row.container, "connectors.github.connect")));
+  await row.emitProgress(PROGRESS);
+  button(row.container, "connectors.github.deviceCode.copyAndOpen").focus();
+
+  current = connectedStatus;
+  await React.act(async () => {
+    row.broadcastStatus([connectedStatus]);
+    connect.settle({ status: "connected" });
+  });
+  return row.container;
+}
+
+test("a successful connect hands focus to the row's next step, not the page", async (t) => {
+  const container = await connectWhileFocused(t, GITHUB);
+  assertFocused(container, "connectors.github.repositories.manage");
+});
+
+test("with no repositories button, a successful connect hands focus to Disconnect", async (t) => {
+  const container = await connectWhileFocused(t, { ...GITHUB, manageUrl: undefined });
+  assertFocused(container, "connectors.github.disconnect");
+});
+
+test("the org turning connectors off mid-connect stops it, once", async (t) => {
+  const connect = pendingConnect();
+  const { container, emitProgress, render, unmount, cancels } = await renderGithubRow(t, {
+    status: DISCONNECTED,
+    electronAPI: { connectorConnect: connect.connectorConnect },
+  });
+  await React.act(async () => click(button(container, "connectors.github.connect")));
+  await emitProgress(PROGRESS);
+
+  await render({ blockedByOrg: true });
+  assert.deepEqual(cancels, ["github"]);
+  assert.equal(container.textContent, "");
+
+  await unmount();
+  connect.settle({ status: "failed", errorCode: "oauth_cancelled" });
+  await React.act(async () => {});
+  assert.deepEqual(cancels, ["github"]);
 });
 
 test("a connect that ends while focus is elsewhere leaves focus where it is", async (t) => {
@@ -421,7 +509,7 @@ test("a connect that ends while focus is elsewhere leaves focus where it is", as
 
   await React.act(async () => connect.settle({ status: "failed", errorCode: "code_expired" }));
 
-  assert.equal(container.ownerDocument.activeElement, elsewhere);
+  assert.ok(container.ownerDocument.activeElement === elsewhere, "focus stayed put");
 });
 
 test("leaving Settings while the code is showing stops the connect, once", async (t) => {
@@ -653,6 +741,8 @@ test("a login that needs reconnecting offers Reconnect and Disconnect", async (t
   assert.match(container.textContent, /connectors\.github\.needsReconnect/);
   assert.equal(hasButton(container, "connectors.github.reconnect"), true);
   assert.equal(hasButton(container, "connectors.github.disconnect"), true);
+  // Its repository count can't refresh until it reconnects.
+  assert.doesNotMatch(container.textContent, /connectors\.github\.repositories\./);
 });
 
 test("after Disconnect, the row links to GitHub's authorizations page", async (t) => {

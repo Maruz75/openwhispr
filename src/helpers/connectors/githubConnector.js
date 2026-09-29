@@ -5,6 +5,7 @@
 const { createGithubApi } = require("./githubApi");
 const { createGithubAuth } = require("./githubAuth");
 const { createGithubInstallations } = require("./githubInstallations");
+const { isTransportErrorCode } = require("./deliveryClassifier");
 
 const MAX_TITLE_LENGTH = 256;
 const MAX_BODY_LENGTH = 65536;
@@ -14,9 +15,11 @@ const MAX_RESULTS = 10;
 const SNIPPET_LENGTH = 300;
 // GitHub's 256-character search limit counts only the words, never the
 // qualifiers, and MAX_QUERY_LENGTH already keeps the words under it. What
-// bounds the `repo:` list is the request itself: GitHub answered 250
-// qualifiers (a 5 KB URL) and failed with a 5xx near 8 KB.
-const MAX_SEARCH_QUERY_LENGTH = 4000;
+// bounds the `repo:` list is the request URL: GitHub answered 250 qualifiers
+// (a 5 KB URL) and failed with a 5xx near 8 KB. The budget is `q`
+// percent-encoded, never shorter than it is in the URL (a space is `+`
+// there), so with the rest of the URL it stays under the 5 KB that worked.
+const MAX_SEARCH_QUERY_LENGTH = 4900;
 // A read of the installed repository count for the status gives up after
 // this long, so a hung read never blocks the next one.
 const STATUS_REPOSITORIES_TIMEOUT_MS = 5000;
@@ -28,25 +31,39 @@ const TYPES = new Set(["issue", "pr", "any"]);
 // searches.
 const TYPE_QUALIFIERS = { issue: "is:issue", pr: "is:pull-request" };
 // The scope is always the installed repos, so the user's own scope
-// qualifiers (negated, quoted or after NOT too) are removed; every other
-// qualifier (label:, author:, is:, …) passes through. A NOT left behind
-// would negate whatever came next.
-const SCOPE_QUALIFIER = /(^|\s)(?:NOT\s+)?-?(?:repo|org|user):(?:"[^"]*"?|\S*)/gi;
+// qualifiers (negated, quoted, after NOT or opening a group too) are
+// removed; every other qualifier (label:, author:, is:, …) passes through.
+const SCOPE_QUALIFIER = /(^|[\s(])(?:NOT\s+)*-?(?:repo|org|user):(?:"[^"]*"?|[^\s)]*)/gi;
+// What a removed qualifier can leave behind, each removed until none is
+// left: an empty group (with a NOT or - in front of it), AND or OR opening
+// the query or a group, an operator closing one, and an operator before AND
+// or OR. GitHub would refuse the query, and a NOT would negate whatever came
+// next. GitHub's operators are upper case; "or" is a word.
+const LEFTOVERS = [
+  /(\s?)(?:\bNOT\s*|-)?\(\s*\)/g,
+  /(^|\()\s*(?:AND|OR)(?=\s|\)|$)/g,
+  /(^|[\s(])(?:AND|OR|NOT)(?=\s*(?:\)|$))/g,
+  /(^|[\s(])(?:AND|OR|NOT)\s+(?=(?:AND|OR)(?:\s|\)|$))/g,
+];
+// A state the query names itself: state:open beside is:closed would match
+// nothing.
+const STATE_QUALIFIER =
+  /(^|[\s(])-?(?:is:(?:open|closed|merged|unmerged)|state:(?:open|closed))(?=$|[\s)])/i;
 const LINE_BREAK = /[\r\n]/;
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 const NUMBER_PATTERN = /^[1-9]\d{0,9}$/;
 const SHORT_REFERENCE = /^([^/\s#]+)\/([^/\s#]+)#(\d+)$/;
+// `repo#12` or `#12`: a comment target whose repo is found among the
+// installed ones.
+const INSTALLED_REFERENCE = /^([^/\s#]*)#(\d+)$/;
 const SEARCH_REPO_URL = /^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)$/;
-const TRANSPORT_CODE = /^(E[A-Z0-9_]+|ERR_[A-Z0-9_]+|UND_ERR_[A-Z0-9_]+|timeout|network_error)$/;
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,99}$/i;
 // spec §6.1: no email address reaches the model, internationalized ones
 // (josé@example.com, bob@exämple.com, a full-width ＠) included. A GitHub
 // mention ("@alice", no local part before the @) is left alone.
 const EMAIL_PATTERN = /[\p{L}\p{N}._%+-]+[@＠][\p{L}\p{N}.-]+\.\p{L}{2,}/gu;
 
-const NO_REPOSITORIES_MESSAGE =
-  "The OpenWhispr GitHub App isn't installed on any repository yet. Tell the user to choose repositories for it in Settings → Integrations → Connectors.";
 const INVALID_REFERENCE = { ok: false, errorCode: "invalid_reference" };
 
 function nonEmptyString(value) {
@@ -95,12 +112,23 @@ function clip(text, max) {
   return `${kept}…`;
 }
 
+function validRepoName(name) {
+  return REPO_PATTERN.test(name) && name !== "." && name !== "..";
+}
+
 function reference(owner, repo, number) {
-  if (!OWNER_PATTERN.test(owner) || !REPO_PATTERN.test(repo) || repo === "." || repo === "..") {
-    return INVALID_REFERENCE;
-  }
+  if (!OWNER_PATTERN.test(owner) || !validRepoName(repo)) return INVALID_REFERENCE;
   if (!NUMBER_PATTERN.test(number)) return INVALID_REFERENCE;
   return { ok: true, owner, repo, number: Number(number) };
+}
+
+// `repo#12` (`name` is "repo") or `#12` (`name` is "").
+function parseInstalledReference(input) {
+  const match = INSTALLED_REFERENCE.exec(typeof input === "string" ? input.trim() : "");
+  if (!match || (match[1] && !validRepoName(match[1])) || !NUMBER_PATTERN.test(match[2])) {
+    return INVALID_REFERENCE;
+  }
+  return { ok: true, name: match[1], number: Number(match[2]) };
 }
 
 /**
@@ -131,22 +159,35 @@ function parseGithubTarget(input) {
   return reference(owner ?? "", repo ?? "", number ?? "");
 }
 
+function withoutLeftovers(text) {
+  let previous;
+  let current = text;
+  do {
+    previous = current;
+    for (const pattern of LEFTOVERS) current = current.replace(pattern, "$1 ");
+  } while (current !== previous);
+  return collapseWhitespace(current);
+}
+
 /**
  * The `q` for GET /search/issues: the user's words without their own scope
- * qualifiers, the type (`issue` or `pr`) and state, then one `repo:` per
- * installed repo in the order given (most recently updated first) while `q`
- * stays within MAX_SEARCH_QUERY_LENGTH. `truncated` says some repos were
- * left out.
+ * qualifiers, the type (`issue` or `pr`) and state (unless the words name
+ * one), then one `repo:` per installed repo in the order given (most
+ * recently updated first) while `q`, percent-encoded, stays within
+ * MAX_SEARCH_QUERY_LENGTH. `truncated` says some repos were left out.
  */
 function buildSearchQuery({ query, type, state = "open", repos = [] }) {
-  const words = collapseWhitespace(String(query ?? "").replace(SCOPE_QUALIFIER, " "));
-  const stateQualifier = state === "all" ? "" : "state:open";
+  const words = withoutLeftovers(String(query ?? "").replace(SCOPE_QUALIFIER, "$1 "));
+  const stateQualifier = state === "all" || STATE_QUALIFIER.test(words) ? "" : "state:open";
   let q = [words, TYPE_QUALIFIERS[type], stateQualifier].filter(Boolean).join(" ");
+  let encodedLength = encodeURIComponent(q).length;
   const searched = [];
   for (const fullName of repos) {
-    const next = [q, `repo:${fullName}`].filter(Boolean).join(" ");
-    if (next.length > MAX_SEARCH_QUERY_LENGTH) break;
-    q = next;
+    const qualifier = `${q ? " " : ""}repo:${fullName}`;
+    const nextLength = encodedLength + encodeURIComponent(qualifier).length;
+    if (nextLength > MAX_SEARCH_QUERY_LENGTH) break;
+    q += qualifier;
+    encodedLength = nextLength;
     searched.push(fullName);
   }
   // Without a single repo: qualifier the search would cover every repo the
@@ -166,7 +207,7 @@ function failureMessage(errorCode) {
     case "rate_limited":
       return "GitHub is limiting requests right now. Try again later.";
     case "no_repositories":
-      return NO_REPOSITORIES_MESSAGE;
+      return "The OpenWhispr GitHub App isn't installed on any repository yet. Tell the user to choose repositories for it in Settings → Integrations → Connectors.";
     case "forbidden":
       return "GitHub refused: the user may not have permission for that in this repository.";
     case "not_found":
@@ -180,7 +221,7 @@ function failureMessage(errorCode) {
     case "too_long":
       return `Keep the title to ${MAX_TITLE_LENGTH} characters and the text to ${MAX_BODY_LENGTH} characters or fewer.`;
     case "invalid_reference":
-      return "Give the issue or pull request as owner/repo#123 or its github.com link.";
+      return "Give the issue or pull request as owner/repo#123, repo#123, #123 or its github.com link.";
     case "credential_save_failed":
       return "Couldn't save the refreshed GitHub login.";
     case "not_configured":
@@ -188,7 +229,7 @@ function failureMessage(errorCode) {
     case "network":
       return "Couldn't reach GitHub.";
     default:
-      return TRANSPORT_CODE.test(errorCode ?? "")
+      return isTransportErrorCode(errorCode)
         ? "Couldn't reach GitHub."
         : "GitHub refused the request.";
   }
@@ -202,27 +243,20 @@ function commitFailed(errorCode, message = failureMessage(errorCode)) {
   return { state: "failed", errorCode, message };
 }
 
-// A lookup's failure: its own message when it has one, and the install link
-// for a repo the App isn't on.
+// A lookup's failure, with its own message when it has one.
 function failedWith(failure) {
-  return {
-    ...failed(failure.errorCode, failure.message ?? failureMessage(failure.errorCode)),
-    ...(failure.installUrl ? { installUrl: failure.installUrl } : {}),
-  };
+  return failed(failure.errorCode, failure.message);
 }
 
 function commitFailedWith(failure) {
-  return {
-    ...commitFailed(failure.errorCode, failure.message ?? failureMessage(failure.errorCode)),
-    ...(failure.installUrl ? { installUrl: failure.installUrl } : {}),
-  };
+  return commitFailed(failure.errorCode, failure.message);
 }
 
 function clarify(message, candidates = []) {
   return { status: "needs_clarification", message, candidates };
 }
 
-// Up to MAX_LABELS distinct names, in the order given.
+// The distinct names, in the order given.
 function labelList(value) {
   const seen = new Set();
   const labels = [];
@@ -234,7 +268,7 @@ function labelList(value) {
     seen.add(key);
     labels.push(label);
   }
-  return labels.slice(0, MAX_LABELS);
+  return labels;
 }
 
 function repoPath(repo) {
@@ -261,7 +295,10 @@ function searchItem(raw, fullName) {
     author: nonEmptyString(raw.user?.login) ? raw.user.login : null,
     labels: (Array.isArray(raw.labels) ? raw.labels : [])
       .map((label) => (typeof label === "string" ? label : label?.name))
-      .filter(nonEmptyString),
+      .filter(nonEmptyString)
+      // GitHub caps a label name at 50 characters, so the quadratic pattern
+      // has nothing long to run on.
+      .map(redactEmails),
     snippet: excerpt(raw.body, SNIPPET_LENGTH),
   };
 }
@@ -291,18 +328,22 @@ function createGithubConnector({
   }
 
   // `truncated`: the installations listed more repositories than OpenWhispr
-  // reads, so the repo may be installed after all.
+  // reads, so the repo may be installed after all. That message keeps the
+  // phrase "check the name": githubTools.ts matches it to say so to the model.
   function notInstalled(fullName, truncated = false) {
+    if (truncated) {
+      return {
+        errorCode: "not_installed",
+        message: `The OpenWhispr GitHub App isn't installed on ${fullName}, as far as OpenWhispr can tell: it reads the first 1,000 repositories of each installation. Ask the user to check the name.`,
+      };
+    }
     const installUrl = manageUrl();
-    const message = truncated
-      ? `The OpenWhispr GitHub App isn't installed on ${fullName}, as far as OpenWhispr can tell: it reads the first 1,000 repositories of each installation. Ask the user to check the name.`
-      : `The OpenWhispr GitHub App isn't installed on ${fullName}.`;
+    const message = `The OpenWhispr GitHub App isn't installed on ${fullName}.`;
     return {
       errorCode: "not_installed",
       message: installUrl
         ? `${message} Tell the user to install it on that repository: ${installUrl}`
         : `${message} Tell the user to install it on that repository from Settings → Integrations → Connectors.`,
-      ...(installUrl ? { installUrl } : {}),
     };
   }
 
@@ -360,9 +401,22 @@ function createGithubConnector({
     return { repo };
   }
 
-  async function resolveRepo(session, input) {
+  // writableRepo, with issues turned on. A repo with issues off still takes
+  // comments on its pull requests, so only a new issue checks it.
+  function issueRepo(repo, fullName, truncated) {
+    const writable = writableRepo(repo, fullName, truncated);
+    if (writable.failure || repo.hasIssues) return writable;
+    return {
+      failure: {
+        errorCode: "issues_disabled",
+        message: `Issues are turned off in ${repo.fullName}, so it can't take a new issue.`,
+      },
+    };
+  }
+
+  async function resolveRepo(session, input, options) {
     const resolved = await call(session, (token) =>
-      installations.resolveRepo(session.binding, token, input)
+      installations.resolveRepo(session.binding, token, input, options)
     );
     if (resolved.ok) return { repo: resolved.repo };
     if (resolved.clarification) return { clarification: resolved.clarification };
@@ -373,13 +427,16 @@ function createGithubConnector({
   }
 
   // GitHub answers 403 or 404 for a repo the App isn't installed on (any
-  // more): the installations are read again to tell that apart.
+  // more), and 403 for one archived since the list was read: the
+  // installations are read again to tell those apart.
   async function refusal(session, result, repo) {
     if (result.errorCode === "forbidden" || result.errorCode === "not_found") {
       installations.clear(session.binding);
       const listed = await call(session, (token) => installations.list(session.binding, token));
-      if (listed.ok && !findInstalled(listed.repos, repo.owner, repo.name)) {
-        return notInstalled(repo.fullName, listed.truncated === true);
+      if (listed.ok) {
+        const fresh = findInstalled(listed.repos, repo.owner, repo.name);
+        const writable = writableRepo(fresh, repo.fullName, listed.truncated === true);
+        if (writable.failure) return writable.failure;
       }
     }
     return { errorCode: result.errorCode };
@@ -521,7 +578,7 @@ function createGithubConnector({
     // reach normalizeQueryResult as an unrecognized code and get rewritten to
     // generic "query_failed" copy; "network" is a code it accepts as is.
     if (failure) {
-      return failed(TRANSPORT_CODE.test(failure.errorCode ?? "") ? "network" : failure.errorCode);
+      return failed(isTransportErrorCode(failure.errorCode) ? "network" : failure.errorCode);
     }
     const items = [];
     let truncated = unlisted;
@@ -564,11 +621,18 @@ function createGithubConnector({
       return failed("too_long", `Keep the description to ${MAX_BODY_LENGTH} characters or fewer.`);
     }
     const requested = labelList(args?.labels);
+    // Never trimmed to fit: the card would show fewer labels than asked for
+    // without saying so.
+    if (requested.length > MAX_LABELS) {
+      return failed("too_many_labels", `Pick at most ${MAX_LABELS} labels for one issue.`);
+    }
 
     const opened = await openSession(binding);
     if (opened.failure) return failedWith(opened.failure);
     const { session } = opened;
-    const resolved = await resolveRepo(session, typeof args?.repo === "string" ? args.repo : "");
+    const resolved = await resolveRepo(session, typeof args?.repo === "string" ? args.repo : "", {
+      forNewIssue: true,
+    });
     if (resolved.clarification) {
       return clarify(
         `${resolved.clarification.message} The issue can go in any of these.`,
@@ -576,7 +640,7 @@ function createGithubConnector({
       );
     }
     if (resolved.failure) return failedWith(resolved.failure);
-    const writable = writableRepo(resolved.repo);
+    const writable = issueRepo(resolved.repo);
     if (writable.failure) return failedWith(writable.failure);
     const { repo } = writable;
 
@@ -588,7 +652,15 @@ function createGithubConnector({
       );
       if (!listed.ok) {
         const refused = await refusal(session, listed, repo);
-        return failedWith(refused);
+        // A 404 here is about the repo, never an issue or pull request.
+        return failedWith(
+          refused.errorCode === "not_found"
+            ? {
+                errorCode: "labels_unavailable",
+                message: `Couldn't read the labels in ${repo.fullName}. Try again, or create the issue without labels.`,
+              }
+            : refused
+        );
       }
       const existing = new Map(
         listed.items
@@ -598,6 +670,10 @@ function createGithubConnector({
       for (const label of requested) {
         const match = existing.get(label.toLowerCase());
         if (match) labels.push(match);
+        // Only the first 1,000 labels were read, so this one may exist all
+        // the same: it goes as asked, and the card lists it with the others
+        // rather than saying the repo doesn't have it.
+        else if (listed.truncated) labels.push(label);
         else dropped.push(label);
       }
     }
@@ -634,9 +710,28 @@ function createGithubConnector({
     };
   }
 
+  // The { owner, repo, number } a parsed target names, finding the repo of
+  // `repo#12` or `#12` among the installed ones.
+  async function commentTarget(session, parsed) {
+    if (parsed.owner) return { target: parsed };
+    const resolved = await resolveRepo(session, parsed.name);
+    if (resolved.clarification) {
+      return {
+        clarification: clarify(
+          `${resolved.clarification.message} The comment goes on #${parsed.number} there.`,
+          resolved.clarification.candidates
+        ),
+      };
+    }
+    if (resolved.failure) return resolved;
+    const { repo } = resolved;
+    return { target: { owner: repo.owner, repo: repo.name, number: parsed.number } };
+  }
+
   async function prepareComment(args, binding) {
-    const target = parseGithubTarget(args?.target);
-    if (!target.ok) return failed("invalid_reference");
+    const full = parseGithubTarget(args?.target);
+    const parsed = full.ok ? full : parseInstalledReference(args?.target);
+    if (!parsed.ok) return failed("invalid_reference");
     const body = typeof args?.body === "string" ? args.body : "";
     if (!body.trim()) return clarify("Ask the user what the comment should say.");
     if (characterCount(body) > MAX_BODY_LENGTH) {
@@ -645,7 +740,10 @@ function createGithubConnector({
     const opened = await openSession(binding);
     if (opened.failure) return failedWith(opened.failure);
     const { session } = opened;
-    const read = await readTarget(session, target);
+    const found = await commentTarget(session, parsed);
+    if (found.clarification) return found.clarification;
+    if (found.failure) return failedWith(found.failure);
+    const read = await readTarget(session, found.target);
     if (read.failure) return failedWith(read.failure);
 
     const notes = [
@@ -695,7 +793,7 @@ function createGithubConnector({
     const { session } = opened;
     const installed = await installedRepos(session, payload);
     if (installed.failure) return commitFailedWith(installed.failure);
-    const writable = writableRepo(
+    const writable = issueRepo(
       findInstalled(installed.repos, payload.owner, payload.repo),
       `${payload.owner}/${payload.repo}`,
       installed.truncated
@@ -774,7 +872,9 @@ function createGithubConnector({
     const listed = await call(opened.session, (token) =>
       installations.list(binding, token, { signal })
     );
-    return listed.ok ? String(listed.repos.length) : null;
+    if (!listed.ok) return null;
+    // More repositories are installed than OpenWhispr reads (1,000 each).
+    return `${listed.repos.length}${listed.truncated ? "+" : ""}`;
   }
 
   // The installed repo count, within statusTimeoutMs. Best effort: a

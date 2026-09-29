@@ -11,29 +11,46 @@ import { failedResult, needsClarificationResult, unavailableResult } from "./too
 
 export const GITHUB_RECONNECT_GUIDANCE =
   "Tell the user to reconnect GitHub under Settings → Integrations → Connectors. Don't retry.";
+const CREATE_UNKNOWN_GUIDANCE =
+  "Tell the user to check the repository's issues on GitHub (checkUrl) before asking for it again.";
+const COMMENT_UNKNOWN_GUIDANCE =
+  "Tell the user to check the issue or pull request on GitHub (checkUrl) before asking for the comment again.";
 
 // The limits main enforces (githubConnector.js), counted in characters as
 // main and the card count them. Checked here too, so an oversized call never
 // crosses IPC.
 const MAX_QUERY_LENGTH = 200;
 
+const STATES = ["open", "all"] as const;
+const TYPES = ["issue", "pr", "any"] as const;
+
 function characterCount(value: string): number {
   return [...value].length;
 }
 
-// The target forms main's parseGithubTarget accepts: owner/repo#12, or an
-// issue or pull request link on github.com (with anything after the
-// number). Main parses it again and checks the repository is installed.
+// The target forms main's parseGithubTarget accepts: owner/repo#12, repo#12,
+// #12, or an issue or pull request link on github.com (with anything after
+// the number). Main parses it again, finds a short form's repository among
+// the installed ones (asking when that's ambiguous) and checks it's installed.
 const GITHUB_TARGET =
-  /^(?:[A-Za-z0-9-]+\/[A-Za-z0-9._-]+#\d+|https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/(?:issues|pull)\/\d+(?:[/?#].*)?)$/;
+  /^(?:(?:(?:[A-Za-z0-9-]+\/)?[A-Za-z0-9._-]+)?#\d+|https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/(?:issues|pull)\/\d+(?:[/?#].*)?)$/;
 
 function text(args: Record<string, unknown>, name: string): string {
   const value = args[name];
   return typeof value === "string" ? value : "";
 }
 
-function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
-  return allowed.includes(value as T) ? (value as T) : fallback;
+// Left out (models often send null for that) is the default; anything else
+// must be one of the allowed values, never silently replaced by the default.
+function choice<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T | null {
+  if (value === undefined || value === null) return fallback;
+  return allowed.includes(value as T) ? (value as T) : null;
+}
+
+// A single label is often sent as a bare string.
+function labelNames(value: unknown): string[] {
+  const list: unknown[] = typeof value === "string" ? [value] : Array.isArray(value) ? value : [];
+  return list.filter((label): label is string => typeof label === "string");
 }
 
 // The tool step reads "GitHub needs to be reconnected.", like a failed
@@ -51,6 +68,13 @@ function needsReconnect(): boolean {
   return Boolean(github?.connected && github.needsReconnect);
 }
 
+// Main asks to check the name when the installations list more repositories
+// than it reads (githubConnector.js notInstalled): the App may be installed
+// after all. Only the code and message cross IPC, so the message tells.
+const MAYBE_INSTALLED = /check the name/i;
+const MAYBE_INSTALLED_GUIDANCE =
+  "OpenWhispr couldn't read every repository the GitHub App is on, so it may be installed there after all. Ask the user to check the repository name.";
+
 const REPOSITORY_GUIDANCE: Readonly<Record<string, string>> = {
   no_repositories:
     "Tell the user to choose repositories for the OpenWhispr GitHub App in Settings → Integrations → Connectors, then ask again.",
@@ -61,9 +85,16 @@ const REPOSITORY_GUIDANCE: Readonly<Record<string, string>> = {
 // The model gets GitHub's next step: reconnect, or pick repositories, with
 // the App's install page when this build has one.
 function withGithubGuidance(result: ToolResult): ToolResult {
-  const data = result.data as { status?: unknown; errorCode?: unknown } | null;
+  const data = result.data as { status?: unknown; errorCode?: unknown; error?: unknown } | null;
   if (data?.status !== "failed" || typeof data.errorCode !== "string") return result;
   if (data.errorCode === "reconnect_needed") return githubReconnectResult();
+  if (
+    data.errorCode === "not_installed" &&
+    typeof data.error === "string" &&
+    MAYBE_INSTALLED.test(data.error)
+  ) {
+    return { ...result, data: { ...data, guidance: MAYBE_INSTALLED_GUIDANCE } };
+  }
   const guidance = Object.hasOwn(REPOSITORY_GUIDANCE, data.errorCode)
     ? REPOSITORY_GUIDANCE[data.errorCode]
     : undefined;
@@ -73,11 +104,12 @@ function withGithubGuidance(result: ToolResult): ToolResult {
 }
 
 // A sent issue or comment tells the model who GitHub notified, read from
-// what was actually sent (the card's final fields, edits included).
-function withNotified(result: ToolResult): ToolResult {
+// what was actually sent. The card reports `final` only when the user edited
+// it; otherwise what was sent is what this call prepared.
+function withNotified(result: ToolResult, prepared: { title?: string; body: string }): ToolResult {
   const data = result.data as { status?: unknown; final?: Record<string, unknown> } | null;
-  if (data?.status !== "sent" || !data.final) return result;
-  const notified = githubFieldMentions(data.final);
+  if (data?.status !== "sent") return result;
+  const notified = githubFieldMentions(data.final ?? prepared);
   return notified.length > 0 ? { ...result, data: { ...data, notified } } : result;
 }
 
@@ -92,10 +124,14 @@ export const githubSearchIssuesTool: ToolDefinition = {
   parameters: {
     type: "object",
     properties: {
-      query: { type: "string", description: "What to look for" },
+      query: { type: "string", description: "What to look for, 200 characters at most" },
       repo: { type: "string", description: "owner/name or a repository name, to search just one" },
-      state: { type: "string", enum: ["open", "all"], description: "Default open" },
-      type: { type: "string", enum: ["issue", "pr", "any"], description: "Default any" },
+      state: {
+        type: "string",
+        enum: [...STATES],
+        description: "open (default) or all, which includes closed and merged",
+      },
+      type: { type: "string", enum: [...TYPES], description: "issue, pr or any (default)" },
     },
     required: ["query"],
     additionalProperties: false,
@@ -115,13 +151,25 @@ export const githubSearchIssuesTool: ToolDefinition = {
     const query = text(args, "query").trim();
     if (!query) return needsClarificationResult("Ask the user what to search GitHub for.");
     if (characterCount(query) > MAX_QUERY_LENGTH) return tooLong("search", MAX_QUERY_LENGTH);
+    const state = choice(args.state, STATES, "open");
+    if (!state) {
+      return failedResult(
+        "invalid",
+        'state is "open" (the default) or "all", which includes closed and merged ones. For closed ones only, use "all" and add is:closed to the query.',
+        "github"
+      );
+    }
+    const type = choice(args.type, TYPES, "any");
+    if (!type) {
+      return failedResult("invalid", 'type is "issue", "pr" or "any" (the default).', "github");
+    }
     if (needsReconnect()) return githubReconnectResult();
     const repo = text(args, "repo").trim();
     const result = await runQueryAction(context, "github", "search_issues", {
       query,
       ...(repo ? { repo } : {}),
-      state: oneOf(args.state, ["open", "all"], "open"),
-      type: oneOf(args.type, ["issue", "pr", "any"], "any"),
+      state,
+      type,
     });
     return withGithubGuidance(result);
   },
@@ -135,8 +183,11 @@ export const githubCreateIssueTool: ToolDefinition = {
     type: "object",
     properties: {
       repo: { type: "string", description: "owner/name, or a repository name" },
-      title: { type: "string", description: "One line" },
-      body: { type: "string", description: "The description, in Markdown" },
+      title: { type: "string", description: "One line, 256 characters at most" },
+      body: {
+        type: "string",
+        description: "The description, in Markdown, 65,536 characters at most",
+      },
       labels: { type: "array", items: { type: "string" }, description: "Existing label names" },
     },
     required: ["title"],
@@ -145,7 +196,7 @@ export const githubCreateIssueTool: ToolDefinition = {
   readOnly: false,
   connectorId: "github",
   promptInstruction:
-    "Use github_create_issue only when the user asks for a GitHub issue; they review and create it on a card. When the result asks which repository, ask the user instead of guessing.",
+    "Use github_create_issue only for GitHub issues the user asked you to file, one call per issue; they review and create each on a card. When the result asks which repository, ask the user instead of guessing.",
 
   async execute(
     args: Record<string, unknown>,
@@ -172,28 +223,30 @@ export const githubCreateIssueTool: ToolDefinition = {
     }
     if (needsReconnect()) return githubReconnectResult();
     const repo = text(args, "repo").trim();
-    const labels = Array.isArray(args.labels)
-      ? args.labels.filter((label): label is string => typeof label === "string")
-      : [];
-    const result = await runApprovalAction(context, "github", "create_issue", {
-      ...(repo ? { repo } : {}),
-      title,
-      body,
-      ...(labels.length > 0 ? { labels } : {}),
-    });
-    return withNotified(withGithubGuidance(result));
+    const labels = labelNames(args.labels);
+    const result = await runApprovalAction(
+      context,
+      "github",
+      "create_issue",
+      { ...(repo ? { repo } : {}), title, body, ...(labels.length > 0 ? { labels } : {}) },
+      { unknownGuidance: CREATE_UNKNOWN_GUIDANCE }
+    );
+    return withNotified(withGithubGuidance(result), { title, body });
   },
 };
 
 export const githubCommentTool: ToolDefinition = {
   name: "github_comment",
   description:
-    "Comment on a GitHub issue or pull request as the user. Nothing is posted until the user approves it on a card. `target` is owner/repo#12 or the issue's or pull request's github.com link; search first if you don't have one.",
+    "Comment on a GitHub issue or pull request as the user. Nothing is posted until the user approves it on a card. `target` is owner/repo#12, repo#12, #12, or the issue's or pull request's github.com link; search first if you don't have one.",
   parameters: {
     type: "object",
     properties: {
-      target: { type: "string", description: "owner/repo#12, or a github.com issue or PR link" },
-      body: { type: "string", description: "The comment, in Markdown" },
+      target: {
+        type: "string",
+        description: "owner/repo#12, repo#12, #12, or a github.com issue or PR link",
+      },
+      body: { type: "string", description: "The comment, in Markdown, 65,536 characters at most" },
     },
     required: ["target", "body"],
     additionalProperties: false,
@@ -201,7 +254,7 @@ export const githubCommentTool: ToolDefinition = {
   readOnly: false,
   connectorId: "github",
   promptInstruction:
-    "Use github_comment only when the user asks to comment on a GitHub issue or pull request; they review and post it on a card.",
+    "Use github_comment only when the user asks to comment on a GitHub issue or pull request; they review and post it on a card. Pass owner/repo#12 when you know the repository; repo#12 and #12 work too, and when more than one repository could be meant the result asks which, so ask the user.",
 
   async execute(
     args: Record<string, unknown>,
@@ -213,7 +266,7 @@ export const githubCommentTool: ToolDefinition = {
     if (!GITHUB_TARGET.test(target)) {
       return failedResult(
         "invalid_reference",
-        "`target` must be owner/repo#12 or a github.com issue or pull request link. Use github_search_issues to find it.",
+        "`target` must be owner/repo#12, repo#12, #12, or a github.com issue or pull request link. Use github_search_issues to find it.",
         "github"
       );
     }
@@ -222,8 +275,14 @@ export const githubCommentTool: ToolDefinition = {
       return tooLong("comment", MAX_ISSUE_BODY_LENGTH);
     }
     if (needsReconnect()) return githubReconnectResult();
-    const result = await runApprovalAction(context, "github", "comment", { target, body });
-    return withNotified(withGithubGuidance(result));
+    const result = await runApprovalAction(
+      context,
+      "github",
+      "comment",
+      { target, body },
+      { unknownGuidance: COMMENT_UNKNOWN_GUIDANCE }
+    );
+    return withNotified(withGithubGuidance(result), { body });
   },
 };
 

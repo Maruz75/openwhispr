@@ -161,6 +161,53 @@ test("a closed HTML comment notifies no one; code or an unclosed one hides nothi
   assert.deepEqual(githubMentions("<!-- never closed @dan"), ["@dan"]);
 });
 
+test("a backslash-escaped backtick opens no code span; an escaped backslash doesn't escape it", async () => {
+  const { githubMentions } = await load();
+  assert.deepEqual(githubMentions("Use \\` for ticks, cc @alice, and \\` again"), ["@alice"]);
+  // The escaped backtick is text, so the next two pair up around @bob.
+  assert.deepEqual(githubMentions("\\`a` @bob `b`"), []);
+  // "\\\\" is a literal backslash: the backtick after it opens `a`.
+  assert.deepEqual(githubMentions("\\\\`a` @carol `b`"), ["@carol"]);
+});
+
+test("a backtick line whose info string holds a backtick is a paragraph, not a fence", async () => {
+  const { githubMentions } = await load();
+  assert.deepEqual(githubMentions("``` not a fence `x`\n@bob\n\n@carol"), ["@bob", "@carol"]);
+  // A tilde fence's info string may hold backticks.
+  assert.deepEqual(githubMentions("~~~ `x`\n@bob\n~~~\n@carol"), ["@carol"]);
+});
+
+test("a setext underline or thematic break ends the block, so a code span can't cross it", async () => {
+  const { githubMentions } = await load();
+  assert.deepEqual(githubMentions("Heading `a\n---\n@kim `"), ["@kim"]);
+  assert.deepEqual(githubMentions("Heading `a\n===\n@kim `"), ["@kim"]);
+  assert.deepEqual(githubMentions("a `b\n***\n@lee `"), ["@lee"]);
+});
+
+test("only a comment that opens a line runs past a blank line", async () => {
+  const { githubMentions } = await load();
+  assert.deepEqual(githubMentions("see <!-- draft\n\n@alice\n\n-->"), ["@alice"]);
+  assert.deepEqual(githubMentions("  <!--\n@bob\n\n@carol\n--> @dan"), ["@dan"]);
+  // Inside one paragraph an inline comment still spans lines.
+  assert.deepEqual(githubMentions("see <!-- draft\n@erin --> @fay"), ["@fay"]);
+  assert.deepEqual(githubMentions("\\<!-- @gus -->"), ["@gus"]);
+});
+
+test("a comment block and a fence each hide the other's markers", async () => {
+  const { githubMentions } = await load();
+  assert.deepEqual(githubMentions("<!-- a\n```\n-->\n@alice"), ["@alice"]);
+  assert.deepEqual(githubMentions("```\n<!--\n```\n-->\n@bob"), ["@bob"]);
+});
+
+test("many unclosed comments are scanned in linear time", async () => {
+  const { githubMentions } = await load();
+  const started = performance.now();
+  assert.deepEqual(githubMentions(`${"<!--".repeat(50_000)} @alice`), ["@alice"]);
+  assert.deepEqual(githubMentions(`${"<!--\n".repeat(20_000)}@bob`), ["@bob"]);
+  // The quadratic scan took about a second here.
+  assert.ok(performance.now() - started < 250, "well under a keystroke");
+});
+
 test("githubFieldMentions reads title and body apart, each mention once", async () => {
   const { githubFieldMentions } = await load();
   // A title ending in an open code span can't hide the body's mentions.

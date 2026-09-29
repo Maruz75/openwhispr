@@ -4,18 +4,11 @@
 const { createBoundLogin } = require("./boundLogin");
 const { describeError } = require("./errorSummary");
 const { createDeviceFlow } = require("./githubDeviceFlow");
+const { isTransportErrorCode } = require("./deliveryClassifier");
 
 // User access tokens live 8 hours. Refreshing 5 minutes early keeps a comment
 // from starting with a token that expires on the way.
 const EXPIRY_SKEW_MS = 5 * 60 * 1000;
-// A refused OAuth refresh (GitHub answered with an `error`, not a 5xx or a
-// transport failure) always means the login can't be used as is: the refresh
-// token expired (6 months), was revoked, or was already used; the App was
-// deleted; or any other code GitHub might answer with (an app misconfigured
-// for this grant type, say). These three are the ones seen in practice and
-// stay named for the tests and the log line; refresh() below treats every
-// refused answer the same way, not only these.
-const OAUTH_LOGIN_GONE = new Set(["bad_refresh_token", "invalid_grant", "unauthorized_client"]);
 const CONNECTION_CHANGED = { ok: false, errorCode: "connection_changed" };
 
 function codedError(code) {
@@ -87,6 +80,22 @@ function createGithubAuth({
     }
   }
 
+  // Who the new token belongs to. The user has already approved the code by
+  // now, so a blip on this read (no answer, a 5xx) gets a second try rather
+  // than throwing the approval away; a cancel ends it like one mid-poll.
+  async function readUser(token, signal) {
+    const throwIfCancelled = () => {
+      if (signal?.aborted) throw codedError("oauth_cancelled");
+    };
+    let user = await api.rest("GET", "/user", { token, signal });
+    throwIfCancelled();
+    if (!user.ok && (user.outcome === "unknown" || isTransportErrorCode(user.errorCode))) {
+      user = await api.rest("GET", "/user", { token, signal });
+      throwIfCancelled();
+    }
+    return user;
+  }
+
   // Returns the new login; the manager saves it under the account and slot
   // generation that started the connect, or nowhere (connection_changed).
   // `signal` ends the polling when a newer Connect replaces this one.
@@ -105,7 +114,7 @@ function createGithubAuth({
     });
     const tokens = parseTokens(polled?.token, now());
     if (!tokens) throw codedError("token_exchange_failed");
-    const user = await api.rest("GET", "/user", { token: tokens.accessToken });
+    const user = await readUser(tokens.accessToken, signal);
     if (!user.ok || !Number.isInteger(user.data?.id) || !nonEmptyString(user.data?.login)) {
       throw codedError("token_exchange_failed");
     }
@@ -223,4 +232,4 @@ function createGithubAuth({
   };
 }
 
-module.exports = { createGithubAuth, OAUTH_LOGIN_GONE, EXPIRY_SKEW_MS };
+module.exports = { createGithubAuth, EXPIRY_SKEW_MS };

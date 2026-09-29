@@ -9,6 +9,7 @@ const {
   transportErrorCode,
   retryAfterMs,
 } = require("./deliveryClassifier");
+const { isPlainObject, readJson, formBody } = require("./providerHttp");
 
 const GITHUB_API_BASE = "https://api.github.com";
 const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
@@ -35,25 +36,38 @@ const STATUS_CODES = new Map([
   [422, "invalid"],
 ]);
 
-function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+// A throttled or timed-out OAuth request can pass whatever its body says, and
+// so can the OAuth errors that mean "ask again later" (RFC 6749 §5.2 and
+// §4.1.2.1): none of them is a verdict on the login or the device code.
+const TRANSIENT_OAUTH_STATUSES = new Set([408, 429]);
+const TRANSIENT_OAUTH_ERRORS = new Set(["temporarily_unavailable", "server_error"]);
+
+// Waits `ms`, or less when `signal` aborts first. Never rejects: the caller
+// checks the signal afterwards.
+function abortableSleep(ms, signal) {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    function onAbort() {
+      clearTimeout(timer);
+      resolve();
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
-// Error statuses can carry an empty or non-JSON body.
-async function readJson(response) {
-  try {
-    const text = await response.text();
-    return text ? JSON.parse(text) : null;
-  } catch {
-    return null;
-  }
-}
-
-function formBody(params) {
-  const defined = Object.entries(params ?? {}).filter(
-    ([, value]) => value !== undefined && value !== null
-  );
-  return new URLSearchParams(defined).toString();
+function transportFailure(error) {
+  return {
+    ok: false,
+    outcome: classifyTransportError(error),
+    errorCode: transportErrorCode(error),
+  };
 }
 
 // The URL of a Link header's rel="next" entry, or null.
@@ -68,7 +82,7 @@ function nextLink(header) {
 
 function createGithubApi({
   fetchImpl,
-  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  sleep = abortableSleep,
   now = Date.now,
   timeoutMs = REQUEST_TIMEOUT_MS,
 }) {
@@ -81,14 +95,7 @@ function createGithubApi({
       });
       return { response };
     } catch (error) {
-      return {
-        response: null,
-        failure: {
-          ok: false,
-          outcome: classifyTransportError(error),
-          errorCode: transportErrorCode(error),
-        },
-      };
+      return { response: null, failure: transportFailure(error) };
     }
   }
 
@@ -162,7 +169,9 @@ function createGithubApi({
       typeof first.retryAfterMs === "number" &&
       first.retryAfterMs <= MAX_RETRY_AFTER_MS
     ) {
-      await sleep(first.retryAfterMs);
+      await sleep(first.retryAfterMs, options.signal);
+      // Cancelled while waiting: the same answer as a request it cut short.
+      if (options.signal?.aborted) return transportFailure(options.signal.reason);
       return restOnce(method, url, options);
     }
     return first;
@@ -223,13 +232,15 @@ function createGithubApi({
     if (oauthError) {
       const outcome = status >= 500 ? "unknown" : "failed";
       const interval = Number(body.interval);
+      const transient =
+        TRANSIENT_OAUTH_STATUSES.has(status) || TRANSIENT_OAUTH_ERRORS.has(oauthError);
       return {
         ok: false,
         outcome,
         errorCode: oauthError,
-        // GitHub answered and said no, as opposed to a network failure or an
-        // outage, which may pass (gmailApi's `refused`).
-        ...(outcome === "failed" ? { refused: true } : {}),
+        // GitHub answered and said no, as opposed to a network failure, an
+        // outage or a throttle, which may pass (gmailApi's `refused`).
+        ...(outcome === "failed" && !transient ? { refused: true } : {}),
         // slow_down carries GitHub's new minimum interval, in seconds.
         ...(Number.isFinite(interval) && interval > 0 ? { intervalMs: interval * 1000 } : {}),
       };
@@ -256,6 +267,7 @@ function createGithubApi({
 
 module.exports = {
   createGithubApi,
+  abortableSleep,
   GITHUB_API_BASE,
   GITHUB_DEVICE_CODE_URL,
   GITHUB_ACCESS_TOKEN_URL,

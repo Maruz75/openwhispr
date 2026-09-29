@@ -271,16 +271,67 @@ test("buildSearchQuery drops the user's repo:, org: and user: qualifiers and kee
   // A NOT left in front of a removed qualifier would negate the next word.
   assert.equal(
     buildSearchQuery({
-      query: "crash NOT repo:evil/secret state:closed",
+      query: "crash NOT repo:evil/secret label:bug",
       type: "issue",
       repos: ["a/b"],
     }).q,
-    "crash state:closed is:issue state:open repo:a/b"
+    "crash label:bug is:issue state:open repo:a/b"
   );
   assert.equal(
     buildSearchQuery({ query: "crash", type: "pr", repos: ["a/b"] }).q,
     "crash is:pull-request state:open repo:a/b"
   );
+});
+
+test("buildSearchQuery removes a scope qualifier in a group and leaves no operator dangling", async () => {
+  const { buildSearchQuery } = await setupGithub();
+  const words = (query) =>
+    buildSearchQuery({ query, type: "issue", state: "all", repos: ["a/b"] }).q.replace(
+      / is:issue repo:a\/b$/,
+      ""
+    );
+
+  for (const [query, expected] of [
+    ["(repo:evil/x) login", "login"],
+    ["login (repo:evil/x)", "login"],
+    ["login OR repo:evil/x", "login"],
+    ["repo:evil/x OR login", "login"],
+    ["repo:evil/x AND login", "login"],
+    ["login AND repo:evil/x AND crash", "login AND crash"],
+    ["login OR repo:evil/x OR crash", "login OR crash"],
+    ["login (repo:evil/x OR crash)", "login ( crash)"],
+    ["login (crash OR repo:evil/x)", "login (crash )"],
+    ["login NOT (repo:evil/x) crash", "login crash"],
+    ["login -(org:evil) crash", "login crash"],
+    ["(NOT repo:evil/x) login", "login"],
+    ["(repo:a/x OR org:evil) AND login", "login"],
+    ['(repo:"evil/x") login', "login"],
+    // Lower case "or" is a word to GitHub, so it stays.
+    ["works or repo:evil/x", "works or"],
+  ]) {
+    assert.equal(words(query), expected, query);
+    assert.doesNotMatch(words(query), /repo:|org:/, query);
+  }
+});
+
+test("buildSearchQuery adds state:open only when the query names no state of its own", async () => {
+  const { buildSearchQuery } = await setupGithub();
+  const q = (query) => buildSearchQuery({ query, type: "pr", repos: ["a/b"] }).q;
+
+  for (const query of [
+    "crash is:closed",
+    "crash IS:MERGED",
+    "crash is:unmerged",
+    "crash is:open",
+    "crash state:closed",
+    "crash -is:open",
+    "(is:closed OR is:merged) crash",
+  ]) {
+    assert.equal(q(query), `${query} is:pull-request repo:a/b`, query);
+  }
+  for (const query of ["crash is:issue", "crash label:state:closed", "crash is:closedish"]) {
+    assert.equal(q(query), `${query} is:pull-request state:open repo:a/b`, query);
+  }
 });
 
 test("buildSearchQuery names repos in the order given until q would pass the request budget", async () => {
@@ -295,23 +346,26 @@ test("buildSearchQuery names repos in the order given until q would pass the req
 
   const repos = Array.from({ length: 300 }, (_, index) => `acme-organization/service-${index}`);
   const built = buildSearchQuery({ query: "timeout", type: "issue", repos });
+  const encoded = (text) => encodeURIComponent(text).length;
 
   assert.equal(built.ok, true);
   assert.equal(built.truncated, true);
-  assert.ok(built.q.length <= 4000, `${built.q.length}`);
+  // The budget is the request URL's, so q counts percent-encoded.
+  assert.ok(encoded(built.q) <= 4900, `${encoded(built.q)}`);
   assert.deepEqual(built.repos, repos.slice(0, built.repos.length));
   assert.ok(built.repos.length > 30 && built.repos.length < 300);
   // The next repo would not have fitted.
-  assert.ok(`${built.q} repo:${repos[built.repos.length]}`.length > 4000);
+  assert.ok(encoded(`${built.q} repo:${repos[built.repos.length]}`) > 4900);
 
+  // Six encoded bytes per character: 900 of them fit no repo, though q is
+  // far shorter than the budget unencoded.
+  const wide = buildSearchQuery({ query: "ü".repeat(900), type: "issue", repos: ["acme/api"] });
   // A search that leaves no room for even one repo would span every repo the
   // user can see, so it is refused instead.
-  assert.deepEqual(
-    buildSearchQuery({ query: "x".repeat(3990), type: "issue", repos: ["acme/api"] }),
-    {
-      ok: false,
-      errorCode: "too_long",
-    }
+  assert.deepEqual(wide, { ok: false, errorCode: "too_long" });
+  assert.equal(
+    buildSearchQuery({ query: "u".repeat(900), type: "issue", repos: ["acme/api"] }).ok,
+    true
   );
 });
 
@@ -466,6 +520,21 @@ test("an email address in a search result's title or body never reaches the mode
   assert.match(item.snippet, /@alice/);
 });
 
+test("an email address in a search result's label never reaches the model", async () => {
+  const { connector } = await setupGithub({
+    [SEARCH]: [
+      searchPage([
+        searchHit("acme/api", 1, { labels: [{ name: "owner: sam@example.test" }, "bug"] }),
+      ]),
+      searchPage([]),
+    ],
+  });
+
+  const [item] = (await connector.query("search_issues", { query: "x" }, BOUND)).items;
+
+  assert.deepEqual(item.labels, ["owner: [email]", "bug"]);
+});
+
 test("internationalized and full-width email addresses are redacted too", async () => {
   const { connector } = await setupGithub({
     [SEARCH]: [
@@ -550,7 +619,7 @@ test("a search that can't name every installed repo says it was cut, and so does
   const cut = await setupGithub({ ...installedScript(many), [SEARCH]: [searchPage([])] });
   const result = await cut.connector.query("search_issues", { query: "timeout" }, BOUND);
   assert.equal(result.truncated, true);
-  assert.ok(hits(cut.github, SEARCH)[0].query.q.length <= 4000);
+  assert.ok(encodeURIComponent(hits(cut.github, SEARCH)[0].query.q).length <= 4900);
 
   const more = await setupGithub({
     [SEARCH]: [searchPage([searchHit("acme/api", 1)], 57), searchPage([])],
@@ -581,7 +650,6 @@ test("a repo the App isn't installed on is named, with the install link, and not
     status: "failed",
     errorCode: "not_installed",
     message: `The OpenWhispr GitHub App isn't installed on evil/secret. Tell the user to install it on that repository: ${INSTALL_URL}`,
-    installUrl: INSTALL_URL,
   });
   assert.equal(hits(github, SEARCH).length, 0);
 
@@ -591,7 +659,7 @@ test("a repo the App isn't installed on is named, with the install link, and not
     { query: "x", repo: "evil/secret" },
     BOUND
   );
-  assert.equal(plain.installUrl, undefined);
+  assert.doesNotMatch(plain.message, /https:/);
   assert.match(plain.message, /Settings → Integrations → Connectors/);
 });
 
@@ -744,6 +812,10 @@ test("installations listing more repos than OpenWhispr reads mark a search cut, 
   const missing = await connector.query("search_issues", { query: "x", repo: "acme/far" }, BOUND);
   assert.equal(missing.errorCode, "not_installed");
   assert.match(missing.message, /first 1,000 repositories/);
+  // githubTools.ts reads "check the name" as "may be installed after all",
+  // so this message never advises installing.
+  assert.match(missing.message, /check the name/i);
+  assert.doesNotMatch(missing.message, /install it|https:/);
 });
 
 test("a rate-limited or unreachable search fails with its code", async () => {
@@ -957,17 +1029,163 @@ test("an archived repo takes no new issue or comment, at prepare or at Send", as
   for (const setup of [issue, comment]) assert.equal(writes(setup.github).length, 0);
 });
 
-test("more than 10 labels are capped at 10, and no labels means no labels request", async () => {
-  const names = Array.from({ length: 12 }, (_, index) => `label-${index}`);
-  const capped = await setupGithub({ [LABELS]: [json(names.map((name) => ({ name })))] });
-  const prepared = await prepareIssue(capped.connector, { labels: names });
-  assert.deepEqual(prepared.payload.labels, names.slice(0, 10));
+test("more than 10 labels are refused before any request, and no labels means no labels request", async () => {
+  const names = Array.from({ length: 11 }, (_, index) => `label-${index}`);
+  const many = await setupGithub({ [LABELS]: [json(names.map((name) => ({ name })))] });
+  assert.deepEqual(
+    await many.connector.prepare("create_issue", { title: "x", labels: names }, BOUND),
+    {
+      status: "failed",
+      errorCode: "too_many_labels",
+      message: "Pick at most 10 labels for one issue.",
+    }
+  );
+  assert.equal(many.github.calls.length, 0);
+  // Ten distinct names, however many repeats, are within the limit.
+  const ten = await prepareIssue(many.connector, { labels: [...names.slice(0, 10), "LABEL-0"] });
+  assert.deepEqual(ten.payload.labels, names.slice(0, 10));
 
   const plain = await setupGithub();
   const noLabels = await prepareIssue(plain.connector);
   assert.deepEqual(noLabels.payload.labels, []);
   assert.deepEqual(noLabels.preview.notes, []);
   assert.equal(hits(plain.github, LABELS).length, 0);
+});
+
+test("labels past the 1,000 GitHub listed are kept as asked, never reported missing", async () => {
+  const page = json([{ name: "bug" }], 200, {
+    link: '<https://api.github.com/repos/acme/api/labels?per_page=100&page=2>; rel="next"',
+  });
+  const { connector, github } = await setupGithub({ [LABELS]: [page] });
+
+  const prepared = await prepareIssue(connector, { labels: ["BUG", "area/billing"] });
+
+  assert.equal(hits(github, LABELS).length, 10);
+  assert.deepEqual(prepared.payload.labels, ["bug", "area/billing"]);
+  assert.deepEqual(prepared.preview.notes.slice(0, 1), [
+    {
+      key: "connectors.approval.issue.notes.labels",
+      values: { labels: "bug, area/billing" },
+    },
+  ]);
+  assert.equal(
+    prepared.preview.notes.some(
+      (note) => note.key === "connectors.approval.issue.notes.droppedLabels"
+    ),
+    false
+  );
+});
+
+test("a labels read GitHub can't find is about the repo, never an issue or pull request", async () => {
+  const { connector, github } = await setupGithub({
+    [LABELS]: [json({ message: "Not Found" }, 404)],
+  });
+
+  assert.deepEqual(
+    await connector.prepare(
+      "create_issue",
+      { repo: "acme/api", title: "x", labels: ["bug"] },
+      BOUND
+    ),
+    {
+      status: "failed",
+      errorCode: "labels_unavailable",
+      message:
+        "Couldn't read the labels in acme/api. Try again, or create the issue without labels.",
+    }
+  );
+  // Still installed: the installations were read again to tell.
+  assert.equal(hits(github, INSTALLATIONS).length, 2);
+
+  const removed = await setupGithub({
+    [REPOSITORIES]: [
+      json({ total_count: 3, repositories: INSTALLED_REPOS }),
+      json({ total_count: 1, repositories: [repo("acme/web", "2026-09-20T10:00:00Z")] }),
+    ],
+    [LABELS]: [json({ message: "Not Found" }, 404)],
+  });
+  assert.equal(
+    (
+      await removed.connector.prepare(
+        "create_issue",
+        { repo: "acme/api", title: "x", labels: ["bug"] },
+        BOUND
+      )
+    ).errorCode,
+    "not_installed"
+  );
+});
+
+test("a repo with issues turned off takes no new issue, at prepare or at Send", async () => {
+  const issuesOff = installedScript(
+    INSTALLED_REPOS.map((entry) =>
+      entry.full_name === "acme/api" ? { ...entry, has_issues: false } : entry
+    )
+  );
+  const DISABLED = {
+    status: "failed",
+    errorCode: "issues_disabled",
+    message: "Issues are turned off in acme/api, so it can't take a new issue.",
+  };
+
+  const prepared = await setupGithub(issuesOff);
+  assert.deepEqual(
+    await prepared.connector.prepare(
+      "create_issue",
+      { repo: "acme/api", title: "Crash", labels: ["bug"] },
+      BOUND
+    ),
+    DISABLED
+  );
+  assert.equal(prepared.github.calls.filter((call) => call.path.startsWith("/repos/")).length, 0);
+
+  // Turned off between prepare and Send: the Settings re-read picks it up.
+  const later = await setupGithub({
+    [REPOSITORIES]: [
+      json({ total_count: 3, repositories: INSTALLED_REPOS }),
+      issuesOff[REPOSITORIES][0],
+    ],
+    [CREATE]: [CREATED],
+  });
+  const { payload } = await prepareIssue(later.connector);
+  await later.connector.getStatus();
+  await countReadLands();
+  assert.deepEqual(await later.connector.commit("create_issue", payload, {}, BOUND), {
+    state: "failed",
+    errorCode: DISABLED.errorCode,
+    message: DISABLED.message,
+  });
+  assert.equal(writes(later.github).length, 0);
+
+  // Its pull requests still take comments.
+  const pull = await setupGithub({ ...issuesOff, [ISSUE_45]: [PULL] });
+  assert.equal((await prepareComment(pull.connector)).status, "ready");
+});
+
+test("the question which repository takes an issue leaves out archived repos and ones with issues off", async () => {
+  const { connector } = await setupGithub(
+    installedScript([
+      ...INSTALLED_REPOS,
+      { ...repo("acme/old", "2026-09-28T10:00:00Z"), archived: true },
+      { ...repo("acme/docs", "2026-09-28T09:00:00Z"), has_issues: false },
+      { ...repo("old/api", "2026-09-28T08:00:00Z"), archived: true },
+    ])
+  );
+
+  assert.deepEqual(await connector.prepare("create_issue", { title: "x" }, BOUND), {
+    status: "needs_clarification",
+    message: "Ask the user which repository to use. The issue can go in any of these.",
+    candidates: ["acme/api", "dana/api", "acme/web"],
+  });
+  assert.deepEqual(
+    (await connector.prepare("create_issue", { repo: "api", title: "x" }, BOUND)).candidates,
+    ["acme/api", "dana/api"]
+  );
+  // A search can still look in every one of them.
+  assert.deepEqual(
+    (await connector.query("search_issues", { query: "x", repo: "api" }, BOUND)).candidates,
+    ["old/api", "acme/api", "dana/api"]
+  );
 });
 
 test("a missing, too long or oversized issue is refused before any request", async () => {
@@ -1169,6 +1387,51 @@ test("a 404 after the App was uninstalled from the repo reads as not installed",
   assert.equal(hits(github, CREATE).length, 1);
 });
 
+test("a 403 on a repo archived since the list was read reads as archived", async () => {
+  const archivedList = json({
+    total_count: 3,
+    repositories: INSTALLED_REPOS.map((entry) =>
+      entry.full_name === "acme/api" ? { ...entry, archived: true } : entry
+    ),
+  });
+  const forbidden = json({ message: "Repository was archived so is read-only." }, 403);
+  const ARCHIVED = {
+    state: "failed",
+    errorCode: "archived",
+    message: "acme/api is archived, so it can't take new issues or comments.",
+  };
+
+  const issue = await setupGithub({
+    [REPOSITORIES]: [json({ total_count: 3, repositories: INSTALLED_REPOS }), archivedList],
+    [CREATE]: [forbidden],
+  });
+  const created = await prepareIssue(issue.connector);
+  assert.deepEqual(
+    await issue.connector.commit("create_issue", created.payload, {}, BOUND),
+    ARCHIVED
+  );
+
+  const comment = await setupGithub({
+    [REPOSITORIES]: [json({ total_count: 3, repositories: INSTALLED_REPOS }), archivedList],
+    [ISSUE_45]: [ISSUE],
+    [COMMENT_45]: [forbidden],
+  });
+  const commented = await prepareComment(comment.connector);
+  assert.deepEqual(
+    await comment.connector.commit("comment", commented.payload, {}, BOUND),
+    ARCHIVED
+  );
+  assert.equal(hits(comment.github, COMMENT_45).length, 1);
+
+  // Still writable: GitHub's own refusal stands.
+  const refused = await setupGithub({ [CREATE]: [forbidden] });
+  const card = await prepareIssue(refused.connector);
+  assert.equal(
+    (await refused.connector.commit("create_issue", card.payload, {}, BOUND)).errorCode,
+    "forbidden"
+  );
+});
+
 test("a 401 at Send is refreshed once under the same login, then the create goes through", async () => {
   const { connector, github } = await setupGithub({
     [CREATE]: [UNAUTHORIZED, CREATED],
@@ -1211,6 +1474,73 @@ test("prepare reads the issue and shows the comment card with its title", async 
     },
   });
   assert.equal(writes(github).length, 0);
+});
+
+test("a comment target can name just the repo, or just the number when one repo is installed", async () => {
+  const web = await setupGithub({
+    "GET /repos/acme/web/issues/45": [
+      json({ ...ISSUE.body, html_url: "https://github.com/acme/web/issues/45" }),
+    ],
+  });
+  const onWeb = await prepareComment(web.connector, { target: " WEB#45 " });
+  assert.deepEqual(onWeb.payload, {
+    owner: "acme",
+    repo: "web",
+    number: 45,
+    body: "Looking into it.",
+  });
+  assert.equal(onWeb.preview.destinationLabel, "acme/web#45");
+
+  const one = await setupGithub({
+    ...installedScript([repo("acme/api", "2026-09-27T10:00:00Z")]),
+    [ISSUE_45]: [ISSUE],
+  });
+  assert.equal(
+    (await prepareComment(one.connector, { target: "#45" })).preview.destinationLabel,
+    "acme/api#45"
+  );
+
+  const several = await setupGithub();
+  assert.deepEqual(
+    await several.connector.prepare("comment", { target: "#45", body: "x" }, BOUND),
+    {
+      status: "needs_clarification",
+      message: "Ask the user which repository to use. The comment goes on #45 there.",
+      candidates: ["acme/api", "dana/api", "acme/web"],
+    }
+  );
+  assert.deepEqual(
+    await several.connector.prepare("comment", { target: "api#45", body: "x" }, BOUND),
+    {
+      status: "needs_clarification",
+      message:
+        "Several installed repositories are named api. Ask the user which one. The comment goes on #45 there.",
+      candidates: ["acme/api", "dana/api"],
+    }
+  );
+  const missing = await several.connector.prepare(
+    "comment",
+    { target: "secret#1", body: "x" },
+    BOUND
+  );
+  assert.equal(missing.errorCode, "not_installed");
+  assert.match(missing.message, /installed on secret\./);
+  assert.equal(several.github.calls.filter((call) => call.path.startsWith("/repos/")).length, 0);
+
+  const bad = await setupGithub();
+  for (const target of ["#0", "#", "api#", "#12a", "..#4", ".#4", "a b#4", "api#4#5", "acme/#4"]) {
+    assert.deepEqual(
+      await bad.connector.prepare("comment", { target, body: "x" }, BOUND),
+      {
+        status: "failed",
+        errorCode: "invalid_reference",
+        message:
+          "Give the issue or pull request as owner/repo#123, repo#123, #123 or its github.com link.",
+      },
+      target
+    );
+  }
+  assert.equal(bad.github.calls.length, 0);
 });
 
 test("a comment on a pull request says so on the card", async () => {
@@ -1481,6 +1811,21 @@ test("the status shows the GitHub user, the installed repository count once read
   await countReadLands();
   assert.equal((await unreadable.connector.getStatus()).workspaceLabel, null);
   assert.equal(unreadable.statusChanges.length, 0);
+});
+
+test("a repository count cut at the read limit says there are more", async () => {
+  const { connector } = await setupGithub({
+    [REPOSITORIES]: [
+      json({ total_count: 1500, repositories: INSTALLED_REPOS }, 200, {
+        link: '<https://api.github.com/user/installations/7/repositories?page=2>; rel="next"',
+      }),
+    ],
+  });
+
+  await connector.getStatus();
+  await countReadLands();
+
+  assert.equal((await connector.getStatus()).workspaceLabel, "30+");
 });
 
 test("getStatus never waits on GitHub, and reads the count once however many ask at once", async () => {

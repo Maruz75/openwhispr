@@ -122,8 +122,9 @@ test("github_search_issues searches through the query path with its defaults", a
   const { githubSearchIssuesTool } = await loadTools();
   const { context, holds } = await turn();
 
+  // Models often send null for an argument they leave out.
   const result = await githubSearchIssuesTool.execute(
-    { query: "  timeout  ", state: "closed", type: "bug" },
+    { query: "  timeout  ", state: null, type: null },
     context()
   );
   // Other people's text shapes the answer, so a voice turn keeps it in the
@@ -142,6 +143,34 @@ test("github_search_issues searches through the query path with its defaults", a
   assert.equal(result.data.source, "github");
   assert.equal(result.data.untrusted, true);
   assert.equal(result.data.items[0].reference, "acme/api#45");
+});
+
+test("a state or type outside the list is refused, never swapped for the default", async (t) => {
+  let queried = 0;
+  installBrowserGlobals(t, {
+    window: { electronAPI: { connectorQuery: async () => (queried += 1) } },
+  });
+  await setGithubStatus(t);
+  const { githubSearchIssuesTool } = await loadTools();
+  const { context, holds } = await turn();
+
+  // "closed" used to become open-only: the model would read open issues as
+  // the closed ones it asked for.
+  const closed = await githubSearchIssuesTool.execute(
+    { query: "timeout", state: "closed" },
+    context()
+  );
+  const bug = await githubSearchIssuesTool.execute({ query: "timeout", type: "bug" }, context());
+
+  assert.equal(closed.data.status, "failed");
+  assert.equal(closed.data.errorCode, "invalid");
+  assert.match(closed.data.error, /"all", which includes closed and merged/);
+  assert.match(closed.data.error, /is:closed/);
+  assert.equal(bug.data.status, "failed");
+  assert.equal(bug.data.errorCode, "invalid");
+  assert.match(bug.data.error, /"issue", "pr" or "any"/);
+  assert.equal(queried, 0);
+  assert.equal(holds.count, 2);
 });
 
 test("an empty or over-long search never reaches main", async (t) => {
@@ -272,6 +301,31 @@ test("a repository the App isn't on names the fix; without an App slug there's n
   assert.equal("installUrl" in result.data, false);
 });
 
+test("a repository main may not have seen all of is a name to check, not an install", async (t) => {
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => ({
+          status: "failed",
+          errorCode: "not_installed",
+          message:
+            "The OpenWhispr GitHub App isn't installed on acme/api, as far as OpenWhispr can tell: it reads the first 1,000 repositories of each installation. Ask the user to check the name.",
+        }),
+      },
+    },
+  });
+  await setGithubStatus(t);
+  const { githubCreateIssueTool } = await loadTools();
+  const { context } = await turn();
+
+  const result = await githubCreateIssueTool.execute({ repo: "acme/api", title: "Bug" }, context());
+
+  assert.equal(result.data.errorCode, "not_installed");
+  assert.match(result.data.guidance, /check the repository name/);
+  assert.doesNotMatch(result.data.guidance, /install the OpenWhispr GitHub App/);
+  assert.equal("installUrl" in result.data, false);
+});
+
 test("github_create_issue prepares a card with one-line title, body and labels", async (t) => {
   const prepared = [];
   installBrowserGlobals(t, {
@@ -321,6 +375,45 @@ test("github_create_issue prepares a card with one-line title, body and labels",
   assert.equal(result.data.status, "sent");
   assert.equal(result.data.url, "https://github.com/acme/api/issues/212");
   assert.equal(holds.count, 1);
+});
+
+test("github_create_issue takes a single label given as a string", async (t) => {
+  const prepared = [];
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async (...args) => {
+          prepared.push(args[2]);
+          return { status: "failed", errorCode: "invalid", message: "stop here" };
+        },
+      },
+    },
+  });
+  await setGithubStatus(t);
+  const { githubCreateIssueTool } = await loadTools();
+  const { context } = await turn();
+
+  await githubCreateIssueTool.execute({ title: "Bug", labels: "bug" }, context());
+  await githubCreateIssueTool.execute({ title: "Bug", labels: 7 }, context());
+
+  assert.deepEqual(
+    prepared.map((args) => args.labels),
+    [["bug"], undefined]
+  );
+});
+
+test("the GitHub tools tell the model their limits and short targets", async () => {
+  const { githubSearchIssuesTool, githubCreateIssueTool, githubCommentTool } = await loadTools();
+  const describe = (tool, name) => tool.parameters.properties[name].description;
+
+  assert.match(describe(githubSearchIssuesTool, "query"), /200 characters/);
+  assert.match(describe(githubSearchIssuesTool, "state"), /all, which includes closed and merged/);
+  assert.match(describe(githubCreateIssueTool, "title"), /256 characters/);
+  assert.match(describe(githubCreateIssueTool, "body"), /65,536 characters/);
+  assert.match(describe(githubCommentTool, "body"), /65,536 characters/);
+  assert.match(describe(githubCommentTool, "target"), /repo#12, #12/);
+  assert.match(githubCreateIssueTool.promptInstruction, /one call per issue/);
+  assert.match(githubCommentTool.promptInstruction, /repo#12 and #12/);
 });
 
 test("github_create_issue without a repo leaves the choice to main, and passes its question on", async (t) => {
@@ -378,7 +471,7 @@ test("github_create_issue checks its title and description before any IPC", asyn
   assert.equal(holds.count, 3);
 });
 
-test("github_comment accepts owner/repo#12 and github.com issue or PR links only", async (t) => {
+test("github_comment accepts owner/repo#12, repo#12, #12 and github.com issue or PR links only", async (t) => {
   const targets = [];
   installBrowserGlobals(t, {
     window: {
@@ -395,14 +488,20 @@ test("github_comment accepts owner/repo#12 and github.com issue or PR links only
   const { context, holds } = await turn();
   const accepted = [
     "acme/api#12",
+    "api#12",
+    "#12",
     "https://github.com/acme/api/issues/12",
     "https://github.com/acme/api/pull/12",
     "https://github.com/acme/api/pull/12/files?diff=split#r1",
   ];
   const refused = [
-    "#12",
+    "#",
+    "api#",
     "acme/api",
     "acme/api#",
+    "/api#12",
+    "acme/api/x#12",
+    "acme/api#12#3",
     "ENG-12",
     "http://github.com/acme/api/issues/12",
     "https://github.com.evil.test/acme/api/issues/12",
@@ -497,6 +596,40 @@ test("create and comment hold delivery on every outcome", async (t) => {
   assert.equal(holds.count, 5);
 });
 
+test("an unconfirmed issue or comment sends the user to GitHub to check before retrying", async (t) => {
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => ({ status: "ready", actionId: "a1", preview: ISSUE_PREVIEW }),
+        connectorCommit: async () => ({
+          state: "unknown",
+          checkUrl: "https://github.com/acme/api/issues",
+        }),
+      },
+    },
+  });
+  await setGithubStatus(t);
+  const [{ githubCreateIssueTool, githubCommentTool }, approvals] = await Promise.all([
+    loadTools(),
+    resetApprovals(),
+  ]);
+  const { context } = await turn();
+
+  const created = githubCreateIssueTool.execute({ title: "Bug" }, context());
+  await approvals.approveAction(await cardFor(approvals, "call-1"));
+  const commented = githubCommentTool.execute({ target: "acme/api#4", body: "+1" }, context());
+  await approvals.approveAction(await cardFor(approvals, "call-2"));
+
+  const issue = (await created).data;
+  const comment = (await commented).data;
+  assert.equal(issue.status, "unknown");
+  assert.equal(issue.checkUrl, "https://github.com/acme/api/issues");
+  assert.match(issue.guidance, /check the repository's issues on GitHub \(checkUrl\)/);
+  assert.equal(comment.status, "unknown");
+  assert.match(comment.guidance, /check the issue or pull request on GitHub/);
+  assert.match(comment.guidance, /before asking for the comment again/);
+});
+
 test("a sent issue tells the model who GitHub notified, from the card as sent", async (t) => {
   const answers = [
     { ...ISSUE_PREVIEW, fields: { title: "Ping @alice", body: "See `@bob` and @Alice" } },
@@ -534,6 +667,59 @@ test("a sent issue tells the model who GitHub notified, from the card as sent", 
 
   assert.deepEqual((await mentioned).data.notified, ["@alice", "@carol"]);
   assert.equal("notified" in (await quiet).data, false);
+});
+
+test("an unedited send reports who GitHub notified from what the call prepared", async (t) => {
+  // The card reports final fields only when the user edited them.
+  const answers = [
+    { ...ISSUE_PREVIEW, fields: { title: "Ping @alice", body: "cc @bob" } },
+    {
+      verbKey: "comment",
+      destinationLabel: "acme/api#4",
+      body: "Thanks @carol",
+      fields: { body: "Thanks @carol" },
+    },
+  ];
+  let prepared = 0;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => ({
+          status: "ready",
+          actionId: `a${++prepared}`,
+          preview: answers.shift(),
+        }),
+        connectorCommit: async () => ({
+          state: "sent",
+          url: "https://github.com/acme/api/issues/4",
+        }),
+      },
+    },
+  });
+  await setGithubStatus(t);
+  const [{ githubCreateIssueTool, githubCommentTool }, approvals] = await Promise.all([
+    loadTools(),
+    resetApprovals(),
+  ]);
+  const { context } = await turn();
+
+  const created = githubCreateIssueTool.execute(
+    { title: "Ping\n@alice", body: "cc @bob" },
+    context()
+  );
+  await approvals.approveAction(await cardFor(approvals, "call-1"));
+  const commented = githubCommentTool.execute(
+    { target: "acme/api#4", body: "Thanks @carol" },
+    context()
+  );
+  await approvals.approveAction(await cardFor(approvals, "call-2"));
+
+  const issue = (await created).data;
+  const comment = (await commented).data;
+  assert.equal("final" in issue, false);
+  assert.deepEqual(issue.notified, ["@alice", "@bob"]);
+  assert.equal("final" in comment, false);
+  assert.deepEqual(comment.notified, ["@carol"]);
 });
 
 test("titles and bodies are measured in characters, as the card and main measure them", async (t) => {
@@ -643,6 +829,11 @@ test("each GitHub tool has a step icon, and an English name and working line aft
     .map((tool) => tool.name);
   assert.deepEqual(names, ["github_search_issues", "github_create_issue", "github_comment"]);
   for (const name of names) assert.ok(toolIcons[name], `${name} has an icon`);
+  // Linear's tools of the same kind show the same icons.
+  assert.deepEqual(
+    names.map((name) => toolIcons[name]),
+    ["linear_search_issues", "linear_create_issue", "linear_comment"].map((name) => toolIcons[name])
+  );
   // Foundation §9.6: GitHub's keys sit right after find_contact's, in tool order.
   for (const suffix of ["Name", "Status"]) {
     const at = keys.indexOf(`find_contact${suffix}`);
@@ -654,9 +845,25 @@ test("each GitHub tool has a step icon, and an English name and working line aft
   assert.deepEqual(
     names.map((name) => [tools[`${name}Name`], tools[`${name}Status`]]),
     [
-      ["GitHub search", "Searching GitHub..."],
-      ["GitHub issue", "Preparing the GitHub issue..."],
-      ["GitHub comment", "Preparing the GitHub comment..."],
+      ["Search GitHub", "Searching GitHub..."],
+      ["GitHub issue", "Preparing a GitHub issue..."],
+      ["GitHub comment", "Preparing a GitHub comment..."],
     ]
+  );
+});
+
+test("the connector rules forbid claiming an issue or comment that wasn't sent", async (t) => {
+  installBrowserGlobals(t);
+  const vite = await createRendererServer(t, { cachePrefix: "openwhispr-github-prompt-rules-" });
+  const [{ getAgentSystemPrompt }, { githubToolModule }] = await Promise.all([
+    vite.ssrLoadModule("/config/prompts.ts"),
+    loadTools(),
+  ]);
+
+  const prompt = getAgentSystemPrompt(githubToolModule.createTools({ emailDraftTarget: "gmail" }));
+
+  assert.match(
+    prompt,
+    /nor that an issue or comment was created or posted unless its status is sent/
   );
 });

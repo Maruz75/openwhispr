@@ -56,7 +56,7 @@ const ISSUE = {
 
 // One card on the real approval store, with the translation keys (and their
 // values) as the text.
-async function mountCard(t, { connectorId, preview }) {
+async function mountCard(t, { connectorId, preview, language = "en" }) {
   let root = null;
   let store;
   let key;
@@ -80,7 +80,7 @@ async function mountCard(t, { connectorId, preview }) {
       "/i18n": `export default { t: (key) => key };`,
       "react-i18next": `
         const t = (key, options) => (options ? key + JSON.stringify(options) : key);
-        export const useTranslation = () => ({ t, i18n: { language: "en" } });
+        export const useTranslation = () => ({ t, i18n: { language: ${JSON.stringify(language)} } });
       `,
       "/ui/button": `
         import React from "react";
@@ -117,7 +117,7 @@ async function mountCard(t, { connectorId, preview }) {
 
 test("a GitHub issue card says who its mentions will notify", async (t) => {
   const container = await mountCard(t, { connectorId: "github", preview: ISSUE });
-  assert.ok(container.textContent.includes(note("@alice, @acme/infra")));
+  assert.ok(container.textContent.includes(note("@alice and @acme/infra")));
 });
 
 test("the note follows the user's edits: added, changed and gone", async (t) => {
@@ -126,7 +126,7 @@ test("the note follows the user's edits: added, changed and gone", async (t) => 
   const body = () => field(container, "connectors.approval.issue.bodyLabel");
 
   await React.act(async () => type(body(), "Ask @bob instead. Also @Bob and @carol."));
-  assert.ok(container.textContent.includes(note("@bob, @carol")));
+  assert.ok(container.textContent.includes(note("@bob and @carol")));
   assert.equal(container.textContent.includes("@alice"), false);
 
   await React.act(async () => type(body(), "Nobody to ping; see `@alice` in the log."));
@@ -139,9 +139,53 @@ test("the note follows the user's edits: added, changed and gone", async (t) => 
   assert.ok(container.textContent.includes(note("@dana")));
 });
 
+test("the mentions are listed the way the UI language lists names", async (t) => {
+  const preview = {
+    ...ISSUE,
+    fields: { title: "Timeout", body: "cc @alice, @bob and @carol" },
+  };
+  const german = await mountCard(t, { connectorId: "github", preview, language: "de" });
+  assert.ok(german.textContent.includes(note("@alice, @bob und @carol")));
+});
+
+test("a language tag Intl can't read falls back to a comma list", async (t) => {
+  const container = await mountCard(t, {
+    connectorId: "github",
+    preview: ISSUE,
+    language: "en_US",
+  });
+  assert.ok(container.textContent.includes(note("@alice, @acme/infra")));
+});
+
+test("the fields being edited are described by the note, and only while there is one", async (t) => {
+  const container = await mountCard(t, { connectorId: "github", preview: ISSUE });
+  await React.act(async () => click(button(container, "connectors.approval.edit")));
+  const title = () => field(container, "connectors.approval.issue.titleLabel");
+  const body = () => field(container, "connectors.approval.issue.bodyLabel");
+
+  const notesId = body().getAttribute("aria-describedby");
+  assert.ok(notesId, "the body names the note");
+  assert.equal(title().getAttribute("aria-describedby"), notesId);
+  const notes = findElement(container, (element) => element.getAttribute?.("id") === notesId);
+  assert.ok(notes, "the id belongs to the rendered note");
+  assert.ok(notes.textContent.includes(NOTE_KEY));
+
+  // An empty title is described by what blocks Send as well as by the note.
+  await React.act(async () => type(title(), ""));
+  const [problemsId, ...rest] = title().getAttribute("aria-describedby").split(" ");
+  assert.deepEqual(rest, [notesId]);
+  assert.notEqual(problemsId, notesId);
+  assert.equal(title().getAttribute("aria-invalid"), "true");
+  await React.act(async () => type(title(), "Timeout"));
+
+  await React.act(async () => type(body(), "Nobody to ping."));
+  assert.equal(body().getAttribute("aria-describedby"), null);
+  assert.equal(title().getAttribute("aria-describedby"), null);
+});
+
 test("the note speaks of Send, so a cancelled card no longer shows it", async (t) => {
   const container = await mountCard(t, { connectorId: "github", preview: ISSUE });
-  assert.ok(container.textContent.includes(note("@alice, @acme/infra")));
+  assert.ok(container.textContent.includes(note("@alice and @acme/infra")));
 
   await React.act(async () => click(button(container, "connectors.approval.cancel")));
 

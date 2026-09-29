@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { useId, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { liveCardNotesFor } from "./liveCardNotes";
 import type { IssueFieldProblem, IssueFields, IssueVerb } from "../../utils/issueApprovalFields";
@@ -23,6 +23,11 @@ interface IssueApprovalFieldsProps {
   onChange: (patch: Partial<IssueFields>) => void;
 }
 
+type IssueFieldsLayoutProps = IssueApprovalFieldsProps & {
+  /** The id of the live notes under the fields, while there are any. */
+  notesId?: string;
+};
+
 /** An issue's title and description, or a comment's text, shown or edited. */
 function IssueFieldsLayout({
   verb,
@@ -31,13 +36,23 @@ function IssueFieldsLayout({
   problem,
   problemsId,
   onChange,
-}: IssueApprovalFieldsProps): ReactElement {
+  notesId,
+}: IssueFieldsLayoutProps): ReactElement {
   const { t } = useTranslation();
   const hasTitle = verb === "issue";
   const titleInvalid = problem !== null && TITLE_PROBLEMS.has(problem);
   const bodyInvalid = problem !== null && !titleInvalid;
-  const validity = (isInvalid: boolean): { "aria-invalid"?: true; "aria-describedby"?: string } =>
-    isInvalid ? { "aria-invalid": true, "aria-describedby": problemsId } : {};
+  // Both fields are described by the live notes (who Send notifies), and an
+  // invalid one by what blocks Send too.
+  const description = (
+    isInvalid: boolean
+  ): { "aria-invalid"?: true; "aria-describedby"?: string } => {
+    const describedBy = [isInvalid ? problemsId : null, notesId].filter(Boolean).join(" ");
+    return {
+      ...(isInvalid ? { "aria-invalid": true } : {}),
+      ...(describedBy ? { "aria-describedby": describedBy } : {}),
+    };
+  };
 
   if (!editing) {
     return (
@@ -59,7 +74,7 @@ function IssueFieldsLayout({
       {hasTitle && (
         <input
           aria-label={t("connectors.approval.issue.titleLabel")}
-          {...validity(titleInvalid)}
+          {...description(titleInvalid)}
           type="text"
           className={FIELD_CLASS}
           dir="auto"
@@ -71,7 +86,7 @@ function IssueFieldsLayout({
         aria-label={t(
           hasTitle ? "connectors.approval.issue.bodyLabel" : "connectors.approval.comment.bodyLabel"
         )}
-        {...validity(bodyInvalid)}
+        {...description(bodyInvalid)}
         className={`min-h-24 ${FIELD_CLASS}`}
         dir="auto"
         value={fields.body}
@@ -92,16 +107,22 @@ export function IssueApprovalFields({
   pending,
   ...props
 }: IssueApprovalFieldsProps & { connectorId: string; pending: boolean }): ReactElement {
-  const { t } = useTranslation();
-  const liveNotes = pending ? liveCardNotesFor(connectorId, props.fields) : [];
+  const { t, i18n } = useTranslation();
+  const notesId = useId();
+  const liveNotes = pending ? liveCardNotesFor(connectorId, props.fields, i18n.language) : [];
+  const hasNotes = liveNotes.length > 0;
   return (
     <>
-      <IssueFieldsLayout {...props} />
-      {liveNotes.map((note) => (
-        <p key={note.key} className="mt-1 text-xs text-muted-foreground" dir="auto">
-          {t(note.key, note.values)}
-        </p>
-      ))}
+      <IssueFieldsLayout {...props} notesId={hasNotes ? notesId : undefined} />
+      {hasNotes && (
+        <div id={notesId}>
+          {liveNotes.map((note) => (
+            <p key={note.key} className="mt-1 text-xs text-muted-foreground" dir="auto">
+              {t(note.key, note.values)}
+            </p>
+          ))}
+        </div>
+      )}
     </>
   );
 }

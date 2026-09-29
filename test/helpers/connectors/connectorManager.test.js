@@ -2408,6 +2408,29 @@ test(
 );
 
 test(
+  "a sign-out stops the connect the account started, and nothing is saved",
+  { timeout: 5000 },
+  async () => {
+    let accountId = "acct-a";
+    const credentials = memoryCredentials(null, { connectorId: "fake" });
+    const signIn = abortableSignIn();
+    const { manager } = await setup(connectable({ authorize: signIn.authorize }), undefined, {
+      credentials,
+      getAccountId: () => accountId,
+    });
+
+    const connecting = manager.connect("fake", "allowed");
+    await Promise.resolve();
+    accountId = null;
+    manager.accountChanged();
+
+    assert.equal(signIn.signals[0].aborted, true);
+    assert.deepEqual(await connecting, { status: "failed", errorCode: "oauth_cancelled" });
+    assert.equal(credentials.read("acct-a", "fake"), null);
+  }
+);
+
+test(
   "a Cancel that lands once the login is saved has nothing left to stop",
   { timeout: 5000 },
   async () => {

@@ -36,17 +36,18 @@ function byRecentUpdate(a, b) {
   return (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
 }
 
-function candidatesOf(repos) {
-  return repos.slice(0, MAX_CANDIDATES).map((repo) => repo.fullName);
+// A repo offered for a new issue must be able to take one: an archived repo
+// or one with issues turned off would only fail at prepare.
+function candidatesOf(repos, forNewIssue) {
+  return repos
+    .filter((repo) => !forNewIssue || (!repo.archived && repo.hasIssues))
+    .slice(0, MAX_CANDIDATES)
+    .map((repo) => repo.fullName);
 }
 
-function notInstalled(name, truncated) {
-  return {
-    ok: false,
-    errorCode: "not_installed",
-    message: `The OpenWhispr GitHub App isn't installed on ${name}.`,
-    truncated,
-  };
+// The connector words the refusals: it knows the App's install link.
+function notInstalled(truncated) {
+  return { ok: false, errorCode: "not_installed", truncated };
 }
 
 function whenAborted(signal) {
@@ -72,17 +73,20 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
       signal,
     });
     if (!installations.ok) return installations;
+    // A suspended installation's repositories answer 403, so one suspended
+    // org would fail every read; its repositories are out of reach anyway.
+    const active = installations.items.filter(
+      (installation) => Number.isInteger(installation?.id) && installation.suspended_at == null
+    );
     const lists = await Promise.all(
-      installations.items
-        .filter((installation) => Number.isInteger(installation?.id))
-        .map((installation) =>
-          api.restAll(`/user/installations/${installation.id}/repositories`, {
-            token,
-            query: { per_page: 100 },
-            key: "repositories",
-            signal,
-          })
-        )
+      active.map((installation) =>
+        api.restAll(`/user/installations/${installation.id}/repositories`, {
+          token,
+          query: { per_page: 100 },
+          key: "repositories",
+          signal,
+        })
+      )
     );
     const failure = lists.find((listed) => !listed.ok);
     if (failure) return failure;
@@ -90,7 +94,7 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
     return {
       ok: true,
       repos: repos.sort(byRecentUpdate),
-      installationCount: installations.items.length,
+      installationCount: active.length,
       truncated: lists.some((listed) => listed.truncated) || installations.truncated === true,
     };
   }
@@ -122,8 +126,9 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
 
   // `owner/name` exactly (case-insensitive), or a bare name when exactly one
   // installed repo has it. Anything else is a question for the user, never
-  // a guess.
-  async function resolveRepo(binding, token, input) {
+  // a guess. `forNewIssue` leaves repos that can't take an issue out of the
+  // question's candidates.
+  async function resolveRepo(binding, token, input, { forNewIssue = false } = {}) {
     const wanted = typeof input === "string" ? input.trim() : "";
     const lower = wanted.toLowerCase();
     const matches = wanted.includes("/")
@@ -134,27 +139,20 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
     );
     if (!listed.ok) return listed;
     const { repos } = listed;
-    if (repos.length === 0) {
-      return {
-        ok: false,
-        errorCode: "no_repositories",
-        message:
-          "The OpenWhispr GitHub App isn't installed on any repository yet. Tell the user to choose repositories for it in Settings → Integrations → Connectors.",
-      };
-    }
+    if (repos.length === 0) return { ok: false, errorCode: "no_repositories" };
     if (!wanted) {
       if (repos.length === 1) return { ok: true, repo: repos[0] };
       return {
         ok: false,
         clarification: {
           message: "Ask the user which repository to use.",
-          candidates: candidatesOf(repos),
+          candidates: candidatesOf(repos, forNewIssue),
         },
       };
     }
     if (wanted.includes("/")) {
       const match = repos.find(matches);
-      return match ? { ok: true, repo: match } : notInstalled(wanted, listed.truncated);
+      return match ? { ok: true, repo: match } : notInstalled(listed.truncated);
     }
     const named = repos.filter(matches);
     if (named.length === 1) return { ok: true, repo: named[0] };
@@ -163,11 +161,11 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
         ok: false,
         clarification: {
           message: `Several installed repositories are named ${wanted}. Ask the user which one.`,
-          candidates: candidatesOf(named),
+          candidates: candidatesOf(named, forNewIssue),
         },
       };
     }
-    return notInstalled(wanted, listed.truncated);
+    return notInstalled(listed.truncated);
   }
 
   function clear(binding) {

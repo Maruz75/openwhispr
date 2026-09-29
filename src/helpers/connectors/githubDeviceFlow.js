@@ -2,6 +2,7 @@
 // endpoint at GitHub's interval until the user enters the code, declines, or
 // the code expires. No client secret: a GitHub App's device flow needs only
 // the client id. Pure: the api, the clock and the sleep are injected.
+const { abortableSleep } = require("./githubApi");
 
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 // GitHub's documented defaults when a reply leaves them out.
@@ -9,34 +10,11 @@ const DEFAULT_INTERVAL_MS = 5000;
 const DEFAULT_EXPIRES_IN_S = 900;
 // slow_down: "5 extra seconds are added to the minimum interval".
 const SLOW_DOWN_STEP_MS = 5000;
-// A poll that fails without an OAuth answer (offline, a 5xx, a timeout) is
-// retried at the interval; this many in a row give up.
-const MAX_TRANSIENT_POLL_FAILURES = 3;
 // The code is entered here; the renderer opens it, so nothing else is accepted.
 const VERIFICATION_ORIGIN = "https://github.com/";
 
 function codedError(code) {
   return Object.assign(new Error(code), { code });
-}
-
-// Waits `ms`, or less when `signal` aborts first. Never rejects: the caller
-// checks the signal afterwards.
-function abortableSleep(ms, signal) {
-  return new Promise((resolve) => {
-    if (signal?.aborted) {
-      resolve();
-      return;
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    function onAbort() {
-      clearTimeout(timer);
-      resolve();
-    }
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
 }
 
 function positiveNumber(value, fallback) {
@@ -99,7 +77,6 @@ function createDeviceFlow({
     now = defaultNow,
   }) {
     let interval = positiveNumber(intervalMs, DEFAULT_INTERVAL_MS);
-    let transientFailures = 0;
     for (;;) {
       throwIfCancelled(signal);
       const remaining = expiresAt - now();
@@ -123,10 +100,10 @@ function createDeviceFlow({
       }
       switch (result.errorCode) {
         case "authorization_pending":
-          transientFailures = 0;
           continue;
         case "slow_down":
-          transientFailures = 0;
+        // A bare 429 is GitHub throttling the poll without saying slow_down.
+        case "http_429":
           // GitHub's new interval when it sends one, and never faster than
           // five seconds more than before.
           interval = Math.max(interval + SLOW_DOWN_STEP_MS, positiveNumber(result.intervalMs, 0));
@@ -141,14 +118,16 @@ function createDeviceFlow({
           break;
       }
       // GitHub said no in a way we don't expect (incorrect_device_code,
-      // unsupported_grant_type, a bare 4xx): waiting will not change it.
-      // No answer (offline, a timeout, a reset) or a 5xx may pass.
-      const saidNo = result.refused === true || /^http_4\d\d$/.test(result.errorCode ?? "");
+      // unsupported_grant_type, a bare 4xx other than a 408 timeout): waiting
+      // will not change it.
+      const saidNo =
+        result.refused === true ||
+        (/^http_4\d\d$/.test(result.errorCode ?? "") && result.errorCode !== "http_408");
       if (saidNo) throw codedError("token_exchange_failed");
-      transientFailures += 1;
-      if (transientFailures > MAX_TRANSIENT_POLL_FAILURES) {
-        throw codedError("token_exchange_failed");
-      }
+      // No answer (offline, a timeout, a reset), a 5xx or a throttle may pass,
+      // so it is asked again at the interval until the code expires: the user
+      // may still be typing the code on a phone while this machine's network
+      // drops out for a minute.
     }
   }
 
@@ -161,5 +140,4 @@ module.exports = {
   DEFAULT_INTERVAL_MS,
   DEFAULT_EXPIRES_IN_S,
   SLOW_DOWN_STEP_MS,
-  MAX_TRANSIENT_POLL_FAILURES,
 };

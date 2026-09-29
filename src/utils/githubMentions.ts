@@ -1,58 +1,125 @@
 // A fence opens a code block on a line of its own: up to three spaces, then
-// three or more backticks or tildes.
-const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+// three or more backticks or tildes. A backtick fence's info string can't
+// hold a backtick; with one, the line is plain paragraph text.
+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)/;
 
-// Fenced code blocks become blank lines. An unclosed fence runs to the end
-// of the text, as GitHub renders it.
-function withoutFencedBlocks(text: string): string {
-  let open: string | null = null;
-  return text
-    .split("\n")
-    .map((line) => {
-      const fence = FENCE.exec(line)?.[1] ?? null;
-      if (open) {
-        // Closed by the same character, at least as long, and nothing after it.
-        if (
-          fence &&
-          fence[0] === open[0] &&
-          fence.length >= open.length &&
-          !line.trim().slice(fence.length).trim()
-        ) {
-          open = null;
-        }
-        return "";
+// An HTML comment that opens a line is a block of its own: it runs past
+// blank lines, to the first line holding `-->`.
+const COMMENT_BLOCK_START = /^ {0,3}<!--/;
+const COMMENT_OPEN = "<!--";
+const COMMENT_CLOSE = "-->";
+
+// Fenced code blocks and comment blocks become blank lines; the text after a
+// comment block's `-->` stays. An unclosed fence runs to the end of the
+// text, as GitHub renders it. An unclosed comment hides nothing: it could
+// otherwise hide real mentions after it.
+function withoutCodeAndCommentBlocks(text: string): string {
+  const lastClose = text.lastIndexOf(COMMENT_CLOSE);
+  const lines: string[] = [];
+  let fence: string | null = null;
+  let inComment = false;
+  let lineStart = 0;
+  for (const line of text.split("\n")) {
+    const start = lineStart;
+    lineStart += line.length + 1;
+    if (inComment) {
+      const close = line.indexOf(COMMENT_CLOSE);
+      inComment = close === -1;
+      lines.push(inComment ? "" : line.slice(close + COMMENT_CLOSE.length));
+      continue;
+    }
+    const match = FENCE.exec(line);
+    if (fence) {
+      // Closed by the same character, at least as long, and nothing after it.
+      if (
+        match &&
+        match[1][0] === fence[0] &&
+        match[1].length >= fence.length &&
+        !match[2].trim()
+      ) {
+        fence = null;
       }
-      if (fence) open = fence;
-      return fence ? "" : line;
-    })
-    .join("\n");
+      lines.push("");
+      continue;
+    }
+    if (match && !(match[1][0] === "`" && match[2].includes("`"))) {
+      fence = match[1];
+      lines.push("");
+      continue;
+    }
+    const comment = COMMENT_BLOCK_START.exec(line);
+    if (comment && lastClose >= start + comment[0].length) {
+      const close = line.indexOf(COMMENT_CLOSE, comment[0].length);
+      inComment = close === -1;
+      lines.push(inComment ? "" : line.slice(close + COMMENT_CLOSE.length));
+      continue;
+    }
+    lines.push(line);
+  }
+  return lines.join("\n");
 }
 
 // A code span is a whole run of backticks closed by a run of the same
-// length; part of a longer run never opens one. An unmatched backtick is
-// plain text.
-const CODE_SPAN = /(?<!`)(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g;
+// length; part of a longer run, or a run whose first backtick is escaped by
+// a backslash (an odd number of them), never opens one. An unmatched
+// backtick is plain text. The `(?=`)` keeps the backslash count to backtick
+// positions.
+const CODE_SPAN = /(?<!`)(?=`)(?<!(?:^|[^\\])\\(?:\\\\)*)(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g;
 
-// CommonMark never lets a code span leave its block, so a stray backtick in
-// one list item, heading, quote line or table row can't swallow mentions in
-// the next. A block ends at a blank line (fenced blocks are blank by now),
-// after a heading, and before a line that opens a new block. A quote's
-// lines are split apart too, which can only show more mentions, never fewer.
+// An inline HTML comment never renders, so it notifies no one. Only a
+// closed, unescaped one counts. Once a `<!--` finds no `-->` after it, no
+// later one can, so the scan stops there and stays linear.
+function withoutInlineComments(text: string): string {
+  let result = "";
+  let from = 0;
+  let open = text.indexOf(COMMENT_OPEN);
+  while (open !== -1) {
+    if (isEscaped(text, open)) {
+      open = text.indexOf(COMMENT_OPEN, open + 1);
+      continue;
+    }
+    const close = text.indexOf(COMMENT_CLOSE, open + COMMENT_OPEN.length);
+    if (close === -1) break;
+    result += `${text.slice(from, open)} `;
+    from = close + COMMENT_CLOSE.length;
+    open = text.indexOf(COMMENT_OPEN, from);
+  }
+  return result + text.slice(from);
+}
+
+function isEscaped(text: string, index: number): boolean {
+  let backslashes = 0;
+  while (text[index - 1 - backslashes] === "\\") backslashes++;
+  return backslashes % 2 === 1;
+}
+
+// CommonMark never lets a code span or an inline comment leave its block,
+// so a stray backtick in one list item, heading, quote line or table row
+// can't swallow mentions in the next. A block ends at a blank line (fenced
+// and comment blocks are blank by now), after a heading, around a setext
+// underline or thematic break, and before a line that opens a new block. A
+// quote's lines are split apart too, which can only show more mentions,
+// never fewer.
 const BLOCK_START = /^ {0,3}(?:[-+*][ \t]|\d{1,9}[.)][ \t]|#{1,6}(?:[ \t]|$)|>|\|)/;
 const HEADING = /^ {0,3}#{1,6}(?:[ \t]|$)/;
+const BREAK = /^ {0,3}(?:=+[ \t]*|-+[ \t]*|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/;
 
 function withoutCodeSpans(text: string): string {
   const blocks: string[] = [];
   let block: string[] = [];
   const endBlock = (): void => {
-    if (block.length > 0) blocks.push(block.join("\n").replace(CODE_SPAN, " "));
+    if (block.length > 0) {
+      blocks.push(withoutInlineComments(block.join("\n").replace(CODE_SPAN, " ")));
+    }
     block = [];
   };
-  let afterHeading = false;
+  let endsAfter = false;
   for (const line of text.split("\n")) {
-    if (afterHeading || !line.trim() || BLOCK_START.test(line)) endBlock();
-    afterHeading = HEADING.test(line);
-    if (line.trim()) block.push(line);
+    // A break line is never block text, and the block ends after it.
+    const isBreak = BREAK.test(line);
+    if (endsAfter || !line.trim() || BLOCK_START.test(line)) endBlock();
+    endsAfter = isBreak || HEADING.test(line);
+    if (line.trim() && !isBreak) block.push(line);
   }
   endBlock();
   return blocks.join("\n");
@@ -69,30 +136,33 @@ function withoutCodeSpans(text: string): string {
 const MENTION =
   /(^|[^A-Za-z0-9@\/])@([A-Za-z0-9](?:[A-Za-z0-9]|[_-](?=[A-Za-z0-9_])){0,38})(\/[A-Za-z0-9][A-Za-z0-9_-]*)?(?![A-Za-z0-9])/g;
 
-/**
- * The people and teams GitHub notifies for this Markdown: `@name` and
- * `@org/team`, outside code spans and fenced code blocks. Each appears once
- * (GitHub handles ignore case), as first written, in first-seen order.
- */
-// An HTML comment never renders, so it notifies no one. Only a closed one
-// outside code counts: `<!--` written in code or left open could otherwise
-// hide real mentions after it.
-const HTML_COMMENT = /<!--[\s\S]*?-->/g;
-
-export function githubMentions(text: string): string[] {
+// Each mention once (GitHub handles ignore case), as first written.
+function uniqueMentions(mentions: Iterable<string>): string[] {
   const seen = new Set<string>();
-  const mentions: string[] = [];
-  // Paragraph, fence and code-span detection all key off "\n".
-  const normalized = text.replace(/\r\n/g, "\n");
-  const prose = withoutCodeSpans(withoutFencedBlocks(normalized)).replace(HTML_COMMENT, " ");
-  for (const match of prose.matchAll(MENTION)) {
-    const mention = `@${match[2]}${match[3] ?? ""}`;
+  const unique: string[] = [];
+  for (const mention of mentions) {
     const key = mention.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    mentions.push(mention);
+    unique.push(mention);
   }
-  return mentions;
+  return unique;
+}
+
+function* mentionsIn(text: string): Generator<string> {
+  // Paragraph, fence and code-span detection all key off "\n".
+  const prose = withoutCodeSpans(withoutCodeAndCommentBlocks(text.replace(/\r\n/g, "\n")));
+  for (const match of prose.matchAll(MENTION)) yield `@${match[2]}${match[3] ?? ""}`;
+}
+
+/**
+ * The people and teams GitHub notifies for this Markdown: `@name` and
+ * `@org/team`, outside code spans, fenced code blocks and HTML comments. Each
+ * appears once (GitHub handles ignore case), as first written, in first-seen
+ * order. Where the Markdown is ambiguous it errs toward listing a mention.
+ */
+export function githubMentions(text: string): string[] {
+  return uniqueMentions(mentionsIn(text));
 }
 
 /**
@@ -101,13 +171,5 @@ export function githubMentions(text: string): string[] {
  */
 export function githubFieldMentions(fields: { title?: unknown; body?: unknown }): string[] {
   const text = (value: unknown): string => (typeof value === "string" ? value : "");
-  const seen = new Set<string>();
-  return [...githubMentions(text(fields.title)), ...githubMentions(text(fields.body))].filter(
-    (mention) => {
-      const key = mention.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }
-  );
+  return uniqueMentions([...mentionsIn(text(fields.title)), ...mentionsIn(text(fields.body))]);
 }

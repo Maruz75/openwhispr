@@ -347,12 +347,78 @@ test("with no repo named, one installed repo is used and several are a question"
   });
 });
 
+test("for a new issue, the question leaves out archived repos and ones with issues turned off", async () => {
+  const script = twoInstallations();
+  script[reposOf(2)] = [
+    reposPage([
+      DANA_API,
+      DANA_NOTES,
+      repo("dana/old", "2026-09-26T10:00:00Z", { archived: true }),
+      repo("old/api", "2026-09-10T10:00:00Z", { archived: true }),
+    ]),
+  ];
+  const { installations } = await setup(script);
+  const forNewIssue = { forNewIssue: true };
+
+  assert.deepEqual(
+    (await installations.resolveRepo(BINDING, TOKEN, undefined, forNewIssue)).clarification
+      .candidates,
+    ["dana/notes", "acme/api", "acme/web"]
+  );
+  // dana/api has issues off and old/api is archived: of three repos named
+  // api, only acme/api is offered.
+  assert.deepEqual(
+    (await installations.resolveRepo(BINDING, TOKEN, "api", forNewIssue)).clarification.candidates,
+    ["acme/api"]
+  );
+  // Anything else (a search) is offered every repo.
+  assert.deepEqual((await installations.resolveRepo(BINDING, TOKEN)).clarification.candidates, [
+    "dana/notes",
+    "acme/api",
+    "dana/old",
+    "dana/api",
+    "acme/web",
+    "old/api",
+  ]);
+  // Naming a repo still finds it: prepare says why it can't take the issue.
+  assert.equal(
+    (await installations.resolveRepo(BINDING, TOKEN, "dana/old", forNewIssue)).repo.fullName,
+    "dana/old"
+  );
+});
+
+test("a suspended installation is skipped, so its 403 never fails the others", async () => {
+  const { installations, github } = await setup({
+    [INSTALLATIONS]: [
+      installationsPage([
+        { ...installation(1, "acme"), suspended_at: "2026-09-01T00:00:00Z" },
+        installation(2, "dana"),
+      ]),
+    ],
+    [reposOf(1)]: [json({ message: "This installation has been suspended" }, 403)],
+    [reposOf(2)]: [reposPage([DANA_NOTES])],
+  });
+
+  const listed = await installations.list(BINDING, TOKEN);
+
+  assert.equal(listed.ok, true);
+  assert.deepEqual(
+    listed.repos.map((entry) => entry.fullName),
+    ["dana/notes"]
+  );
+  assert.equal(listed.installationCount, 1);
+  assert.equal(
+    github.calls.filter((call) => call.path === "/user/installations/1/repositories").length,
+    0
+  );
+});
+
 test("a repo the App isn't installed on is named in the refusal; none installed is its own refusal", async () => {
   const { installations } = await setup(twoInstallations());
+  // The connector words the refusal, with the App's install link.
   assert.deepEqual(await installations.resolveRepo(BINDING, TOKEN, "acme/secret"), {
     ok: false,
     errorCode: "not_installed",
-    message: "The OpenWhispr GitHub App isn't installed on acme/secret.",
     truncated: false,
   });
   assert.equal(
@@ -362,9 +428,11 @@ test("a repo the App isn't installed on is named in the refusal; none installed 
 
   const none = await setup({ [INSTALLATIONS]: [installationsPage([])] });
   for (const input of [undefined, "acme/api", "api"]) {
-    const refused = await none.installations.resolveRepo(BINDING, TOKEN, input);
-    assert.equal(refused.errorCode, "no_repositories", String(input));
-    assert.match(refused.message, /Settings → Integrations → Connectors/);
+    assert.deepEqual(
+      await none.installations.resolveRepo(BINDING, TOKEN, input),
+      { ok: false, errorCode: "no_repositories" },
+      String(input)
+    );
   }
 });
 

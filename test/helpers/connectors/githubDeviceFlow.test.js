@@ -206,19 +206,35 @@ test("access_denied is oauth_denied; a disabled flow and other refusals end the 
   }
 });
 
-test("a poll with no answer is retried at the interval, up to three in a row", async () => {
-  const { MAX_TRANSIENT_POLL_FAILURES } = await load();
-  assert.equal(MAX_TRANSIENT_POLL_FAILURES, 3);
+test("a poll with no answer is asked again at the interval until the code expires", async () => {
   const offline = { ok: false, outcome: "failed", errorCode: "ENOTFOUND" };
   const outage = { ok: false, outcome: "unknown", errorCode: "http_502" };
   const timeout = { ok: false, outcome: "unknown", errorCode: "timeout" };
+  const requestTimeout = { ok: false, outcome: "failed", errorCode: "http_408" };
+  const tryLater = { ok: false, outcome: "failed", errorCode: "temporarily_unavailable" };
 
-  const recovered = await poll([offline, outage, PENDING, timeout, offline, outage, GRANTED]);
-  assert.equal(recovered.value.ok, true, "a pending answer resets the count");
+  // A minute offline while the user types the code on a phone.
+  const blip = [...Array(12).fill(offline), outage, timeout, requestTimeout, tryLater];
+  const recovered = await poll([...blip, PENDING, GRANTED]);
+  assert.deepEqual(recovered.value, { ok: true, token: FIXTURES.token });
+  assert.equal(recovered.api.calls.accessToken.length, blip.length + 2);
+  assert.ok(
+    recovered.clock.sleeps.every((ms) => ms === 5000),
+    "never faster than the interval"
+  );
 
-  const gone = await poll([offline, outage, timeout, offline, GRANTED]);
-  assert.equal(gone.error.code, "token_exchange_failed");
-  assert.equal(gone.api.calls.accessToken.length, 4);
+  // Offline for the code's whole life: a poll every 5 s until it expires,
+  // and none at the moment it does.
+  const gone = await poll([offline]);
+  assert.equal(gone.error.code, "code_expired");
+  assert.equal(gone.api.calls.accessToken.length, 900 / 5 - 1);
+});
+
+test("a bare 429 on a poll slows it down like slow_down, and doesn't end it", async () => {
+  const throttled = { ok: false, outcome: "failed", errorCode: "http_429" };
+  const { value, clock } = await poll([throttled, throttled, PENDING, GRANTED]);
+  assert.deepEqual(value, { ok: true, token: FIXTURES.token });
+  assert.deepEqual(clock.sleeps, [5000, 10000, 15000, 15000]);
 });
 
 test("the interval is honoured on real timers: nothing is asked early (fake timers)", async (t) => {
@@ -304,6 +320,35 @@ test("an abort while a poll is in flight is oauth_cancelled, not a retry", async
   };
   const cancelled = await poll([lateToken], { signal: late.signal });
   assert.equal(cancelled.error.code, "oauth_cancelled");
+});
+
+test("end to end over githubApi: a throttle or a try-later answer keeps the poll going", async () => {
+  const { createDeviceFlow } = await load();
+  const { createGithubApi } = await import("../../../src/helpers/connectors/githubApi.js");
+  const github = fakeGithubFetch({
+    "POST /login/oauth/access_token": [
+      json({ message: "Too many requests" }, 429),
+      oauthError("temporarily_unavailable"),
+      json({ error: "incorrect_device_code" }, 429),
+      json(FIXTURES.token),
+    ],
+  });
+  const clock = manualClock();
+  const flow = createDeviceFlow({
+    api: createGithubApi({ fetchImpl: github.fetchImpl }),
+    sleep: clock.sleep,
+    now: clock.now,
+  });
+
+  const result = await flow.pollForToken({
+    clientId: CLIENT_ID,
+    deviceCode: "dc-test-1",
+    intervalMs: 5000,
+    expiresAt: EXPIRES_AT,
+  });
+
+  assert.deepEqual(result, { ok: true, token: FIXTURES.token });
+  assert.deepEqual(clock.sleeps, [5000, 10000, 10000, 10000]);
 });
 
 test("end to end over githubApi: GitHub's HTTP-200 errors drive the poll", async () => {

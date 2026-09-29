@@ -13,9 +13,9 @@ function deviceUrl(verificationUri: string): string {
 
 /**
  * The code GitHub's device flow asks the user to enter, shown in the row
- * while it connects, with Cancel from the moment Connect is pressed. Mounted only while the row is connecting, so it
- * listens only then; the latest code for this connector wins, since a new
- * Connect replaces the attempt before it.
+ * while it connects, with Cancel from the moment Connect is pressed. Mounted
+ * only while the row is connecting, so it listens only then. Should a second
+ * code arrive, it replaces the first: it's the one GitHub is waiting on.
  */
 export function GithubDeviceCode({ connectorId }: { connectorId: string }): ReactElement {
   const { t, i18n } = useTranslation();
@@ -29,7 +29,8 @@ export function GithubDeviceCode({ connectorId }: { connectorId: string }): Reac
     return () => unsubscribe?.();
   }, [connectorId]);
 
-  // Cancel is there from the start: asking GitHub for a code can take a while.
+  // Cancel is there from the start: asking GitHub for a code can take a
+  // while, and main honours a cancel that reaches it before the connect does.
   const cancel = (
     <Button
       size="sm"

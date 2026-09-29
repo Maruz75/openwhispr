@@ -250,6 +250,26 @@ test("a secondary limit with no headers, and a bare 429, wait a minute: failed, 
   }
 });
 
+test("a cancel while waiting out a rate limit ends at once, with no retry", async () => {
+  const { createGithubApi } = await load();
+  const github = fakeGithubFetch({ "GET /user/installations": [rateLimited({ retryAfter: 5 })] });
+  // The default sleep, on real timers.
+  const client = createGithubApi({ fetchImpl: github.fetchImpl, now: () => NOW });
+  const controller = new AbortController();
+  const pending = client.rest("GET", "/user/installations", {
+    token: "ghu-1",
+    signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(), 5);
+  const started = Date.now();
+
+  const result = await pending;
+
+  assert.deepEqual(result, { ok: false, outcome: "unknown", errorCode: "network_error" });
+  assert.ok(Date.now() - started < 1000, "does not wait out the 5 s retry-after");
+  assert.equal(github.calls.length, 1);
+});
+
 test("offline before the write is failed; a reset after it is unknown", async () => {
   const cases = [
     [offline(), "failed", "ENOTFOUND"],
@@ -459,6 +479,25 @@ test("accessToken: a token is ok; unreadable, 5xx, other 4xx and offline are cla
     const { client } = await api({ "POST /login/oauth/access_token": [reply] });
     const result = await client.accessToken({ client_id: "Iv1.test" });
     assert.deepEqual(result, { ok: false, ...expected }, JSON.stringify(reply));
+  }
+});
+
+test("accessToken: a throttle or a try-later OAuth error is not a refusal", async () => {
+  const cases = [
+    [json({ error: "slow_down" }, 429), "slow_down"],
+    [json({ error: "authorization_pending" }, 408), "authorization_pending"],
+    [json({ error: "bad_refresh_token" }, 429), "bad_refresh_token"],
+    [oauthError("temporarily_unavailable"), "temporarily_unavailable"],
+    [oauthError("server_error"), "server_error"],
+  ];
+  for (const [reply, errorCode] of cases) {
+    const { client } = await api({ "POST /login/oauth/access_token": [reply] });
+    const result = await client.accessToken({ client_id: "Iv1.test" });
+    assert.deepEqual(
+      result,
+      { ok: false, outcome: "failed", errorCode },
+      `${reply.status} ${errorCode}`
+    );
   }
 });
 
