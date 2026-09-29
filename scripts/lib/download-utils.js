@@ -173,7 +173,7 @@ function downloadFile(url, dest, retryCount = 0) {
         return;
       }
 
-      activeRequest = https.get(currentUrl, (response) => {
+      const req = https.get(currentUrl, (response) => {
         if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
           discardBody(response);
           const location = response.headers.location;
@@ -222,12 +222,21 @@ function downloadFile(url, dest, retryCount = 0) {
         });
       });
 
-      activeRequest.on("error", (err) => {
+      activeRequest = req;
+
+      // A redirect we already followed can still error or time out while its body drains;
+      // that must not tear down the request that replaced it.
+      req.on("error", (err) => {
+        if (req !== activeRequest) return;
         cleanup();
         reject(err);
       });
 
-      activeRequest.setTimeout(REQUEST_TIMEOUT, () => {
+      req.setTimeout(REQUEST_TIMEOUT, () => {
+        if (req !== activeRequest) {
+          req.destroy();
+          return;
+        }
         cleanup();
         reject(new Error("Connection timed out"));
       });
