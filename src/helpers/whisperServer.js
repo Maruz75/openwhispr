@@ -120,6 +120,14 @@ function getThreadSignature(resolution) {
   return `threads:${resolution.threads || "default"}`;
 }
 
+// How a process ended, as the startup errors report it. A Unix signal death has
+// no exit code, so without the signal a SIGILL left no detail at all (#2356).
+function describeProcessExit({ exitCode = null, signal = null } = {}) {
+  if (signal) return `signal: ${signal}`;
+  if (exitCode !== null) return `exit code: ${exitCode}`;
+  return "";
+}
+
 function isVadActive(options = {}) {
   return options.vadEnabled === true && !!options.vadModelPath;
 }
@@ -642,6 +650,8 @@ class WhisperServerManager extends EventEmitter {
 
     let stderrBuffer = "";
     let exitCode = null;
+    let exitSignal = null;
+    const getProcessInfo = () => ({ stderr: stderrBuffer, exitCode, signal: exitSignal });
 
     this.process.stdout.on("data", (data) => {
       debugLogger.debug("whisper-server stdout", { data: data.toString().trim() });
@@ -657,20 +667,19 @@ class WhisperServerManager extends EventEmitter {
       this.ready = false;
     });
 
-    this.process.on("close", (code) => {
+    this.process.on("close", (code, signal) => {
       exitCode = code;
-      debugLogger.debug("whisper-server process exited", { code });
+      exitSignal = signal;
+      debugLogger.debug("whisper-server process exited", { code, signal });
       this.ready = false;
       this.process = null;
       this.stopHealthCheck();
       sidecarPidFile.clear("whisper");
     });
 
+    const startupTimeoutMs = usingVulkan ? VULKAN_STARTUP_TIMEOUT_MS : STARTUP_TIMEOUT_MS;
     try {
-      await this.waitForReady(
-        () => ({ stderr: stderrBuffer, exitCode }),
-        usingVulkan ? VULKAN_STARTUP_TIMEOUT_MS : STARTUP_TIMEOUT_MS
-      );
+      await this.waitForReady(getProcessInfo, startupTimeoutMs);
     } catch (err) {
       // An intentional stop() during startup is not a GPU/thread failure
       if (err.isStopped) throw err;
@@ -779,7 +788,7 @@ class WhisperServerManager extends EventEmitter {
       if (!this.process || this.process.killed) {
         const info = getProcessInfo ? getProcessInfo() : {};
         const stderr = info.stderr ? info.stderr.trim().slice(0, 200) : "";
-        const details = stderr || (info.exitCode !== null ? `exit code: ${info.exitCode}` : "");
+        const details = stderr || describeProcessExit(info);
         throw new Error(
           `whisper-server process died during startup${details ? `: ${details}` : ""}`
         );
