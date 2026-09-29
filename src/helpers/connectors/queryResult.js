@@ -16,9 +16,16 @@ const FIELD_NAME = /^[a-zA-Z][a-zA-Z0-9_]{0,39}$/;
 // it's the one connector-supplied string that must be a short, flat token —
 // never free text (a URL, a message) that could bloat or spoof a log line.
 const ERROR_CODE = /^[a-z0-9_]{1,64}$/;
-// C0 control characters other than tab and line feed (terminal escapes, NUL, CR).
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B-\u001F]/g;
+// Characters that change what text says without being seen, so the model
+// could act on words the approval card never shows: C0 controls other than
+// tab and line feed, DEL and C1 (terminal escapes, NUL, CR), bidi overrides
+// and isolates, zero-width spaces and the BOM, and tag characters (hidden
+// ASCII). ZWNJ and ZWJ stay: Persian words and emoji need them.
+const HIDDEN_CHARACTERS =
+  // eslint-disable-next-line no-control-regex
+  /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u200B\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF\u{E0000}-\u{E007F}]/gu;
+// Unicode's line and paragraph separators read as line breaks.
+const LINE_SEPARATORS = /[\u2028\u2029]/g;
 const ELLIPSIS = "…";
 
 function queryFailed() {
@@ -39,7 +46,7 @@ function isHighSurrogate(code) {
 
 // At most `max` UTF-16 units, ellipsis included, never ending on half an emoji.
 function cleanString(value, max, state) {
-  const text = value.replace(CONTROL_CHARACTERS, "");
+  const text = value.replace(HIDDEN_CHARACTERS, "").replace(LINE_SEPARATORS, "\n");
   if (text.length <= max) return text;
   state.truncated = true;
   let end = max - ELLIPSIS.length;

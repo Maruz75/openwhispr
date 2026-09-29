@@ -92,6 +92,40 @@ test("strings lose control characters except newline and tab, and are cut at 1,0
   assert.equal(long.truncated, true);
 });
 
+test("strings lose characters that hide text, but keep the joiners words and emoji need", async () => {
+  const { normalizeQueryResult } = await load();
+  const hidden = [
+    "\u007f", // DEL
+    "\u009b", // 8-bit CSI
+    "\u0085", // NEL
+    "\u202e", // right-to-left override
+    "\u2066", // left-to-right isolate
+    "\u200b", // zero-width space
+    "\u2060", // word joiner
+    "\ufeff", // BOM
+    "\u{e0049}\u{e0067}", // tag characters: hidden "Ig"
+  ].join("");
+  const clean = normalizeQueryResult({
+    status: "ok",
+    items: [
+      {
+        title: `Fix${hidden} login`,
+        body: "one\u2028two\u2029three",
+        persian: "می\u200cخواهم",
+        family: "👩\u200d👧",
+      },
+    ],
+  });
+
+  assert.deepEqual(clean.items[0], {
+    title: "Fix login",
+    body: "one\ntwo\nthree",
+    persian: "می\u200cخواهم",
+    family: "👩\u200d👧",
+  });
+  assert.equal(clean.truncated, false);
+});
+
 test("a cut never splits a surrogate pair", async () => {
   const { normalizeQueryResult } = await load();
   const result = normalizeQueryResult({

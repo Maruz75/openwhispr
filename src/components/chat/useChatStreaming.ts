@@ -37,6 +37,7 @@ import {
   type ToolRegistry,
 } from "../../services/tools/ToolRegistry";
 import { createToolExecutionScope, type ToolExecutionScope } from "./toolExecutionScope";
+import { isQueryResultData } from "../../services/tools/connectors/runQueryAction";
 import { getAgentToolActivityRemainingMs } from "../../helpers/agentToolPresentation";
 import type { Message, AgentState, ChatImageAttachment, ToolCallInfo } from "./types";
 import type { ContainerScope } from "../../types/chat";
@@ -649,7 +650,9 @@ export function useChatStreaming({
                                 ...tc,
                                 status: "completed" as const,
                                 result: toolDisplayTexts.get(chunk.callId) ?? chunk.displayText,
-                                ...(chunk.metadata ? { metadata: chunk.metadata } : {}),
+                                ...(chunk.metadata && !isQueryResultData(chunk.metadata)
+                                  ? { metadata: chunk.metadata }
+                                  : {}),
                               }
                             : tc
                         ),

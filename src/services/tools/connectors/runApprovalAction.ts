@@ -15,7 +15,9 @@ import {
  */
 export const MAX_APPROVAL_CARDS_PER_TURN = 5;
 const CARD_SLOT = "approval_card";
-const CARD_LIMIT_GUIDANCE = `Only ${MAX_APPROVAL_CARDS_PER_TURN} approval cards can be prepared per request. Tell the user which cards are ready, and offer to prepare the rest after they've dealt with these.`;
+// The model reads this only once every card of the step is settled, so it
+// reports outcomes rather than pointing at cards still waiting.
+const CARD_LIMIT_GUIDANCE = `Only ${MAX_APPROVAL_CARDS_PER_TURN} approval cards can be prepared per request. Tell the user how the prepared ones turned out, and offer to prepare the rest in a new request.`;
 
 /**
  * Prepare in main, show the card, and report what the user decided.
@@ -30,6 +32,9 @@ export async function runApprovalAction(
   options: { unknownGuidance?: string } = {}
 ): Promise<ToolResult> {
   if (!context) return unavailableResult("no_chat_context");
+  // Whatever happens next (a card, a question, a refusal), the answer belongs
+  // in the panel: a voice turn must never paste it at the caret.
+  context.onHoldDelivery();
   // Claimed before the first await, so calls running in parallel can't overshoot.
   if (!context.claimTurnSlot(CARD_SLOT, MAX_APPROVAL_CARDS_PER_TURN)) {
     return notSentResult(

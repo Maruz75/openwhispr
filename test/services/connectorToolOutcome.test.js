@@ -82,6 +82,7 @@ test("runApprovalAction passes clarifications straight back to the model", async
       toolCallId: "call-1",
       signal: controller.signal,
       onApprovalRequested() {},
+      onHoldDelivery() {},
       claimTurnSlot: () => true,
       releaseTurnSlot() {},
     },
@@ -126,6 +127,7 @@ test("runApprovalAction waits for the card and returns the send", async (t) => {
       toolCallId: "call-2",
       signal: controller.signal,
       onApprovalRequested() {},
+      onHoldDelivery() {},
       claimTurnSlot: () => true,
       releaseTurnSlot() {},
     },
@@ -326,6 +328,7 @@ test("runApprovalAction words a Gmail failure for Gmail and passes its unknown g
     toolCallId,
     signal: new AbortController().signal,
     onApprovalRequested() {},
+    onHoldDelivery() {},
     claimTurnSlot: () => true,
     releaseTurnSlot() {},
   });
@@ -400,7 +403,7 @@ test("a created item's label reaches the card and the model; a malformed one doe
           status: "ready",
           actionId: `a-${replies.length}`,
           preview: {
-            verbKey: "default",
+            verbKey: "issue",
             destinationLabel: "ENG",
             accountLabel: "chad",
             body: "hi",
@@ -411,6 +414,7 @@ test("a created item's label reaches the card and the model; a malformed one doe
       },
     },
   });
+  await (await loadI18n()).changeLanguage("en");
   const { runApprovalAction } = await loadRun();
   const { approvalKey, approveAction, useConnectorApprovalStore } = await loadStore();
   useConnectorApprovalStore.setState({ entries: {} });
@@ -421,6 +425,7 @@ test("a created item's label reaches the card and the model; a malformed one doe
         toolCallId,
         signal: new AbortController().signal,
         onApprovalRequested() {},
+        onHoldDelivery() {},
         claimTurnSlot: () => true,
         releaseTurnSlot() {},
       },
@@ -439,10 +444,16 @@ test("a created item's label reaches the card and the model; a malformed one doe
   const created = await send("call-7");
   assert.equal(created.result.data.reference, "ENG-124");
   assert.equal(created.entry.resultLabel, "ENG-124");
+  assert.equal(
+    created.result.displayText,
+    "Created ENG-124.",
+    "the tool step follows the card's verb"
+  );
 
   const malformed = await send("call-8");
   assert.equal("reference" in malformed.result.data, false);
   assert.equal(malformed.entry.resultLabel, undefined);
+  assert.equal(malformed.result.displayText, "Created an issue in ENG.");
 });
 
 test("an issue or comment's tool step says what was created, or where to check", async () => {

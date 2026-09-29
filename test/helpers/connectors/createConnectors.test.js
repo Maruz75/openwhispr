@@ -80,6 +80,31 @@ test("Gmail reads its Google client from deps.env lazily, not at build time", as
   assert.equal((await gmail.getStatus()).configured, true);
 });
 
+// Slack's client id is read at sign-in, the same way: one saved after startup
+// is used without rebuilding the connector list.
+test("Slack reads its client id from deps.env lazily, not at build time", async () => {
+  const { createConnectors } = await load();
+  const env = {};
+  const authUrls = [];
+  const connectors = createConnectors(
+    fakeDeps({
+      env,
+      runOAuthLoopbackFlow: async ({ buildAuthUrl }) => {
+        authUrls.push(buildAuthUrl("http://127.0.0.1:1/slack/callback", "state", "challenge"));
+        throw new Error("no browser in tests");
+      },
+    })
+  );
+  const slack = connectors.find((connector) => connector.id === "slack");
+
+  await assert.rejects(slack.authorize(), { code: "not_configured" });
+  assert.deepEqual(authUrls, [], "no browser opens without a client id");
+
+  env.SLACK_CLIENT_ID = "slack-client";
+  await assert.rejects(slack.authorize(), /no browser in tests/);
+  assert.equal(new URL(authUrls[0]).searchParams.get("client_id"), "slack-client");
+});
+
 // Revoke must check the login's own issuing client, not today's
 // GMAIL_CLIENT_ID: a stale login issued under an older Gmail client (or the
 // calendar's client, from the pre-split flow) must still be checked against

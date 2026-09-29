@@ -242,6 +242,53 @@ test("on the AI SDK path a tool step shows the tool's own text, not a bare Done"
   assert.equal(holds, 1);
 });
 
+test("a search's items reach the model but are never kept with the conversation", async (t) => {
+  const { captured, reasoningService, getMessages } = await renderChatStreaming(
+    t,
+    CONNECTOR_SURFACE,
+    { settings: BYOK_SETTINGS }
+  );
+  const searchItems = {
+    status: "ok",
+    source: "linear",
+    untrusted: true,
+    items: [{ id: "ENG-1", title: "Someone else's words" }],
+    truncated: false,
+  };
+  reasoningService.processTextStreamingAI.mock.mockImplementation(() =>
+    (async function* () {
+      yield {
+        type: "tool_calls",
+        calls: [
+          { id: "call-1", name: "linear_search_issues", arguments: "{}" },
+          { id: "call-2", name: "get_note", arguments: "{}" },
+        ],
+      };
+      yield {
+        type: "tool_result",
+        callId: "call-1",
+        toolName: "linear_search_issues",
+        displayText: "Done",
+        metadata: searchItems,
+      };
+      yield {
+        type: "tool_result",
+        callId: "call-2",
+        toolName: "get_note",
+        displayText: "Done",
+        metadata: { id: 7, title: "Standup" },
+      };
+      yield { type: "done", finishReason: "stop" };
+    })()
+  );
+
+  await captured.sendToAI("Find the login bug", []);
+
+  const [search, note] = getMessages().find((message) => message.role === "assistant").toolCalls;
+  assert.equal(search.metadata, undefined, "the saved and synced message holds no items");
+  assert.deepEqual(note.metadata, { id: 7, title: "Standup" }, "a note card still gets its data");
+});
+
 test("on the cloud path a tool's hold reaches the caller through the turn's scope", async (t) => {
   const { captured, reasoningService } = await renderChatStreaming(t, CONNECTOR_SURFACE, {
     electronAPI: { connectorFindContacts: async () => ({ contacts: [] }) },
