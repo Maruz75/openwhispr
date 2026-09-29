@@ -703,9 +703,14 @@ function createGithubConnector({
       // A login always reports configured, so Disconnect stays reachable.
       const status = { ...auth.statusOf(entry.credential), configured: true };
       if (status.needsReconnect) return withManage(status);
+      const binding = bindingFor(ownerAccountId, entry);
+      // The count shown here must reflect an install picked on GitHub's own
+      // page moments ago, so it never serves the 60 s cache tools use; the
+      // clear only affects this read, not the search/prepare calls after it.
+      installations.clear(binding);
       return withManage({
         ...status,
-        workspaceLabel: await repoCount(bindingFor(ownerAccountId, entry)),
+        workspaceLabel: await repoCount(binding),
       });
     },
 

@@ -96,8 +96,18 @@ async function renderGithubRow(
   const opened = [];
   const copied = [];
   const cancels = [];
+  // Real window focus/blur never fires in this harness, so the repositories
+  // button's one-shot "came back to the window" listener is captured here and
+  // fired manually with dispatchFocus.
+  const focusListeners = new Map();
   installBrowserGlobals(t, {
     window: {
+      addEventListener: (type, listener, options) => {
+        if (type === "focus") focusListeners.set(listener, Boolean(options && options.once));
+      },
+      removeEventListener: (type, listener) => {
+        if (type === "focus") focusListeners.delete(listener);
+      },
       electronAPI: {
         connectorStatus: async () => (status ? [status] : []),
         onConnectorStatusChanged: (callback) => {
@@ -173,6 +183,13 @@ async function renderGithubRow(
     await React.act(async () => root.unmount());
     root = null;
   };
+  const dispatchFocus = () =>
+    React.act(async () => {
+      for (const [listener, once] of [...focusListeners]) {
+        if (once) focusListeners.delete(listener);
+        listener();
+      }
+    });
   return {
     container,
     emitProgress,
@@ -182,6 +199,8 @@ async function renderGithubRow(
     opened,
     copied,
     cancels,
+    dispatchFocus,
+    focusListeners,
   };
 }
 
@@ -458,6 +477,53 @@ test("a repository count that couldn't be read shows just the login, never 'none
   assert.doesNotMatch(container.textContent, /"repositories"|"empty"/);
   assert.equal(hasButton(container, "connectors.github.repositories.choose"), false);
   assert.equal(hasButton(container, "connectors.github.repositories.manage"), true);
+});
+
+test("Choose repositories arms a one-shot focus refresh; coming back with a count offers Manage repositories", async (t) => {
+  let fetches = 0;
+  const { container, dispatchFocus, opened } = await renderGithubRow(t, {
+    status: { ...GITHUB, workspaceLabel: "0" },
+    electronAPI: {
+      // The row's own load and this button's own mount refresh each read the
+      // status once before the user does anything; neither finds a
+      // repository yet. Only the focus-triggered read (the 3rd) does.
+      connectorStatus: async () => {
+        fetches += 1;
+        return [{ ...GITHUB, workspaceLabel: fetches <= 2 ? "0" : "2" }];
+      },
+    },
+  });
+  assert.equal(fetches, 2, "the row and the button each read the status once on mount");
+  assert.equal(hasButton(container, "connectors.github.repositories.choose"), true);
+
+  await React.act(async () => click(button(container, "connectors.github.repositories.choose")));
+  assert.deepEqual(opened, [GITHUB.manageUrl]);
+  // No refetch from the click itself: only coming back to the window does.
+  assert.equal(fetches, 2);
+
+  await dispatchFocus();
+
+  assert.equal(fetches, 3);
+  assert.equal(hasButton(container, "connectors.github.repositories.manage"), true);
+  assert.equal(hasButton(container, "connectors.github.repositories.choose"), false);
+});
+
+test("the focus listener fires once and is removed on unmount too", async (t) => {
+  const { container, dispatchFocus, focusListeners, unmount } = await renderGithubRow(t, {
+    status: { ...GITHUB, workspaceLabel: "0" },
+  });
+
+  await React.act(async () => click(button(container, "connectors.github.repositories.choose")));
+  assert.equal(focusListeners.size, 1);
+
+  await dispatchFocus();
+  assert.equal(focusListeners.size, 0, "a one-shot listener removes itself once fired");
+
+  await React.act(async () => click(button(container, "connectors.github.repositories.choose")));
+  assert.equal(focusListeners.size, 1);
+
+  await unmount();
+  assert.equal(focusListeners.size, 0, "unmounting removes a still-pending listener");
 });
 
 test("the three summaries read as intended in English", async () => {

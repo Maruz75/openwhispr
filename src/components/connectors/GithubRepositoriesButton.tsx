@@ -1,7 +1,8 @@
-import type { ReactElement } from "react";
+import { useEffect, useRef, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
 import type { ConnectorStatus } from "../../types/connectors";
+import { refreshConnectorStatus } from "../../stores/connectorStatusStore";
 
 /**
  * Opens the GitHub App's install page, where the user picks the
@@ -14,18 +15,38 @@ export function GithubRepositoriesButton({
   status: ConnectorStatus;
 }): ReactElement | null {
   const { t } = useTranslation();
+  const removeFocusListener = useRef<(() => void) | null>(null);
+
+  // The row's status can be a stale snapshot (ensureConnectorStatus loads
+  // only once per window): a fresh read as soon as this button can show
+  // picks up an install finished earlier in this same window session.
+  useEffect(() => {
+    void refreshConnectorStatus();
+  }, []);
+
+  // A listener left armed by a click, with the row gone before the window
+  // regained focus, is removed too.
+  useEffect(() => () => removeFocusListener.current?.(), []);
+
   const { manageUrl } = status;
   // No App slug in this build: there is no page to open.
   if (!manageUrl) return null;
   // Only a count of zero: a count that couldn't be read (null) may still
   // have repositories behind it.
   const none = status.workspaceLabel === "0";
+
+  const openManage = (): void => {
+    void window.electronAPI?.openExternal?.(manageUrl);
+    // One re-read the next time this window regains focus: coming back from
+    // GitHub's install page is the moment the count can have changed.
+    removeFocusListener.current?.();
+    const onFocus = (): void => void refreshConnectorStatus();
+    window.addEventListener("focus", onFocus, { once: true });
+    removeFocusListener.current = () => window.removeEventListener("focus", onFocus);
+  };
+
   return (
-    <Button
-      size="sm"
-      variant={none ? "default" : "outline"}
-      onClick={() => void window.electronAPI?.openExternal?.(manageUrl)}
-    >
+    <Button size="sm" variant={none ? "default" : "outline"} onClick={openManage}>
       {t(none ? "connectors.github.repositories.choose" : "connectors.github.repositories.manage")}
     </Button>
   );

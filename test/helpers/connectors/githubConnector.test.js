@@ -1067,6 +1067,19 @@ test("the status shows the GitHub user, the installed repository count and where
   assert.equal((await unreadable.connector.getStatus()).workspaceLabel, null);
 });
 
+test("getStatus re-reads the installed repositories every time, never the 60s installations cache", async () => {
+  const { connector, github } = await setupGithub({
+    [REPOSITORIES]: [
+      json({ total_count: 3, repositories: INSTALLED_REPOS }),
+      json({ total_count: 1, repositories: [repo("acme/web", "2026-09-20T10:00:00Z")] }),
+    ],
+  });
+
+  assert.equal((await connector.getStatus()).workspaceLabel, "3");
+  assert.equal((await connector.getStatus()).workspaceLabel, "1");
+  assert.equal(hits(github, REPOSITORIES).length, 2);
+});
+
 test("a repository read or token refresh that hangs is given up after the bound: the count is unknown, the rest stands", async () => {
   const { STATUS_REPOSITORIES_TIMEOUT_MS } = await setupGithub();
   assert.equal(STATUS_REPOSITORIES_TIMEOUT_MS, 5000);
