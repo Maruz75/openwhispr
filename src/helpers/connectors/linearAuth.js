@@ -149,13 +149,23 @@ function createLinearAuth({
 
   // Best effort, refresh token first: revoking it ends the grant, and the
   // access token is revoked too in case Linear only ends the token it gets.
+  // revokeToken (linearApi.js) never throws, but the try/catch stays as a
+  // last line of defense; either way a failed revoke is logged, by kind
+  // only, never the token.
   async function revokeTokens(tokens) {
-    for (const token of tokens) {
+    for (const { kind, token } of tokens) {
       if (!nonEmptyString(token)) continue;
       try {
-        await api.revokeToken(token);
+        const result = await api.revokeToken(token);
+        if (!result.ok) {
+          logger?.warn("linear revoke failed", { tokenKind: kind }, "connectors");
+        }
       } catch (error) {
-        logger?.warn("linear revoke failed", describeError(error), "connectors");
+        logger?.warn(
+          "linear revoke failed",
+          { tokenKind: kind, ...describeError(error) },
+          "connectors"
+        );
       }
     }
   }
@@ -199,7 +209,10 @@ function createLinearAuth({
         // A grant Linear issued that can't become a login is revoked at once,
         // not left live with nothing using it.
         const refuse = async (redirectCode, reason) => {
-          await revokeTokens([data.refresh_token, data.access_token]);
+          await revokeTokens([
+            { kind: "refresh", token: data.refresh_token },
+            { kind: "access", token: data.access_token },
+          ]);
           return new OAuthFlowError(redirectCode, `linear_${reason}`);
         };
         const tokens = parseTokens(data, now());
@@ -252,7 +265,11 @@ function createLinearAuth({
     if (!credential.refreshToken) return login.markReconnect(binding);
     let result = await requestRefresh(credential.refreshToken);
     // Asked once more, but only while the login this refresh started with
-    // still holds.
+    // still holds. Task 3 (REFRESH_NO_SECRET): Linear rotates the refresh
+    // token on every use; its docs describe a 30-minute grace period on the
+    // previous token, so retrying with the same one after a lost answer is
+    // expected to still work. At worst Linear refuses it with invalid_grant,
+    // which flags the login for a reconnect with the sign-in kept.
     if (!result.ok && isTransient(result) && login.stillBound(binding)) {
       result = await requestRefresh(credential.refreshToken);
     }
@@ -301,7 +318,10 @@ function createLinearAuth({
 
   // Best effort: the local login goes whatever Linear answers.
   async function revoke(credential) {
-    await revokeTokens([credential?.refreshToken, credential?.accessToken]);
+    await revokeTokens([
+      { kind: "refresh", token: credential?.refreshToken },
+      { kind: "access", token: credential?.accessToken },
+    ]);
   }
 
   function statusOf(credential) {

@@ -61,6 +61,9 @@ const INPUT_ERROR_MESSAGE_OVERRIDES = [
 ];
 // Task 3: the header that says how long to wait after a rate limit, in whole
 // seconds. Without it nothing is retried and the result is rate_limited.
+// Unverified by Task 3: Linear's docs describe `X-RateLimit-*-Reset` headers
+// for its own limiter and may not send `Retry-After` at all, in which case
+// this stays safe (no retry, rate_limited) rather than wrong.
 const RETRY_AFTER_HEADER = "retry-after";
 // Task 3 (REVOKE): how a token is revoked. Both documented forms at once:
 // the token in the form body and as the bearer credential.

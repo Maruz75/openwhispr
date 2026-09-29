@@ -734,6 +734,24 @@ test("revoke revokes the refresh token, then the access token, and never throws"
   assert.deepEqual(empty.linear.calls, []);
 });
 
+test("a failed revoke is logged by token kind, never the token, and both are still tried", async () => {
+  const warnings = [];
+  const { auth, linear } = await setup({
+    logger: { warn: (...args) => warnings.push(args) },
+    script: { [REVOKE]: [offline()] },
+  });
+
+  await assert.doesNotReject(auth.revoke(CONNECTED));
+
+  assert.equal(hits(linear, REVOKE).length, 2, "both tokens still tried");
+  assert.equal(warnings.length, 2);
+  assert.deepEqual(
+    warnings.map(([, data]) => data.tokenKind),
+    ["refresh", "access"]
+  );
+  assert.doesNotMatch(JSON.stringify(warnings), SECRETS);
+});
+
 test("the status shows the user and the workspace, and the reconnect flag", async () => {
   const { auth } = await setup();
   assert.deepEqual(auth.statusOf(CONNECTED), {

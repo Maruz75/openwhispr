@@ -204,7 +204,7 @@ test("Linear declares one query and two approval actions with their card fields"
   });
   assert.deepEqual(
     [MAX_TITLE_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_RESULTS, SNIPPET_LENGTH],
-    [256, 50000, 10, 300]
+    [256, 65536, 10, 300]
   );
 });
 
@@ -500,20 +500,35 @@ test("a project that isn't in the team is left off, and the card says so", async
   ]);
 });
 
+test("assignToMe with no Linear name still shows an assignee note, and always sends the assigneeId with one", async () => {
+  const { connector } = await setupLinear({}, { credential: { ...CONNECTED, userName: null } });
+
+  const prepared = await prepareCrash(connector, { assignToMe: true });
+
+  assert.equal(prepared.payload.assigneeId, "user-1");
+  assert.deepEqual(
+    prepared.preview.notes.find((note) => note.key === "connectors.approval.issue.notes.assignee"),
+    { key: "connectors.approval.issue.notes.assignee", values: { assignee: "you" } }
+  );
+});
+
 test("prepare refuses a title or description Linear can't take, before any lookup", async () => {
   const { connector, linear, teams } = await setupLinear();
   for (const [args, errorCode] of [
     [{ title: "  " }, "missing_title"],
     [{ title: "\r\n" }, "missing_title"],
     [{ title: "x".repeat(257) }, "too_long"],
-    [{ description: "y".repeat(50001) }, "too_long"],
+    [{ description: "y".repeat(65537) }, "too_long"],
     [{ priority: "p1" }, "invalid_input"],
+    [{ priority: "toString" }, "invalid_input"],
+    [{ priority: "constructor" }, "invalid_input"],
+    [{ priority: "__proto__" }, "invalid_input"],
   ]) {
     const prepared = await connector.prepare("create_issue", { ...CRASH, ...args }, BOUND);
     assert.deepEqual([prepared.status, prepared.errorCode], ["failed", errorCode], errorCode);
   }
   assert.equal((await prepareCrash(connector, { title: "x".repeat(256) })).status, "ready");
-  assert.equal((await prepareCrash(connector, { description: "y".repeat(50000) })).status, "ready");
+  assert.equal((await prepareCrash(connector, { description: "y".repeat(65536) })).status, "ready");
   assert.deepEqual(linear.calls, []);
   assert.equal(teams.calls.length, 2, "only the two that passed looked the team up");
 });
@@ -568,7 +583,7 @@ test("an edit that breaks a rule at Send is refused without calling Linear", asy
     [{ title: "   " }, "missing_title"],
     [{ title: "Crash\nBcc" }, "invalid_input"],
     [{ title: "x".repeat(257) }, "too_long"],
-    [{ body: "y".repeat(50001) }, "too_long"],
+    [{ body: "y".repeat(65537) }, "too_long"],
   ]) {
     const result = await connector.commit("create_issue", prepared.payload, edits, BOUND);
     assert.deepEqual([result.state, result.errorCode], ["failed", errorCode], errorCode);
@@ -603,13 +618,19 @@ test("an uncertain create found by its client id is sent, with its key", async (
 });
 
 test("an uncertain create that Linear says doesn't exist failed: nothing was created", async () => {
+  // The create's own uncertainty must be a completed 200 (an unlisted
+  // GraphQL error), never a transport failure or a 5xx: only then does a
+  // lookup miss prove nothing was created.
   for (const notThere of [
     gql({ issue: null }),
     gqlError("ENTITY_NOT_FOUND"),
     gqlError("INPUT_ERROR", { message: "Entity not found: Issue" }),
   ]) {
     const { connector, linear } = await setupLinear({
-      [GRAPHQL]: { LinearIssueCreate: [httpStatus(502)], LinearIssue: [notThere] },
+      [GRAPHQL]: {
+        LinearIssueCreate: [gqlError("INTERNAL_SERVER_ERROR")],
+        LinearIssue: [notThere],
+      },
     });
     const prepared = await prepareCrash(connector);
 
@@ -617,6 +638,29 @@ test("an uncertain create that Linear says doesn't exist failed: nothing was cre
 
     assert.deepEqual([result.state, result.errorCode], ["failed", "not_created"]);
     assert.equal(ops(linear, "LinearIssueCreate").length, 1, "never created again");
+  }
+});
+
+test("an uncertain create after a timeout, reset or 5xx whose lookup finds nothing stays unknown", async () => {
+  // Linear may still commit the insert later, so a miss after our own
+  // uncertainty (not a completed answer) is never reported as not_created.
+  for (const createReply of [httpStatus(502), reset(), httpStatus(503)]) {
+    for (const lookup of [
+      gql({ issue: null }),
+      gqlError("INPUT_ERROR", { message: "Entity not found: Issue" }),
+    ]) {
+      const { connector, linear } = await setupLinear({
+        [GRAPHQL]: { LinearIssueCreate: [createReply], LinearIssue: [lookup] },
+      });
+      const prepared = await prepareCrash(connector);
+
+      const result = await connector.commit("create_issue", prepared.payload, {}, BOUND);
+
+      assert.equal(result.state, "unknown");
+      assert.equal(result.checkUrl, TEAM_ISSUES);
+      assert.deepEqual(linear.operations(), ["LinearIssueCreate", "LinearIssue"]);
+      assert.equal(ops(linear, "LinearIssueCreate").length, 1);
+    }
   }
 });
 
@@ -808,7 +852,7 @@ test("a comment on another workspace's issue, or on something that isn't an issu
   }
   for (const [body, errorCode] of [
     ["  ", "missing_body"],
-    ["y".repeat(50001), "too_long"],
+    ["y".repeat(65537), "too_long"],
   ]) {
     const prepared = await connector.prepare("comment", { issue: "ENG-123", body }, BOUND);
     assert.deepEqual([prepared.status, prepared.errorCode], ["failed", errorCode], errorCode);
@@ -848,6 +892,25 @@ test("Send posts the card's comment once and links to it", async () => {
   });
 });
 
+test("a comment prepared by key whose Linear issue.url carries a different workspace key still posts at Send", async () => {
+  const renamedUrl = "https://linear.app/renamed/issue/ENG-123/login-fails-after-update";
+  const { connector, linear } = await setupLinear({
+    [GRAPHQL]: {
+      LinearIssue: [gql({ issue: { ...ENG_123, url: renamedUrl } })],
+      LinearCommentCreate: [COMMENTED],
+    },
+  });
+  const prepared = await connector.prepare("comment", { issue: "ENG-123", body: "hi" }, BOUND);
+  assert.equal(prepared.payload.issueUrl, renamedUrl, "prepare stored Linear's own (renamed) url");
+
+  const result = await connector.commit("comment", prepared.payload, {}, BOUND);
+
+  assert.deepEqual(result, { state: "sent", url: `${ISSUE_URL}#comment-1` });
+  assert.deepEqual(ops(linear, "LinearCommentCreate")[0].variables, {
+    input: { issueId: "issue-123", body: "hi" },
+  });
+});
+
 test("an uncertain comment stays unknown, points at the issue, and is never repeated", async () => {
   for (const reply of [httpStatus(503), reset(), gqlError("INTERNAL_SERVER_ERROR"), gql({})]) {
     const { connector, linear } = await setupLinear({
@@ -863,25 +926,35 @@ test("an uncertain comment stays unknown, points at the issue, and is never repe
   }
 });
 
-test("a comment edited empty or too long, or aimed at another workspace, is refused at Send", async () => {
+test("a comment edited empty or too long is refused at Send, without calling Linear", async () => {
   const { connector, linear } = await setupLinear({
     [GRAPHQL]: { LinearCommentCreate: [COMMENTED] },
   });
   const payload = { issueId: "issue-123", identifier: "ENG-123", issueUrl: ISSUE_URL, body: "hi" };
   for (const [edits, errorCode] of [
     [{ body: " " }, "missing_body"],
-    [{ body: "y".repeat(50001) }, "too_long"],
+    [{ body: "y".repeat(65537) }, "too_long"],
   ]) {
     const result = await connector.commit("comment", payload, edits, BOUND);
     assert.deepEqual([result.state, result.errorCode], ["failed", errorCode]);
   }
-  const elsewhere = await connector.commit(
-    "comment",
-    { ...payload, issueUrl: "https://linear.app/other/issue/ENG-123/x" },
-    {},
-    BOUND
-  );
-  assert.deepEqual([elsewhere.state, elsewhere.errorCode], ["failed", "wrong_workspace"]);
+  assert.deepEqual(linear.calls, []);
+});
+
+test("a comment payload missing its issueId or identifier is refused at Send, without calling Linear", async () => {
+  const { connector, linear } = await setupLinear({
+    [GRAPHQL]: { LinearCommentCreate: [COMMENTED] },
+  });
+  const payload = { issueId: "issue-123", identifier: "ENG-123", issueUrl: ISSUE_URL, body: "hi" };
+  for (const broken of [
+    { ...payload, issueId: "" },
+    { ...payload, issueId: null },
+    { ...payload, identifier: "" },
+    { ...payload, identifier: undefined },
+  ]) {
+    const result = await connector.commit("comment", broken, {}, BOUND);
+    assert.deepEqual([result.state, result.errorCode], ["failed", "refused"]);
+  }
   assert.deepEqual(linear.calls, []);
 });
 

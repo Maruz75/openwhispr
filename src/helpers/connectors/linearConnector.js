@@ -8,8 +8,9 @@ const { createLinearAuth, linearRedirectUri } = require("./linearAuth");
 const { createLinearTeams } = require("./linearTeams");
 
 const MAX_TITLE_LENGTH = 256;
-// Task 3 (LIMITS): lower this to Linear's own limit if it is lower.
-const MAX_DESCRIPTION_LENGTH = 50000;
+// Task 3 (LIMITS): Linear accepted a 70,000-character description, higher
+// than the card's own 65,536-character limit, so the card's limit governs.
+const MAX_DESCRIPTION_LENGTH = 65536;
 const MAX_QUERY_LENGTH = 200;
 const MAX_RESULTS = 10;
 const SNIPPET_LENGTH = 300;
@@ -211,6 +212,15 @@ function commitFailed(errorCode, message = failureMessage(errorCode)) {
   return { state: "failed", errorCode, message };
 }
 
+// Own keys only: PRIORITIES is a plain object, so "toString", "constructor"
+// or "__proto__" would otherwise resolve to an inherited function or the
+// prototype itself instead of failing as an unknown priority.
+function priorityFor(value) {
+  return typeof value === "string" && Object.hasOwn(PRIORITIES, value)
+    ? PRIORITIES[value]
+    : undefined;
+}
+
 function stringOrNull(value) {
   return typeof value === "string" ? value : null;
 }
@@ -355,7 +365,7 @@ function createLinearConnector({
     const description = typeof args?.description === "string" ? args.description : "";
     const problem = titleProblem(title) ?? bodyProblem(description, { required: false });
     if (problem) return prepareFailed(problem);
-    const priority = args?.priority === undefined ? null : PRIORITIES[args.priority];
+    const priority = args?.priority === undefined ? null : priorityFor(args.priority);
     if (priority === undefined) {
       return prepareFailed("invalid_input", "priority is urgent, high, medium, low or none.");
     }
@@ -383,10 +393,12 @@ function createLinearConnector({
       });
     }
     const { credential } = access;
-    if (args?.assignToMe === true && nonEmptyString(credential.userName)) {
+    // The card is the truth: an assigneeId is never sent without a note
+    // saying so, even when Linear never told us the viewer's name.
+    if (args?.assignToMe === true) {
       notes.push({
         key: "connectors.approval.issue.notes.assignee",
-        values: { assignee: credential.userName },
+        values: { assignee: nonEmptyString(credential.userName) ? credential.userName : "you" },
       });
     }
 
@@ -487,6 +499,14 @@ function createLinearConnector({
     };
   }
 
+  // A lookup miss proves nothing unless the create's own uncertain answer was
+  // a completed HTTP 200 (a listed GraphQL error, or a 200 whose issueCreate
+  // didn't carry a usable issue). After a timeout, a connection reset or a
+  // 5xx, Linear may still commit the insert later, so a miss stays unknown.
+  function isCompletedAnswer(errorCode) {
+    return !TRANSPORT_CODE.test(errorCode ?? "") && !/^http_5\d\d$/.test(errorCode ?? "");
+  }
+
   // The create was sent with its client id, and Linear refuses a second
   // create with the same one, so a single lookup settles it.
   async function settleUncertainCreate(binding, access, payload, uncertain) {
@@ -500,7 +520,8 @@ function createLinearConnector({
     if (issue && nonEmptyString(issue.url) && nonEmptyString(issue.identifier)) {
       return { state: "sent", url: issue.url, resultLabel: issue.identifier };
     }
-    if ((result.ok && result.data?.issue === null) || result.errorCode === "not_found") {
+    const missing = (result.ok && result.data?.issue === null) || result.errorCode === "not_found";
+    if (missing && isCompletedAnswer(uncertain.errorCode)) {
       return commitFailed("not_created");
     }
     return stillUnknown;
@@ -553,11 +574,15 @@ function createLinearConnector({
     const body = typeof edits?.body === "string" ? edits.body : payload.body;
     const problem = bodyProblem(body, { required: true });
     if (problem) return commitFailed(problem);
-    // The issue must still be in the bound login's workspace.
-    const bound = boundCredential(binding);
-    if (!bound) return commitFailed("connection_changed");
-    const reference = parseIssueReference(payload.issueUrl, bound.organizationUrlKey);
-    if (!reference.ok) return commitFailed(reference.errorCode);
+    // No re-parse of Linear's own issue.url against the bound login's
+    // organizationUrlKey here: the payload was built in main from Linear's
+    // answer under this same token, which only ever reaches one workspace,
+    // so a workspace rename between prepare and Send must not refuse a
+    // comment that was always going to the right place. The user's typed
+    // reference is still checked for that in prepareComment.
+    if (!nonEmptyString(payload?.issueId) || !nonEmptyString(payload?.identifier)) {
+      return commitFailed("refused");
+    }
 
     const access = await auth.getAccessToken(binding);
     if (!access.ok) return commitFailed(failureCode(access.errorCode));

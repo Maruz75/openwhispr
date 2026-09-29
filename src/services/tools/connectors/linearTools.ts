@@ -18,7 +18,7 @@ const COMMENT_UNKNOWN_GUIDANCE =
 // call that can't succeed never reaches main.
 const MAX_QUERY_LENGTH = 200;
 const MAX_TITLE_LENGTH = 256;
-const MAX_BODY_LENGTH = 50000;
+const MAX_BODY_LENGTH = 65536;
 const PRIORITIES = ["urgent", "high", "medium", "low", "none"] as const;
 const STATES = ["open", "all"] as const;
 

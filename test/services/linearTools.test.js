@@ -343,7 +343,7 @@ test("linear_create_issue refuses what Linear can't take before main, and still 
   for (const [args, status, errorCode] of [
     [{ title: " \n " }, "needs_clarification", undefined],
     [{ title: "x".repeat(257) }, "failed", "too_long"],
-    [{ title: "Crash", description: "y".repeat(50001) }, "failed", "too_long"],
+    [{ title: "Crash", description: "y".repeat(65537) }, "failed", "too_long"],
     [{ title: "Crash", description: 5 }, "failed", "invalid_input"],
     [{ title: "Crash", priority: "p1" }, "failed", "invalid_input"],
     [{ title: "Crash", assignToMe: "yes" }, "failed", "invalid_input"],
@@ -498,7 +498,7 @@ test("linear_comment asks for the issue and refuses an empty comment, without ca
   const empty = await linearCommentTool.execute({ issue: "ENG-123", body: "  " }, noBody);
   assert.deepEqual([empty.data.status, empty.data.errorCode], ["failed", "missing_body"]);
   const tooLong = await linearCommentTool.execute(
-    { issue: "ENG-123", body: "y".repeat(50001) },
+    { issue: "ENG-123", body: "y".repeat(65537) },
     linearContext("m10", "call-12")
   );
   assert.equal(tooLong.data.errorCode, "too_long");
