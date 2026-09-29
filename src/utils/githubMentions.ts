@@ -29,9 +29,17 @@ function withoutFencedBlocks(text: string): string {
 }
 
 // A code span is a run of backticks closed by a run of the same length. An
-// unmatched backtick is plain text.
+// unmatched backtick is plain text. CommonMark never lets a span cross a
+// blank line, so a stray backtick in one paragraph can't swallow mentions in
+// a later one; fenced blocks are already blanked by withoutFencedBlocks, so
+// they still end a paragraph here.
+const CODE_SPAN = /(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g;
+
 function withoutCodeSpans(text: string): string {
-  return text.replace(/(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g, " ");
+  return text
+    .split(/\n[ \t]*\n/)
+    .map((paragraph) => paragraph.replace(CODE_SPAN, " "))
+    .join("\n\n");
 }
 
 // A GitHub handle: letters, digits and single inner hyphens, at most 39

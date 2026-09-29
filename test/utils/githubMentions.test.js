@@ -42,6 +42,15 @@ test("mentions inside inline code are ignored", async () => {
   assert.deepEqual(githubMentions("Use ``a ` @inside`` here, @outside"), ["@outside"]);
 });
 
+test("a code span never crosses a blank line, so a later paragraph's mention still counts", async () => {
+  const { githubMentions } = await load();
+  assert.deepEqual(
+    githubMentions("Press the ` key to open the console.\n\ncc @alice, the fix is in `main.js`"),
+    ["@alice"]
+  );
+  assert.deepEqual(githubMentions("`@a` then @b"), ["@b"]);
+});
+
 test("mentions inside fenced code blocks are ignored, fences of either kind", async () => {
   const { githubMentions } = await load();
   const body = [
