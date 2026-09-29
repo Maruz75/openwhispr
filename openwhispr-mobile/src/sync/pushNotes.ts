@@ -295,9 +295,10 @@ export async function pushNotes(
 
     // Pushed now, a note in a folder with no cloud id would reach the server unfiled,
     // and so land in no folder anywhere else. It waits for the folder like it would for
-    // a space; pushFolders runs first, so normally that's just this pass. A folder
-    // pushFolders will never upload (refused, or never queued) holds nothing: the note
-    // goes up unfiled rather than not at all.
+    // a space. pushFolders has already run this pass, so a folder still waiting here
+    // failed to upload and is retried next pass. A folder pushFolders will never upload
+    // (refused, or never queued) holds nothing: the note goes up unfiled rather than
+    // not at all.
     const folder = n.folderId == null ? undefined : foldersById.get(n.folderId);
     if (isFolderAwaitingUpload(folder)) {
       skippedPendingFolder += 1;

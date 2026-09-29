@@ -6,4 +6,8 @@ import type { Folder } from '@/data/types';
  * since pushed now it would reach the server unfiled.
  */
 export const isFolderAwaitingUpload = (folder: Folder | null | undefined): boolean =>
-  !!folder && !folder.remoteId && folder.pendingSync === 1 && folder.clientFolderId != null;
+  !!folder &&
+  folder.deletedAt == null &&
+  !folder.remoteId &&
+  folder.pendingSync === 1 &&
+  folder.clientFolderId != null;

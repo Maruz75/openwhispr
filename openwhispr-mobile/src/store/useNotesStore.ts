@@ -140,18 +140,23 @@ const resolveMeetingFolderId = (folders: Folder[]): number => {
 
 /**
  * A meeting goes where it was started: that folder, or that team space. Anywhere else it
- * goes to the personal Meetings folder, and so does a Private-mode meeting started in a
- * team space, since a private note can't be shared.
+ * goes to the personal Meetings folder. So does a meeting started in a team space this
+ * device no longer has, and a Private-mode one, since a private note can't be shared.
  */
 const createMeetingNoteRow = (title: string, context: CreateMeetingNoteContext): Note => {
-  const privateSpaceId = spacesRepository.getPrivateSpace().id;
-  const keepsPersonal = useProcessingModeStore.getState().activeMode === 'private';
+  const canFileInTeamSpace = (spaceId: number | null): boolean =>
+    useProcessingModeStore.getState().activeMode !== 'private' &&
+    spacesRepository.listSpaces().some(({ id, kind }) => id === spaceId && kind === 'team');
   if (context.folderId != null) {
     const folder = notesRepository.getFolders().find(({ id }) => id === context.folderId);
-    if (folder && (!keepsPersonal || folder.spaceId === privateSpaceId)) {
+    if (
+      folder &&
+      (folder.spaceId === spacesRepository.getPrivateSpace().id ||
+        canFileInTeamSpace(folder.spaceId))
+    ) {
       return notesRepository.createNote(title, '', folder.id);
     }
-  } else if (context.spaceId != null && !keepsPersonal && context.spaceId !== privateSpaceId) {
+  } else if (context.spaceId != null && canFileInTeamSpace(context.spaceId)) {
     return notesRepository.createNote(title, '', undefined, context.spaceId);
   }
   return notesRepository.createNote(

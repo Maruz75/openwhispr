@@ -111,6 +111,10 @@ describe('isFolderAwaitingUpload', () => {
     repo.deleteFolder(folder.id);
 
     expect(awaitsUpload(repo, folder.id)).toBe(false);
+    // Deleting queues the folder again, so the row itself must say no too.
+    const deleted = repo.getFoldersIncludingDeleted().find(({ id }) => id === folder.id);
+    expect(deleted?.pendingSync).toBe(1);
+    expect(isFolderAwaitingUpload(deleted)).toBe(false);
   });
 });
 

@@ -68,6 +68,10 @@ jest.mock('@/data', () => ({
   },
   spacesRepository: {
     getPrivateSpace: jest.fn(() => ({ id: 1, kind: 'private' })),
+    listSpaces: jest.fn(() => [
+      { id: 1, kind: 'private' },
+      { id: 3, kind: 'team' },
+    ]),
   },
 }));
 jest.mock('@/store/useProcessingModeStore', () => ({
@@ -112,7 +116,7 @@ jest.mock('@/services/transcription/LocalTranscriptionService', () => ({
 }));
 
 import { useNotesStore } from '../useNotesStore';
-import { notesRepository } from '@/data';
+import { notesRepository, spacesRepository } from '@/data';
 import { ReasoningService } from '@/services/reasoning/ReasoningService';
 import { generateLocalMeetingNotes } from '@/lib/notes/localMeetingNotes';
 import * as localReasoning from '@/lib/localReasoning';
@@ -289,6 +293,21 @@ describe('createMeetingNote', () => {
       expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
       useNotesStore.getState().createMeetingNote({ folderId: 5 });
       expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 5);
+    });
+
+    it('uses Meetings when the team space is unknown, gone, or not a number', () => {
+      useNotesStore.getState().createMeetingNote({ spaceId: 404 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+      useNotesStore.getState().createMeetingNote({ spaceId: Number('abc') });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+
+      // Access to space 3 was removed while its screen was still open.
+      (spacesRepository.listSpaces as jest.Mock).mockReturnValueOnce([{ id: 1, kind: 'private' }]);
+      useNotesStore.getState().createMeetingNote({ spaceId: 3 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+      (spacesRepository.listSpaces as jest.Mock).mockReturnValueOnce([{ id: 1, kind: 'private' }]);
+      useNotesStore.getState().createMeetingNote({ folderId: 9 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
     });
 
     it('uses Meetings when the folder is gone, or the space is the personal one', () => {
