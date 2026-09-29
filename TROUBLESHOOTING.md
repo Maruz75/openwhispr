@@ -101,6 +101,7 @@
    - Linux: Build from source at https://github.com/ggml-org/whisper.cpp
 4. Clear model cache: `rm -rf ~/.cache/openwhispr/whisper-models`
 5. Try cloud transcription as fallback
+6. On processors without AVX2 (Intel before Haswell, AMD FX), the standard engine stops at startup (Windows exit code 3221225501, Linux SIGILL) and OpenWhispr switches to a build for older processors by itself, on Windows and Linux: transcription works, more slowly. If the error says whisper-server can't run on this processor, the processor also lacks AVX (for example first-generation Core i processors and many Celeron, Pentium and Atom models): use a cloud transcription provider instead.
 
 **GPU acceleration (CUDA / Vulkan):** If the GPU-accelerated whisper-server crashes at startup (unsupported GPU, out of VRAM), OpenWhispr automatically restarts it on CPU, retries the same request, and shows a "using CPU instead" notice — the dictation still completes. GPU acceleration can be toggled off from the GPU card in the transcription model picker.
 

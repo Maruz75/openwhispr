@@ -13,6 +13,7 @@ const { createAbortError } = require("./abortError");
 const sidecarPidFile = require("./sidecarPidFile");
 const { BIN_SUBDIR: CUDA_BIN_SUBDIR } = require("./whisperCudaManager");
 const { BIN_SUBDIR: VULKAN_BIN_SUBDIR } = require("./whisperVulkanManager");
+const { CPU_FALLBACK_LEVELS, cpuFallbackServerBinaryName } = require("./whisperCppRelease");
 const { sanitizeWhisperVadConfig, DEFAULT_WHISPER_VAD_CONFIG } = require("./whisperVadConfig");
 const {
   computeTranscriptionTimeoutMs,
@@ -126,6 +127,18 @@ function describeProcessExit({ exitCode = null, signal = null } = {}) {
   if (signal) return `signal: ${signal}`;
   if (exitCode !== null) return `exit code: ${exitCode}`;
   return "";
+}
+
+// A process that executes an instruction its processor lacks is ended with
+// STATUS_ILLEGAL_INSTRUCTION (0xC000001D) on Windows and SIGILL on Unix. The
+// primary CPU build needs AVX2, FMA, F16C and BMI2, so this is how it dies at
+// startup on Intel processors before Haswell and on AMD FX (#2356).
+const STATUS_ILLEGAL_INSTRUCTION = 0xc000001d;
+
+function isIllegalInstructionExit({ exitCode = null, signal = null } = {}) {
+  if (signal === "SIGILL") return true;
+  // Node reports the NTSTATUS unsigned (3221225501); >>> 0 also maps the signed form
+  return Number.isInteger(exitCode) && exitCode >>> 0 === STATUS_ILLEGAL_INSTRUCTION;
 }
 
 function isVadActive(options = {}) {
@@ -455,6 +468,20 @@ class WhisperServerManager extends EventEmitter {
     return null;
   }
 
+  // The CPU build to try after `binary` died of an illegal instruction: the
+  // first CPU_FALLBACK_LEVELS build below it that is installed next to it, or
+  // null when none is left. Only win32-x64 and linux-x64 ship these builds.
+  getCpuFallbackBinaryPath(binary) {
+    const names = CPU_FALLBACK_LEVELS.map((level) =>
+      cpuFallbackServerBinaryName(process.platform, process.arch, level)
+    );
+    for (const name of names.slice(names.indexOf(path.basename(binary)) + 1)) {
+      const candidate = path.join(path.dirname(binary), name);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+    return null;
+  }
+
   isAvailable() {
     return this.getServerBinaryPath() !== null;
   }
@@ -700,6 +727,31 @@ class WhisperServerManager extends EventEmitter {
         await this.stop();
         this.gpuFallbackActive = true;
         return this._doStart(modelPath, { ...options, useCuda: false, useVulkan: false });
+      }
+      // The CPU build ran an instruction this processor lacks: move one level
+      // down (getCpuFallbackBinaryPath). Caching the build makes it the CPU
+      // binary for the rest of the session, since stop() leaves the cache alone,
+      // so later restarts and GPU fallbacks never re-run a build that crashed.
+      // The process has already exited, so there is nothing for stop() to reap
+      // and gpuFallbackActive stays as the GPU branch above left it. The thread
+      // retry below is skipped: the same build would only crash again.
+      const processInfo = getProcessInfo();
+      if (isIllegalInstructionExit(processInfo)) {
+        const exit = describeProcessExit(processInfo);
+        const fallbackBinary = this.getCpuFallbackBinaryPath(serverBinary);
+        if (fallbackBinary) {
+          debugLogger.warn(
+            "whisper-server stopped on an instruction this processor lacks, retrying with a build for older processors",
+            { exit, from: path.basename(serverBinary), to: path.basename(fallbackBinary) }
+          );
+          this.cachedServerBinaryPath = fallbackBinary;
+          return this._doStart(modelPath, options);
+        }
+        throw new Error(
+          `whisper-server can't run on this processor: ${path.basename(serverBinary)} stopped on ` +
+            `an instruction the processor doesn't support (${exit}), and no build for older ` +
+            "processors is left to try"
+        );
       }
       if (shouldFallbackToDefaultThreads(threadResolution)) {
         const defaultThreadResolution = createThreadResolution(
@@ -1210,3 +1262,4 @@ module.exports.getGpuSignature = getGpuSignature;
 module.exports.resolveWhisperThreads = resolveWhisperThreads;
 module.exports.shouldFallbackToCpuAfterRequestError = shouldFallbackToCpuAfterRequestError;
 module.exports.shouldRetryAfterServerReplaced = shouldRetryAfterServerReplaced;
+module.exports.isIllegalInstructionExit = isIllegalInstructionExit;
