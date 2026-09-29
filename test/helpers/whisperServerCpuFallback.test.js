@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 const { installElectronStub, setUserDataDir } = require("./harness/electronStub");
@@ -12,12 +13,14 @@ installElectronStub();
 const WhisperServerManager = require("../../src/helpers/whisperServer");
 const { isIllegalInstructionExit } = WhisperServerManager;
 const { BIN_SUBDIR: CUDA_BIN_SUBDIR } = require("../../src/helpers/whisperCudaManager");
+const { BIN_SUBDIR: VULKAN_BIN_SUBDIR } = require("../../src/helpers/whisperVulkanManager");
 const { cpuFallbackServerBinaryName } = require("../../src/helpers/whisperCppRelease");
 
 const PRIMARY = `whisper-server-${process.platform}-${process.arch}`;
 const IVYBRIDGE = cpuFallbackServerBinaryName(process.platform, process.arch, "ivybridge");
 const SANDYBRIDGE = cpuFallbackServerBinaryName(process.platform, process.arch, "sandybridge");
 const CUDA = `whisper-server-${process.platform}-${process.arch}-cuda`;
+const VULKAN = `whisper-server-${process.platform}-${process.arch}-vulkan`;
 
 // The fake builds are POSIX shell scripts. CI runs this suite on Linux; the
 // Windows exit code is covered by the isIllegalInstructionExit test.
@@ -27,8 +30,22 @@ const SPAWNS_FAKE_BUILDS = {
   timeout: 30000,
 };
 
+// An OS-assigned port per start. A fake that dies never binds its port, so with
+// the manager's fixed range another run of this file (a second worktree) could
+// answer the health check on it.
+function osAssignedPort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
+  });
+}
+
 // A temp install: fake whisper-server builds in <dir>/bin, found through
-// process.resourcesPath like a packaged app, and a CUDA pack under <dir>/userData.
+// process.resourcesPath like a packaged app, and GPU packs under <dir>/userData.
 // Each fake appends its file name to spawns.log, then either dies of a signal
 // ("sigill" is how a build dies on a processor that lacks its instructions) or
 // serves HTTP like a started server. On macOS each signal death also leaves a
@@ -54,6 +71,7 @@ require("http")
     [IVYBRIDGE]: path.join(dir, "bin"),
     [SANDYBRIDGE]: path.join(dir, "bin"),
     [CUDA]: path.join(dir, "userData", "bin", CUDA_BIN_SUBDIR),
+    [VULKAN]: path.join(dir, "userData", "bin", VULKAN_BIN_SUBDIR),
   };
   const runs = {
     sigill: "kill -s ILL $$",
@@ -75,6 +93,7 @@ require("http")
   process.resourcesPath = dir;
   setUserDataDir(path.join(dir, "userData"));
   const manager = new WhisperServerManager();
+  manager.findAvailablePort = osAssignedPort;
   t.after(async () => {
     await manager.stop();
     process.resourcesPath = previousResourcesPath;
@@ -125,6 +144,17 @@ test("isIllegalInstructionExit recognises the Windows and Unix illegal-instructi
   assert.equal(isIllegalInstructionExit({ exitCode: null, signal: "SIGSEGV" }), false);
   assert.equal(isIllegalInstructionExit({ exitCode: null, signal: null }), false); // still running
   assert.equal(isIllegalInstructionExit({}), false);
+});
+
+test("the builds for processors without AVX2 are named like the platform's executables", () => {
+  assert.equal(
+    cpuFallbackServerBinaryName("win32", "x64", "ivybridge"),
+    "whisper-server-win32-x64-ivybridge.exe"
+  );
+  assert.equal(
+    cpuFallbackServerBinaryName("linux", "x64", "sandybridge"),
+    "whisper-server-linux-x64-sandybridge"
+  );
 });
 
 test(
@@ -235,6 +265,7 @@ test(
   async (t) => {
     const install = createInstall(t, {
       [CUDA]: "sigill",
+      [VULKAN]: "serve",
       [PRIMARY]: "sigill",
       [IVYBRIDGE]: "serve",
     });
@@ -245,12 +276,12 @@ test(
 
     assert.deepEqual(install.spawns(), [CUDA, PRIMARY, IVYBRIDGE]);
     assert.deepEqual(fallbacks, ["cuda"]);
-    assert.equal(install.manager.gpuFallbackActive, true);
     assert.equal(install.manager.getStatus().gpuBackend, null);
 
-    // WHISPER_GPU_FAILED=cuda makes the next dictation resolve to CPU: it reuses this server
-    await install.manager.start(install.model, { useCuda: false, useVulkan: false, threads: 4 });
-    assert.equal(install.spawns().length, 3);
+    // WHISPER_GPU_FAILED=cuda lets the next dictation resolve to the installed
+    // Vulkan pack: the session keeps its working CPU server instead of a GPU cold start
+    await install.manager.start(install.model, { useVulkan: true, threads: 4 });
+    assert.deepEqual(install.spawns(), [CUDA, PRIMARY, IVYBRIDGE]);
   }
 );
 
