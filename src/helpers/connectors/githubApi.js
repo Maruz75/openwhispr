@@ -228,6 +228,9 @@ function createGithubApi({
     if (!response) return failure;
     const body = await readJson(response);
     const { status } = response;
+    // A 429 is a throttle whatever its body says: asking again at once only
+    // prolongs it, so callers wait instead of retrying.
+    const rateLimited = status === 429 ? { rateLimited: true } : {};
     const oauthError = isPlainObject(body) && typeof body.error === "string" ? body.error : "";
     if (oauthError) {
       const outcome = status >= 500 ? "unknown" : "failed";
@@ -241,6 +244,7 @@ function createGithubApi({
         // GitHub answered and said no, as opposed to a network failure, an
         // outage or a throttle, which may pass (gmailApi's `refused`).
         ...(outcome === "failed" && !transient ? { refused: true } : {}),
+        ...rateLimited,
         // slow_down carries GitHub's new minimum interval, in seconds.
         ...(Number.isFinite(interval) && interval > 0 ? { intervalMs: interval * 1000 } : {}),
       };
@@ -250,7 +254,12 @@ function createGithubApi({
         ? { ok: true, data: body }
         : { ok: false, outcome: "unknown", errorCode: "bad_response" };
     }
-    return { ok: false, outcome: classifyHttpStatus(status), errorCode: `http_${status}` };
+    return {
+      ok: false,
+      outcome: classifyHttpStatus(status),
+      errorCode: `http_${status}`,
+      ...rateLimited,
+    };
   }
 
   // `signal` lets a cancelled connect end a request that is in flight.

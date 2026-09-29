@@ -1,7 +1,7 @@
 // GitHub login and tokens (spec §5.1): the device flow for a GitHub App, and
 // user-token refresh bound to one login. A device-flow token refreshes with
 // the client id alone, so no client secret ships in the app or is ever sent.
-const { createBoundLogin } = require("./boundLogin");
+const { createBoundLogin, CONNECTION_CHANGED } = require("./boundLogin");
 const { describeError } = require("./errorSummary");
 const { createDeviceFlow } = require("./githubDeviceFlow");
 const { isTransportErrorCode } = require("./deliveryClassifier");
@@ -9,7 +9,17 @@ const { isTransportErrorCode } = require("./deliveryClassifier");
 // User access tokens live 8 hours. Refreshing 5 minutes early keeps a comment
 // from starting with a token that expires on the way.
 const EXPIRY_SKEW_MS = 5 * 60 * 1000;
-const CONNECTION_CHANGED = { ok: false, errorCode: "connection_changed" };
+// GitHub refused the OAuth client, not the user's login: a build shipped with
+// a wrong or disabled client id. Signing in again won't help, and flagging
+// every login for a reconnect would outlive the corrected build.
+// incorrect_client_credentials and device_flow_disabled are GitHub's own;
+// the other two are RFC 6749 §5.2's names for the same fault.
+const CLIENT_REFUSED = new Set([
+  "incorrect_client_credentials",
+  "device_flow_disabled",
+  "unauthorized_client",
+  "invalid_client",
+]);
 
 function codedError(code) {
   return Object.assign(new Error(code), { code });
@@ -101,7 +111,6 @@ function createGithubAuth({
   // `signal` ends the polling when a newer Connect replaces this one.
   async function authorize({ signal } = {}) {
     const id = clientId();
-    // Fail before asking GitHub for a code.
     if (!id) throw codedError("not_configured");
     const started = await deviceFlow.startDeviceAuthorization({ clientId: id, signal });
     reportProgress(started);
@@ -149,10 +158,11 @@ function createGithubAuth({
     let result = await requestRefresh(id, credential.refreshToken);
     // A refused answer (GitHub said no, with a 2xx/4xx carrying its own
     // `error`) is definitive: retrying wastes a request and the refresh token
-    // is single-use besides. Only a network error, a 5xx or an unreadable
-    // answer may pass, so only those get a second try, and only while the
-    // login this refresh started with still holds.
-    if (!result.ok && !result.refused && login.stillBound(binding)) {
+    // is single-use besides. A 429 asks us to wait, not to ask again at once.
+    // Only a network error, a 5xx or an unreadable answer may pass, so only
+    // those get a second try, and only while the login this refresh started
+    // with still holds.
+    if (!result.ok && !result.refused && !result.rateLimited && login.stillBound(binding)) {
       result = await requestRefresh(id, credential.refreshToken);
     }
     if (!result.ok) {
@@ -165,11 +175,13 @@ function createGithubAuth({
         { errorName: "GithubOAuthError", errorCode: result.errorCode },
         "connectors"
       );
-      // Any refused answer means the login can't be used as is, whether it's
-      // one of the known dead-login codes or one never seen before: reporting
-      // it as an indefinite "network" failure would leave every action
-      // saying "Couldn't reach GitHub" forever while the row still reads
-      // connected.
+      if (result.rateLimited) return { ok: false, errorCode: "rate_limited" };
+      if (CLIENT_REFUSED.has(result.errorCode)) return { ok: false, errorCode: "not_configured" };
+      // Any other refused answer means the login can't be used as is, whether
+      // it's one of the known dead-login codes or one never seen before:
+      // reporting it as an indefinite "network" failure would leave every
+      // action saying "Couldn't reach GitHub" forever while the row still
+      // reads connected.
       if (result.refused) return login.markReconnect(binding);
       return { ok: false, errorCode: "network" };
     }
@@ -205,10 +217,24 @@ function createGithubAuth({
     return login.getAccessToken(binding, { forceRefresh: !replaced });
   }
 
-  // Revoking a GitHub App user token needs the App's client secret, which
-  // never ships in the app. Disconnect deletes the login locally and the row
-  // links to github.com/settings/apps/authorizations instead.
-  async function revoke() {}
+  // Best effort: the local login goes whatever GitHub answers. This ends the
+  // tokens themselves; the App's authorization stays on github.com, which is
+  // why the Settings row still offers "Review on GitHub". GitHub refuses an
+  // authenticated call here (403), so no token is sent as a bearer.
+  async function revoke(credential) {
+    const tokens = [credential?.refreshToken, credential?.accessToken].filter(nonEmptyString);
+    if (tokens.length === 0) return;
+    try {
+      const result = await api.rest("POST", "/credentials/revoke", {
+        body: { credentials: tokens },
+      });
+      if (!result.ok) {
+        logger?.warn("github revoke failed", { errorCode: result.errorCode }, "connectors");
+      }
+    } catch (error) {
+      logger?.warn("github revoke failed", describeError(error), "connectors");
+    }
+  }
 
   function statusOf(credential) {
     const refreshExpired =

@@ -3962,6 +3962,7 @@
           "credential_save_failed": "No se pudo guardar el inicio de sesión de GitHub en este equipo. No se publicó nada. Inténtalo de nuevo.",
           "generic": "Algo salió mal. No se publicó nada en GitHub.",
           "not_installed": "La aplicación OpenWhispr de GitHub no está instalada en este repositorio. Añádela en Configuración. No se publicó nada.",
+          "repo_unlisted": "No se pudo confirmar que la aplicación OpenWhispr de GitHub esté instalada en este repositorio. Comprueba el nombre del repositorio. No se publicó nada.",
           "no_repositories": "Aún no hay repositorios elegidos para la aplicación OpenWhispr de GitHub. Elígelos en Configuración. No se publicó nada.",
           "forbidden": "No tienes permiso para hacer esto en el repositorio. No se publicó nada.",
           "not_found": "No se encontró el issue o la pull request. No se publicó nada.",
@@ -4304,6 +4305,7 @@
           "credential_save_failed": "No se pudo guardar el inicio de sesión de GitHub en este equipo.",
           "generic": "No funcionó en GitHub.",
           "not_installed": "La aplicación OpenWhispr de GitHub no está instalada ahí.",
+          "repo_unlisted": "No se pudo confirmar que la aplicación OpenWhispr de GitHub esté instalada ahí.",
           "no_repositories": "Aún no hay repositorios de GitHub elegidos.",
           "forbidden": "Sin permiso en ese repositorio.",
           "not_found": "No se encontró ese issue o pull request.",
@@ -4354,9 +4356,7 @@
         }
       },
       "unknownSent": {
-        "github": "No se pudo confirmar que se publicó en {{destination}}. Revisa GitHub antes de volver a intentarlo.",
-        "gmail": "No se pudo confirmar que el correo para {{destination}} se envió. Revisa la carpeta Enviados de Gmail.",
-        "linear": "No se pudo confirmar que llegara a Linear. Revisa {{destination}} en Linear antes de volver a intentarlo."
+        "gmail": "No se pudo confirmar que el correo para {{destination}} se envió. Revisa la carpeta Enviados de Gmail."
       },
       "gmailDraftLimit": "Solo se pueden preparar {{max}} correos por solicitud.",
       "queryResults": "Resultados encontrados: {{total}}",

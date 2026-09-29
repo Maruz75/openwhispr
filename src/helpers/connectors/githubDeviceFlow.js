@@ -104,8 +104,6 @@ function createDeviceFlow({
         case "slow_down":
         // A bare 429 is GitHub throttling the poll without saying slow_down.
         case "http_429":
-          // GitHub's new interval when it sends one, and never faster than
-          // five seconds more than before.
           interval = Math.max(interval + SLOW_DOWN_STEP_MS, positiveNumber(result.intervalMs, 0));
           continue;
         case "expired_token":

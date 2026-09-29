@@ -19,6 +19,7 @@ const loadApi = () => import("../../../src/helpers/connectors/githubApi.js");
 const DEVICE_CODE = "POST /login/device/code";
 const TOKEN = "POST /login/oauth/access_token";
 const USER = "GET /user";
+const REVOKE = "POST /credentials/revoke";
 const CLIENT_ID = "Iv1.test-client";
 const STARTED = {
   deviceCode: "device-code-1",
@@ -428,7 +429,7 @@ test("a 401 on a token another request already replaced uses the replacement, wi
 });
 
 test("an expired, revoked or used refresh token means reconnect, asked once and flagged", async () => {
-  for (const code of ["bad_refresh_token", "invalid_grant", "unauthorized_client"]) {
+  for (const code of ["bad_refresh_token", "invalid_grant"]) {
     const { auth, github, credentials } = await setup({
       credential: EXPIRED,
       script: { [TOKEN]: [oauthError(code)] },
@@ -489,7 +490,7 @@ test("any other refused OAuth refresh answer means reconnect too, asked once and
   // field: that is a definitive "no", never worth a second try, whatever the
   // code is. slow_down is refused the same way (it isn't a transient network
   // condition, even though its name suggests pacing).
-  for (const code of ["incorrect_client_credentials", "unsupported_grant_type", "slow_down"]) {
+  for (const code of ["unsupported_grant_type", "slow_down"]) {
     const { auth, github, credentials, logger } = await setup({
       credential: EXPIRED,
       script: { [TOKEN]: [oauthError(code)] },
@@ -506,9 +507,57 @@ test("any other refused OAuth refresh answer means reconnect too, asked once and
   }
 });
 
-test("a throttled or try-later refresh keeps the login, whatever its OAuth error", async () => {
+test("a refresh GitHub refuses for the OAuth client says the build can't use GitHub, and keeps the login", async () => {
+  for (const code of [
+    "incorrect_client_credentials",
+    "unauthorized_client",
+    "invalid_client",
+    "device_flow_disabled",
+  ]) {
+    const { auth, github, credentials, logger } = await setup({
+      credential: EXPIRED,
+      script: { [TOKEN]: [oauthError(code), REFRESHED] },
+    });
+
+    assert.deepEqual(
+      await auth.getAccessToken(BINDING),
+      { ok: false, errorCode: "not_configured" },
+      code
+    );
+    assert.equal(hits(github, TOKEN).length, 1, `${code}: not retried`);
+    assert.deepEqual(slot(credentials), EXPIRED, `${code}: not flagged for reconnect`);
+    assert.equal(credentials.saves.length, 0, code);
+    assert.doesNotMatch(JSON.stringify(logger.lines), /ghr-|ghu-|synthetic/);
+    // Nothing was flagged, so a build with a working client id refreshes it.
+    assert.equal((await auth.getAccessToken(BINDING)).token, "ghu-2", code);
+  }
+});
+
+test("a throttled refresh is rate_limited, not retried at once, and keeps the login", async () => {
   for (const failure of [
+    json({ message: "Too many requests" }, 429),
+    { status: 429, rawBody: "" },
     json({ error: "bad_refresh_token" }, 429),
+    json({ error: "incorrect_client_credentials" }, 429),
+  ]) {
+    const label = `${failure.status} ${failure.body?.error ?? failure.body?.message ?? "empty"}`;
+    const { auth, github, credentials } = await setup({
+      credential: EXPIRED,
+      script: { [TOKEN]: [failure, REFRESHED] },
+    });
+
+    assert.deepEqual(
+      await auth.getAccessToken(BINDING),
+      { ok: false, errorCode: "rate_limited" },
+      label
+    );
+    assert.equal(hits(github, TOKEN).length, 1, label);
+    assert.deepEqual(slot(credentials), EXPIRED, label);
+  }
+});
+
+test("a timed-out or try-later refresh keeps the login, whatever its OAuth error", async () => {
+  for (const failure of [
     json({ error: "slow_down" }, 408),
     oauthError("temporarily_unavailable"),
     oauthError("server_error"),
@@ -640,11 +689,76 @@ test("markReconnect flags only the bound login", async () => {
   assert.equal(slot(replaced.credentials).needsReconnect, false);
 });
 
-test("revoke resolves without a request: GitHub needs the client secret for it", async () => {
-  const { auth, github } = await setup();
+test("revoke ends the refresh and access tokens in one unauthenticated request", async () => {
+  const { auth, github, logger } = await setup({ script: { [REVOKE]: [json({}, 202)] } });
 
   assert.equal(await auth.revoke(CONNECTED), undefined);
-  assert.equal(github.calls.length, 0);
+
+  assert.deepEqual(github.requests(), [REVOKE]);
+  const [call] = github.calls;
+  assert.equal(call.origin, "https://api.github.com");
+  assert.deepEqual(call.json, { credentials: ["ghr-1", "ghu-1"] });
+  // GitHub answers any authenticated request here with a 403.
+  assert.equal(call.authorization, null);
+  assert.equal(logger.lines.length, 0);
+});
+
+test("revoke sends only the tokens the login has, and nothing when it has none", async () => {
+  for (const [credential, expected] of [
+    [{ ...CONNECTED, refreshToken: null }, ["ghu-1"]],
+    [{ ...CONNECTED, accessToken: "" }, ["ghr-1"]],
+  ]) {
+    const { auth, github } = await setup({ script: { [REVOKE]: [json({}, 202)] } });
+    await auth.revoke(credential);
+    assert.deepEqual(
+      github.calls.map((call) => call.json),
+      [{ credentials: expected }]
+    );
+  }
+
+  for (const credential of [
+    { ...CONNECTED, refreshToken: null, accessToken: null },
+    null,
+    undefined,
+  ]) {
+    const { auth, github } = await setup();
+    assert.equal(await auth.revoke(credential), undefined);
+    assert.equal(github.calls.length, 0);
+  }
+});
+
+test("a revoke GitHub refuses or never answers resolves, and the log holds no token", async () => {
+  for (const reply of [
+    json({ message: "Validation Failed" }, 422),
+    json({ message: "Server Error" }, 500),
+    reset(),
+    offline(),
+  ]) {
+    const { auth, logger } = await setup({ script: { [REVOKE]: [reply] } });
+
+    assert.equal(await auth.revoke(CONNECTED), undefined);
+    assert.equal(logger.lines.length, 1);
+    assert.equal(logger.lines[0].message, "github revoke failed");
+    assert.doesNotMatch(JSON.stringify(logger.lines), /ghr-|ghu-/);
+  }
+
+  // Even an api that throws never makes the disconnect fail.
+  const { createGithubAuth } = await loadAuth();
+  const logger = recordingLogger();
+  const broken = createGithubAuth({
+    api: {
+      rest: () => {
+        throw new Error("boom ghu-1");
+      },
+    },
+    credentials: memoryCredentials(CONNECTED, { connectorId: "github" }),
+    getClientId: () => CLIENT_ID,
+    deviceFlow: fakeDeviceFlow(),
+    logger,
+  });
+  assert.equal(await broken.revoke(CONNECTED), undefined);
+  assert.equal(logger.lines.length, 1);
+  assert.doesNotMatch(JSON.stringify(logger.lines), /ghr-|ghu-/);
 });
 
 test("the status names the GitHub user and says when a reconnect is needed", async () => {
@@ -666,7 +780,7 @@ test("the status names the GitHub user and says when a reconnect is needed", asy
 // half of Task 8's; Task 8 adds the real one.
 const silentLogger = { info() {}, warn() {}, error() {} };
 
-async function setupConnect({ poll, script = { [USER]: [DANA] } } = {}) {
+async function setupConnect({ poll, script = { [USER]: [DANA], [REVOKE]: [json({}, 202)] } } = {}) {
   const [{ createConnectorManager }, { createPendingActions }] = await Promise.all([
     import("../../../src/helpers/connectors/connectorManager.js"),
     import("../../../src/helpers/connectors/pendingActions.js"),
@@ -689,7 +803,7 @@ async function setupConnect({ poll, script = { [USER]: [DANA] } } = {}) {
       return null;
     },
     authorize: (options) => auth.authorize(options),
-    revoke: () => auth.revoke(),
+    revoke: (credential) => auth.revoke(credential),
   };
   const manager = createConnectorManager({
     connectors: [connector],
@@ -740,7 +854,7 @@ test("an OpenWhispr account switch while the code waits (up to 15 minutes) saves
 });
 
 test("a login saved while the code waited wins over the late one", async () => {
-  const { manager, credentials } = await setupConnect({
+  const { manager, credentials, github } = await setupConnect({
     poll: async (args, store) => {
       store.replace("acct-1", "github", OTHER_LOGIN, 0);
       return issued();
@@ -752,6 +866,11 @@ test("a login saved while the code waited wins over the late one", async () => {
     errorCode: "connection_changed",
   });
   assert.deepEqual(credentials.read("acct-1", "github").credential, OTHER_LOGIN);
+  // Nobody will use the late login, so its tokens are ended on GitHub.
+  assert.deepEqual(
+    hits(github, REVOKE).map((call) => call.json),
+    [{ credentials: ["ghr-new", "ghu-new"] }]
+  );
 });
 
 test("a newer Connect stops the one still waiting on its code", async () => {

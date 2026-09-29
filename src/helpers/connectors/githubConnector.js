@@ -4,8 +4,9 @@
 // Send commits exactly what the card shows, re-checked here first.
 const { createGithubApi } = require("./githubApi");
 const { createGithubAuth } = require("./githubAuth");
-const { createGithubInstallations } = require("./githubInstallations");
+const { createGithubInstallations, REFETCH_AFTER_MS } = require("./githubInstallations");
 const { isTransportErrorCode } = require("./deliveryClassifier");
+const { formBody } = require("./providerHttp");
 
 const MAX_TITLE_LENGTH = 256;
 const MAX_BODY_LENGTH = 65536;
@@ -16,9 +17,9 @@ const SNIPPET_LENGTH = 300;
 // GitHub's 256-character search limit counts only the words, never the
 // qualifiers, and MAX_QUERY_LENGTH already keeps the words under it. What
 // bounds the `repo:` list is the request URL: GitHub answered 250 qualifiers
-// (a 5 KB URL) and failed with a 5xx near 8 KB. The budget is `q`
-// percent-encoded, never shorter than it is in the URL (a space is `+`
-// there), so with the rest of the URL it stays under the 5 KB that worked.
+// (a 5 KB URL) and failed with a 5xx near 8 KB. The budget is `q` as the
+// request's query string encodes it (formBody, as githubApi's rest builds
+// it), so with the rest of the URL it stays under the 5 KB that worked.
 const MAX_SEARCH_QUERY_LENGTH = 4900;
 // A read of the installed repository count for the status gives up after
 // this long, so a hung read never blocks the next one.
@@ -91,6 +92,7 @@ function redactEmails(text) {
 // when it can, so no address is cut in two where the excerpt might show it.
 function excerpt(text, max) {
   const collapsed = collapseWhitespace(text);
+  // UTF-16 units: at least twice `max` characters, however many are emoji.
   const windowLength = max * 4;
   if (collapsed.length <= windowLength) return clip(redactEmails(collapsed), max);
   const space = collapsed.lastIndexOf(" ", windowLength);
@@ -100,16 +102,12 @@ function excerpt(text, max) {
   return clip(`${redactEmails(collapsed.slice(0, end))}…`, max);
 }
 
-// At most `max` UTF-16 units, cut between code points (never inside a
-// surrogate pair), ending in "…" when anything was cut.
+// At most `max` characters (code points, so never half a surrogate pair),
+// ending in "…" when anything was cut.
 function clip(text, max) {
   if (text.length <= max) return text;
-  let kept = "";
-  for (const character of text) {
-    if (kept.length + character.length > max - 1) break;
-    kept += character;
-  }
-  return `${kept}…`;
+  const characters = [...text];
+  return characters.length <= max ? text : `${characters.slice(0, max - 1).join("")}…`;
 }
 
 function validRepoName(name) {
@@ -173,21 +171,18 @@ function withoutLeftovers(text) {
  * The `q` for GET /search/issues: the user's words without their own scope
  * qualifiers, the type (`issue` or `pr`) and state (unless the words name
  * one), then one `repo:` per installed repo in the order given (most
- * recently updated first) while `q`, percent-encoded, stays within
- * MAX_SEARCH_QUERY_LENGTH. `truncated` says some repos were left out.
+ * recently updated first) while `q`, encoded as the request sends it, stays
+ * within MAX_SEARCH_QUERY_LENGTH. `truncated` says some repos were left out.
  */
 function buildSearchQuery({ query, type, state = "open", repos = [] }) {
   const words = withoutLeftovers(String(query ?? "").replace(SCOPE_QUALIFIER, "$1 "));
   const stateQualifier = state === "all" || STATE_QUALIFIER.test(words) ? "" : "state:open";
   let q = [words, TYPE_QUALIFIERS[type], stateQualifier].filter(Boolean).join(" ");
-  let encodedLength = encodeURIComponent(q).length;
   const searched = [];
   for (const fullName of repos) {
-    const qualifier = `${q ? " " : ""}repo:${fullName}`;
-    const nextLength = encodedLength + encodeURIComponent(qualifier).length;
-    if (nextLength > MAX_SEARCH_QUERY_LENGTH) break;
-    q += qualifier;
-    encodedLength = nextLength;
+    const next = `${q}${q ? " " : ""}repo:${fullName}`;
+    if (formBody({ q: next }).length > MAX_SEARCH_QUERY_LENGTH) break;
+    q = next;
     searched.push(fullName);
   }
   // Without a single repo: qualifier the search would cover every repo the
@@ -229,8 +224,9 @@ function failureMessage(errorCode) {
     case "network":
       return "Couldn't reach GitHub.";
     default:
-      return isTransportErrorCode(errorCode)
-        ? "Couldn't reach GitHub."
+      if (isTransportErrorCode(errorCode)) return "Couldn't reach GitHub.";
+      return /^http_5\d\d$/.test(errorCode)
+        ? "GitHub had a problem answering. Try again later."
         : "GitHub refused the request.";
   }
 }
@@ -312,10 +308,11 @@ function createGithubConnector({
   notifyStatusChanged = () => {},
   statusTimeoutMs = STATUS_REPOSITORIES_TIMEOUT_MS,
 }) {
-  // The installed repository count per login, and the read in flight for
-  // it. The manager asks every connector for its status together, so the
-  // status answers with the last count read and never waits on GitHub:
-  // Slack's Connect or the first chat turn would wait with it.
+  // The installed repository count per OpenWhispr account, for its current
+  // login ({ generation, count }), and the reads in flight. The manager asks
+  // every connector for its status together, so the status answers with the
+  // last count read and never waits on GitHub: Slack's Connect or the first
+  // chat turn would wait with it.
   const repoCounts = new Map();
   const countReads = new Set();
   const countKey = (binding) => `${binding.ownerAccountId}:${binding.generation}`;
@@ -328,12 +325,11 @@ function createGithubConnector({
   }
 
   // `truncated`: the installations listed more repositories than OpenWhispr
-  // reads, so the repo may be installed after all. That message keeps the
-  // phrase "check the name": githubTools.ts matches it to say so to the model.
+  // reads, so the repo may be installed after all.
   function notInstalled(fullName, truncated = false) {
     if (truncated) {
       return {
-        errorCode: "not_installed",
+        errorCode: "repo_unlisted",
         message: `The OpenWhispr GitHub App isn't installed on ${fullName}, as far as OpenWhispr can tell: it reads the first 1,000 repositories of each installation. Ask the user to check the name.`,
       };
     }
@@ -420,10 +416,17 @@ function createGithubConnector({
     );
     if (resolved.ok) return { repo: resolved.repo };
     if (resolved.clarification) return { clarification: resolved.clarification };
-    if (resolved.errorCode === "not_installed") {
-      return { failure: notInstalled(input.trim(), resolved.truncated === true) };
+    if (resolved.errorCode === "not_installed" || resolved.errorCode === "repo_unlisted") {
+      return { failure: notInstalled(input.trim(), resolved.errorCode === "repo_unlisted") };
     }
-    return { failure: { errorCode: resolved.errorCode } };
+    return { failure: { errorCode: resolved.errorCode, message: resolved.message } };
+  }
+
+  // GitHub answers 410 both when a repo's issues are off and when the issue
+  // was deleted; the installed repo says which. Null for any other answer.
+  function deletedIssue(result, repo, number) {
+    if (result.errorCode !== "issues_disabled" || !repo.hasIssues) return null;
+    return { errorCode: "not_found", message: `${repo.fullName}#${number} was deleted.` };
   }
 
   // GitHub answers 403 or 404 for a repo the App isn't installed on (any
@@ -458,17 +461,9 @@ function createGithubConnector({
       api.rest("GET", `${repoPath(repo)}/issues/${target.number}`, { token })
     );
     if (!read.ok) {
-      // GitHub answers 410 both when a repo's issues are off and when the
-      // issue was deleted; the installed repo says which.
-      if (read.errorCode === "issues_disabled" && repo.hasIssues) {
-        return {
-          failure: {
-            errorCode: "not_found",
-            message: `${repo.fullName}#${target.number} was deleted.`,
-          },
-        };
-      }
-      return { failure: await refusal(session, read, repo) };
+      return {
+        failure: deletedIssue(read, repo, target.number) ?? (await refusal(session, read, repo)),
+      };
     }
     const issue = read.data;
     if (!Number.isInteger(issue?.number) || !nonEmptyString(issue?.html_url)) {
@@ -520,48 +515,19 @@ function createGithubConnector({
     };
   }
 
-  async function searchIssues(args, binding) {
-    const query = typeof args?.query === "string" ? args.query.trim() : "";
-    if (!query) return clarify("Ask the user what to search GitHub for.");
-    if (characterCount(query) > MAX_QUERY_LENGTH) {
-      return failed("too_long", `Keep the search to ${MAX_QUERY_LENGTH} characters or fewer.`);
-    }
-    const state = args?.state ?? "open";
-    const type = args?.type ?? "any";
-    if (!STATES.has(state) || !TYPES.has(type)) {
-      return failed("invalid", "state is open or all, and type is issue, pr or any.");
-    }
-    const opened = await openSession(binding);
-    if (opened.failure) return failedWith(opened.failure);
-    const { session } = opened;
-
-    let scope;
-    // The installations listed more repos than OpenWhispr reads: some went
-    // unsearched.
-    let unlisted = false;
-    if (typeof args?.repo === "string" && args.repo.trim()) {
-      const resolved = await resolveRepo(session, args.repo);
-      if (resolved.clarification) {
-        return clarify(resolved.clarification.message, resolved.clarification.candidates);
-      }
-      if (resolved.failure) return failedWith(resolved.failure);
-      scope = [resolved.repo];
-    } else {
-      const installed = await installedRepos(session);
-      if (installed.failure) return failedWith(installed.failure);
-      scope = installed.repos;
-      unlisted = installed.truncated;
-    }
-
-    const repoNames = scope.map((r) => r.fullName);
+  // One search per type (`any` is both), each limited to `repos`.
+  async function runSearches(session, { query, type, state }, repos) {
     const searches = (type === "any" ? ["issue", "pr"] : [type]).map((kind) =>
-      buildSearchQuery({ query, type: kind, state, repos: repoNames })
+      buildSearchQuery({ query, type: kind, state, repos: repos.map((repo) => repo.fullName) })
     );
     if (searches.some((built) => !built.ok)) {
-      return failed(
-        "too_long",
-        "The search is too long to limit to the user's repositories. Ask for a shorter search."
-      );
+      return {
+        failure: {
+          errorCode: "too_long",
+          message:
+            "The search is too long to limit to the user's repositories. Ask for a shorter search.",
+        },
+      };
     }
     const pages = await Promise.all(
       searches.map((built) =>
@@ -578,10 +544,64 @@ function createGithubConnector({
     // reach normalizeQueryResult as an unrecognized code and get rewritten to
     // generic "query_failed" copy; "network" is a code it accepts as is.
     if (failure) {
-      return failed(isTransportErrorCode(failure.errorCode) ? "network" : failure.errorCode);
+      return {
+        failure: {
+          errorCode: isTransportErrorCode(failure.errorCode) ? "network" : failure.errorCode,
+        },
+      };
     }
+    return { searches, pages };
+  }
+
+  // The search over the repo named, or every installed one. `truncated`:
+  // the installations listed more repos than OpenWhispr reads, so some went
+  // unsearched.
+  async function scopedSearch(session, repo, params) {
+    let scope;
+    if (repo) {
+      const resolved = await resolveRepo(session, repo);
+      if (!resolved.repo) return resolved;
+      scope = { repos: [resolved.repo], truncated: false };
+    } else {
+      scope = await installedRepos(session);
+      if (scope.failure) return scope;
+    }
+    const run = await runSearches(session, params, scope.repos);
+    return run.failure ? run : { ...run, truncated: scope.truncated };
+  }
+
+  async function searchIssues(args, binding) {
+    const query = typeof args?.query === "string" ? args.query.trim() : "";
+    if (!query) return clarify("Ask the user what to search GitHub for.");
+    if (characterCount(query) > MAX_QUERY_LENGTH) {
+      return failed("too_long", `Keep the search to ${MAX_QUERY_LENGTH} characters or fewer.`);
+    }
+    const state = args?.state ?? "open";
+    const type = args?.type ?? "any";
+    // Refused before GitHub is asked: the model's own input, not GitHub's
+    // verdict.
+    if (!STATES.has(state) || !TYPES.has(type)) {
+      return failed("invalid_input", "state is open or all, and type is issue, pr or any.");
+    }
+    const opened = await openSession(binding);
+    if (opened.failure) return failedWith(opened.failure);
+    const { session } = opened;
+    const repo = typeof args?.repo === "string" ? args.repo.trim() : "";
+    const params = { query, type, state };
+
+    let run = await scopedSearch(session, repo, params);
+    // GitHub answers 422 when q names a repo the user can no longer search
+    // (unticked on the install page, deleted, access lost), which the 60 s
+    // cache can still list: the repos are read fresh and searched once more.
+    if (run.failure?.errorCode === "invalid") {
+      installations.clear(session.binding);
+      run = await scopedSearch(session, repo, params);
+    }
+    if (run.clarification) return clarify(run.clarification.message, run.clarification.candidates);
+    if (run.failure) return failedWith(run.failure);
+    const { searches, pages } = run;
     const items = [];
-    let truncated = unlisted;
+    let truncated = run.truncated;
     searches.forEach((built, index) => {
       const found = pages[index];
       const searched = new Map(built.repos.map((fullName) => [fullName.toLowerCase(), fullName]));
@@ -820,6 +840,14 @@ function createGithubConnector({
     }
     if (created.outcome === "failed") {
       const refused = await refusal(session, created, repo);
+      // GitHub answers 404 to a write the user may not make there, and the
+      // repo is still installed: no issue is missing.
+      if (refused.errorCode === "not_found") {
+        return commitFailed(
+          "forbidden",
+          `GitHub refused: the user may not be able to create issues in ${repo.fullName}.`
+        );
+      }
       return commitFailedWith(refused);
     }
     // GitHub has no idempotency key, so an uncertain create is never repeated.
@@ -852,8 +880,10 @@ function createGithubConnector({
         : { state: "unknown", errorCode: "bad_response", checkUrl: read.issue.url };
     }
     if (posted.outcome === "failed") {
-      const refused = await refusal(session, posted, read.repo);
-      return commitFailedWith(refused);
+      return commitFailedWith(
+        deletedIssue(posted, read.repo, read.issue.number) ??
+          (await refusal(session, posted, read.repo))
+      );
     }
     return { state: "unknown", errorCode: posted.errorCode, checkUrl: read.issue.url };
   }
@@ -866,15 +896,26 @@ function createGithubConnector({
     };
   }
 
+  // A list younger than REFETCH_AFTER_MS is reused, so the status
+  // broadcasts that follow each other don't each read every repository, and
+  // an install picked on GitHub's own page moments ago still shows.
   async function countRepos(binding, signal) {
     const opened = await openSession(binding);
-    if (opened.failure || signal.aborted) return null;
-    const listed = await call(opened.session, (token) =>
-      installations.list(binding, token, { signal })
-    );
-    if (!listed.ok) return null;
-    // More repositories are installed than OpenWhispr reads (1,000 each).
-    return `${listed.repos.length}${listed.truncated ? "+" : ""}`;
+    let failure = opened.failure;
+    if (!failure) {
+      if (signal.aborted) return null;
+      const listed = await call(opened.session, (token) =>
+        installations.list(binding, token, { signal, maxAgeMs: REFETCH_AFTER_MS })
+      );
+      // More repositories are installed than OpenWhispr reads (1,000 each).
+      if (listed.ok) return `${listed.repos.length}${listed.truncated ? "+" : ""}`;
+      failure = listed;
+    }
+    // The refresh this read needed was refused and the login is saved as
+    // needing a reconnect, but Settings and the offered tools only see that
+    // in a status read. Announced even after the read was given up on.
+    if (failure.errorCode === "reconnect_needed") notifyStatusChanged();
+    return null;
   }
 
   // The installed repo count, within statusTimeoutMs. Best effort: a
@@ -887,19 +928,22 @@ function createGithubConnector({
     return Promise.race([countRepos(binding, signal).catch(() => null), gaveUp]);
   }
 
+  // The last count read for this login, or null.
+  function lastRepoCount(binding) {
+    const last = repoCounts.get(binding.ownerAccountId);
+    return last?.generation === binding.generation ? last.count : null;
+  }
+
   // Reads the count again in the background and announces a changed one.
-  // The count must reflect an install picked on GitHub's own page moments
-  // ago, so the read skips the 60 s cache (the fresh list then serves the
-  // tools too). A count that couldn't be read keeps the last one.
+  // A count that couldn't be read keeps the last one.
   function refreshRepoCount(binding) {
     const key = countKey(binding);
     if (countReads.has(key)) return;
     countReads.add(key);
-    installations.clear(binding);
     void repoCount(binding).then((count) => {
       countReads.delete(key);
-      if (count === null || count === repoCounts.get(key)) return;
-      repoCounts.set(key, count);
+      if (count === null || count === lastRepoCount(binding)) return;
+      repoCounts.set(binding.ownerAccountId, { generation: binding.generation, count });
       notifyStatusChanged();
     });
   }
@@ -935,7 +979,7 @@ function createGithubConnector({
       refreshRepoCount(binding);
       return withManage({
         ...status,
-        workspaceLabel: repoCounts.get(countKey(binding)) ?? null,
+        workspaceLabel: lastRepoCount(binding),
       });
     },
 
@@ -963,7 +1007,10 @@ function createGithubConnector({
     },
 
     authorize: (options) => auth.authorize(options),
-    revoke: () => auth.revoke(),
+    revoke: (credential) => auth.revoke(credential),
+    // GitHub revokes one token, never the user's other logins, so a login a
+    // reconnect replaced is revoked too, even for the same GitHub user.
+    loginKey: (credential) => credential?.refreshToken ?? credential?.accessToken ?? null,
   };
 }
 

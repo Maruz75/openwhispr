@@ -3909,6 +3909,7 @@
           "credential_save_failed": "无法在此电脑上保存 GitHub 登录信息，未发布任何内容。请重试。",
           "generic": "出了点问题，未向 GitHub 发布任何内容。",
           "not_installed": "此仓库未安装 OpenWhispr GitHub App。请在设置中添加。未发布任何内容。",
+          "repo_unlisted": "无法确认此仓库是否已安装 OpenWhispr GitHub App。请检查仓库名称。未发布任何内容。",
           "no_repositories": "尚未为 OpenWhispr GitHub App 选择仓库。请在设置中选择。未发布任何内容。",
           "forbidden": "您没有在此仓库中执行此操作的权限，未发布任何内容。",
           "not_found": "找不到该 Issue 或拉取请求，未发布任何内容。",
@@ -4251,6 +4252,7 @@
           "credential_save_failed": "无法在此电脑上保存 GitHub 登录信息。",
           "generic": "在 GitHub 上操作未成功。",
           "not_installed": "那里未安装 OpenWhispr GitHub App。",
+          "repo_unlisted": "无法确认那里是否已安装 OpenWhispr GitHub App。",
           "no_repositories": "尚未选择 GitHub 仓库。",
           "forbidden": "在该仓库中没有权限。",
           "not_found": "找不到该 Issue 或拉取请求。",
@@ -4301,9 +4303,7 @@
         }
       },
       "unknownSent": {
-        "github": "无法确认是否已发布到 {{destination}}，重试前请先在 GitHub 上检查。",
-        "gmail": "无法确认发给 {{destination}} 的邮件是否已发送，请检查 Gmail 的“已发送”文件夹。",
-        "linear": "无法确认是否已送达 Linear。重试前请先在 Linear 中检查 {{destination}}。"
+        "gmail": "无法确认发给 {{destination}} 的邮件是否已发送，请检查 Gmail 的“已发送”文件夹。"
       },
       "gmailDraftLimit": "每次请求最多只能准备 {{max}} 封邮件。",
       "queryResults": "找到的结果：{{total}}",

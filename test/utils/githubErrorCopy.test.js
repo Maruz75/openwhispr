@@ -17,6 +17,7 @@ const REQUIRED = [
 const GITHUB_CODES = [
   ...REQUIRED,
   "not_installed",
+  "repo_unlisted",
   "no_repositories",
   "forbidden",
   "not_found",
@@ -102,10 +103,23 @@ test("every code GitHub returns has its own copy on both surfaces, in English", 
 test("GitHub cards and receipts name GitHub", () => {
   const copy = connectorsCopy("en");
   assert.equal(copy.approval.openIn.github, "Open in GitHub");
-  assert.match(copy.toolStatus.unknownSent.github, /\{\{destination\}\}/);
   assert.match(copy.approval.github.notes.mentions, /\{\{mentions\}\}/);
   assert.match(copy.recent.actions.github_create_issue, /\{\{destination\}\}/);
   assert.match(copy.recent.actions.github_comment, /\{\{destination\}\}/);
   assert.equal(typeof copy.recent.unlabeledActions.github_create_issue, "string");
   assert.equal(typeof copy.recent.unlabeledActions.github_comment, "string");
+});
+
+test("a repository main couldn't find among those it read has its own copy, in every locale", () => {
+  for (const locale of LOCALES) {
+    const t = i18n.getFixedT(locale);
+    const copy = connectorsCopy(locale);
+    for (const scope of ["approval", "toolStatus"]) {
+      const shown = connectorErrorText(t, scope, "github", "repo_unlisted");
+      assert.equal(shown, copy[scope].errors.github.repo_unlisted, `${locale} ${scope}`);
+      // It may be installed after all, so it never reads as "not installed".
+      assert.notEqual(shown, copy[scope].errors.github.not_installed, `${locale} ${scope}`);
+      assert.notEqual(shown, copy[scope].errors.github.generic, `${locale} ${scope}`);
+    }
+  }
 });

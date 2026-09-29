@@ -71,7 +71,10 @@ export function ConnectorLoginRow({
   // Set while a connect the row should stop on leaving is still waiting.
   const cancelOnLeave = useRef<(() => void) | null>(null);
   const actions = useRef<HTMLDivElement>(null);
+  const connectingDetail = useRef<HTMLDivElement>(null);
   const wasConnecting = useRef(false);
+  // Set when Connect or Reconnect had focus as the connect started.
+  const focusConnectingDetail = useRef(false);
 
   // Loaded for every plan: a lapsed plan must still see, and remove, its login.
   useEffect(() => {
@@ -94,13 +97,19 @@ export function ConnectorLoginRow({
     cancel?.();
   }, [canConnect]);
 
-  // A connect in the row ends by unmounting its own Cancel or Copy & open,
-  // which usually held focus; focus then goes to the row's first button
-  // (Connect, Reconnect, the next step once connected, or Disconnect) rather
-  // than dropping to the page.
+  // A connect in the row starts by unmounting the Connect or Reconnect that
+  // had focus, so focus moves to the connecting detail's Cancel (its only
+  // button until the code arrives). It ends by unmounting its own Cancel or
+  // Copy & open, which usually held focus; focus then goes to the row's first
+  // button (Connect, Reconnect, the next step once connected, or Disconnect)
+  // rather than dropping to the page.
   useEffect(() => {
     if (phase === "connecting") {
       wasConnecting.current = true;
+      if (focusConnectingDetail.current) {
+        focusConnectingDetail.current = false;
+        connectingDetail.current?.querySelector<HTMLButtonElement>("button")?.focus();
+      }
       return;
     }
     if (!wasConnecting.current || !row.connectInRow) return;
@@ -121,6 +130,9 @@ export function ConnectorLoginRow({
   const connect = async (): Promise<void> => {
     const attempt = ++latestAttempt.current;
     const isLatest = (): boolean => attempt === latestAttempt.current;
+    focusConnectingDetail.current = Boolean(
+      row.connectInRow && actions.current?.contains(document.activeElement)
+    );
     setPhase("connecting");
     setErrorCode(null);
     setGrantKept(false);
@@ -198,7 +210,9 @@ export function ConnectorLoginRow({
             {summary}
           </p>
           {phase === "connecting" && ConnectingDetail && (
-            <ConnectingDetail connectorId={connectorId} />
+            <div ref={connectingDetail}>
+              <ConnectingDetail connectorId={connectorId} />
+            </div>
           )}
           {disconnected && !connected && DisconnectedDetail && (
             <DisconnectedDetail connectorId={connectorId} />

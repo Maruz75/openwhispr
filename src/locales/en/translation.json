@@ -4078,6 +4078,7 @@
           "credential_save_failed": "The GitHub login couldn't be saved on this computer. Nothing was posted. Try again.",
           "generic": "Something went wrong. Nothing was posted to GitHub.",
           "not_installed": "The OpenWhispr GitHub App isn't installed on this repository. Add it in Settings. Nothing was posted.",
+          "repo_unlisted": "Couldn't confirm the OpenWhispr GitHub App is installed on this repository. Check the repository name. Nothing was posted.",
           "no_repositories": "No repositories are chosen for the OpenWhispr GitHub App yet. Choose them in Settings. Nothing was posted.",
           "forbidden": "You don't have permission to do this in the repository. Nothing was posted.",
           "not_found": "The issue or pull request couldn't be found. Nothing was posted.",
@@ -4420,6 +4421,7 @@
           "credential_save_failed": "Couldn't save the GitHub login on this computer.",
           "generic": "That didn't work on GitHub.",
           "not_installed": "The OpenWhispr GitHub App isn't installed there.",
+          "repo_unlisted": "Couldn't confirm the OpenWhispr GitHub App is installed there.",
           "no_repositories": "No GitHub repositories chosen yet.",
           "forbidden": "No permission in that repository.",
           "not_found": "Couldn't find that issue or pull request.",
@@ -4470,9 +4472,7 @@
         }
       },
       "unknownSent": {
-        "github": "Couldn't confirm it was posted to {{destination}}. Check GitHub before trying again.",
-        "gmail": "Couldn't confirm the email to {{destination}} was sent. Check your Gmail Sent folder.",
-        "linear": "Couldn't confirm it reached Linear. Check {{destination}} in Linear before trying again."
+        "gmail": "Couldn't confirm the email to {{destination}} was sent. Check your Gmail Sent folder."
       },
       "gmailDraftLimit": "Only {{max}} emails can be prepared per request.",
       "queryResults": "Results found: {{total}}",

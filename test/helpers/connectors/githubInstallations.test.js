@@ -82,13 +82,11 @@ test("lists every installed repository across installations and pages, most rece
   const listed = await installations.list(BINDING, TOKEN);
 
   assert.equal(listed.ok, true);
-  assert.equal(listed.installationCount, 2);
   assert.deepEqual(listed.repos, [
     {
       owner: "dana",
       name: "notes",
       fullName: "dana/notes",
-      private: false,
       hasIssues: true,
       archived: false,
       canPush: false,
@@ -98,7 +96,6 @@ test("lists every installed repository across installations and pages, most rece
       owner: "acme",
       name: "api",
       fullName: "acme/api",
-      private: true,
       hasIssues: true,
       archived: false,
       canPush: false,
@@ -108,7 +105,6 @@ test("lists every installed repository across installations and pages, most rece
       owner: "dana",
       name: "api",
       fullName: "dana/api",
-      private: false,
       hasIssues: false,
       archived: false,
       canPush: false,
@@ -118,7 +114,6 @@ test("lists every installed repository across installations and pages, most rece
       owner: "acme",
       name: "web",
       fullName: "acme/web",
-      private: false,
       hasIssues: true,
       archived: false,
       canPush: false,
@@ -176,9 +171,11 @@ test("an installation with more repositories than OpenWhispr reads marks the lis
 
   assert.equal(listed.ok, true);
   assert.equal(listed.truncated, true);
-  const missing = await installations.resolveRepo(BINDING, TOKEN, "dana/far");
-  assert.equal(missing.errorCode, "not_installed");
-  assert.equal(missing.truncated, true);
+  // Its own code: the repo may be installed after all.
+  assert.deepEqual(await installations.resolveRepo(BINDING, TOKEN, "dana/far"), {
+    ok: false,
+    errorCode: "repo_unlisted",
+  });
 });
 
 test("repository entries without an owner, name or full name are skipped", async () => {
@@ -236,7 +233,6 @@ test("a failed read is reported, never cached, and never half a list", async () 
   assert.deepEqual(await outage.installations.list(BINDING, TOKEN), {
     ok: true,
     repos: [],
-    installationCount: 0,
     truncated: false,
   });
 
@@ -297,7 +293,6 @@ test("a repo is resolved by owner/name in any case, or by a bare name only one r
       owner: "acme",
       name: "api",
       fullName: "acme/api",
-      private: true,
       hasIssues: true,
       archived: false,
       canPush: false,
@@ -321,6 +316,77 @@ test("a bare name two installed repos share is a question listing owner/name", a
       candidates: ["acme/api", "dana/api"],
     },
   });
+});
+
+// One installation listing `repositories`, cut at the read limit when
+// `truncated` (every later page is empty and links to another).
+function installedOnly(repositories, { truncated = false } = {}) {
+  const more = next("/user/installations/2/repositories", 2);
+  return {
+    [INSTALLATIONS]: [installationsPage([installation(2, "acme")])],
+    [reposOf(2)]: truncated
+      ? [reposPage(repositories, more), reposPage([], more)]
+      : [reposPage(repositories)],
+  };
+}
+
+test("a bare name as said aloud finds the repo it nearly names, an exact name first", async () => {
+  const OPEN_WHISPR = repo("acme/open-whispr", "2026-09-27T10:00:00Z");
+  const { installations } = await setup(installedOnly([OPEN_WHISPR, ACME_WEB]));
+  for (const input of ["open whispr", "openwhispr", "Open_Whispr", "open"]) {
+    assert.equal(
+      (await installations.resolveRepo(BINDING, TOKEN, input)).repo?.fullName,
+      "acme/open-whispr",
+      input
+    );
+  }
+
+  const both = await setup(
+    installedOnly([OPEN_WHISPR, repo("acme/openwhispr", "2026-09-26T10:00:00Z")])
+  );
+  assert.equal(
+    (await both.installations.resolveRepo(BINDING, TOKEN, "OpenWhispr")).repo.fullName,
+    "acme/openwhispr"
+  );
+
+  // An owner/name is never matched loosely.
+  assert.equal(
+    (await both.installations.resolveRepo(BINDING, TOKEN, "acme/open whispr")).errorCode,
+    "not_installed"
+  );
+});
+
+test("a bare name that nearly names several repos is a question", async () => {
+  const { installations } = await setup(
+    installedOnly([
+      repo("acme/whisper-api", "2026-09-27T10:00:00Z"),
+      repo("acme/whisper-web", "2026-09-26T10:00:00Z"),
+      repo("acme/docs", "2026-09-25T10:00:00Z"),
+    ])
+  );
+
+  assert.deepEqual(await installations.resolveRepo(BINDING, TOKEN, "whisper"), {
+    ok: false,
+    clarification: {
+      message: "Several installed repositories match whisper. Ask the user which one.",
+      candidates: ["acme/whisper-api", "acme/whisper-web"],
+    },
+  });
+});
+
+test("a list cut at the read limit finds only an exact name, since a looser one may be unread", async () => {
+  const { installations } = await setup(
+    installedOnly([repo("acme/open-whispr", "2026-09-27T10:00:00Z")], { truncated: true })
+  );
+
+  assert.deepEqual(await installations.resolveRepo(BINDING, TOKEN, "open whispr"), {
+    ok: false,
+    errorCode: "repo_unlisted",
+  });
+  assert.equal(
+    (await installations.resolveRepo(BINDING, TOKEN, "Open-Whispr")).repo.fullName,
+    "acme/open-whispr"
+  );
 });
 
 test("with no repo named, one installed repo is used and several are a question", async () => {
@@ -366,10 +432,10 @@ test("for a new issue, the question leaves out archived repos and ones with issu
     ["dana/notes", "acme/api", "acme/web"]
   );
   // dana/api has issues off and old/api is archived: of three repos named
-  // api, only acme/api is offered.
-  assert.deepEqual(
-    (await installations.resolveRepo(BINDING, TOKEN, "api", forNewIssue)).clarification.candidates,
-    ["acme/api"]
+  // api, acme/api is the one that can take the issue, so there's no question.
+  assert.equal(
+    (await installations.resolveRepo(BINDING, TOKEN, "api", forNewIssue)).repo.fullName,
+    "acme/api"
   );
   // Anything else (a search) is offered every repo.
   assert.deepEqual((await installations.resolveRepo(BINDING, TOKEN)).clarification.candidates, [
@@ -385,6 +451,30 @@ test("for a new issue, the question leaves out archived repos and ones with issu
     (await installations.resolveRepo(BINDING, TOKEN, "dana/old", forNewIssue)).repo.fullName,
     "dana/old"
   );
+});
+
+test("for a new issue, no repo that can take one is a refusal, never an empty question", async () => {
+  const { installations } = await setup(
+    installedOnly([
+      repo("acme/api", "2026-09-27T10:00:00Z", { archived: true }),
+      repo("dana/api", "2026-09-26T10:00:00Z", { has_issues: false }),
+      repo("acme/web", "2026-09-25T10:00:00Z", { archived: true }),
+    ])
+  );
+  const forNewIssue = { forNewIssue: true };
+
+  assert.deepEqual(await installations.resolveRepo(BINDING, TOKEN, undefined, forNewIssue), {
+    ok: false,
+    errorCode: "issues_disabled",
+    message:
+      "None of the installed repositories can take a new issue: each is archived or has issues turned off.",
+  });
+  assert.deepEqual(await installations.resolveRepo(BINDING, TOKEN, "api", forNewIssue), {
+    ok: false,
+    errorCode: "issues_disabled",
+    message:
+      "None of the installed repositories named api can take a new issue: each is archived or has issues turned off.",
+  });
 });
 
 test("a suspended installation is skipped, so its 403 never fails the others", async () => {
@@ -406,7 +496,6 @@ test("a suspended installation is skipped, so its 403 never fails the others", a
     listed.repos.map((entry) => entry.fullName),
     ["dana/notes"]
   );
-  assert.equal(listed.installationCount, 1);
   assert.equal(
     github.calls.filter((call) => call.path === "/user/installations/1/repositories").length,
     0
@@ -419,7 +508,6 @@ test("a repo the App isn't installed on is named in the refusal; none installed 
   assert.deepEqual(await installations.resolveRepo(BINDING, TOKEN, "acme/secret"), {
     ok: false,
     errorCode: "not_installed",
-    truncated: false,
   });
   assert.equal(
     (await installations.resolveRepo(BINDING, TOKEN, "infra")).errorCode,

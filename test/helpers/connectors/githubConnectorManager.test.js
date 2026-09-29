@@ -1,10 +1,18 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { CONNECTED, fakeGithubFetch, hang, json, memoryCredentials } = require("./githubFixtures");
+const {
+  CONNECTED,
+  fakeGithubFetch,
+  hang,
+  json,
+  oauthError,
+  memoryCredentials,
+} = require("./githubFixtures");
 
 const INSTALLATIONS = "GET /user/installations";
 const REPOSITORIES = "GET /user/installations/7/repositories";
 const CREATE = "POST /repos/acme/api/issues";
+const TOKEN = "POST /login/oauth/access_token";
 const ALLOWED = { policyState: "allowed", accountId: "acct-1" };
 const INSTALL_URL = "https://github.com/apps/openwhispr-dev/installations/new";
 const ENV = { GITHUB_APP_CLIENT_ID: "Iv1.test-client", GITHUB_APP_SLUG: "openwhispr-dev" };
@@ -84,6 +92,54 @@ async function setup({ script = {}, credential = CONNECTED, env = ENV, others = 
 }
 
 const hits = (github, key) => github.calls.filter((call) => `${call.method} ${call.path}` === key);
+
+// The connector with a real api, installations and token handling, driven
+// through the real manager, but with the sign-in and the token revoke
+// recorded: GitHub's own endpoints for those are githubAuth's to test.
+async function setupRevokes({ signsIn }) {
+  const [
+    { createConnectorManager },
+    { createPendingActions },
+    { createGithubConnector },
+    { createGithubApi },
+    { createGithubAuth },
+    { createGithubInstallations },
+  ] = await Promise.all([
+    import("../../../src/helpers/connectors/connectorManager.js"),
+    import("../../../src/helpers/connectors/pendingActions.js"),
+    import("../../../src/helpers/connectors/githubConnector.js"),
+    import("../../../src/helpers/connectors/githubApi.js"),
+    import("../../../src/helpers/connectors/githubAuth.js"),
+    import("../../../src/helpers/connectors/githubInstallations.js"),
+  ]);
+  const api = createGithubApi({ fetchImpl: fakeGithubFetch(INSTALLED).fetchImpl });
+  const credentials = memoryCredentials(CONNECTED, { connectorId: "github" });
+  const revoked = [];
+  const auth = {
+    ...createGithubAuth({ api, credentials, getClientId: () => ENV.GITHUB_APP_CLIENT_ID }),
+    authorize: async () => signsIn,
+    revoke: async (credential) => {
+      revoked.push(credential);
+    },
+  };
+  const connector = createGithubConnector({
+    api,
+    auth,
+    installations: createGithubInstallations({ api }),
+    credentials,
+    getSlug: () => ENV.GITHUB_APP_SLUG,
+  });
+  const manager = createConnectorManager({
+    connectors: [connector],
+    pendingActions: createPendingActions(),
+    actionLog: fakeLog(),
+    logger: silentLogger,
+    getAccountId: () => credentials.activeAccountId(),
+    credentials,
+    onStatusChanged: () => {},
+  });
+  return { manager, credentials, revoked };
+}
 
 test("buildGithubConnector reads the client id and App slug from the environment when asked", async () => {
   const env = {};
@@ -230,4 +286,42 @@ test("createConnectors registers GitHub once, built from the shared deps", async
   assert.equal(status.workspaceLabel, "1");
   assert.equal(status.manageUrl, INSTALL_URL);
   assert.ok(github.calls.length > 0);
+});
+
+test("a status read whose token refresh GitHub refuses announces that the login needs reconnecting", async () => {
+  const { manager, github, credentials, statusBroadcasts } = await setup({
+    script: { [TOKEN]: [oauthError("bad_refresh_token")] },
+    credential: { ...CONNECTED, expiresAt: Date.now() - 1000 },
+  });
+
+  const [first] = await manager.status();
+  assert.equal(first.needsReconnect, false);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(hits(github, TOKEN).length, 1);
+  assert.equal(credentials.read("acct-1", "github").credential.needsReconnect, true);
+  // Without the announcement Settings would keep saying connected, with no
+  // Reconnect, and the tools would stay offered.
+  assert.equal(statusBroadcasts.at(-1)?.[0].needsReconnect, true);
+});
+
+test("Disconnect revokes the stored GitHub login's token", async () => {
+  const { manager, credentials, revoked } = await setupRevokes({ signsIn: null });
+
+  assert.deepEqual(await manager.disconnect("github"), { status: "disconnected" });
+
+  assert.deepEqual(revoked, [CONNECTED]);
+  assert.equal(credentials.read("acct-1", "github"), null);
+});
+
+test("reconnecting GitHub revokes the login it replaced, even for the same GitHub user", async () => {
+  const renewed = { ...CONNECTED, accessToken: "ghu-9", refreshToken: "ghr-9" };
+  const { manager, credentials, revoked } = await setupRevokes({ signsIn: renewed });
+
+  assert.equal((await manager.connect("github", "allowed")).status, "connected");
+  await new Promise((resolve) => setImmediate(resolve));
+
+  // GitHub revokes one token, so the new login is untouched.
+  assert.deepEqual(revoked, [CONNECTED]);
+  assert.deepEqual(credentials.read("acct-1", "github").credential, renewed);
 });

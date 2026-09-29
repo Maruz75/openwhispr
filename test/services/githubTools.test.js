@@ -146,6 +146,7 @@ test("github_search_issues searches through the query path with its defaults", a
 });
 
 test("a state or type outside the list is refused, never swapped for the default", async (t) => {
+  await useEnglish();
   let queried = 0;
   installBrowserGlobals(t, {
     window: { electronAPI: { connectorQuery: async () => (queried += 1) } },
@@ -163,12 +164,15 @@ test("a state or type outside the list is refused, never swapped for the default
   const bug = await githubSearchIssuesTool.execute({ query: "timeout", type: "bug" }, context());
 
   assert.equal(closed.data.status, "failed");
-  assert.equal(closed.data.errorCode, "invalid");
+  assert.equal(closed.data.errorCode, "invalid_input");
   assert.match(closed.data.error, /"all", which includes closed and merged/);
   assert.match(closed.data.error, /is:closed/);
   assert.equal(bug.data.status, "failed");
-  assert.equal(bug.data.errorCode, "invalid");
+  assert.equal(bug.data.errorCode, "invalid_input");
   assert.match(bug.data.error, /"issue", "pr" or "any"/);
+  // GitHub was never asked, so the tool step doesn't say GitHub refused it.
+  assert.equal(closed.displayText, "That didn't work on GitHub.");
+  assert.equal(bug.displayText, "That didn't work on GitHub.");
   assert.equal(queried, 0);
   assert.equal(holds.count, 2);
 });
@@ -302,15 +306,16 @@ test("a repository the App isn't on names the fix; without an App slug there's n
 });
 
 test("a repository main may not have seen all of is a name to check, not an install", async (t) => {
+  await useEnglish();
+  // Keyed on the code alone: main's wording can change freely.
+  const answers = [
+    { errorCode: "repo_unlisted", message: "acme/api wasn't in the repositories read." },
+    { errorCode: "not_installed", message: "Not installed. Ask the user to check the name." },
+  ];
   installBrowserGlobals(t, {
     window: {
       electronAPI: {
-        connectorPrepare: async () => ({
-          status: "failed",
-          errorCode: "not_installed",
-          message:
-            "The OpenWhispr GitHub App isn't installed on acme/api, as far as OpenWhispr can tell: it reads the first 1,000 repositories of each installation. Ask the user to check the name.",
-        }),
+        connectorPrepare: async () => ({ status: "failed", ...answers.shift() }),
       },
     },
   });
@@ -318,12 +323,25 @@ test("a repository main may not have seen all of is a name to check, not an inst
   const { githubCreateIssueTool } = await loadTools();
   const { context } = await turn();
 
-  const result = await githubCreateIssueTool.execute({ repo: "acme/api", title: "Bug" }, context());
+  const unlisted = await githubCreateIssueTool.execute(
+    { repo: "acme/api", title: "Bug" },
+    context()
+  );
+  const missing = await githubCreateIssueTool.execute(
+    { repo: "acme/api", title: "Bug" },
+    context()
+  );
 
-  assert.equal(result.data.errorCode, "not_installed");
-  assert.match(result.data.guidance, /check the repository name/);
-  assert.doesNotMatch(result.data.guidance, /install the OpenWhispr GitHub App/);
-  assert.equal("installUrl" in result.data, false);
+  assert.equal(unlisted.data.errorCode, "repo_unlisted");
+  assert.match(unlisted.data.guidance, /couldn't read every repository/);
+  assert.match(unlisted.data.guidance, /check the repository name/);
+  assert.equal("installUrl" in unlisted.data, false);
+  assert.equal(
+    unlisted.displayText,
+    "Couldn't confirm the OpenWhispr GitHub App is installed there."
+  );
+  assert.match(missing.data.guidance, /install the OpenWhispr GitHub App/);
+  assert.equal(missing.data.installUrl, GITHUB.manageUrl);
 });
 
 test("github_create_issue prepares a card with one-line title, body and labels", async (t) => {
@@ -353,7 +371,7 @@ test("github_create_issue prepares a card with one-line title, body and labels",
       repo: " acme/api ",
       title: " Login times out\n on Safari ",
       body: "Steps to reproduce",
-      labels: ["bug", 7, "auth"],
+      labels: ["bug", "auth"],
     },
     context()
   );
@@ -394,12 +412,43 @@ test("github_create_issue takes a single label given as a string", async (t) => 
   const { context } = await turn();
 
   await githubCreateIssueTool.execute({ title: "Bug", labels: "bug" }, context());
-  await githubCreateIssueTool.execute({ title: "Bug", labels: 7 }, context());
+  await githubCreateIssueTool.execute({ title: "Bug", labels: null, body: null }, context());
 
   assert.deepEqual(
-    prepared.map((args) => args.labels),
-    [["bug"], undefined]
+    prepared.map((args) => [args.labels, args.body]),
+    [
+      [["bug"], ""],
+      [undefined, ""],
+    ]
   );
+});
+
+test("a description or label that isn't text is refused, never dropped", async (t) => {
+  let prepared = 0;
+  installBrowserGlobals(t, {
+    window: { electronAPI: { connectorPrepare: async () => (prepared += 1) } },
+  });
+  await setGithubStatus(t);
+  const { githubCreateIssueTool } = await loadTools();
+  const { context, holds } = await turn();
+
+  const results = [
+    // The card would open with an empty description.
+    await githubCreateIssueTool.execute({ title: "Bug", body: { text: "Steps" } }, context()),
+    await githubCreateIssueTool.execute({ title: "Bug", body: 42 }, context()),
+    // The issue would be filed without a label that was asked for.
+    await githubCreateIssueTool.execute({ title: "Bug", labels: ["bug", 7] }, context()),
+    await githubCreateIssueTool.execute({ title: "Bug", labels: 7 }, context()),
+  ];
+
+  assert.deepEqual(
+    results.map((result) => [result.data.status, result.data.errorCode]),
+    Array(4).fill(["failed", "invalid_input"])
+  );
+  assert.match(results[0].data.error, /body is the description, as Markdown text/);
+  assert.match(results[2].data.error, /labels is a list of existing label names/);
+  assert.equal(prepared, 0);
+  assert.equal(holds.count, 4);
 });
 
 test("the GitHub tools tell the model their limits and short targets", async () => {
@@ -493,6 +542,8 @@ test("github_comment accepts owner/repo#12, repo#12, #12 and github.com issue or
     "https://github.com/acme/api/issues/12",
     "https://github.com/acme/api/pull/12",
     "https://github.com/acme/api/pull/12/files?diff=split#r1",
+    // Main reads the scheme and host case-insensitively, as `new URL` does.
+    "HTTPS://GitHub.COM/acme/api/issues/12",
   ];
   const refused = [
     "#",
@@ -506,6 +557,8 @@ test("github_comment accepts owner/repo#12, repo#12, #12 and github.com issue or
     "http://github.com/acme/api/issues/12",
     "https://github.com.evil.test/acme/api/issues/12",
     "https://github.com/acme/api/commit/12",
+    // The path is compared as given.
+    "https://github.com/acme/api/Issues/12",
     "https://gitlab.com/acme/api/issues/12",
   ];
 
@@ -597,10 +650,18 @@ test("create and comment hold delivery on every outcome", async (t) => {
 });
 
 test("an unconfirmed issue or comment sends the user to GitHub to check before retrying", async (t) => {
+  await useEnglish();
   installBrowserGlobals(t, {
     window: {
       electronAPI: {
-        connectorPrepare: async () => ({ status: "ready", actionId: "a1", preview: ISSUE_PREVIEW }),
+        connectorPrepare: async (_connector, action) => ({
+          status: "ready",
+          actionId: "a1",
+          preview:
+            action === "comment"
+              ? { ...ISSUE_PREVIEW, verbKey: "comment", destinationLabel: "acme/api#4" }
+              : ISSUE_PREVIEW,
+        }),
         connectorCommit: async () => ({
           state: "unknown",
           checkUrl: "https://github.com/acme/api/issues",
@@ -620,8 +681,19 @@ test("an unconfirmed issue or comment sends the user to GitHub to check before r
   const commented = githubCommentTool.execute({ target: "acme/api#4", body: "+1" }, context());
   await approvals.approveAction(await cardFor(approvals, "call-2"));
 
-  const issue = (await created).data;
-  const comment = (await commented).data;
+  const issueResult = await created;
+  const commentResult = await commented;
+  const issue = issueResult.data;
+  const comment = commentResult.data;
+  // The tool step names what may not exist, as the card does.
+  assert.equal(
+    issueResult.displayText,
+    "Couldn't confirm the issue was created. Check acme/api before trying again."
+  );
+  assert.equal(
+    commentResult.displayText,
+    "Couldn't confirm the comment was posted. Check acme/api#4 before trying again."
+  );
   assert.equal(issue.status, "unknown");
   assert.equal(issue.checkUrl, "https://github.com/acme/api/issues");
   assert.match(issue.guidance, /check the repository's issues on GitHub \(checkUrl\)/);

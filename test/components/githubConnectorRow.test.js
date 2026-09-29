@@ -443,6 +443,43 @@ test("Cancel before the code arrives stops the connect and hands focus back to C
   assertFocused(container, "connectors.github.connect");
 });
 
+// Connect and Reconnect go away while the row connects, so a keyboard user's
+// focus follows to Cancel instead of dropping to the page.
+for (const [label, status] of [
+  ["connectors.github.connect", DISCONNECTED],
+  ["connectors.github.reconnect", { ...GITHUB, needsReconnect: true }],
+]) {
+  test(`pressing a focused ${label.split(".").pop()} hands focus to Cancel`, async (t) => {
+    const connect = pendingConnect();
+    const { container } = await renderGithubRow(t, {
+      status,
+      electronAPI: { connectorConnect: connect.connectorConnect },
+    });
+    const pressed = button(container, label);
+    pressed.focus();
+
+    await React.act(async () => click(pressed));
+
+    assert.equal(hasButton(container, label), false);
+    assertFocused(container, "connectors.github.deviceCode.cancel");
+  });
+}
+
+test("Connect pressed while focus is elsewhere leaves focus where it is", async (t) => {
+  const connect = pendingConnect();
+  const { container } = await renderGithubRow(t, {
+    status: DISCONNECTED,
+    electronAPI: { connectorConnect: connect.connectorConnect },
+  });
+  const elsewhere = container.ownerDocument.createElement("input");
+  elsewhere.focus();
+
+  await React.act(async () => click(button(container, "connectors.github.connect")));
+
+  assert.equal(hasButton(container, "connectors.github.deviceCode.cancel"), true);
+  assert.ok(container.ownerDocument.activeElement === elsewhere, "focus stayed put");
+});
+
 // Main broadcasts the new login before the connect resolves, so the row is
 // connected by the time Copy & open (which held focus) unmounts.
 async function connectWhileFocused(t, connectedStatus) {

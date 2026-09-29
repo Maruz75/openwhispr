@@ -1,11 +1,18 @@
-import i18n from "../../../i18n";
-import { useConnectorStatusStore } from "../../../stores/connectorStatusStore";
-import { connectorErrorText } from "../../../utils/connectorErrorCopy";
+import {
+  characterCount,
+  MAX_ISSUE_BODY_LENGTH,
+  MAX_ISSUE_TITLE_LENGTH,
+} from "../../../utils/issueApprovalFields";
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "../ToolRegistry";
 import type { ConnectorToolModule } from "./connectorToolModules";
 import { runApprovalAction } from "./runApprovalAction";
 import { runQueryAction } from "./runQueryAction";
-import { failedResult, needsClarificationResult, unavailableResult } from "./toolOutcome";
+import {
+  failedResult,
+  needsClarificationResult,
+  needsReconnectNow,
+  reconnectResult,
+} from "./toolOutcome";
 
 export const LINEAR_RECONNECT_GUIDANCE =
   "Tell the user to reconnect Linear under Settings → Integrations → Connectors. Don't retry.";
@@ -14,11 +21,9 @@ const CREATE_UNKNOWN_GUIDANCE =
 const COMMENT_UNKNOWN_GUIDANCE =
   "Tell the user to check the issue in Linear before asking for the comment again.";
 
-// The connector's own limits (linearConnector.js), checked here too so a
-// call that can't succeed never reaches main.
+// The connector's own search limit (linearConnector.js), checked here too so
+// a call that can't succeed never reaches main. Issues use the card's limits.
 const MAX_QUERY_LENGTH = 200;
-const MAX_TITLE_LENGTH = 256;
-const MAX_BODY_LENGTH = 65536;
 const PRIORITIES = ["urgent", "high", "medium", "low", "none"] as const;
 const STATES = ["open", "all"] as const;
 
@@ -45,24 +50,8 @@ function isAbsent(value: unknown): value is undefined | null {
   return value === undefined || value === null;
 }
 
-// Characters (code points), as the card and main count them.
-function characterCount(text: string): number {
-  return [...text].length;
-}
-
-// The tool step reads "Linear needs to be reconnected.", the same copy a
-// failed reconnect_needed step shows, not the generic "connectors unavailable".
 function linearReconnectResult(): ToolResult {
-  return {
-    ...unavailableResult("reconnect_needed", LINEAR_RECONNECT_GUIDANCE),
-    displayText: connectorErrorText(i18n.t, "toolStatus", "linear", "reconnect_needed"),
-  };
-}
-
-function needsReconnectNow(): boolean {
-  // Read live, not when the registry was built: a login can lapse mid-conversation.
-  const linear = useConnectorStatusStore.getState().statuses.linear;
-  return Boolean(linear?.connected && linear.needsReconnect);
+  return reconnectResult("linear", LINEAR_RECONNECT_GUIDANCE);
 }
 
 // Main answers a lapsed login as failed/reconnect_needed, whether it found
@@ -98,15 +87,15 @@ function searchArgs(args: Record<string, unknown>): Checked {
 function createArgs(args: Record<string, unknown>): Checked {
   const title = typeof args.title === "string" ? args.title.replace(/[\r\n]+/g, " ").trim() : "";
   if (!title) return needsClarificationResult("Ask the user what the issue should be called.");
-  if (characterCount(title) > MAX_TITLE_LENGTH) {
-    return tooLong(`Keep the title to ${MAX_TITLE_LENGTH} characters or fewer.`);
+  if (characterCount(title) > MAX_ISSUE_TITLE_LENGTH) {
+    return tooLong(`Keep the title to ${MAX_ISSUE_TITLE_LENGTH} characters or fewer.`);
   }
   if (!isAbsent(args.description) && typeof args.description !== "string") {
     return invalid("description is Markdown text.");
   }
   const description = typeof args.description === "string" ? args.description : "";
-  if (characterCount(description) > MAX_BODY_LENGTH) {
-    return tooLong(`Keep the description to ${MAX_BODY_LENGTH} characters or fewer.`);
+  if (characterCount(description) > MAX_ISSUE_BODY_LENGTH) {
+    return tooLong(`Keep the description to ${MAX_ISSUE_BODY_LENGTH} characters or fewer.`);
   }
   if (
     !isAbsent(args.priority) &&
@@ -138,8 +127,8 @@ function commentArgs(args: Record<string, unknown>): Checked {
   }
   const body = typeof args.body === "string" ? args.body : "";
   if (!body.trim()) return failedResult("missing_body", "The comment is empty.", "linear");
-  if (characterCount(body) > MAX_BODY_LENGTH) {
-    return tooLong(`Keep the comment to ${MAX_BODY_LENGTH} characters or fewer.`);
+  if (characterCount(body) > MAX_ISSUE_BODY_LENGTH) {
+    return tooLong(`Keep the comment to ${MAX_ISSUE_BODY_LENGTH} characters or fewer.`);
   }
   return { issue, body };
 }
@@ -178,7 +167,7 @@ export const linearSearchIssuesTool: ToolDefinition = {
     context?.onHoldDelivery();
     const checked = searchArgs(args);
     if (isToolResult(checked)) return checked;
-    if (needsReconnectNow()) return linearReconnectResult();
+    if (needsReconnectNow("linear")) return linearReconnectResult();
     return withReconnectGuidance(await runQueryAction(context, "linear", "search_issues", checked));
   },
 };
@@ -221,7 +210,7 @@ export const linearCreateIssueTool: ToolDefinition = {
     context?.onHoldDelivery();
     const checked = createArgs(args);
     if (isToolResult(checked)) return checked;
-    if (needsReconnectNow()) return linearReconnectResult();
+    if (needsReconnectNow("linear")) return linearReconnectResult();
     return withReconnectGuidance(
       await runApprovalAction(context, "linear", "create_issue", checked, {
         unknownGuidance: CREATE_UNKNOWN_GUIDANCE,
@@ -255,7 +244,7 @@ export const linearCommentTool: ToolDefinition = {
     context?.onHoldDelivery();
     const checked = commentArgs(args);
     if (isToolResult(checked)) return checked;
-    if (needsReconnectNow()) return linearReconnectResult();
+    if (needsReconnectNow("linear")) return linearReconnectResult();
     return withReconnectGuidance(
       await runApprovalAction(context, "linear", "comment", checked, {
         unknownGuidance: COMMENT_UNKNOWN_GUIDANCE,

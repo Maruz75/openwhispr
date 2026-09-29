@@ -1,13 +1,20 @@
-import i18n from "../../../i18n";
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "../ToolRegistry";
 import { useConnectorStatusStore } from "../../../stores/connectorStatusStore";
-import { connectorErrorText } from "../../../utils/connectorErrorCopy";
 import { githubFieldMentions } from "../../../utils/githubMentions";
-import { MAX_ISSUE_BODY_LENGTH, MAX_ISSUE_TITLE_LENGTH } from "../../../utils/issueApprovalFields";
+import {
+  characterCount,
+  MAX_ISSUE_BODY_LENGTH,
+  MAX_ISSUE_TITLE_LENGTH,
+} from "../../../utils/issueApprovalFields";
 import type { ConnectorToolModule } from "./connectorToolModules";
 import { runApprovalAction } from "./runApprovalAction";
 import { runQueryAction } from "./runQueryAction";
-import { failedResult, needsClarificationResult, unavailableResult } from "./toolOutcome";
+import {
+  failedResult,
+  needsClarificationResult,
+  needsReconnectNow,
+  reconnectResult,
+} from "./toolOutcome";
 
 export const GITHUB_RECONNECT_GUIDANCE =
   "Tell the user to reconnect GitHub under Settings → Integrations → Connectors. Don't retry.";
@@ -24,16 +31,21 @@ const MAX_QUERY_LENGTH = 200;
 const STATES = ["open", "all"] as const;
 const TYPES = ["issue", "pr", "any"] as const;
 
-function characterCount(value: string): number {
-  return [...value].length;
-}
-
 // The target forms main's parseGithubTarget accepts: owner/repo#12, repo#12,
 // #12, or an issue or pull request link on github.com (with anything after
 // the number). Main parses it again, finds a short form's repository among
 // the installed ones (asking when that's ambiguous) and checks it's installed.
-const GITHUB_TARGET =
-  /^(?:(?:(?:[A-Za-z0-9-]+\/)?[A-Za-z0-9._-]+)?#\d+|https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/(?:issues|pull)\/\d+(?:[/?#].*)?)$/;
+const SHORT_TARGET = /^(?:(?:[A-Za-z0-9-]+\/)?[A-Za-z0-9._-]+)?#\d+$/;
+// Main parses a link with `new URL`, which lowercases the scheme and host but
+// keeps the path as given.
+const LINK_ORIGIN = /^https:\/\/github\.com\//i;
+const LINK_PATH = /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/(?:issues|pull)\/\d+(?:[/?#].*)?$/;
+
+function isGithubTarget(target: string): boolean {
+  if (SHORT_TARGET.test(target)) return true;
+  const origin = LINK_ORIGIN.exec(target);
+  return origin !== null && LINK_PATH.test(target.slice(origin[0].length));
+}
 
 function text(args: Record<string, unknown>, name: string): string {
   const value = args[name];
@@ -47,32 +59,23 @@ function choice<T extends string>(value: unknown, allowed: readonly T[], fallbac
   return allowed.includes(value as T) ? (value as T) : null;
 }
 
-// A single label is often sent as a bare string.
-function labelNames(value: unknown): string[] {
-  const list: unknown[] = typeof value === "string" ? [value] : Array.isArray(value) ? value : [];
-  return list.filter((label): label is string => typeof label === "string");
+// A single label is often sent as a bare string. Null for anything that
+// isn't text: dropping it would file the issue without a label that was asked for.
+function labelNames(value: unknown): string[] | null {
+  if (value === undefined || value === null) return [];
+  if (typeof value === "string") return [value];
+  if (!Array.isArray(value)) return null;
+  return value.every((label): label is string => typeof label === "string") ? value : null;
 }
 
-// The tool step reads "GitHub needs to be reconnected.", like a failed
-// reconnect_needed step, not the generic "connectors unavailable".
 function githubReconnectResult(): ToolResult {
-  return {
-    ...unavailableResult("reconnect_needed", GITHUB_RECONNECT_GUIDANCE),
-    displayText: connectorErrorText(i18n.t, "toolStatus", "github", "reconnect_needed"),
-  };
+  return reconnectResult("github", GITHUB_RECONNECT_GUIDANCE);
 }
 
-// Read live, not when the registry was built: a login can lapse mid-conversation.
-function needsReconnect(): boolean {
-  const github = useConnectorStatusStore.getState().statuses.github;
-  return Boolean(github?.connected && github.needsReconnect);
-}
-
-// Main asks to check the name when the installations list more repositories
-// than it reads (githubConnector.js notInstalled): the App may be installed
-// after all. Only the code and message cross IPC, so the message tells.
-const MAYBE_INSTALLED = /check the name/i;
-const MAYBE_INSTALLED_GUIDANCE =
+// Main couldn't read every repository the installations list (it stops at
+// 1,000 each), so this one may be there after all: an install link would
+// send the user to fix what may not be broken.
+const REPO_UNLISTED_GUIDANCE =
   "OpenWhispr couldn't read every repository the GitHub App is on, so it may be installed there after all. Ask the user to check the repository name.";
 
 const REPOSITORY_GUIDANCE: Readonly<Record<string, string>> = {
@@ -85,15 +88,11 @@ const REPOSITORY_GUIDANCE: Readonly<Record<string, string>> = {
 // The model gets GitHub's next step: reconnect, or pick repositories, with
 // the App's install page when this build has one.
 function withGithubGuidance(result: ToolResult): ToolResult {
-  const data = result.data as { status?: unknown; errorCode?: unknown; error?: unknown } | null;
+  const data = result.data as { status?: unknown; errorCode?: unknown } | null;
   if (data?.status !== "failed" || typeof data.errorCode !== "string") return result;
   if (data.errorCode === "reconnect_needed") return githubReconnectResult();
-  if (
-    data.errorCode === "not_installed" &&
-    typeof data.error === "string" &&
-    MAYBE_INSTALLED.test(data.error)
-  ) {
-    return { ...result, data: { ...data, guidance: MAYBE_INSTALLED_GUIDANCE } };
+  if (data.errorCode === "repo_unlisted") {
+    return { ...result, data: { ...data, guidance: REPO_UNLISTED_GUIDANCE } };
   }
   const guidance = Object.hasOwn(REPOSITORY_GUIDANCE, data.errorCode)
     ? REPOSITORY_GUIDANCE[data.errorCode]
@@ -115,6 +114,11 @@ function withNotified(result: ToolResult, prepared: { title?: string; body: stri
 
 function tooLong(what: string, max: number): ToolResult {
   return failedResult("too_long", `The ${what} is over ${max} characters. Shorten it.`, "github");
+}
+
+// The model's own arguments, refused before main is asked.
+function invalid(message: string): ToolResult {
+  return failedResult("invalid_input", message, "github");
 }
 
 export const githubSearchIssuesTool: ToolDefinition = {
@@ -153,17 +157,15 @@ export const githubSearchIssuesTool: ToolDefinition = {
     if (characterCount(query) > MAX_QUERY_LENGTH) return tooLong("search", MAX_QUERY_LENGTH);
     const state = choice(args.state, STATES, "open");
     if (!state) {
-      return failedResult(
-        "invalid",
-        'state is "open" (the default) or "all", which includes closed and merged ones. For closed ones only, use "all" and add is:closed to the query.',
-        "github"
+      return invalid(
+        'state is "open" (the default) or "all", which includes closed and merged ones. For closed ones only, use "all" and add is:closed to the query.'
       );
     }
     const type = choice(args.type, TYPES, "any");
     if (!type) {
-      return failedResult("invalid", 'type is "issue", "pr" or "any" (the default).', "github");
+      return invalid('type is "issue", "pr" or "any" (the default).');
     }
-    if (needsReconnect()) return githubReconnectResult();
+    if (needsReconnectNow("github")) return githubReconnectResult();
     const repo = text(args, "repo").trim();
     const result = await runQueryAction(context, "github", "search_issues", {
       query,
@@ -209,7 +211,6 @@ export const githubCreateIssueTool: ToolDefinition = {
     const title = text(args, "title")
       .replace(/\s*[\r\n]+\s*/g, " ")
       .trim();
-    const body = text(args, "body");
     if (!title) {
       return needsClarificationResult(
         "The issue needs a title. Write a short one from the user's request and call github_create_issue again."
@@ -218,12 +219,21 @@ export const githubCreateIssueTool: ToolDefinition = {
     if (characterCount(title) > MAX_ISSUE_TITLE_LENGTH) {
       return tooLong("title", MAX_ISSUE_TITLE_LENGTH);
     }
+    // Left out, the issue has no description; anything else must be text, or
+    // the card would open with an empty one.
+    if (args.body !== undefined && args.body !== null && typeof args.body !== "string") {
+      return invalid("body is the description, as Markdown text.");
+    }
+    const body = text(args, "body");
     if (characterCount(body) > MAX_ISSUE_BODY_LENGTH) {
       return tooLong("description", MAX_ISSUE_BODY_LENGTH);
     }
-    if (needsReconnect()) return githubReconnectResult();
-    const repo = text(args, "repo").trim();
     const labels = labelNames(args.labels);
+    if (!labels) {
+      return invalid("labels is a list of existing label names, as text.");
+    }
+    if (needsReconnectNow("github")) return githubReconnectResult();
+    const repo = text(args, "repo").trim();
     const result = await runApprovalAction(
       context,
       "github",
@@ -263,7 +273,7 @@ export const githubCommentTool: ToolDefinition = {
     context?.onHoldDelivery();
     const target = text(args, "target").trim();
     const body = text(args, "body");
-    if (!GITHUB_TARGET.test(target)) {
+    if (!isGithubTarget(target)) {
       return failedResult(
         "invalid_reference",
         "`target` must be owner/repo#12, repo#12, #12, or a github.com issue or pull request link. Use github_search_issues to find it.",
@@ -274,7 +284,7 @@ export const githubCommentTool: ToolDefinition = {
     if (characterCount(body) > MAX_ISSUE_BODY_LENGTH) {
       return tooLong("comment", MAX_ISSUE_BODY_LENGTH);
     }
-    if (needsReconnect()) return githubReconnectResult();
+    if (needsReconnectNow("github")) return githubReconnectResult();
     const result = await runApprovalAction(
       context,
       "github",

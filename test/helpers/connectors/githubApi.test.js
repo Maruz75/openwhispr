@@ -383,6 +383,22 @@ test("restAll returns a failed page's result, and never follows a link off api.g
   assert.ok(foreign.github.calls.every((call) => call.origin === "https://api.github.com"));
 });
 
+test("a call with no token sends no Authorization header, as GitHub's credential revoke requires", async () => {
+  const { client, github } = await api({ "POST /credentials/revoke": [json({}, 202)] });
+
+  const result = await client.rest("POST", "/credentials/revoke", {
+    body: { credentials: ["ghr-1", "ghu-1"] },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 202);
+  const [call] = github.calls;
+  assert.equal(call.origin, "https://api.github.com");
+  assert.equal(call.authorization, null);
+  assert.equal("Authorization" in call.headers, false);
+  assert.deepEqual(call.json, { credentials: ["ghr-1", "ghu-1"] });
+});
+
 test("deviceCode posts the client id as a form to github.com, with no secret and no token", async () => {
   const { GITHUB_DEVICE_CODE_URL } = await load();
   assert.equal(GITHUB_DEVICE_CODE_URL, "https://github.com/login/device/code");
@@ -484,9 +500,7 @@ test("accessToken: a token is ok; unreadable, 5xx, other 4xx and offline are cla
 
 test("accessToken: a throttle or a try-later OAuth error is not a refusal", async () => {
   const cases = [
-    [json({ error: "slow_down" }, 429), "slow_down"],
     [json({ error: "authorization_pending" }, 408), "authorization_pending"],
-    [json({ error: "bad_refresh_token" }, 429), "bad_refresh_token"],
     [oauthError("temporarily_unavailable"), "temporarily_unavailable"],
     [oauthError("server_error"), "server_error"],
   ];
@@ -496,6 +510,24 @@ test("accessToken: a throttle or a try-later OAuth error is not a refusal", asyn
     assert.deepEqual(
       result,
       { ok: false, outcome: "failed", errorCode },
+      `${reply.status} ${errorCode}`
+    );
+  }
+});
+
+test("accessToken: a 429 is rate limited whatever its body says", async () => {
+  const cases = [
+    [json({ error: "slow_down" }, 429), "slow_down"],
+    [json({ error: "bad_refresh_token" }, 429), "bad_refresh_token"],
+    [json({ message: "Too many requests" }, 429), "http_429"],
+    [{ status: 429, rawBody: "" }, "http_429"],
+  ];
+  for (const [reply, errorCode] of cases) {
+    const { client } = await api({ "POST /login/oauth/access_token": [reply] });
+    const result = await client.accessToken({ client_id: "Iv1.test" });
+    assert.deepEqual(
+      result,
+      { ok: false, outcome: "failed", errorCode, rateLimited: true },
       `${reply.status} ${errorCode}`
     );
   }

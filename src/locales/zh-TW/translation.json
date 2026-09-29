@@ -3909,6 +3909,7 @@
           "credential_save_failed": "無法在這台電腦上儲存 GitHub 登入資訊，未發佈任何內容。請再試一次。",
           "generic": "發生問題，未在 GitHub 上發佈任何內容。",
           "not_installed": "此存放庫未安裝 OpenWhispr GitHub App。請在設定中新增。未發佈任何內容。",
+          "repo_unlisted": "無法確認此存放庫是否已安裝 OpenWhispr GitHub App。請檢查存放庫名稱。未發佈任何內容。",
           "no_repositories": "尚未為 OpenWhispr GitHub App 選擇存放庫。請在設定中選擇。未發佈任何內容。",
           "forbidden": "您沒有在此存放庫中執行此操作的權限，未發佈任何內容。",
           "not_found": "找不到該 Issue 或提取要求，未發佈任何內容。",
@@ -4251,6 +4252,7 @@
           "credential_save_failed": "無法在這台電腦上儲存 GitHub 登入資訊。",
           "generic": "在 GitHub 上操作未成功。",
           "not_installed": "那裡未安裝 OpenWhispr GitHub App。",
+          "repo_unlisted": "無法確認那裡是否已安裝 OpenWhispr GitHub App。",
           "no_repositories": "尚未選擇 GitHub 存放庫。",
           "forbidden": "在該存放庫中沒有權限。",
           "not_found": "找不到該 Issue 或提取要求。",
@@ -4301,9 +4303,7 @@
         }
       },
       "unknownSent": {
-        "github": "無法確認是否已發佈到 {{destination}}，重試前請先在 GitHub 上檢查。",
-        "gmail": "無法確認寄給 {{destination}} 的郵件是否已傳送，請檢查 Gmail 的「寄件備份」資料夾。",
-        "linear": "無法確認是否已送達 Linear。重試前請先在 Linear 中檢查 {{destination}}。"
+        "gmail": "無法確認寄給 {{destination}} 的郵件是否已傳送，請檢查 Gmail 的「寄件備份」資料夾。"
       },
       "gmailDraftLimit": "每次請求最多只能準備 {{max}} 封郵件。",
       "queryResults": "找到的結果：{{total}}",

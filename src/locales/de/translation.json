@@ -4078,6 +4078,7 @@
           "credential_save_failed": "Die GitHub-Anmeldung konnte auf diesem Computer nicht gespeichert werden. Es wurde nichts gepostet. Versuche es erneut.",
           "generic": "Etwas ist schiefgelaufen. Es wurde nichts auf GitHub gepostet.",
           "not_installed": "Die OpenWhispr GitHub App ist in diesem Repository nicht installiert. Füge sie in den Einstellungen hinzu. Es wurde nichts gepostet.",
+          "repo_unlisted": "Es konnte nicht bestätigt werden, dass die OpenWhispr GitHub App in diesem Repository installiert ist. Prüfe den Namen des Repositorys. Es wurde nichts gepostet.",
           "no_repositories": "Für die OpenWhispr GitHub App sind noch keine Repositorys ausgewählt. Wähle sie in den Einstellungen aus. Es wurde nichts gepostet.",
           "forbidden": "Du hast in diesem Repository keine Berechtigung dafür. Es wurde nichts gepostet.",
           "not_found": "Das Issue oder der Pull Request wurde nicht gefunden. Es wurde nichts gepostet.",
@@ -4420,6 +4421,7 @@
           "credential_save_failed": "GitHub-Anmeldung konnte auf diesem Computer nicht gespeichert werden.",
           "generic": "Das hat auf GitHub nicht funktioniert.",
           "not_installed": "Die OpenWhispr GitHub App ist dort nicht installiert.",
+          "repo_unlisted": "Es konnte nicht bestätigt werden, dass die OpenWhispr GitHub App dort installiert ist.",
           "no_repositories": "Noch keine GitHub-Repositorys ausgewählt.",
           "forbidden": "Keine Berechtigung in diesem Repository.",
           "not_found": "Issue oder Pull Request nicht gefunden.",
@@ -4470,9 +4472,7 @@
         }
       },
       "unknownSent": {
-        "github": "Konnte nicht bestätigen, dass es in {{destination}} gepostet wurde. Prüfe GitHub, bevor du es erneut versuchst.",
-        "gmail": "Konnte nicht bestätigen, dass die E-Mail an {{destination}} gesendet wurde. Prüfe den Gmail-Ordner „Gesendet“.",
-        "linear": "Konnte nicht bestätigen, dass es in Linear angekommen ist. Prüfe {{destination}} in Linear, bevor du es erneut versuchst."
+        "gmail": "Konnte nicht bestätigen, dass die E-Mail an {{destination}} gesendet wurde. Prüfe den Gmail-Ordner „Gesendet“."
       },
       "gmailDraftLimit": "Pro Anfrage können nur {{max}} E-Mails vorbereitet werden.",
       "queryResults": "Gefundene Ergebnisse: {{total}}",

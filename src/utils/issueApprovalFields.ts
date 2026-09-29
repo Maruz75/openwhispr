@@ -38,7 +38,8 @@ export function toIssueFields(
   return { title: typeof title === "string" ? title : "", body };
 }
 
-function characterCount(text: string): number {
+/** Characters (code points), as the card, the tools and main count them. */
+export function characterCount(text: string): number {
   return [...text].length;
 }
 

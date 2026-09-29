@@ -4078,6 +4078,7 @@
           "credential_save_failed": "La connexion GitHub n'a pas pu être enregistrée sur cet ordinateur. Rien n'a été publié. Réessayez.",
           "generic": "Un problème est survenu. Rien n'a été publié sur GitHub.",
           "not_installed": "L'application GitHub OpenWhispr n'est pas installée sur ce dépôt. Ajoutez-la dans les Paramètres. Rien n'a été publié.",
+          "repo_unlisted": "Impossible de confirmer que l'application GitHub OpenWhispr est installée sur ce dépôt. Vérifiez le nom du dépôt. Rien n'a été publié.",
           "no_repositories": "Aucun dépôt n'est encore choisi pour l'application GitHub OpenWhispr. Choisissez-les dans les Paramètres. Rien n'a été publié.",
           "forbidden": "Vous n'avez pas l'autorisation de faire cela dans ce dépôt. Rien n'a été publié.",
           "not_found": "L'issue ou la pull request est introuvable. Rien n'a été publié.",
@@ -4420,6 +4421,7 @@
           "credential_save_failed": "Impossible d'enregistrer la connexion GitHub sur cet ordinateur.",
           "generic": "Cela n'a pas fonctionné sur GitHub.",
           "not_installed": "L'application GitHub OpenWhispr n'y est pas installée.",
+          "repo_unlisted": "Impossible de confirmer que l'application GitHub OpenWhispr y est installée.",
           "no_repositories": "Aucun dépôt GitHub choisi pour l'instant.",
           "forbidden": "Aucune autorisation dans ce dépôt.",
           "not_found": "Issue ou pull request introuvable.",
@@ -4470,9 +4472,7 @@
         }
       },
       "unknownSent": {
-        "github": "Impossible de confirmer la publication dans {{destination}}. Vérifiez GitHub avant de réessayer.",
-        "gmail": "Impossible de confirmer l'envoi de l'e-mail à {{destination}}. Vérifiez le dossier Messages envoyés de Gmail.",
-        "linear": "Impossible de confirmer que c'est arrivé dans Linear. Vérifiez {{destination}} dans Linear avant de réessayer."
+        "gmail": "Impossible de confirmer l'envoi de l'e-mail à {{destination}}. Vérifiez le dossier Messages envoyés de Gmail."
       },
       "gmailDraftLimit": "Seuls {{max}} e-mails peuvent être préparés par demande.",
       "queryResults": "Résultats trouvés : {{total}}",

@@ -1,5 +1,7 @@
 // The repositories the OpenWhispr GitHub App is installed on that the user
 // can reach (spec §5.1). Search, create and comment work in these only.
+const { resolveTarget } = require("./targetResolution");
+
 const MAX_CANDIDATES = 20;
 // A repo that's missing from a list older than this is looked for once more
 // in a fresh one: after a "not installed" answer, the user can install the
@@ -18,7 +20,6 @@ function toRepo(raw) {
     owner,
     name: raw.name,
     fullName: raw.full_name,
-    private: raw.private === true,
     // Tells a deleted issue's 410 apart from a repo with issues turned off.
     hasIssues: raw.has_issues !== false,
     // An archived repo is read-only: nothing can be created or commented.
@@ -36,18 +37,14 @@ function byRecentUpdate(a, b) {
   return (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
 }
 
-// A repo offered for a new issue must be able to take one: an archived repo
-// or one with issues turned off would only fail at prepare.
-function candidatesOf(repos, forNewIssue) {
-  return repos
-    .filter((repo) => !forNewIssue || (!repo.archived && repo.hasIssues))
-    .slice(0, MAX_CANDIDATES)
-    .map((repo) => repo.fullName);
+function canTakeIssue(repo) {
+  return !repo.archived && repo.hasIssues;
 }
 
-// The connector words the refusals: it knows the App's install link.
+// The connector words the refusals: it knows the App's install link. A list
+// cut at the read limit may be missing a repo that is installed after all.
 function notInstalled(truncated) {
-  return { ok: false, errorCode: "not_installed", truncated };
+  return { ok: false, errorCode: truncated ? "repo_unlisted" : "not_installed" };
 }
 
 function whenAborted(signal) {
@@ -94,7 +91,6 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
     return {
       ok: true,
       repos: repos.sort(byRecentUpdate),
-      installationCount: active.length,
       truncated: lists.some((listed) => listed.truncated) || installations.truncated === true,
     };
   }
@@ -116,56 +112,72 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
     return result;
   }
 
-  // The list, read once more when `found` rejects one older than
-  // REFETCH_AFTER_MS.
+  // The list, read once more when `found(repos, truncated)` rejects one
+  // older than REFETCH_AFTER_MS.
   async function listFinding(binding, token, found) {
     const listed = await list(binding, token);
-    if (!listed.ok || found(listed.repos)) return listed;
+    if (!listed.ok || found(listed.repos, listed.truncated === true)) return listed;
     return list(binding, token, { maxAgeMs: REFETCH_AFTER_MS });
   }
 
-  // `owner/name` exactly (case-insensitive), or a bare name when exactly one
-  // installed repo has it. Anything else is a question for the user, never
-  // a guess. `forNewIssue` leaves repos that can't take an issue out of the
-  // question's candidates.
+  // `owner/name` exactly (case-insensitive), or a bare name: the repos named
+  // exactly that, else the ones it nearly names ("open whispr" for
+  // open-whispr). One repo is used; several are a question for the user,
+  // never a guess. `forNewIssue` asks only among repos that can take an
+  // issue, and uses the one that can.
   async function resolveRepo(binding, token, input, { forNewIssue = false } = {}) {
     const wanted = typeof input === "string" ? input.trim() : "";
     const lower = wanted.toLowerCase();
-    const matches = wanted.includes("/")
+    const byFullName = wanted.includes("/");
+    const exact = byFullName
       ? (repo) => repo.fullName.toLowerCase() === lower
       : (repo) => repo.name.toLowerCase() === lower;
-    const listed = await listFinding(binding, token, (repos) =>
-      wanted ? repos.some(matches) : repos.length > 0
+    const named = (repos, truncated) => {
+      const matched = repos.filter(exact);
+      // A cut list keeps to exact names: a looser match could be one of the
+      // repos it never read.
+      if (matched.length > 0 || byFullName || truncated) return matched;
+      const near = resolveTarget(
+        wanted,
+        repos.map((repo) => ({ id: repo.fullName, names: [repo.name, repo.fullName], repo }))
+      );
+      if (near.status === "match") return [near.candidate.repo];
+      return near.status === "ambiguous" ? near.candidates.map((candidate) => candidate.repo) : [];
+    };
+    const listed = await listFinding(binding, token, (repos, truncated) =>
+      wanted ? named(repos, truncated).length > 0 : repos.length > 0
     );
     if (!listed.ok) return listed;
     const { repos } = listed;
     if (repos.length === 0) return { ok: false, errorCode: "no_repositories" };
-    if (!wanted) {
-      if (repos.length === 1) return { ok: true, repo: repos[0] };
+    const found = wanted ? named(repos, listed.truncated === true) : repos;
+    if (found.length === 0) return notInstalled(listed.truncated === true);
+    // A single repo is used even if it can't take an issue: prepare says why.
+    if (found.length === 1) return { ok: true, repo: found[0] };
+    const choices = forNewIssue ? found.filter(canTakeIssue) : found;
+    if (choices.length === 1) return { ok: true, repo: choices[0] };
+    if (choices.length === 0) {
       return {
         ok: false,
-        clarification: {
-          message: "Ask the user which repository to use.",
-          candidates: candidatesOf(repos, forNewIssue),
-        },
+        errorCode: "issues_disabled",
+        message: wanted
+          ? `None of the installed repositories named ${wanted} can take a new issue: each is archived or has issues turned off.`
+          : "None of the installed repositories can take a new issue: each is archived or has issues turned off.",
       };
     }
-    if (wanted.includes("/")) {
-      const match = repos.find(matches);
-      return match ? { ok: true, repo: match } : notInstalled(listed.truncated);
+    let message = "Ask the user which repository to use.";
+    if (wanted) {
+      message = exact(found[0])
+        ? `Several installed repositories are named ${wanted}. Ask the user which one.`
+        : `Several installed repositories match ${wanted}. Ask the user which one.`;
     }
-    const named = repos.filter(matches);
-    if (named.length === 1) return { ok: true, repo: named[0] };
-    if (named.length > 1) {
-      return {
-        ok: false,
-        clarification: {
-          message: `Several installed repositories are named ${wanted}. Ask the user which one.`,
-          candidates: candidatesOf(named, forNewIssue),
-        },
-      };
-    }
-    return notInstalled(listed.truncated);
+    return {
+      ok: false,
+      clarification: {
+        message,
+        candidates: choices.slice(0, MAX_CANDIDATES).map((repo) => repo.fullName),
+      },
+    };
   }
 
   function clear(binding) {

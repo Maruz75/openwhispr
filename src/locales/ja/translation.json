@@ -3909,6 +3909,7 @@
           "credential_save_failed": "このコンピューターにGitHubのログイン情報を保存できませんでした。何も投稿されていません。もう一度お試しください。",
           "generic": "問題が発生しました。GitHubには何も投稿されていません。",
           "not_installed": "このリポジトリにはOpenWhisprのGitHub Appがインストールされていません。設定で追加してください。何も投稿されていません。",
+          "repo_unlisted": "このリポジトリにOpenWhisprのGitHub Appがインストールされているか確認できませんでした。リポジトリ名を確認してください。何も投稿されていません。",
           "no_repositories": "OpenWhisprのGitHub Appにリポジトリがまだ選択されていません。設定で選択してください。何も投稿されていません。",
           "forbidden": "このリポジトリでこの操作を行う権限がありません。何も投稿されていません。",
           "not_found": "Issueまたはプルリクエストが見つかりませんでした。何も投稿されていません。",
@@ -4251,6 +4252,7 @@
           "credential_save_failed": "このコンピューターにGitHubのログイン情報を保存できませんでした。",
           "generic": "GitHubでうまくいきませんでした。",
           "not_installed": "そこにはOpenWhisprのGitHub Appがインストールされていません。",
+          "repo_unlisted": "そこにOpenWhisprのGitHub Appがインストールされているか確認できませんでした。",
           "no_repositories": "GitHubのリポジトリがまだ選択されていません。",
           "forbidden": "そのリポジトリでの権限がありません。",
           "not_found": "そのIssueまたはプルリクエストが見つかりませんでした。",
@@ -4301,9 +4303,7 @@
         }
       },
       "unknownSent": {
-        "github": "{{destination}} に投稿されたか確認できませんでした。もう一度試す前にGitHubを確認してください。",
-        "gmail": "{{destination}} 宛てのメールが送信されたか確認できませんでした。Gmailの送信済みフォルダを確認してください。",
-        "linear": "Linearに届いたか確認できませんでした。もう一度試す前に、Linearで {{destination}} を確認してください。"
+        "gmail": "{{destination}} 宛てのメールが送信されたか確認できませんでした。Gmailの送信済みフォルダを確認してください。"
       },
       "gmailDraftLimit": "1回のリクエストで準備できるメールは{{max}}件までです。",
       "queryResults": "見つかった結果: {{total}}",
