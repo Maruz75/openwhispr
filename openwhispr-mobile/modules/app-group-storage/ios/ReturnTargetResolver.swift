@@ -100,12 +100,14 @@ enum ReturnTargetResolver {
   /// about a second after the keyboard opens the app, usually after JS asks to return.
   static let observerWaitTimeout: TimeInterval = 2
   /// Longest a return may stay in flight. Covers the observer wait plus the
-  /// cold-launch retries, and ends before JS's 5 s timeout so JS still gets the
-  /// real outcome rather than its own fallback.
+  /// cold-launch retries, and ends well before JS's 6 s timeout (the main-queue
+  /// hop can lag on a cold launch) so JS still gets the real outcome rather
+  /// than its own fallback.
   static let returnDeadline: TimeInterval = 4.5
 
-  /// The extension's own detection wins (it still works before iOS 26.4); the
-  /// containing app's observer is the fallback.
+  /// The extension's own detection wins (it still works before iOS 26.4). The
+  /// observer only stands in when the extension saw no host: a host it named
+  /// but that isn't in the catalog is still that host, not the last one observed.
   static func resolve(extensionUrl: String?, extensionBundle: String?, observedBundle: String?) -> ReturnTarget? {
     let extensionHost = HostAppCatalog.lookup(extensionBundle)
     if let rawUrl = extensionUrl, let url = normalizeReturnUrl(rawUrl) {
@@ -114,10 +116,17 @@ enum ReturnTargetResolver {
     if let host = extensionHost, let url = URL(string: host.returnUrl) {
       return ReturnTarget(url: url, hostName: host.name, source: .extensionBundle)
     }
-    if let host = HostAppCatalog.lookup(observedBundle), let url = URL(string: host.returnUrl) {
+    if !extensionSawHost(extensionBundle), let host = HostAppCatalog.lookup(observedBundle),
+       let url = URL(string: host.returnUrl) {
       return ReturnTarget(url: url, hostName: host.name, source: .observer)
     }
     return nil
+  }
+
+  /// The extension names its host before iOS 26.4. When it did, waiting on the
+  /// observer would only name the same host again.
+  static func extensionSawHost(_ extensionBundle: String?) -> Bool {
+    !(extensionBundle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
   }
 
   static func normalizeReturnUrl(_ rawUrl: String) -> URL? {
@@ -157,32 +166,43 @@ enum ReturnTargetResolver {
 /// its deadline: a hung `open` completion must not leave every later handoff
 /// refused as `skipped` (and stuck on "Returning…").
 final class ReturnAttemptGate {
-  private(set) var isInFlight = false
-  private var generation = 0
+  private var current: ReturnAttempt?
 
-  /// Starts an attempt and returns its finish function, or nil while another
-  /// attempt is in flight. `schedule` runs the deadline (the main queue in the app).
+  var isInFlight: Bool { current.map { !$0.isFinished } ?? false }
+
+  /// Starts an attempt, or returns nil while another is in flight. `schedule`
+  /// runs the deadline (the main queue in the app).
   func begin(
     deadline: TimeInterval,
     schedule: (TimeInterval, @escaping () -> Void) -> Void,
     timeoutOutcome: @escaping () -> ReturnOutcome,
     completion: @escaping (ReturnOutcome) -> Void
-  ) -> ((ReturnOutcome) -> Void)? {
+  ) -> ReturnAttempt? {
     guard !isInFlight else { return nil }
-    isInFlight = true
-    generation += 1
-    let attempt = generation
-    var finished = false
-    let finish: (ReturnOutcome) -> Void = { [weak self] outcome in
-      guard !finished else { return }
-      finished = true
-      // A late completion from an attempt that already timed out must not free a newer one.
-      if self?.generation == attempt {
-        self?.isInFlight = false
-      }
-      completion(outcome)
+    let attempt = ReturnAttempt(completion: completion)
+    current = attempt
+    schedule(deadline) {
+      guard !attempt.isFinished else { return }
+      attempt.finish(timeoutOutcome())
     }
-    schedule(deadline) { finish(timeoutOutcome()) }
-    return finish
+    return attempt
+  }
+}
+
+/// A single return's outcome, reported once. Work still queued for it (an
+/// observer wait, an `open` retry) checks `isFinished` and stops once the
+/// deadline has settled it, so it can't switch apps under a UI that moved on.
+final class ReturnAttempt {
+  private(set) var isFinished = false
+  private let completion: (ReturnOutcome) -> Void
+
+  init(completion: @escaping (ReturnOutcome) -> Void) {
+    self.completion = completion
+  }
+
+  func finish(_ outcome: ReturnOutcome) {
+    guard !isFinished else { return }
+    isFinished = true
+    completion(outcome)
   }
 }

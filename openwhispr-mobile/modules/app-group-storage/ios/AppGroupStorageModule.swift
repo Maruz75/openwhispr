@@ -1980,7 +1980,7 @@ public class AppGroupStorageModule: Module {
   // MARK: - Return to Previous App
 
   private func returnToHost(invokedAt: Date, completion: @escaping (ReturnOutcome) -> Void) {
-    guard let finish = beginReturnAttempt(
+    guard let attempt = beginReturnAttempt(
       timeoutOutcome: {
         // Resolved but never heard back from `open`: offer the button for that host.
         guard let target = self.lastReturnTarget else {
@@ -2002,36 +2002,39 @@ public class AppGroupStorageModule: Module {
     defaults?.removeObject(forKey: "keyboard_return_bundle")
     defaults?.synchronize()
 
-    let since = invokedAt.addingTimeInterval(-ReturnTargetResolver.observerLookBack)
-    let openResolved: (String?) -> Void = { observedBundle in
-      guard let target = ReturnTargetResolver.resolve(
-        extensionUrl: extensionUrl,
-        extensionBundle: extensionBundle,
-        observedBundle: observedBundle
-      ) else {
+    let openResolved: (ReturnTarget?) -> Void = { target in
+      guard let target else {
         self.logMarker("navigateBack.missingUrl")
-        finish(ReturnOutcome(status: .noTarget, hostName: nil))
+        attempt.finish(ReturnOutcome(status: .noTarget, hostName: nil))
         return
       }
       self.lastReturnTarget = target
       self.logMarker("navigateBack.resolved", extra: "source=\(target.source.rawValue)")
-      self.open(target, retriesLeft: 2, delay: 0.2, completion: finish)
+      self.open(target, retriesLeft: 2, delay: 0.2, attempt: attempt)
     }
 
     let observer = HostAppObserver.shared
-    let observed = observer.latest(since: since)
-    if ReturnTargetResolver.resolve(
+    let since = invokedAt.addingTimeInterval(-ReturnTargetResolver.observerLookBack)
+    if let target = ReturnTargetResolver.resolve(
       extensionUrl: extensionUrl,
       extensionBundle: extensionBundle,
-      observedBundle: observed
-    ) != nil {
-      openResolved(observed)
+      observedBundle: observer.latest(since: since)
+    ) {
+      openResolved(target)
+    } else if ReturnTargetResolver.extensionSawHost(extensionBundle) {
+      openResolved(nil)
     } else {
       // JS usually asks before the observer has seen the host. Wait for a new
       // observation: the observer also reports every other app that shows a
       // keyboard (Spotlight, say), and an unresolvable one inside the look-back
       // window would otherwise end the wait at once.
-      observer.waitForHost(since: Date(), timeout: ReturnTargetResolver.observerWaitTimeout, completion: openResolved)
+      observer.waitForHost(since: Date(), timeout: ReturnTargetResolver.observerWaitTimeout) { observed in
+        openResolved(ReturnTargetResolver.resolve(
+          extensionUrl: extensionUrl,
+          extensionBundle: extensionBundle,
+          observedBundle: observed
+        ))
+      }
     }
   }
 
@@ -2040,20 +2043,20 @@ public class AppGroupStorageModule: Module {
       completion(ReturnOutcome(status: .noTarget, hostName: nil))
       return
     }
-    guard let finish = beginReturnAttempt(
+    guard let attempt = beginReturnAttempt(
       timeoutOutcome: { ReturnOutcome(status: .failed, hostName: target.hostName) },
       completion: completion
     ) else { return }
     // A button tap is user-initiated and the app is active: one attempt, no retries.
-    open(target, retriesLeft: 0, delay: 0, completion: finish)
+    open(target, retriesLeft: 0, delay: 0, attempt: attempt)
   }
 
   /// Nil (after resolving `skipped`) while another return is in flight.
   private func beginReturnAttempt(
     timeoutOutcome: @escaping () -> ReturnOutcome,
     completion: @escaping (ReturnOutcome) -> Void
-  ) -> ((ReturnOutcome) -> Void)? {
-    let finish = returnAttemptGate.begin(
+  ) -> ReturnAttempt? {
+    let attempt = returnAttemptGate.begin(
       deadline: ReturnTargetResolver.returnDeadline,
       schedule: { delay, work in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work) },
       timeoutOutcome: {
@@ -2062,20 +2065,26 @@ public class AppGroupStorageModule: Module {
       },
       completion: completion
     )
-    if finish == nil {
+    if attempt == nil {
       logMarker("navigateBack.skippedInFlight")
       completion(ReturnOutcome(status: .skipped, hostName: nil))
     }
-    return finish
+    return attempt
   }
 
   private func open(
     _ target: ReturnTarget,
     retriesLeft: Int,
     delay: TimeInterval,
-    completion: @escaping (ReturnOutcome) -> Void
+    attempt: ReturnAttempt
   ) {
     let urlString = target.url.absoluteString
+    // The deadline already settled this return (JS may show the button or a
+    // newer handoff may be under way), so a retry must not switch apps now.
+    guard !attempt.isFinished else {
+      logMarker("navigateBack.abandoned", extra: "url=\(urlString)")
+      return
+    }
     logMarker("navigateBack.attemptOpen", extra: "url=\(urlString)")
     let appWasActive = UIApplication.shared.applicationState == .active
     UIApplication.shared.open(target.url, options: [:]) { success in
@@ -2084,18 +2093,18 @@ public class AppGroupStorageModule: Module {
         extra: "url=\(urlString)"
       )
       if success {
-        completion(ReturnOutcome(status: .opened, hostName: target.hostName))
+        attempt.finish(ReturnOutcome(status: .opened, hostName: target.hostName))
         return
       }
       guard ReturnTargetResolver.shouldRetry(
         openSucceeded: false, appWasActive: appWasActive, retriesLeft: retriesLeft
       ) else {
         self.logMarker("navigateBack.openFinalFailure", extra: "wasActive=\(appWasActive)")
-        completion(ReturnOutcome(status: .failed, hostName: target.hostName))
+        attempt.finish(ReturnOutcome(status: .failed, hostName: target.hostName))
         return
       }
       DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-        self.open(target, retriesLeft: retriesLeft - 1, delay: min(delay * 1.6, 1.0), completion: completion)
+        self.open(target, retriesLeft: retriesLeft - 1, delay: min(delay * 1.6, 1.0), attempt: attempt)
       }
     }
   }

@@ -8,6 +8,7 @@ struct ReturnTargetResolverTests {
     blankExtensionUrlFallsThroughToExtensionBundle()
     extensionBundleLookupIgnoresCaseAndWhitespace()
     observerIsUsedWhenTheExtensionKnowsNothing()
+    extensionHostOutsideTheCatalogIgnoresTheObserver()
     unknownObservedBundleResolvesNothing()
     nothingKnownResolvesNothing()
     staleObservationIsIgnored()
@@ -55,6 +56,16 @@ struct ReturnTargetResolverTests {
     precondition(target?.url.absoluteString == "slack://", "observer bundle resolves")
     precondition(target?.source == .observer, "source is the observer")
     precondition(target?.hostName == "Slack", "observer host name")
+  }
+
+  static func extensionHostOutsideTheCatalogIgnoresTheObserver() {
+    precondition(
+      ReturnTargetResolver.resolve(
+        extensionUrl: nil, extensionBundle: "com.example.unknown", observedBundle: "com.tinyspeck.chatlyio") == nil,
+      "the extension's own host wins even when it can't be opened")
+    precondition(ReturnTargetResolver.extensionSawHost(" com.example.unknown "), "a named host")
+    precondition(!ReturnTargetResolver.extensionSawHost("  "), "a blank host")
+    precondition(!ReturnTargetResolver.extensionSawHost(nil), "no host")
   }
 
   static func unknownObservedBundleResolvesNothing() {
@@ -111,21 +122,21 @@ struct ReturnTargetResolverTests {
     scheduled: @escaping (TimeInterval, @escaping () -> Void) -> Void,
     timeout: ReturnOutcome,
     completion: @escaping (ReturnOutcome) -> Void
-  ) -> ((ReturnOutcome) -> Void)? {
+  ) -> ReturnAttempt? {
     gate.begin(deadline: ReturnTargetResolver.returnDeadline, schedule: scheduled, timeoutOutcome: { timeout }, completion: completion)
   }
 
   static func gateAllowsOneAttemptAtATime() {
     let gate = ReturnAttemptGate()
     var outcomes: [ReturnOutcomeStatus] = []
-    let finish = startGate(gate, scheduled: { _, _ in }, timeout: ReturnOutcome(status: .noTarget, hostName: nil)) {
+    let attempt = startGate(gate, scheduled: { _, _ in }, timeout: ReturnOutcome(status: .noTarget, hostName: nil)) {
       outcomes.append($0.status)
     }
-    precondition(finish != nil, "the first attempt starts")
+    precondition(attempt != nil, "the first attempt starts")
     let second = startGate(gate, scheduled: { _, _ in }, timeout: ReturnOutcome(status: .noTarget, hostName: nil)) { _ in }
     precondition(second == nil, "a second attempt is refused while one is in flight")
-    finish?(ReturnOutcome(status: .opened, hostName: "Slack"))
-    finish?(ReturnOutcome(status: .failed, hostName: "Slack"))
+    attempt?.finish(ReturnOutcome(status: .opened, hostName: "Slack"))
+    attempt?.finish(ReturnOutcome(status: .failed, hostName: "Slack"))
     precondition(outcomes == [.opened], "an attempt finishes exactly once")
     precondition(!gate.isInFlight, "finishing frees the gate")
   }
@@ -134,15 +145,16 @@ struct ReturnTargetResolverTests {
     let gate = ReturnAttemptGate()
     var deadlines: [(TimeInterval, () -> Void)] = []
     var outcomes: [ReturnOutcome] = []
-    let finish = startGate(gate, scheduled: { deadlines.append(($0, $1)) }, timeout: ReturnOutcome(status: .failed, hostName: "Slack")) {
+    let attempt = startGate(gate, scheduled: { deadlines.append(($0, $1)) }, timeout: ReturnOutcome(status: .failed, hostName: "Slack")) {
       outcomes.append($0)
     }
     precondition(deadlines.count == 1 && deadlines[0].0 == ReturnTargetResolver.returnDeadline, "the deadline is scheduled")
-    precondition(ReturnTargetResolver.returnDeadline < 5, "native gives up before JS's 5 s timeout so JS sees the real outcome")
+    precondition(ReturnTargetResolver.returnDeadline <= 4.5, "native gives up well before JS's 6 s timeout so JS sees the real outcome")
     deadlines[0].1()
     precondition(outcomes.map(\.status) == [.failed] && outcomes.first?.hostName == "Slack", "the deadline resolves failed with the host")
     precondition(!gate.isInFlight, "the deadline frees the gate for the next handoff")
-    finish?(ReturnOutcome(status: .opened, hostName: "Slack"))
+    precondition(attempt?.isFinished == true, "queued retries see the attempt is over")
+    attempt?.finish(ReturnOutcome(status: .opened, hostName: "Slack"))
     precondition(outcomes.count == 1, "a late real outcome is ignored")
   }
 
@@ -153,7 +165,7 @@ struct ReturnTargetResolverTests {
     deadlines[0]()
     let second = startGate(gate, scheduled: { _, _ in }, timeout: ReturnOutcome(status: .noTarget, hostName: nil)) { _ in }
     precondition(second != nil, "a new attempt starts after the old one timed out")
-    first?(ReturnOutcome(status: .opened, hostName: "Slack"))
+    first?.finish(ReturnOutcome(status: .opened, hostName: "Slack"))
     precondition(gate.isInFlight, "the old attempt's late completion must not free the new one")
   }
 }
