@@ -868,8 +868,13 @@ export class LocalNotesRepository implements NotesRepository {
     // A note filed in a folder the server has never seen reaches it unfiled, so a null
     // coming back keeps the note in that folder. While the folder is still on its way up,
     // the note is queued again, and pushNotes sends it once the folder has a cloud id.
-    const unsyncedFolder =
+    // A team pass that moves the note to another space is followed: the folder stays behind.
+    const folderUnknownToServer =
       remote.folder_id == null ? this.getFolderUnknownToServer(local.folderId) : null;
+    const unsyncedFolder =
+      options.spaceId === undefined || folderUnknownToServer?.spaceId === options.spaceId
+        ? folderUnknownToServer
+        : null;
     this.database
       .update(notes)
       .set({

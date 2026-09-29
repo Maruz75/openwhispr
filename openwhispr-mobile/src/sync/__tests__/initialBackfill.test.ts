@@ -123,6 +123,20 @@ describe('runInitialBackfillIfNeeded — once-per-account guard', () => {
     expect(mockNotesRepository.setSyncState).not.toHaveBeenCalled();
   });
 
+  it('leaves alone a folder the server already has, or one being deleted, once it has run', async () => {
+    mockNotesRepository.getSyncState.mockReturnValue('1');
+    mockNotesRepository.getFoldersMissingClientId.mockReturnValue([
+      // Pulled with no client id: marking it for upload would push its name back over a
+      // rename made on another device.
+      folder({ id: 3, name: 'Clients', isDefault: 0, remoteId: 'srv-folder-3' }),
+      folder({ id: 4, name: 'Old', isDefault: 0, deletedAt: '2026-08-24T10:00:00.000Z' }),
+    ]);
+
+    await runInitialBackfillIfNeeded('user-1');
+
+    expect(mockNotesRepository.setFolderClientId).not.toHaveBeenCalled();
+  });
+
   it('runs once and sets the per-user flag when it was unset', async () => {
     await runInitialBackfillIfNeeded('user-1');
 

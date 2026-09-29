@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm';
-import { folders, notes } from '@/db/schema';
+import { folders, notes, spaces } from '@/db/schema';
 import type { RemoteNote } from '@/data/types';
 import { isFolderAwaitingUpload } from '@/lib/notes/folderUpload';
+import { randomUUID } from '@/lib/uuid';
 import { createMemoryRepository, type TestDb } from './testDb';
 import type { LocalNotesRepository } from '../notesRepository';
 
@@ -39,6 +40,18 @@ const setUp = (): { repo: LocalNotesRepository; db: TestDb; noteId: number } => 
 const fileNote = (db: TestDb, noteId: number, folderId: number): void => {
   db.update(notes).set({ folderId }).where(eq(notes.id, noteId)).run();
 };
+
+const createTeamSpace = (db: TestDb): number =>
+  db
+    .insert(spaces)
+    .values({
+      clientSpaceId: randomUUID(),
+      cloudSpaceId: 'cloud-space-1',
+      kind: 'team',
+      name: 'Eng',
+    })
+    .returning()
+    .get().id;
 
 // Reads the folder the way pushNotes and ensureNoteSynced do.
 const awaitsUpload = (repo: LocalNotesRepository, folderId: number): boolean =>
@@ -155,6 +168,38 @@ describe('applyRemoteNote folder echo', () => {
 
     expect(repo.getNoteById(noteId)?.folderId).toBe(known.id);
     expect(repo.getNoteById(noteId)?.pendingSync).toBe(0);
+  });
+
+  it('follows the server when the team pass moves the note out of the folder’s space', () => {
+    const { repo, db, noteId } = setUp();
+    const folder = repo.createFolder('Meetings');
+    repo.setFolderClientId(folder.id, 'client-folder');
+    fileNote(db, noteId, folder.id);
+    const teamSpaceId = createTeamSpace(db);
+
+    repo.applyRemoteNote(echo, noFolder, { spaceId: teamSpaceId });
+
+    const note = repo.getNoteById(noteId);
+    expect(note?.spaceId).toBe(teamSpaceId);
+    expect(note?.folderId).toBeNull();
+    expect(note?.pendingSync).toBe(0);
+  });
+
+  it('keeps the folder when the team pass leaves the note in the folder’s space', () => {
+    const { repo, db, noteId } = setUp();
+    const teamSpaceId = createTeamSpace(db);
+    const folder = repo.createFolder('Standup', teamSpaceId);
+    repo.setFolderClientId(folder.id, 'client-folder');
+    db.update(notes)
+      .set({ folderId: folder.id, spaceId: teamSpaceId })
+      .where(eq(notes.id, noteId))
+      .run();
+
+    repo.applyRemoteNote(echo, noFolder, { spaceId: teamSpaceId });
+
+    const note = repo.getNoteById(noteId);
+    expect(note?.folderId).toBe(folder.id);
+    expect(note?.pendingSync).toBe(1);
   });
 
   it('follows the server when the note sits in a deleted folder', () => {

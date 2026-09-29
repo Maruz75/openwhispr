@@ -16,8 +16,10 @@ export async function runInitialBackfillIfNeeded(
     // this ran: once an account switch has wiped the folders, or another device deleted
     // one. Without a client id it never uploads and its notes never get a folder on the
     // server. pushFolders adopts it into a synced same-named default rather than creating
-    // a second one.
+    // a second one. A folder the server already has is left alone: queued, it would push
+    // its local name back over a rename made on another device.
     for (const folder of notesRepository.getFoldersMissingClientId()) {
+      if (folder.remoteId || folder.deletedAt) continue;
       notesRepository.setFolderClientId(folder.id, randomUUID());
     }
     return;
