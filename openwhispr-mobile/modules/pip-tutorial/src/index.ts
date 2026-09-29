@@ -5,17 +5,26 @@ interface PipTutorialNativeModule {
   isAvailable(): boolean;
   // Builds before start reported an outcome resolve a boolean, and an OTA update can run this JS
   // on one of them.
-  start(videoName: string): Promise<string | boolean>;
+  start(videoName: string): Promise<PipStartOutcome | boolean>;
   stop(): Promise<void>;
 }
 
 /**
- * `started`, or why the overlay isn't showing: `unsupported`, `video_missing`, `no_root_view`,
- * `controller_failed`, `timeout:possible=<bool>`, `failed:<error>`, `stopped` (a later start or a
- * stop replaced it), `unavailable` (module not linked), `error` (the call threw) or `failed`
- * (an older native build gave no reason).
+ * `started`, or why the overlay isn't showing. `stopped`: a later start or a stop replaced it.
+ * `unavailable`: the iOS module isn't linked. `failed`: an older native build gave no reason.
  */
-export type PipStartOutcome = string;
+export type PipStartOutcome =
+  | 'started'
+  | 'unsupported'
+  | 'video_missing'
+  | 'no_root_view'
+  | 'controller_failed'
+  | 'stopped'
+  | 'unavailable'
+  | 'error'
+  | 'failed'
+  | `timeout:possible=${boolean}`
+  | `failed:${string}`;
 
 let NativeModule: PipTutorialNativeModule | null = null;
 if (Platform.OS === 'ios') {
