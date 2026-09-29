@@ -33,7 +33,40 @@ test("mentions at the start of a line, in brackets and before punctuation count"
 test("email addresses and @ inside a word are not mentions", async () => {
   const { githubMentions } = await load();
   assert.deepEqual(githubMentions("Mail dana@example.com or ops@acme.io; a@b; x@y.z"), []);
-  assert.deepEqual(githubMentions("user@alice and foo_@bar"), []);
+  assert.deepEqual(githubMentions("user@alice"), []);
+  // "@@x" and a domain immediately before "@" ("medium.com/@x") still don't
+  // count: "@" and "/" stay excluded even though "_", "-", "." and "\\" no
+  // longer are.
+  assert.deepEqual(githubMentions("a@b.com @@x medium.com/@x"), []);
+});
+
+// GitHub renders and notifies through all of these; under-reporting a
+// mention it would notify is the mistake to avoid, so any non-word character
+// right before "@" now opens one, not only whitespace and a narrower set of
+// punctuation.
+test("a non-word character right before @ opens a mention, including one that used to be excluded", async () => {
+  const { githubMentions } = await load();
+  // Markdown italics: GitHub renders `_@gina_` as <em>@gina</em> and notifies
+  // gina; the trailing underscore ends the handle rather than blocking it.
+  assert.deepEqual(githubMentions("_@gina_"), ["@gina"]);
+  // Enterprise Managed User handles carry a "_shortcode" suffix.
+  assert.deepEqual(githubMentions("ping @bob_acme"), ["@bob_acme"]);
+  assert.deepEqual(githubMentions("hi-@alice"), ["@alice"]);
+  // The backslash is dropped when GitHub renders this, and it still notifies.
+  assert.deepEqual(githubMentions("see \\@dave"), ["@dave"]);
+  // Loosened on purpose: previously excluded as "@ inside a word".
+  assert.deepEqual(githubMentions("foo_@bar"), ["@bar"]);
+});
+
+test("CRLF line endings are normalised before paragraphs, fences and code spans are found", async () => {
+  const { githubMentions } = await load();
+  assert.deepEqual(githubMentions("cc @alice\r\n\r\n@bob"), ["@alice", "@bob"]);
+  assert.deepEqual(
+    githubMentions("Press the ` key to open the console.\r\n\r\ncc @alice, see `main.js`"),
+    ["@alice"]
+  );
+  const body = ["Before @alice", "```js", "// @bob", "```", "After @carol"].join("\r\n");
+  assert.deepEqual(githubMentions(body), ["@alice", "@carol"]);
 });
 
 test("mentions inside inline code are ignored", async () => {
@@ -77,9 +110,9 @@ test("an unclosed backtick is plain text, so its mention counts", async () => {
   assert.deepEqual(githubMentions("a stray ` then @alice"), ["@alice"]);
 });
 
-test("escaped, doubled or over-long handles are not mentions", async () => {
+test("doubled @ or a bare hyphen right after @ are never mentions; over-long handles aren't either", async () => {
   const { githubMentions } = await load();
-  assert.deepEqual(githubMentions("\\@alice @@bob @-carol"), []);
+  assert.deepEqual(githubMentions("@@bob @-carol"), []);
   assert.deepEqual(githubMentions(`@${"a".repeat(40)}`), []);
   assert.deepEqual(githubMentions(`@${"a".repeat(39)}`), [`@${"a".repeat(39)}`]);
 });

@@ -42,11 +42,15 @@ function withoutCodeSpans(text: string): string {
     .join("\n\n");
 }
 
-// A GitHub handle: letters, digits and single inner hyphens, at most 39
-// characters, optionally followed by /team. Not preceded by anything that
-// makes the @ part of a word, an email address, a path or an escape.
+// A GitHub handle: letters, digits, and inner hyphens or underscores (never
+// trailing), at most 39 characters, optionally followed by /team. Not
+// preceded by a letter, digit, `@`, `/` or backtick, since those make the @
+// part of a word, an email address, a path or a code span; anything else —
+// whitespace, punctuation, a markdown emphasis marker, an escaping backslash
+// — may still open a mention. GitHub renders and notifies through all of
+// those, and under-reporting a mention is the mistake to avoid.
 const MENTION =
-  /(^|[^A-Za-z0-9_@\\/.`-])@([A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38})(\/[A-Za-z0-9][A-Za-z0-9_-]*)?(?![A-Za-z0-9_])/g;
+  /(^|[^A-Za-z0-9@\/`])@([A-Za-z0-9](?:[A-Za-z0-9]|[_-](?=[A-Za-z0-9_])){0,38})(\/[A-Za-z0-9][A-Za-z0-9_-]*)?(?![A-Za-z0-9])/g;
 
 /**
  * The people and teams GitHub notifies for this Markdown: `@name` and
@@ -56,7 +60,9 @@ const MENTION =
 export function githubMentions(text: string): string[] {
   const seen = new Set<string>();
   const mentions: string[] = [];
-  const prose = withoutCodeSpans(withoutFencedBlocks(text));
+  // Paragraph, fence and code-span detection all key off "\n".
+  const normalized = text.replace(/\r\n/g, "\n");
+  const prose = withoutCodeSpans(withoutFencedBlocks(normalized));
   for (const match of prose.matchAll(MENTION)) {
     const mention = `@${match[2]}${match[3] ?? ""}`;
     const key = mention.toLowerCase();
