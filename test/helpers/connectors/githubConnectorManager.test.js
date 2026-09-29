@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { CONNECTED, fakeGithubFetch, json, memoryCredentials } = require("./githubFixtures");
+const { CONNECTED, fakeGithubFetch, hang, json, memoryCredentials } = require("./githubFixtures");
 
 const INSTALLATIONS = "GET /user/installations";
 const REPOSITORIES = "GET /user/installations/7/repositories";
@@ -50,7 +50,7 @@ function fakeLog() {
 
 // The connector exactly as main builds it (buildGithubConnector), driven
 // through the real manager.
-async function setup({ script = {}, credential = CONNECTED, env = ENV } = {}) {
+async function setup({ script = {}, credential = CONNECTED, env = ENV, others = [] } = {}) {
   const [{ createConnectorManager }, { createPendingActions }, { buildGithubConnector }] =
     await Promise.all([
       import("../../../src/helpers/connectors/connectorManager.js"),
@@ -60,23 +60,27 @@ async function setup({ script = {}, credential = CONNECTED, env = ENV } = {}) {
   const github = fakeGithubFetch({ ...INSTALLED, ...script });
   const credentials = memoryCredentials(credential, { connectorId: "github" });
   const broadcasts = [];
+  const statusBroadcasts = [];
+  let manager = null;
   const connector = buildGithubConnector({
     fetch: github.fetchImpl,
     credentials,
     env,
     broadcast: (channel, payload) => broadcasts.push({ channel, payload }),
     logger: silentLogger,
+    notifyStatusChanged: () => void manager?.notifyStatusChanged(),
   });
   const log = fakeLog();
-  const manager = createConnectorManager({
-    connectors: [connector],
+  manager = createConnectorManager({
+    connectors: [...others, connector],
     pendingActions: createPendingActions(),
     actionLog: log,
     logger: silentLogger,
     getAccountId: () => credentials.activeAccountId(),
     credentials,
+    onStatusChanged: (statuses) => statusBroadcasts.push(statuses),
   });
-  return { manager, connector, github, credentials, log, broadcasts };
+  return { manager, connector, github, credentials, log, broadcasts, statusBroadcasts };
 }
 
 const hits = (github, key) => github.calls.filter((call) => `${call.method} ${call.path}` === key);
@@ -94,22 +98,46 @@ test("buildGithubConnector reads the client id and App slug from the environment
   assert.equal(status.manageUrl, INSTALL_URL);
 });
 
-test("the status through the manager keeps the repository count and the GitHub manage link", async () => {
-  const { manager, github } = await setup();
+test("the status through the manager keeps the GitHub manage link, and the repository count arrives as a status change", async () => {
+  const { manager, github, statusBroadcasts } = await setup();
+  const status = {
+    id: "github",
+    connected: true,
+    configured: true,
+    accountLabel: "@dana",
+    workspaceLabel: null,
+    needsReconnect: false,
+    manageUrl: INSTALL_URL,
+  };
 
-  assert.deepEqual(await manager.status(), [
-    {
-      id: "github",
-      connected: true,
-      configured: true,
-      accountLabel: "@dana",
-      workspaceLabel: "1",
-      needsReconnect: false,
-      manageUrl: INSTALL_URL,
-    },
-  ]);
+  assert.deepEqual(await manager.status(), [status]);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.deepEqual(statusBroadcasts.at(-1), [{ ...status, workspaceLabel: "1" }]);
   // Every request went through the fetch main passes in, with GitHub's headers.
   assert.equal(hits(github, INSTALLATIONS)[0].authorization, "Bearer ghu-1");
+});
+
+test("another connector's status never waits on a GitHub repository read", async () => {
+  const slack = {
+    id: "slack",
+    actions: {},
+    getStatus: async () => ({ connected: true, accountLabel: "chad" }),
+    getBinding: async () => null,
+  };
+  const { manager } = await setup({ script: { [INSTALLATIONS]: [hang()] }, others: [slack] });
+
+  const started = Date.now();
+  const statuses = await manager.status();
+
+  assert.ok(Date.now() - started < 500, `${Date.now() - started} ms`);
+  assert.deepEqual(
+    statuses.map((status) => [status.id, status.connected]),
+    [
+      ["slack", true],
+      ["github", true],
+    ]
+  );
 });
 
 test("Send creates exactly the card's edited issue, and the receipt holds the repo only", async () => {
@@ -196,6 +224,8 @@ test("createConnectors registers GitHub once, built from the shared deps", async
     "create_issue",
     "comment",
   ]);
+  await githubConnectors[0].getStatus();
+  await new Promise((resolve) => setTimeout(resolve, 20));
   const status = await githubConnectors[0].getStatus();
   assert.equal(status.workspaceLabel, "1");
   assert.equal(status.manageUrl, INSTALL_URL);

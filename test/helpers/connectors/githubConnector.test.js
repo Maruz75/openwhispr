@@ -104,6 +104,7 @@ async function setupGithub(
     clientId = "Iv1.test-client",
     slug = "openwhispr-dev",
     statusTimeoutMs,
+    clock = { now: NOW },
   } = {}
 ) {
   const [
@@ -118,6 +119,7 @@ async function setupGithub(
     import("../../../src/helpers/connectors/githubInstallations.js"),
   ]);
   const github = fakeGithubFetch({ ...installedScript(), ...script });
+  const statusChanges = [];
   const api = createGithubApi({
     fetchImpl: github.fetchImpl,
     sleep: async () => {},
@@ -141,13 +143,18 @@ async function setupGithub(
   const connector = connectorModule.createGithubConnector({
     api,
     auth,
-    installations: createGithubInstallations({ api, now: () => NOW }),
+    installations: createGithubInstallations({ api, now: () => clock.now }),
     credentials,
     getSlug: () => slug,
+    notifyStatusChanged: () => statusChanges.push(Date.now()),
     ...(statusTimeoutMs === undefined ? {} : { statusTimeoutMs }),
   });
-  return { connector, github, credentials, ...connectorModule };
+  return { connector, github, credentials, statusChanges, ...connectorModule };
 }
+
+// The status's repository count is read in the background; with the fake
+// fetch answering in microtasks, one timer tick lets that read land.
+const countReadLands = () => new Promise((resolve) => setTimeout(resolve, 20));
 
 const hits = (github, key) => github.calls.filter((call) => `${call.method} ${call.path}` === key);
 const writes = (github) => github.calls.filter((call) => call.method === "POST");
@@ -478,6 +485,48 @@ test("internationalized and full-width email addresses are redacted too", async 
   assert.equal(item.snippet, "or [email], or [email]; left-pad@1.2.3 is a version");
 });
 
+test("ten 65,536-character bodies built to slow the email redaction are read in well under a second", async () => {
+  const hostile = ["a".repeat(65536), "a.".repeat(32768), `${"a".repeat(65000)}@x`];
+  const page = searchPage(
+    Array.from({ length: 10 }, (_, index) =>
+      searchHit("acme/api", index + 1, { title: hostile[index % 3], body: hostile[index % 3] })
+    )
+  );
+  const { connector } = await setupGithub({ [SEARCH]: [page, page] });
+
+  const started = Date.now();
+  const { items } = await connector.query("search_issues", { query: "x" }, BOUND);
+
+  assert.ok(Date.now() - started < 1000, `${Date.now() - started} ms`);
+  assert.equal(items.length, 10);
+  assert.ok(items.every((item) => item.snippet.length <= 300 && item.title.length <= 256));
+});
+
+test("an address past the redacted window is never shown, and one inside it is redacted", async () => {
+  const words = (count) => Array.from({ length: count }, () => "word").join(" ");
+  const { connector } = await setupGithub({
+    [SEARCH]: [
+      searchPage([
+        searchHit("acme/api", 1, { body: `${words(300)} late@example.test ${words(10)}` }),
+        // Long addresses shrink to "[email]", so the excerpt reaches deep
+        // into the window, up to the space it ends at.
+        searchHit("acme/api", 2, {
+          body: `${Array.from({ length: 40 }, (_, n) => `${"x".repeat(40)}${n}@example.test`).join(" ")} ${words(200)}`,
+        }),
+      ]),
+      searchPage([]),
+    ],
+  });
+
+  const [late, dense] = (await connector.query("search_issues", { query: "x" }, BOUND)).items;
+
+  assert.equal(late.snippet, `${words(60)}…`);
+  assert.ok(dense.snippet.length <= 300);
+  // Cut short of the body, so it ends in "…" like any clipped snippet.
+  assert.match(dense.snippet, /^(\[email\] )+\[email\]…$/);
+  assert.doesNotMatch(dense.snippet, /@example\.test|x{5}/);
+});
+
 test("a named repo narrows the search to it, and the type and state reach the query", async () => {
   const { connector, github } = await setupGithub({ [SEARCH]: [searchPage([])] });
 
@@ -780,6 +829,94 @@ test("someone who can push to the repo gets no 'labels may not apply' note", asy
   );
 });
 
+test("after a 'not installed' answer, installing the App and asking again works without waiting out the cache", async () => {
+  const onlyWeb = [repo("acme/web", "2026-09-20T10:00:00Z")];
+  const script = () => ({
+    [REPOSITORIES]: [
+      json({ total_count: 1, repositories: onlyWeb }),
+      json({ total_count: 3, repositories: INSTALLED_REPOS }),
+    ],
+    [ISSUE_45]: [ISSUE],
+    [SEARCH]: [searchPage([searchHit("acme/api", 45)]), searchPage([])],
+  });
+  // The user installs the App from the refusal's link and asks again.
+  const later = (clock) => {
+    clock.now += 5000;
+  };
+
+  const createClock = { now: NOW };
+  const created = await setupGithub(script(), { clock: createClock });
+  assert.equal(
+    (
+      await created.connector.prepare(
+        "create_issue",
+        { repo: "acme/api", title: "Login times out" },
+        BOUND
+      )
+    ).errorCode,
+    "not_installed"
+  );
+  later(createClock);
+  await prepareIssue(created.connector);
+
+  const commentClock = { now: NOW };
+  const commented = await setupGithub(script(), { clock: commentClock });
+  assert.equal(
+    (await commented.connector.prepare("comment", { target: "acme/api#45", body: "x" }, BOUND))
+      .errorCode,
+    "not_installed"
+  );
+  later(commentClock);
+  await prepareComment(commented.connector);
+
+  const searchClock = { now: NOW };
+  const searched = await setupGithub(
+    {
+      [INSTALLATIONS]: [
+        json({ total_count: 0, installations: [] }),
+        json({ total_count: 1, installations: [{ id: 7 }] }),
+      ],
+      [SEARCH]: [searchPage([searchHit("acme/api", 45)]), searchPage([])],
+    },
+    { clock: searchClock }
+  );
+  assert.equal(
+    (await searched.connector.query("search_issues", { query: "login" }, BOUND)).errorCode,
+    "no_repositories"
+  );
+  later(searchClock);
+  assert.equal(
+    (await searched.connector.query("search_issues", { query: "login" }, BOUND)).items.length,
+    1
+  );
+});
+
+test("a repo unticked and ticked again on GitHub's page between prepare and Send still takes the issue", async () => {
+  const clock = { now: NOW };
+  const { connector, github } = await setupGithub(
+    {
+      [REPOSITORIES]: [
+        json({ total_count: 3, repositories: INSTALLED_REPOS }),
+        json({
+          total_count: 2,
+          repositories: INSTALLED_REPOS.filter((entry) => entry.full_name !== "acme/api"),
+        }),
+        json({ total_count: 3, repositories: INSTALLED_REPOS }),
+      ],
+      [CREATE]: [CREATED],
+    },
+    { clock }
+  );
+  const { payload } = await prepareIssue(connector);
+  // Settings re-reads the list while acme/api is unticked.
+  await connector.getStatus();
+  await countReadLands();
+  clock.now += 5000;
+
+  assert.equal((await connector.commit("create_issue", payload, {}, BOUND)).state, "sent");
+  assert.equal(hits(github, CREATE).length, 1);
+});
+
 test("an archived repo takes no new issue or comment, at prepare or at Send", async () => {
   const archived = installedScript(
     INSTALLED_REPOS.map((entry) =>
@@ -813,6 +950,7 @@ test("an archived repo takes no new issue or comment, at prepare or at Send", as
   });
   const { payload } = await prepareIssue(later.connector);
   await later.connector.getStatus();
+  await countReadLands();
   const sent = await later.connector.commit("create_issue", payload, {}, BOUND);
   assert.equal(sent.errorCode, "archived");
   assert.equal(writes(later.github).length, 0);
@@ -952,6 +1090,7 @@ test("Send refuses a repo removed from the App since prepare, before any write",
   // The user removes acme/api on GitHub's install page; Settings re-reads
   // the list when they come back.
   await connector.getStatus();
+  await countReadLands();
 
   const result = await connector.commit("create_issue", payload, {}, BOUND);
 
@@ -1317,62 +1456,99 @@ test("a comment card never posts under another login", async () => {
 
 // --- status and binding ---
 
-test("the status shows the GitHub user, the installed repository count and where to manage them", async () => {
-  const { connector } = await setupGithub();
+test("the status shows the GitHub user, the installed repository count once read, and where to manage them", async () => {
+  const { connector, statusChanges } = await setupGithub();
 
-  assert.deepEqual(await connector.getStatus(), {
+  const status = {
     connected: true,
     configured: true,
     accountLabel: "@dana",
-    workspaceLabel: "3",
+    workspaceLabel: null,
     needsReconnect: false,
     manageUrl: INSTALL_URL,
-  });
+  };
+  assert.deepEqual(await connector.getStatus(), status);
+  await countReadLands();
+  assert.equal(statusChanges.length, 1);
+  assert.deepEqual(await connector.getStatus(), { ...status, workspaceLabel: "3" });
+
   const none = await setupGithub(NOTHING_INSTALLED);
+  await none.connector.getStatus();
+  await countReadLands();
   assert.equal((await none.connector.getStatus()).workspaceLabel, "0");
   const unreadable = await setupGithub({ [INSTALLATIONS]: [offline()] });
+  await unreadable.connector.getStatus();
+  await countReadLands();
   assert.equal((await unreadable.connector.getStatus()).workspaceLabel, null);
+  assert.equal(unreadable.statusChanges.length, 0);
 });
 
-test("getStatus re-reads the installed repositories every time, never the 60s installations cache", async () => {
-  const { connector, github } = await setupGithub({
+test("getStatus never waits on GitHub, and reads the count once however many ask at once", async () => {
+  const { connector, github } = await setupGithub({ [INSTALLATIONS]: [hang()] });
+
+  const started = Date.now();
+  const statuses = await Promise.all([connector.getStatus(), connector.getStatus()]);
+
+  assert.ok(Date.now() - started < 500, `${Date.now() - started} ms`);
+  assert.deepEqual(
+    statuses.map((status) => [status.connected, status.accountLabel, status.workspaceLabel]),
+    [
+      [true, "@dana", null],
+      [true, "@dana", null],
+    ]
+  );
+  assert.equal(hits(github, INSTALLATIONS).length, 1);
+});
+
+test("each status re-reads the installed repositories, never the 60s installations cache, and announces only a changed count", async () => {
+  const { connector, github, statusChanges } = await setupGithub({
     [REPOSITORIES]: [
       json({ total_count: 3, repositories: INSTALLED_REPOS }),
+      json({ total_count: 3, repositories: INSTALLED_REPOS }),
       json({ total_count: 1, repositories: [repo("acme/web", "2026-09-20T10:00:00Z")] }),
+      offline(),
     ],
   });
 
-  assert.equal((await connector.getStatus()).workspaceLabel, "3");
+  for (const expected of [null, "3", "3", "1"]) {
+    assert.equal((await connector.getStatus()).workspaceLabel, expected);
+    await countReadLands();
+  }
+  // A count that couldn't be read keeps the last one.
   assert.equal((await connector.getStatus()).workspaceLabel, "1");
-  assert.equal(hits(github, REPOSITORIES).length, 2);
+  assert.equal(hits(github, REPOSITORIES).length, 4);
+  assert.equal(statusChanges.length, 2);
 });
 
-test("a repository read or token refresh that hangs is given up after the bound: the count is unknown, the rest stands", async () => {
+test("a repository read that hangs is given up after the bound, so the next status reads again", async () => {
   const { STATUS_REPOSITORIES_TIMEOUT_MS } = await setupGithub();
   assert.equal(STATUS_REPOSITORIES_TIMEOUT_MS, 5000);
-  for (const [label, script, credential] of [
-    ["installations", { [INSTALLATIONS]: [hang()] }, CONNECTED],
-    ["refresh", { [TOKEN]: [hang()] }, { ...CONNECTED, expiresAt: NOW - 1 }],
-  ]) {
-    const { connector } = await setupGithub(script, { credential, statusTimeoutMs: 50 });
+  const { connector, github, statusChanges } = await setupGithub(
+    { [INSTALLATIONS]: [hang()] },
+    { statusTimeoutMs: 50 }
+  );
 
-    const started = Date.now();
-    const status = await connector.getStatus();
+  await connector.getStatus();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal((await connector.getStatus()).workspaceLabel, null);
+  await countReadLands();
 
-    assert.ok(Date.now() - started < 2000, `${label}: ${Date.now() - started} ms`);
-    assert.deepEqual(
-      status,
-      {
-        connected: true,
-        configured: true,
-        accountLabel: "@dana",
-        workspaceLabel: null,
-        needsReconnect: false,
-        manageUrl: INSTALL_URL,
-      },
-      label
-    );
-  }
+  assert.equal(hits(github, INSTALLATIONS).length, 2);
+  assert.equal(statusChanges.length, 0);
+});
+
+test("a token refresh that hangs never holds up the status", async () => {
+  const { connector } = await setupGithub(
+    { [TOKEN]: [hang()] },
+    { credential: { ...CONNECTED, expiresAt: NOW - 1 } }
+  );
+
+  const started = Date.now();
+  const status = await connector.getStatus();
+
+  assert.ok(Date.now() - started < 500, `${Date.now() - started} ms`);
+  assert.equal(status.accountLabel, "@dana");
+  assert.equal(status.workspaceLabel, null);
 });
 
 test("without a login the status says whether this build can connect; a login always can", async () => {

@@ -1,6 +1,10 @@
 // The repositories the OpenWhispr GitHub App is installed on that the user
 // can reach (spec §5.1). Search, create and comment work in these only.
 const MAX_CANDIDATES = 20;
+// A repo that's missing from a list older than this is looked for once more
+// in a fresh one: after a "not installed" answer, the user can install the
+// App from its link and ask again within seconds.
+const REFETCH_AFTER_MS = 5 * 1000;
 const TIMED_OUT = { ok: false, outcome: "unknown", errorCode: "timeout" };
 
 function nonEmptyString(value) {
@@ -93,10 +97,11 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
 
   // `signal` lets a caller stop waiting (the Settings status gives up after
   // a few seconds). A read it gave up on is never cached, even if it lands.
-  async function list(binding, token, { signal } = {}) {
+  // `maxAgeMs` asks for a list younger than the cache keeps.
+  async function list(binding, token, { signal, maxAgeMs = ttlMs } = {}) {
     const key = keyOf(binding);
     const hit = cache.get(key);
-    if (hit && now() - hit.at < ttlMs) return hit.result;
+    if (hit && now() - hit.at < maxAgeMs) return hit.result;
     // The signal also stops the requests, so a read given up on doesn't keep
     // paging through GitHub in the background.
     const result = signal
@@ -107,11 +112,26 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
     return result;
   }
 
+  // The list, read once more when `found` rejects one older than
+  // REFETCH_AFTER_MS.
+  async function listFinding(binding, token, found) {
+    const listed = await list(binding, token);
+    if (!listed.ok || found(listed.repos)) return listed;
+    return list(binding, token, { maxAgeMs: REFETCH_AFTER_MS });
+  }
+
   // `owner/name` exactly (case-insensitive), or a bare name when exactly one
   // installed repo has it. Anything else is a question for the user, never
   // a guess.
   async function resolveRepo(binding, token, input) {
-    const listed = await list(binding, token);
+    const wanted = typeof input === "string" ? input.trim() : "";
+    const lower = wanted.toLowerCase();
+    const matches = wanted.includes("/")
+      ? (repo) => repo.fullName.toLowerCase() === lower
+      : (repo) => repo.name.toLowerCase() === lower;
+    const listed = await listFinding(binding, token, (repos) =>
+      wanted ? repos.some(matches) : repos.length > 0
+    );
     if (!listed.ok) return listed;
     const { repos } = listed;
     if (repos.length === 0) {
@@ -122,7 +142,6 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
           "The OpenWhispr GitHub App isn't installed on any repository yet. Tell the user to choose repositories for it in Settings → Integrations → Connectors.",
       };
     }
-    const wanted = typeof input === "string" ? input.trim() : "";
     if (!wanted) {
       if (repos.length === 1) return { ok: true, repo: repos[0] };
       return {
@@ -133,12 +152,11 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
         },
       };
     }
-    const lower = wanted.toLowerCase();
     if (wanted.includes("/")) {
-      const match = repos.find((repo) => repo.fullName.toLowerCase() === lower);
+      const match = repos.find(matches);
       return match ? { ok: true, repo: match } : notInstalled(wanted, listed.truncated);
     }
-    const named = repos.filter((repo) => repo.name.toLowerCase() === lower);
+    const named = repos.filter(matches);
     if (named.length === 1) return { ok: true, repo: named[0] };
     if (named.length > 1) {
       return {
@@ -156,7 +174,7 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
     cache.delete(keyOf(binding));
   }
 
-  return { list, resolveRepo, clear };
+  return { list, listFinding, resolveRepo, clear };
 }
 
-module.exports = { createGithubInstallations };
+module.exports = { createGithubInstallations, REFETCH_AFTER_MS };

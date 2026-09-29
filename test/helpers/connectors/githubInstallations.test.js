@@ -377,3 +377,60 @@ test("resolving a repo passes a failed list read through", async () => {
   assert.equal(refused.outcome, "failed");
   assert.equal(refused.errorCode, "unauthorized");
 });
+
+test("a repo missing from a list older than 5 s is looked for once more, and a younger list is trusted", async () => {
+  const { REFETCH_AFTER_MS } = await loadInstallations();
+  assert.equal(REFETCH_AFTER_MS, 5000);
+  const installedLater = () => ({
+    [INSTALLATIONS]: [installationsPage([installation(2, "dana")])],
+    [reposOf(2)]: [reposPage([DANA_NOTES]), reposPage([DANA_NOTES, ACME_WEB])],
+  });
+  const reads = (github) =>
+    github.calls.filter((call) => call.path === "/user/installations").length;
+
+  for (const input of ["acme/web", "web"]) {
+    const { installations, github, clock } = await setup(installedLater());
+    await installations.list(BINDING, TOKEN);
+
+    clock.now = NOW + REFETCH_AFTER_MS - 1;
+    assert.equal(
+      (await installations.resolveRepo(BINDING, TOKEN, input)).errorCode,
+      "not_installed",
+      input
+    );
+    assert.equal(reads(github), 1, input);
+
+    clock.now = NOW + REFETCH_AFTER_MS;
+    assert.equal(
+      (await installations.resolveRepo(BINDING, TOKEN, input)).repo.fullName,
+      "acme/web",
+      input
+    );
+    assert.equal(reads(github), 2, input);
+  }
+
+  // Found in the cached list: never read again.
+  const { installations, github, clock } = await setup(installedLater());
+  await installations.list(BINDING, TOKEN);
+  clock.now = NOW + REFETCH_AFTER_MS;
+  assert.equal(
+    (await installations.resolveRepo(BINDING, TOKEN, "notes")).repo.fullName,
+    "dana/notes"
+  );
+  assert.equal(reads(github), 1);
+});
+
+test("with no repository installed yet, an older list is read again before refusing", async () => {
+  const { installations, clock } = await setup({
+    [INSTALLATIONS]: [installationsPage([]), installationsPage([installation(2, "dana")])],
+    [reposOf(2)]: [reposPage([DANA_NOTES])],
+  });
+  await installations.list(BINDING, TOKEN);
+  clock.now = NOW + 5000;
+
+  assert.equal((await installations.resolveRepo(BINDING, TOKEN)).repo.fullName, "dana/notes");
+  assert.equal(
+    (await installations.listFinding(BINDING, TOKEN, (repos) => repos.length > 0)).repos.length,
+    1
+  );
+});

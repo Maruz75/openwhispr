@@ -17,8 +17,8 @@ const SNIPPET_LENGTH = 300;
 // bounds the `repo:` list is the request itself: GitHub answered 250
 // qualifiers (a 5 KB URL) and failed with a 5xx near 8 KB.
 const MAX_SEARCH_QUERY_LENGTH = 4000;
-// Settings waits this long for the installed repository count, then shows
-// the login without it.
+// A read of the installed repository count for the status gives up after
+// this long, so a hung read never blocks the next one.
 const STATUS_REPOSITORIES_TIMEOUT_MS = 5000;
 
 const STATES = new Set(["open", "all"]);
@@ -65,6 +65,22 @@ function collapseWhitespace(text) {
 
 function redactEmails(text) {
   return String(text ?? "").replace(EMAIL_PATTERN, "[email]");
+}
+
+// A search result's title or body as at most `max` characters, emails
+// redacted. EMAIL_PATTERN takes quadratic time on a long run of word
+// characters, and anyone can open an issue with a 65,536-character body, so
+// only a window a few times `max` is redacted. The window ends at a space
+// when it can, so no address is cut in two where the excerpt might show it.
+function excerpt(text, max) {
+  const collapsed = collapseWhitespace(text);
+  const windowLength = max * 4;
+  if (collapsed.length <= windowLength) return clip(redactEmails(collapsed), max);
+  const space = collapsed.lastIndexOf(" ", windowLength);
+  let end = space > max ? space : windowLength;
+  // Never keep half a surrogate pair.
+  if (/[\uD800-\uDBFF]/.test(collapsed[end - 1])) end -= 1;
+  return clip(`${redactEmails(collapsed.slice(0, end))}…`, max);
 }
 
 // At most `max` UTF-16 units, cut between code points (never inside a
@@ -237,7 +253,7 @@ function searchItem(raw, fullName) {
   return {
     reference: `${fullName}#${raw.number}`,
     isPullRequest: Boolean(pullRequest),
-    title: clip(collapseWhitespace(redactEmails(raw.title)), MAX_TITLE_LENGTH),
+    title: excerpt(raw.title, MAX_TITLE_LENGTH),
     state: state === "closed" || state === "merged" ? state : "open",
     url: raw.html_url,
     updatedAt: nonEmptyString(raw.updated_at) ? raw.updated_at : null,
@@ -246,7 +262,7 @@ function searchItem(raw, fullName) {
     labels: (Array.isArray(raw.labels) ? raw.labels : [])
       .map((label) => (typeof label === "string" ? label : label?.name))
       .filter(nonEmptyString),
-    snippet: clip(collapseWhitespace(redactEmails(raw.body)), SNIPPET_LENGTH),
+    snippet: excerpt(raw.body, SNIPPET_LENGTH),
   };
 }
 
@@ -256,8 +272,17 @@ function createGithubConnector({
   installations,
   credentials,
   getSlug = () => null,
+  notifyStatusChanged = () => {},
   statusTimeoutMs = STATUS_REPOSITORIES_TIMEOUT_MS,
 }) {
+  // The installed repository count per login, and the read in flight for
+  // it. The manager asks every connector for its status together, so the
+  // status answers with the last count read and never waits on GitHub:
+  // Slack's Connect or the first chat turn would wait with it.
+  const repoCounts = new Map();
+  const countReads = new Set();
+  const countKey = (binding) => `${binding.ownerAccountId}:${binding.generation}`;
+
   function manageUrl() {
     const slug = getSlug();
     return typeof slug === "string" && SLUG_PATTERN.test(slug)
@@ -307,8 +332,15 @@ function createGithubConnector({
     return { session: { binding, token: access.token, login: access.credential.login } };
   }
 
-  async function installedRepos(session) {
-    const listed = await call(session, (token) => installations.list(session.binding, token));
+  // With `wanted` ({ owner, repo }), a list without that repo is read once
+  // more, like one with no repo at all: the App may have just been installed.
+  async function installedRepos(session, wanted) {
+    const found = wanted
+      ? (repos) => findInstalled(repos, wanted.owner, wanted.repo) !== null
+      : (repos) => repos.length > 0;
+    const listed = await call(session, (token) =>
+      installations.listFinding(session.binding, token, found)
+    );
     if (!listed.ok) return { failure: { errorCode: listed.errorCode } };
     if (listed.repos.length === 0) return { failure: { errorCode: "no_repositories" } };
     return { repos: listed.repos, truncated: listed.truncated === true };
@@ -356,7 +388,7 @@ function createGithubConnector({
   // The issue or PR a comment goes on, in an installed repo, still open to
   // comments. Read at prepare and again at Send.
   async function readTarget(session, target) {
-    const installed = await installedRepos(session);
+    const installed = await installedRepos(session, target);
     if (installed.failure) return installed;
     const writable = writableRepo(
       findInstalled(installed.repos, target.owner, target.repo),
@@ -661,7 +693,7 @@ function createGithubConnector({
     const opened = await openSession(binding);
     if (opened.failure) return commitFailedWith(opened.failure);
     const { session } = opened;
-    const installed = await installedRepos(session);
+    const installed = await installedRepos(session, payload);
     if (installed.failure) return commitFailedWith(installed.failure);
     const writable = writableRepo(
       findInstalled(installed.repos, payload.owner, payload.repo),
@@ -745,15 +777,31 @@ function createGithubConnector({
     return listed.ok ? String(listed.repos.length) : null;
   }
 
-  // The installed repo count for the row, within statusTimeoutMs. Best
-  // effort: a failure or a timeout leaves it unknown (null, never "0"), and
-  // the rest of the status stands.
+  // The installed repo count, within statusTimeoutMs. Best effort: a
+  // failure or a timeout is null, never "0".
   async function repoCount(binding) {
     const signal = AbortSignal.timeout(statusTimeoutMs);
     const gaveUp = new Promise((resolve) => {
       signal.addEventListener("abort", () => resolve(null), { once: true });
     });
     return Promise.race([countRepos(binding, signal).catch(() => null), gaveUp]);
+  }
+
+  // Reads the count again in the background and announces a changed one.
+  // The count must reflect an install picked on GitHub's own page moments
+  // ago, so the read skips the 60 s cache (the fresh list then serves the
+  // tools too). A count that couldn't be read keeps the last one.
+  function refreshRepoCount(binding) {
+    const key = countKey(binding);
+    if (countReads.has(key)) return;
+    countReads.add(key);
+    installations.clear(binding);
+    void repoCount(binding).then((count) => {
+      countReads.delete(key);
+      if (count === null || count === repoCounts.get(key)) return;
+      repoCounts.set(key, count);
+      notifyStatusChanged();
+    });
   }
 
   return {
@@ -784,13 +832,10 @@ function createGithubConnector({
       const status = { ...auth.statusOf(entry.credential), configured: true };
       if (status.needsReconnect) return withManage(status);
       const binding = bindingFor(ownerAccountId, entry);
-      // The count shown here must reflect an install picked on GitHub's own
-      // page moments ago, so it never serves the 60 s cache tools use; the
-      // clear only affects this read, not the search/prepare calls after it.
-      installations.clear(binding);
+      refreshRepoCount(binding);
       return withManage({
         ...status,
-        workspaceLabel: await repoCount(binding),
+        workspaceLabel: repoCounts.get(countKey(binding)) ?? null,
       });
     },
 
@@ -840,6 +885,7 @@ function buildGithubConnector(deps) {
     installations: createGithubInstallations({ api }),
     credentials: deps.credentials,
     getSlug: () => deps.env?.GITHUB_APP_SLUG,
+    notifyStatusChanged: deps.notifyStatusChanged,
   });
 }
 
