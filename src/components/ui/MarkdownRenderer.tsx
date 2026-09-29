@@ -1,5 +1,5 @@
-import { createContext, useContext, useId, type ReactElement } from "react";
-import Markdown, { type Components } from "react-markdown";
+import { createContext, useContext, useId, type ComponentProps, type ReactElement } from "react";
+import Markdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 interface MarkdownRendererProps {
@@ -8,6 +8,32 @@ interface MarkdownRendererProps {
 }
 
 const FootnotePrefixContext = createContext("");
+
+function MarkdownLink({ node: _node, ...props }: ComponentProps<"a"> & ExtraProps): ReactElement {
+  const prefix = useContext(FootnotePrefixContext);
+  return (
+    <a
+      {...props}
+      aria-describedby={
+        props["aria-describedby"] === "footnote-label"
+          ? `${prefix}footnote-label`
+          : props["aria-describedby"]
+      }
+      target={props.href?.startsWith("#") ? undefined : "_blank"}
+      rel="noopener noreferrer"
+      className="text-link underline decoration-link/30 hover:decoration-link/60 transition-colors"
+    />
+  );
+}
+
+// Replies can be steered by prompt injections in notes, calendar events or web
+// results the agent read. An <img> would fetch its URL as soon as the reply
+// renders, leaking whatever the injection packed into it, so images only ever
+// render as a link the user has to click.
+function MarkdownImage({ src, alt }: ComponentProps<"img"> & ExtraProps): ReactElement | null {
+  if (!src) return alt ? <>{alt}</> : null;
+  return <MarkdownLink href={src}>{alt || src}</MarkdownLink>;
+}
 
 // Stable component types preserve DOM state, including table scroll positions.
 const markdownComponents: Components = {
@@ -38,22 +64,8 @@ const markdownComponents: Components = {
       {children}
     </li>
   ),
-  a: function MarkdownLink({ node: _node, ...props }): ReactElement {
-    const prefix = useContext(FootnotePrefixContext);
-    return (
-      <a
-        {...props}
-        aria-describedby={
-          props["aria-describedby"] === "footnote-label"
-            ? `${prefix}footnote-label`
-            : props["aria-describedby"]
-        }
-        target={props.href?.startsWith("#") ? undefined : "_blank"}
-        rel="noopener noreferrer"
-        className="text-link underline decoration-link/30 hover:decoration-link/60 transition-colors"
-      />
-    );
-  },
+  a: MarkdownLink,
+  img: MarkdownImage,
   code: ({ children }): ReactElement => (
     <code dir="ltr" className="bg-black/10 px-1 py-0.5 rounded text-xs font-mono">
       {children}

