@@ -3726,6 +3726,9 @@
       "email_draftName": "Черновик письма",
       "find_contactName": "Найти контакт",
       "slack_send_messageName": "Сообщение Slack",
+      "linear_search_issuesName": "Поиск в Linear",
+      "linear_create_issueName": "Задача в Linear",
+      "linear_commentName": "Комментарий в Linear",
       "get_noteName": "Получить заметку",
       "create_noteName": "Создать заметку",
       "update_noteName": "Обновить заметку",
@@ -3741,6 +3744,9 @@
       "email_draftStatus": "Подготовка письма...",
       "find_contactStatus": "Поиск контактов...",
       "slack_send_messageStatus": "Подготовка сообщения Slack...",
+      "linear_search_issuesStatus": "Поиск в Linear...",
+      "linear_create_issueStatus": "Подготовка задачи в Linear...",
+      "linear_commentStatus": "Подготовка комментария в Linear...",
       "web_searchStatus": "Поиск в интернете...",
       "copy_to_clipboardStatus": "Копирование в буфер обмена...",
       "get_calendar_eventsStatus": "Проверка календаря...",
@@ -3947,6 +3953,26 @@
           "refused": "Gmail отказался его отправить. Ничего не отправлено.",
           "connection_changed": "Подключение к Gmail изменилось перед отправкой, поэтому ничего не было отправлено.",
           "credential_save_failed": "Не удалось сохранить вход в Gmail на этом компьютере. Ничего не отправлено. Попробуйте снова."
+        },
+        "linear": {
+          "reconnect_needed": "Linear нужно переподключить в настройках.",
+          "connection_changed": "Подключение к Linear изменилось перед отправкой, поэтому ничего не было отправлено.",
+          "credential_save_failed": "Не удалось сохранить вход в Linear на этом компьютере. Ничего не отправлено. Попробуйте снова.",
+          "linear_unavailable": "Linear сейчас недоступен. Ничего не отправлено.",
+          "network": "Не удалось связаться с Linear. Ничего не отправлено.",
+          "rate_limited": "Linear сейчас перегружен. Повторите попытку чуть позже.",
+          "not_found": "Linear больше не находит команду, проект или задачу. Ничего не отправлено.",
+          "forbidden": "Вашему аккаунту Linear это не разрешено. Ничего не отправлено.",
+          "invalid_input": "Linear не смог принять это в таком виде. Ничего не отправлено.",
+          "too_long": "Слишком длинно для Linear. Ничего не отправлено.",
+          "missing_title": "Задаче в Linear нужно название. Ничего не отправлено.",
+          "missing_body": "Комментарий в Linear пуст. Ничего не отправлено.",
+          "not_created": "Linear не создал задачу.",
+          "wrong_workspace": "Эта задача находится в другом рабочем пространстве Linear. Ничего не отправлено.",
+          "invalid_reference": "Это не задача Linear. Ничего не отправлено.",
+          "refused": "Linear отклонил запрос. Ничего не отправлено.",
+          "unknown_action": "OpenWhispr не может сделать это в Linear. Ничего не отправлено.",
+          "generic": "Что-то пошло не так. В Linear ничего не отправлено."
         }
       },
       "email": {
@@ -3966,7 +3992,8 @@
         "unknown": "Не удалось подтвердить отправку. Проверьте папку «Отправленные»."
       },
       "openIn": {
-        "gmail": "Открыть в Gmail"
+        "gmail": "Открыть в Gmail",
+        "linear": "Открыть в Linear"
       },
       "sendLabel": {
         "issue": "Создать задачу",
@@ -4084,17 +4111,63 @@
         "failedBody": "Вернитесь в OpenWhispr, чтобы попробовать снова."
       }
     },
+    "linear": {
+      "title": "Linear",
+      "description": "Ассистент может искать ваши задачи в Linear, а также создавать задачи и комментарии от вашего имени. Вы одобряете каждую задачу и каждый комментарий перед отправкой.",
+      "connect": "Подключить",
+      "reconnect": "Переподключить",
+      "disconnect": "Отключить",
+      "connecting": "Завершите подключение в браузере…",
+      "connectedAs": "Подключено как {{account}} в {{workspace}}",
+      "needsReconnect": "Linear нужно переподключить.",
+      "proRequired": "Перейдите на платный план, чтобы ассистент работал в Linear за вас.",
+      "errors": {
+        "connect_failed": "Не удалось подключить Linear. Попробуйте снова.",
+        "disconnect_failed": "Не удалось отключить Linear. Попробуйте снова.",
+        "oauth_denied": "Linear не был подключён, так как доступ не был разрешён.",
+        "oauth_timeout": "Подключение заняло слишком много времени. Попробуйте снова.",
+        "oauth_state_mismatch": "Эта ссылка для входа устарела. Попробуйте снова.",
+        "ports_busy": "Другое приложение использует порты, которые нужны OpenWhispr для подключения. Закройте его и попробуйте снова.",
+        "token_exchange_failed": "Linear не завершил подключение. Попробуйте снова.",
+        "not_configured": "Linear недоступен в этой сборке.",
+        "connection_changed": "Ваш аккаунт или подключение к Linear изменились во время подключения. Попробуйте снова.",
+        "signed_out": "Войдите в OpenWhispr, чтобы подключить Linear.",
+        "policy_blocked": "Ваша организация отключила коннекторы.",
+        "policy_unavailable": "Не удалось проверить настройки вашей организации. Попробуйте снова.",
+        "permission_not_granted": "Linear не был подключён, так как были выданы не все разрешения. Подключите снова и разрешите их все."
+      },
+      "browser": {
+        "connectedTitle": "Linear подключён",
+        "connectedBody": "Вы можете закрыть эту вкладку и вернуться в OpenWhispr.",
+        "failedTitle": "Linear не был подключён",
+        "failedBody": "Вернитесь в OpenWhispr, чтобы попробовать снова."
+      },
+      "notes": {
+        "priority": {
+          "urgent": "Приоритет: Срочный",
+          "high": "Приоритет: Высокий",
+          "medium": "Приоритет: Средний",
+          "low": "Приоритет: Низкий",
+          "none": "Приоритет: Нет"
+        },
+        "assignedToYou": "Исполнитель: вы"
+      }
+    },
     "recent": {
       "title": "Последние действия",
       "actions": {
         "email_draft": "Черновик для {{destination}}",
         "slack_send_message": "Сообщение для {{destination}}",
-        "gmail_send": "Письмо для {{destination}}"
+        "gmail_send": "Письмо для {{destination}}",
+        "linear_create_issue": "Новая задача в {{destination}}",
+        "linear_comment": "Комментарий к {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "Черновик письма",
         "slack_send_message": "Сообщение в Slack",
-        "gmail_send": "Письмо Gmail"
+        "gmail_send": "Письмо Gmail",
+        "linear_create_issue": "Задача в Linear",
+        "linear_comment": "Комментарий в Linear"
       },
       "states": {
         "pending": "Ожидание",
@@ -4150,10 +4223,31 @@
           "refused": "Gmail отказался его отправить.",
           "connection_changed": "Подключение к Gmail изменилось. Ничего не было отправлено.",
           "credential_save_failed": "Не удалось сохранить вход в Gmail на этом компьютере. Ничего не отправлено."
+        },
+        "linear": {
+          "reconnect_needed": "Linear нужно переподключить.",
+          "connection_changed": "Подключение к Linear изменилось. Ничего не было отправлено.",
+          "credential_save_failed": "Не удалось сохранить вход в Linear на этом компьютере.",
+          "linear_unavailable": "Linear сейчас недоступен.",
+          "network": "Не удалось связаться с Linear.",
+          "rate_limited": "Linear сейчас перегружен.",
+          "not_found": "Не найдено в Linear.",
+          "forbidden": "Не разрешено в Linear.",
+          "invalid_input": "Linear не смог это принять.",
+          "too_long": "Слишком длинно для Linear.",
+          "missing_title": "Задаче в Linear нужно название.",
+          "missing_body": "Комментарий в Linear пуст.",
+          "not_created": "Linear не создал задачу.",
+          "wrong_workspace": "Эта задача находится в другом рабочем пространстве Linear.",
+          "invalid_reference": "Это не задача Linear.",
+          "refused": "Linear отклонил запрос.",
+          "unknown_action": "Недоступно в Linear.",
+          "generic": "В Linear не получилось."
         }
       },
       "unknownSent": {
-        "gmail": "Не удалось подтвердить отправку письма для {{destination}}. Проверьте папку «Отправленные» в Gmail."
+        "gmail": "Не удалось подтвердить отправку письма для {{destination}}. Проверьте папку «Отправленные» в Gmail.",
+        "linear": "Не удалось подтвердить, что это дошло до Linear. Проверьте {{destination}} в Linear, прежде чем пробовать снова."
       },
       "gmailDraftLimit": "Лимит писем на один запрос: {{max}}.",
       "queryResults": "Найдено результатов: {{total}}",

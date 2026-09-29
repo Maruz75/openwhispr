@@ -3682,6 +3682,9 @@
       "email_draftName": "メールの下書き",
       "find_contactName": "連絡先を検索",
       "slack_send_messageName": "Slackメッセージ",
+      "linear_search_issuesName": "Linearを検索",
+      "linear_create_issueName": "LinearのIssue",
+      "linear_commentName": "Linearのコメント",
       "get_noteName": "ノートを取得",
       "create_noteName": "ノートを作成",
       "update_noteName": "ノートを更新",
@@ -3697,6 +3700,9 @@
       "email_draftStatus": "メールを準備しています...",
       "find_contactStatus": "連絡先を検索中...",
       "slack_send_messageStatus": "Slackメッセージを準備しています...",
+      "linear_search_issuesStatus": "Linearを検索中...",
+      "linear_create_issueStatus": "LinearのIssueを準備しています...",
+      "linear_commentStatus": "Linearのコメントを準備しています...",
       "web_searchStatus": "ウェブを検索中...",
       "copy_to_clipboardStatus": "クリップボードにコピー中...",
       "get_calendar_eventsStatus": "カレンダーを確認中...",
@@ -3903,6 +3909,26 @@
           "refused": "Gmailが送信を拒否しました。何も送信されていません。",
           "connection_changed": "送信前にGmailの接続が変わったため、何も送信されませんでした。",
           "credential_save_failed": "このコンピューターにGmailのログイン情報を保存できませんでした。何も送信されていません。もう一度お試しください。"
+        },
+        "linear": {
+          "reconnect_needed": "設定でLinearを再接続する必要があります。",
+          "connection_changed": "送信前にLinearの接続が変わったため、何も送信されませんでした。",
+          "credential_save_failed": "このコンピューターにLinearのログイン情報を保存できませんでした。何も送信されていません。もう一度お試しください。",
+          "linear_unavailable": "現在Linearを利用できません。何も送信されていません。",
+          "network": "Linearに接続できませんでした。何も送信されていません。",
+          "rate_limited": "Linearが混み合っています。しばらくしてからもう一度お試しください。",
+          "not_found": "Linearでチーム、プロジェクト、またはIssueが見つからなくなりました。何も送信されていません。",
+          "forbidden": "お使いのLinearアカウントにはその操作が許可されていません。何も送信されていません。",
+          "invalid_input": "Linearはこの内容を受け付けませんでした。何も送信されていません。",
+          "too_long": "Linearには長すぎます。何も送信されていません。",
+          "missing_title": "LinearのIssueにはタイトルが必要です。何も送信されていません。",
+          "missing_body": "Linearのコメントが空です。何も送信されていません。",
+          "not_created": "LinearはIssueを作成しませんでした。",
+          "wrong_workspace": "そのIssueは別のLinearワークスペースにあります。何も送信されていません。",
+          "invalid_reference": "それはLinearのIssueではありません。何も送信されていません。",
+          "refused": "Linearがリクエストを拒否しました。何も送信されていません。",
+          "unknown_action": "OpenWhisprはLinearでその操作を行えません。何も送信されていません。",
+          "generic": "問題が発生しました。Linearには何も送信されていません。"
         }
       },
       "email": {
@@ -3922,7 +3948,8 @@
         "unknown": "送信されたか確認できませんでした。送信済みフォルダを確認してください。"
       },
       "openIn": {
-        "gmail": "Gmailで開く"
+        "gmail": "Gmailで開く",
+        "linear": "Linearで開く"
       },
       "sendLabel": {
         "issue": "Issue を作成",
@@ -4040,17 +4067,63 @@
         "failedBody": "OpenWhisprに戻ってもう一度お試しください。"
       }
     },
+    "linear": {
+      "title": "Linear",
+      "description": "アシスタントはLinearのIssueを検索し、あなたとしてIssueやコメントを作成できます。送信前に必ず各Issueとコメントを承認します。",
+      "connect": "接続",
+      "reconnect": "再接続",
+      "disconnect": "接続を解除",
+      "connecting": "ブラウザで接続を完了してください…",
+      "connectedAs": "{{workspace}} の {{account}} として接続済み",
+      "needsReconnect": "Linearを再接続する必要があります。",
+      "proRequired": "アシスタントにLinearで作業させるには、有料プランへのアップグレードが必要です。",
+      "errors": {
+        "connect_failed": "Linearを接続できませんでした。もう一度お試しください。",
+        "disconnect_failed": "Linearの接続を解除できませんでした。もう一度お試しください。",
+        "oauth_denied": "アクセスが許可されなかったため、Linearは接続されませんでした。",
+        "oauth_timeout": "接続に時間がかかりすぎました。もう一度お試しください。",
+        "oauth_state_mismatch": "そのサインインリンクは期限切れでした。もう一度お試しください。",
+        "ports_busy": "OpenWhisprが接続に必要なポートを別のアプリが使用しています。そのアプリを閉じてから、もう一度お試しください。",
+        "token_exchange_failed": "Linearの接続が完了しませんでした。もう一度お試しください。",
+        "not_configured": "このビルドではLinearを利用できません。",
+        "connection_changed": "接続中にアカウントまたはLinearの接続が変わりました。もう一度お試しください。",
+        "signed_out": "Linearを接続するにはOpenWhisprにサインインしてください。",
+        "policy_blocked": "組織によってコネクタが無効にされています。",
+        "policy_unavailable": "組織の設定を確認できませんでした。もう一度お試しください。",
+        "permission_not_granted": "すべての権限が許可されなかったため、Linearは接続されませんでした。もう一度接続し、すべて許可してください。"
+      },
+      "browser": {
+        "connectedTitle": "Linearが接続されました",
+        "connectedBody": "このタブを閉じてOpenWhisprに戻ることができます。",
+        "failedTitle": "Linearは接続されませんでした",
+        "failedBody": "OpenWhisprに戻ってもう一度お試しください。"
+      },
+      "notes": {
+        "priority": {
+          "urgent": "優先度: 緊急",
+          "high": "優先度: 高",
+          "medium": "優先度: 中",
+          "low": "優先度: 低",
+          "none": "優先度: なし"
+        },
+        "assignedToYou": "担当者: あなた"
+      }
+    },
     "recent": {
       "title": "最近のアクション",
       "actions": {
         "email_draft": "{{destination}} 宛ての下書き",
         "slack_send_message": "{{destination}} 宛てのメッセージ",
-        "gmail_send": "{{destination}} 宛てのメール"
+        "gmail_send": "{{destination}} 宛てのメール",
+        "linear_create_issue": "{{destination}} の新しいIssue",
+        "linear_comment": "{{destination}} へのコメント"
       },
       "unlabeledActions": {
         "email_draft": "メール下書き",
         "slack_send_message": "Slackメッセージ",
-        "gmail_send": "Gmailのメール"
+        "gmail_send": "Gmailのメール",
+        "linear_create_issue": "LinearのIssue",
+        "linear_comment": "Linearのコメント"
       },
       "states": {
         "pending": "待機中",
@@ -4106,10 +4179,31 @@
           "refused": "Gmailが送信を拒否しました。",
           "connection_changed": "Gmailの接続が変わりました。何も送信されていません。",
           "credential_save_failed": "このコンピューターにGmailのログイン情報を保存できませんでした。何も送信されていません。"
+        },
+        "linear": {
+          "reconnect_needed": "Linearを再接続する必要があります。",
+          "connection_changed": "Linearの接続が変わりました。何も送信されていません。",
+          "credential_save_failed": "このコンピューターにLinearのログイン情報を保存できませんでした。",
+          "linear_unavailable": "現在Linearを利用できません。",
+          "network": "Linearに接続できませんでした。",
+          "rate_limited": "Linearが混み合っています。",
+          "not_found": "Linearで見つかりませんでした。",
+          "forbidden": "Linearで許可されていません。",
+          "invalid_input": "Linearが受け付けませんでした。",
+          "too_long": "Linearには長すぎます。",
+          "missing_title": "LinearのIssueにはタイトルが必要です。",
+          "missing_body": "Linearのコメントが空です。",
+          "not_created": "LinearはIssueを作成しませんでした。",
+          "wrong_workspace": "そのIssueは別のLinearワークスペースにあります。",
+          "invalid_reference": "LinearのIssueではありません。",
+          "refused": "Linearがリクエストを拒否しました。",
+          "unknown_action": "Linearでは利用できません。",
+          "generic": "Linearでうまくいきませんでした。"
         }
       },
       "unknownSent": {
-        "gmail": "{{destination}} 宛てのメールが送信されたか確認できませんでした。Gmailの送信済みフォルダを確認してください。"
+        "gmail": "{{destination}} 宛てのメールが送信されたか確認できませんでした。Gmailの送信済みフォルダを確認してください。",
+        "linear": "Linearに届いたか確認できませんでした。もう一度試す前に、Linearで {{destination}} を確認してください。"
       },
       "gmailDraftLimit": "1回のリクエストで準備できるメールは{{max}}件までです。",
       "queryResults": "見つかった結果: {{total}}",

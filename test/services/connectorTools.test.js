@@ -1399,7 +1399,7 @@ test("runQueryAction passes every other outcome through the shared tool results"
     errorCode: "weird_code",
     error: "Linear said no.",
   });
-  assert.equal(failed.displayText, "That didn't work.");
+  assert.equal(failed.displayText, "That didn't work in Linear.");
 
   next = () => ({ status: "unavailable", reason: "policy_blocked" });
   const blocked = await run();

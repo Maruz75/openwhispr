@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import gmailMark from "../../assets/icons/gmail.svg";
-import { MessageSquare } from "../icons";
+import { CheckCircle, MessageSquare } from "../icons";
 import type { ConnectorStatus } from "../../types/connectors";
 
 /** One connector's row in Settings → Integrations → Connectors. */
@@ -53,6 +53,11 @@ export const CONNECTOR_ROWS: readonly ConnectorRowSpec[] = [
   {
     id: "slack",
     icon: <MessageSquare className={ICON_CLASS} aria-hidden="true" />,
+    accountSummary: accountWorkspaceSummary,
+  },
+  {
+    id: "linear",
+    icon: <CheckCircle className={ICON_CLASS} aria-hidden="true" />,
     accountSummary: accountWorkspaceSummary,
   },
 ];
