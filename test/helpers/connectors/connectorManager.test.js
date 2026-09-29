@@ -718,6 +718,25 @@ test("a status says whether the connector is configured; only an explicit false 
   }
 });
 
+test("a status keeps a github.com manage link and drops any other", async () => {
+  for (const [manageUrl, kept] of [
+    ["https://github.com/apps/openwhispr/installations/new", true],
+    ["http://github.com/apps/openwhispr/installations/new", false],
+    ["https://github.com.evil.test/apps/openwhispr", false],
+    ["https://evil.test/https://github.com/", false],
+    ["javascript:alert(1)//https://github.com/", false],
+    [42, false],
+    [undefined, false],
+  ]) {
+    const { manager } = await setup({
+      getStatus: async () => ({ connected: true, accountLabel: "@dana", manageUrl }),
+    });
+    const [status] = await manager.status();
+    assert.equal(status.manageUrl, kept ? manageUrl : undefined, String(manageUrl));
+    assert.equal(Object.hasOwn(status, "manageUrl"), kept, String(manageUrl));
+  }
+});
+
 test("invalidate cancels pending actions for that connector", async () => {
   const { manager, log } = await setup();
   const { actionId } = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);

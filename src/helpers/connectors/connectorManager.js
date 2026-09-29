@@ -214,6 +214,11 @@ function normalizeStatus(status) {
     accountLabel: isString(value.accountLabel) ? value.accountLabel : null,
     workspaceLabel: isString(value.workspaceLabel) ? value.workspaceLabel : null,
     needsReconnect: value.needsReconnect === true,
+    // GitHub: where the user chooses the repositories its App is installed
+    // on. Settings opens it in the browser, so only a github.com page passes.
+    ...(isString(value.manageUrl) && value.manageUrl.startsWith("https://github.com/")
+      ? { manageUrl: value.manageUrl }
+      : {}),
   };
 }
 

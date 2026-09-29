@@ -3,8 +3,14 @@
 const { buildEmailConnector } = require("./emailConnector");
 const { buildSlackConnector } = require("./slackConnector");
 const { buildGmailConnector } = require("./gmailConnector");
+const { buildGithubConnector } = require("./githubConnector");
 
-const CONNECTOR_FACTORIES = [buildEmailConnector, buildSlackConnector, buildGmailConnector];
+const CONNECTOR_FACTORIES = [
+  buildEmailConnector,
+  buildSlackConnector,
+  buildGmailConnector,
+  buildGithubConnector,
+];
 
 // Two connectors with one id would share login slots and receipts: a build
 // fault, thrown at startup like the manager's editable-type check.

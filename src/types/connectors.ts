@@ -99,6 +99,8 @@ export interface ConnectorStatus {
   accountLabel: string | null;
   workspaceLabel: string | null;
   needsReconnect: boolean;
+  /** GitHub: the github.com page where the user chooses the repositories its App is installed on. */
+  manageUrl?: string;
 }
 
 export type ConnectorConnectResult =

@@ -57,7 +57,7 @@ test("the shipped connectors are email, Slack and Gmail, built from the deps", a
   const connectors = createConnectors(fakeDeps());
   assert.deepEqual(
     connectors.map((connector) => connector.id),
-    ["email", "slack", "gmail"]
+    ["email", "slack", "gmail", "github"]
   );
 });
 
