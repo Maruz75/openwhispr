@@ -1,4 +1,4 @@
-const { OrukeetStreaming } = require("./orukeetStreaming");
+const { OrukeetStreaming, MANAGED_STREAM_OPTIONS } = require("./orukeetStreaming");
 const { connectManagedOrukeet } = require("./orukeetCloudSession");
 const { ipcMain, app, shell, BrowserWindow, systemPreferences, net, session } = require("electron");
 const path = require("path");
@@ -8466,11 +8466,9 @@ class IPCHandlers {
         // default lives here, at the boundary, so the token allowlist stays
         // fail-closed for genuinely unknown providers (#1624).
         const provider = options.provider ?? "openai-realtime";
-        // Managed Cloud retains the capture for batch fallback. A refused
-        // commit must close this attempt instead of retrying for 30 seconds.
         const streaming =
           provider === "orukeet"
-            ? new OrukeetStreaming({ retryCapacity: !isCloud })
+            ? new OrukeetStreaming(isCloud ? MANAGED_STREAM_OPTIONS : {})
             : new OpenAIRealtimeStreaming();
         setupDictationCallbacks(streaming, event);
         // Assign before the token fetch (a real network round trip) so

@@ -706,6 +706,38 @@ test("a card field the action doesn't declare editable (a typo, say) means no ca
   }
 });
 
+test("an issue or comment card missing a field its layout needs means no card", async () => {
+  const prepareWith = async (verbKey, fields) => {
+    const { manager, log } = await setup({
+      actions: { post: { kind: "approval", editable: { title: "line", body: "text" } } },
+      prepare: async () => ({
+        status: "ready",
+        payload: {},
+        preview: { verbKey, destinationLabel: "ENG", accountLabel: "you", body: "B", fields },
+      }),
+    });
+    return { result: await manager.prepare("fake", "post", { text: "x" }, ALLOWED), log };
+  };
+  // A body-only issue would fall back to the plain layout, whose edits Send drops.
+  for (const [verbKey, fields] of [
+    ["issue", { body: "B" }],
+    ["issue", { title: "T" }],
+    ["comment", { title: "T" }],
+  ]) {
+    const { result, log } = await prepareWith(verbKey, fields);
+    assert.equal(result.errorCode, "invalid_result", `${verbKey} ${JSON.stringify(fields)}`);
+    assert.equal(log.rows.size, 0);
+  }
+  for (const [verbKey, fields] of [
+    ["issue", { title: "T", body: "B" }],
+    ["comment", { body: "B" }],
+    ["email", { body: "B" }],
+  ]) {
+    const { result } = await prepareWith(verbKey, fields);
+    assert.deepEqual(result.preview.fields, fields, verbKey);
+  }
+});
+
 test("a status says whether the connector is configured; only an explicit false hides it", async () => {
   for (const [reported, configured] of [
     [{ connected: false, configured: false }, false],

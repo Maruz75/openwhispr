@@ -8,7 +8,6 @@ const NO_RESULTS = { data: { searchIssues: { nodes: [], pageInfo: { hasNextPage:
 // The deps main.js passes to createConnectors (foundation spec §9.3).
 function connectorDeps(overrides = {}) {
   const fetched = [];
-  const pages = [];
   const flows = [];
   const deps = {
     fetch: async (url, init) => {
@@ -25,10 +24,6 @@ function connectorDeps(overrides = {}) {
       return new Promise(() => {});
     },
     OAuthFlowError: FakeFlowError,
-    renderOAuthResultPage: (page) => {
-      pages.push(page);
-      return "<html></html>";
-    },
     credentials: memoryCredentials(null, { connectorId: "linear" }),
     logger: silentLogger,
     env: {},
@@ -38,7 +33,7 @@ function connectorDeps(overrides = {}) {
     broadcast: () => {},
     ...overrides,
   };
-  return { deps, fetched, pages, flows };
+  return { deps, fetched, flows };
 }
 
 test("buildLinearConnector reads the client id at each use, not once at startup", async () => {
@@ -56,7 +51,7 @@ test("buildLinearConnector reads the client id at each use, not once at startup"
 test("buildLinearConnector signs in through the loopback flow and ends on Linear's own page", async () => {
   const { buildLinearConnector } =
     await import("../../../src/helpers/connectors/linearConnector.js");
-  const { deps, pages, flows } = connectorDeps({ env: { LINEAR_CLIENT_ID: "client-1" } });
+  const { deps, flows } = connectorDeps({ env: { LINEAR_CLIENT_ID: "client-1" } });
   const connector = buildLinearConnector(deps);
 
   void connector.authorize({ signal: new AbortController().signal });
@@ -66,20 +61,15 @@ test("buildLinearConnector signs in through the loopback flow and ends on Linear
   assert.equal(flows[0].errorParam, "linear_error");
   const authUrl = new URL(flows[0].buildAuthUrl("http://127.0.0.1:5000/linear/callback", "s", "c"));
   assert.equal(authUrl.searchParams.get("client_id"), "client-1");
-  flows[0].renderResultPage({ ok: true });
-  flows[0].renderResultPage({ ok: false });
-  assert.deepEqual(pages, [
-    {
-      ok: true,
-      title: "t:connectors.linear.browser.connectedTitle",
-      body: "t:connectors.linear.browser.connectedBody",
-    },
-    {
-      ok: false,
-      title: "t:connectors.linear.browser.failedTitle",
-      body: "t:connectors.linear.browser.failedBody",
-    },
-  ]);
+  // main.js passes no page renderer, so this is the shared result page.
+  const connected = flows[0].renderResultPage({ ok: true });
+  const failed = flows[0].renderResultPage({ ok: false });
+  assert.match(connected, /data-ok="true"/);
+  assert.match(connected, /t:connectors\.linear\.browser\.connectedTitle/);
+  assert.match(connected, /t:connectors\.linear\.browser\.connectedBody/);
+  assert.match(failed, /data-ok="false"/);
+  assert.match(failed, /t:connectors\.linear\.browser\.failedTitle/);
+  assert.match(failed, /t:connectors\.linear\.browser\.failedBody/);
 });
 
 test("buildLinearConnector sends Linear's requests through the shared fetch", async () => {
@@ -104,15 +94,11 @@ test("buildLinearConnector sends Linear's requests through the shared fetch", as
 });
 
 test("createConnectors builds Linear last, once, from the shared deps", async () => {
-  const [{ createConnectors, CONNECTOR_FACTORIES }, { buildLinearConnector }] = await Promise.all([
-    import("../../../src/helpers/connectors/createConnectors.js"),
-    import("../../../src/helpers/connectors/linearConnector.js"),
-  ]);
+  const { createConnectors } = await import("../../../src/helpers/connectors/createConnectors.js");
   const { deps } = connectorDeps();
 
   const ids = createConnectors(deps).map((connector) => connector.id);
 
-  assert.equal(CONNECTOR_FACTORIES.at(-1), buildLinearConnector);
   assert.equal(ids.at(-1), "linear");
   assert.equal(ids.filter((id) => id === "linear").length, 1);
 });

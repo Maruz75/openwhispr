@@ -41,7 +41,6 @@ function connectorDeps(overrides = {}) {
     i18n: { t: (key) => key },
     runOAuthLoopbackFlow: () => new Promise(() => {}),
     OAuthFlowError: FakeFlowError,
-    renderOAuthResultPage: ({ ok }) => (ok ? "connected" : "failed"),
     credentials: memoryCredentials(null, { connectorId: "linear" }),
     logger: silentLogger,
     env: { LINEAR_CLIENT_ID: "client-1" },
@@ -145,7 +144,8 @@ test("a sign-in forwarded by the relay reaches the loopback server and exchanges
     `http://127.0.0.1:${port}/linear/callback?code=code-1&state=${encodeURIComponent(state)}`
   );
 
-  assert.equal(page.body, "connected");
+  assert.match(page.body, /data-ok="true"/);
+  assert.match(page.body, /connectors\.linear\.browser\.connectedTitle/);
   const credential = await signedIn;
   assert.equal(credential.userId, "user-1");
   assert.equal(credential.organizationUrlKey, "acme");

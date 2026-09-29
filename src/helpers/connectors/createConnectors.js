@@ -23,9 +23,9 @@ function assertUniqueIds(connectors) {
 }
 
 /**
- * deps: { fetch, i18n, runOAuthLoopbackFlow, OAuthFlowError,
- * renderOAuthResultPage, credentials, logger, env, openExternal,
- * writeClipboard, getGoogleCalendarAccounts, broadcast } (spec §9.3).
+ * deps: { fetch, i18n, runOAuthLoopbackFlow, OAuthFlowError, credentials,
+ * logger, env, openExternal, writeClipboard, getGoogleCalendarAccounts,
+ * broadcast } (spec §9.3).
  */
 function createConnectors(deps, factories = CONNECTOR_FACTORIES) {
   const connectors = factories.map((build) => build(deps));
@@ -33,4 +33,4 @@ function createConnectors(deps, factories = CONNECTOR_FACTORIES) {
   return connectors;
 }
 
-module.exports = { createConnectors, CONNECTOR_FACTORIES };
+module.exports = { createConnectors };
