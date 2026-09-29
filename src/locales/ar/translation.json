@@ -765,6 +765,26 @@
           "refused": "رفض Gmail إرسالها. لم يُرسل شيء.",
           "connection_changed": "تغيّر اتصال Gmail قبل الإرسال، لذا لم يُرسل شيء.",
           "credential_save_failed": "تعذّر حفظ تسجيل الدخول إلى Gmail على هذا الكمبيوتر. لم يُرسل شيء. حاول مرة أخرى."
+        },
+        "linear": {
+          "reconnect_needed": "يلزم إعادة ربط Linear من الإعدادات.",
+          "connection_changed": "تغيّر اتصال Linear قبل الإرسال، لذا لم يُرسل شيء.",
+          "credential_save_failed": "تعذّر حفظ تسجيل الدخول إلى Linear على هذا الكمبيوتر. لم يُرسل شيء. حاول مرة أخرى.",
+          "linear_unavailable": "Linear غير متاح حاليًا. لم يُرسل شيء.",
+          "network": "تعذّر الوصول إلى Linear. لم يُرسل شيء.",
+          "rate_limited": "Linear مشغول حاليًا. حاول مرة أخرى بعد قليل.",
+          "not_found": "لم يعد Linear يجد الفريق أو المشروع أو المشكلة. لم يُرسل شيء.",
+          "forbidden": "لا يُسمح لحسابك في Linear بذلك. لم يُرسل شيء.",
+          "invalid_input": "لم يقبل Linear هذا بصيغته الحالية. لم يُرسل شيء.",
+          "too_long": "أطول مما يسمح به Linear. لم يُرسل شيء.",
+          "missing_title": "تحتاج مشكلة Linear إلى عنوان. لم يُرسل شيء.",
+          "missing_body": "تعليق Linear فارغ. لم يُرسل شيء.",
+          "not_created": "لم ينشئ Linear المشكلة.",
+          "wrong_workspace": "هذه المشكلة في مساحة عمل Linear أخرى. لم يُرسل شيء.",
+          "invalid_reference": "هذه ليست مشكلة في Linear. لم يُرسل شيء.",
+          "refused": "رفض Linear الطلب. لم يُرسل شيء.",
+          "unknown_action": "لا يستطيع OpenWhispr فعل ذلك في Linear. لم يُرسل شيء.",
+          "generic": "حدث خطأ ما. لم يُرسل شيء إلى Linear."
         }
       },
       "email": {
@@ -784,7 +804,8 @@
         "unknown": "تعذّر تأكيد الإرسال. تحقق من مجلد البريد المُرسل."
       },
       "openIn": {
-        "gmail": "فتح في Gmail"
+        "gmail": "فتح في Gmail",
+        "linear": "فتح في Linear"
       },
       "sendLabel": {
         "issue": "إنشاء مشكلة",
@@ -902,17 +923,63 @@
         "failedBody": "عد إلى OpenWhispr للمحاولة مرة أخرى."
       }
     },
+    "linear": {
+      "title": "Linear",
+      "description": "يمكن للمساعد البحث في مشكلات Linear وإنشاء مشكلات وتعليقات نيابةً عنك. توافق على كل مشكلة وتعليق قبل إرسالهما.",
+      "connect": "ربط",
+      "reconnect": "إعادة الربط",
+      "disconnect": "قطع الربط",
+      "connecting": "أكمل الربط في متصفحك…",
+      "connectedAs": "متصل بصفتك {{account}} في {{workspace}}",
+      "needsReconnect": "يلزم إعادة ربط Linear.",
+      "proRequired": "قم بالترقية إلى خطة مدفوعة ليتمكن المساعد من العمل في Linear نيابةً عنك.",
+      "errors": {
+        "connect_failed": "تعذّر ربط Linear. حاول مرة أخرى.",
+        "disconnect_failed": "تعذّر قطع ربط Linear. حاول مرة أخرى.",
+        "oauth_denied": "لم يتم ربط Linear لأن الإذن لم يُمنح.",
+        "oauth_timeout": "استغرق الربط وقتًا طويلاً. حاول مرة أخرى.",
+        "oauth_state_mismatch": "رابط تسجيل الدخول هذا كان قديمًا. حاول مرة أخرى.",
+        "ports_busy": "يستخدم تطبيق آخر المنافذ التي يحتاجها OpenWhispr للربط. أغلقه وحاول مرة أخرى.",
+        "token_exchange_failed": "لم يكمل Linear عملية الربط. حاول مرة أخرى.",
+        "not_configured": "Linear غير متاح في هذا الإصدار.",
+        "connection_changed": "تغيّر حسابك أو اتصال Linear أثناء الربط. حاول مرة أخرى.",
+        "signed_out": "سجّل الدخول إلى OpenWhispr لربط Linear.",
+        "policy_blocked": "أوقفت مؤسستك تشغيل الموصلات.",
+        "policy_unavailable": "تعذّر التحقق من إعدادات مؤسستك. حاول مرة أخرى.",
+        "permission_not_granted": "لم يتم ربط Linear لأن بعض الأذونات لم تُمنح. أعد الربط واسمح بها جميعًا."
+      },
+      "browser": {
+        "connectedTitle": "تم توصيل Linear",
+        "connectedBody": "يمكنك إغلاق هذا التبويب والعودة إلى OpenWhispr.",
+        "failedTitle": "لم يتم توصيل Linear",
+        "failedBody": "عد إلى OpenWhispr للمحاولة مرة أخرى."
+      },
+      "notes": {
+        "priority": {
+          "urgent": "الأولوية: عاجلة",
+          "high": "الأولوية: عالية",
+          "medium": "الأولوية: متوسطة",
+          "low": "الأولوية: منخفضة",
+          "none": "الأولوية: لا شيء"
+        },
+        "assignedToYou": "المُسنَد إليه: أنت"
+      }
+    },
     "recent": {
       "title": "الإجراءات الأخيرة",
       "actions": {
         "email_draft": "مسودة إلى {{destination}}",
         "slack_send_message": "رسالة إلى {{destination}}",
-        "gmail_send": "رسالة إلكترونية إلى {{destination}}"
+        "gmail_send": "رسالة إلكترونية إلى {{destination}}",
+        "linear_create_issue": "مشكلة جديدة في {{destination}}",
+        "linear_comment": "تعليق على {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "مسودة بريد إلكتروني",
         "slack_send_message": "رسالة Slack",
-        "gmail_send": "رسالة Gmail"
+        "gmail_send": "رسالة Gmail",
+        "linear_create_issue": "مشكلة Linear",
+        "linear_comment": "تعليق Linear"
       },
       "states": {
         "pending": "قيد الانتظار",
@@ -968,10 +1035,31 @@
           "refused": "رفض Gmail الإرسال.",
           "connection_changed": "تغيّر اتصال Gmail. لم يُرسل شيء.",
           "credential_save_failed": "تعذّر حفظ تسجيل الدخول إلى Gmail على هذا الكمبيوتر. لم يُرسل شيء."
+        },
+        "linear": {
+          "reconnect_needed": "يلزم إعادة ربط Linear.",
+          "connection_changed": "تغيّر اتصال Linear. لم يُرسل شيء.",
+          "credential_save_failed": "تعذّر حفظ تسجيل الدخول إلى Linear على هذا الكمبيوتر.",
+          "linear_unavailable": "Linear غير متاح حاليًا.",
+          "network": "تعذّر الوصول إلى Linear.",
+          "rate_limited": "Linear مشغول حاليًا.",
+          "not_found": "غير موجود في Linear.",
+          "forbidden": "غير مسموح به في Linear.",
+          "invalid_input": "لم يقبله Linear.",
+          "too_long": "أطول مما يسمح به Linear.",
+          "missing_title": "تحتاج مشكلة Linear إلى عنوان.",
+          "missing_body": "تعليق Linear فارغ.",
+          "not_created": "لم ينشئ Linear المشكلة.",
+          "wrong_workspace": "هذه المشكلة في مساحة عمل Linear أخرى.",
+          "invalid_reference": "ليست مشكلة في Linear.",
+          "refused": "رفض Linear الطلب.",
+          "unknown_action": "غير متاح في Linear.",
+          "generic": "لم ينجح ذلك في Linear."
         }
       },
       "unknownSent": {
-        "gmail": "تعذّر تأكيد إرسال البريد الإلكتروني إلى {{destination}}. تحقق من مجلد البريد المُرسل في Gmail."
+        "gmail": "تعذّر تأكيد إرسال البريد الإلكتروني إلى {{destination}}. تحقق من مجلد البريد المُرسل في Gmail.",
+        "linear": "تعذّر تأكيد وصوله إلى Linear. تحقق من {{destination}} في Linear قبل المحاولة مرة أخرى."
       },
       "gmailDraftLimit": "يمكن تجهيز {{max}} رسائل بريد إلكتروني فقط لكل طلب.",
       "queryResults": "النتائج التي عُثر عليها: {{total}}",
@@ -1519,6 +1607,9 @@
       "email_draftName": "مسودة بريد إلكتروني",
       "find_contactName": "البحث عن جهة اتصال",
       "slack_send_messageName": "رسالة Slack",
+      "linear_search_issuesName": "البحث في Linear",
+      "linear_create_issueName": "مشكلة Linear",
+      "linear_commentName": "تعليق Linear",
       "get_noteName": "الحصول على الملاحظة",
       "create_noteName": "إنشاء ملاحظة",
       "update_noteName": "تحديث الملاحظة",
@@ -1534,6 +1625,9 @@
       "email_draftStatus": "جارٍ تحضير بريد إلكتروني...",
       "find_contactStatus": "جارٍ البحث عن جهات الاتصال...",
       "slack_send_messageStatus": "جارٍ تحضير رسالة Slack...",
+      "linear_search_issuesStatus": "جاري البحث في Linear...",
+      "linear_create_issueStatus": "جارٍ تحضير مشكلة Linear...",
+      "linear_commentStatus": "جارٍ تحضير تعليق Linear...",
       "web_searchStatus": "جاري البحث في الويب...",
       "copy_to_clipboardStatus": "جاري النسخ إلى الحافظة...",
       "get_calendar_eventsStatus": "جاري التحقق من التقويم...",

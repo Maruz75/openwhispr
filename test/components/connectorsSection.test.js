@@ -326,8 +326,8 @@ test("a stale login offers Reconnect and Disconnect", async (t) => {
 
 test("free users with no login see Upgrade on every row and no Connect", async (t) => {
   const none = await renderSection(t, { isPaid: false, blocked: false });
-  // Email, Gmail and Slack.
-  assert.equal(count(none.textContent, /integrations\.api\.viewPlans/g), 3);
+  // Email, Gmail, Slack and Linear.
+  assert.equal(count(none.textContent, /integrations\.api\.viewPlans/g), 4);
   assert.equal(buttonWithText(none, "connectors.slack.connect"), null);
 });
 
@@ -340,8 +340,8 @@ test("free users can always disconnect a login they have", async (t) => {
   assert.match(lapsed.textContent, /connectors\.slack\.disconnect/);
   assert.equal(
     count(lapsed.textContent, /integrations\.api\.viewPlans/g),
-    2,
-    "only the email and Gmail rows' Upgrade"
+    3,
+    "only the email, Gmail and Linear rows' Upgrade"
   );
 });
 
