@@ -1,6 +1,7 @@
 const mockReturnToPreviousApp = jest.fn();
 jest.mock('../../../modules/app-group-storage/src', () => ({
   AppGroupStorage: { returnToPreviousApp: () => mockReturnToPreviousApp() },
+  NO_RETURN_TARGET: { status: 'no_target' },
 }));
 
 import { useHandoffStore } from '@/store/useHandoffStore';

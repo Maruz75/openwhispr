@@ -2,7 +2,7 @@ import { EventEmitter, requireNativeModule } from 'expo';
 import { Platform } from 'react-native';
 import { NO_RETURN_TARGET, parseReturnOutcome, type ReturnOutcome } from './returnOutcome';
 
-export { parseReturnOutcome, type ReturnOutcome } from './returnOutcome';
+export { NO_RETURN_TARGET, parseReturnOutcome, type ReturnOutcome } from './returnOutcome';
 
 type EventSubscription = {
   remove(): void;

@@ -38,9 +38,9 @@ describe('KeyboardHandoffReturnView', () => {
     expect(onBackToHost).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the cancel control on both screens', () => {
+  it('offers cancel only once the return has settled', () => {
     const onCancel = jest.fn();
-    render(
+    const { rerender } = render(
       <KeyboardHandoffReturnView
         mode="returning"
         hostName={null}
@@ -48,7 +48,17 @@ describe('KeyboardHandoffReturnView', () => {
         onBackToHost={jest.fn()}
       />,
     );
-    fireEvent.press(screen.getByLabelText('Cancel and discard'));
+    expect(screen.queryByLabelText('Cancel and discard')).not.toBeOnTheScreen();
+
+    rerender(
+      <KeyboardHandoffReturnView
+        mode="back_to_host"
+        hostName="Slack"
+        onCancel={onCancel}
+        onBackToHost={jest.fn()}
+      />,
+    );
+    fireEvent.press(screen.getByRole('button', { name: 'Cancel and discard' }));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,11 +1,17 @@
-import { AppGroupStorage, type ReturnOutcome } from '../../modules/app-group-storage/src';
+import {
+  AppGroupStorage,
+  NO_RETURN_TARGET,
+  type ReturnOutcome,
+} from '../../modules/app-group-storage/src';
 import { useHandoffStore, type HandoffReturnState } from '@/store/useHandoffStore';
 
 /**
- * Upper bound on a return. Native always resolves (the observer wait is 2 s),
- * but a hung open completion must not strand the user on "Returning…".
+ * Upper bound on a return, in case native never resolves. Native settles every
+ * return within its own 4.5 s deadline (`ReturnTargetResolver.returnDeadline`),
+ * and this has to outlast it with room for a busy main thread on a cold launch,
+ * or the user gets the swipe screen instead of native's real outcome.
  */
-export const RETURN_OUTCOME_TIMEOUT_MS = 5_000;
+export const RETURN_OUTCOME_TIMEOUT_MS = 6_000;
 
 export function applyReturnOutcome(outcome: ReturnOutcome | undefined): void {
   if (!outcome || outcome.status === 'skipped') return;
@@ -18,7 +24,7 @@ export async function returnToHost(
 ): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<ReturnOutcome>((resolve) => {
-    timer = setTimeout(() => resolve({ status: 'no_target' }), RETURN_OUTCOME_TIMEOUT_MS);
+    timer = setTimeout(() => resolve(NO_RETURN_TARGET), RETURN_OUTCOME_TIMEOUT_MS);
   });
   try {
     applyReturnOutcome(await Promise.race([openHost(), timedOut]));
