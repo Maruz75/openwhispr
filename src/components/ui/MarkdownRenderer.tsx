@@ -34,12 +34,21 @@ function MarkdownLink({ node: _node, ...props }: ComponentProps<"a"> & ExtraProp
 // renders, leaking whatever the injection packed into it, so images only ever
 // render as a link the user has to click. Inside another link, a nested link
 // would take the click, and a relative URL resolves against the file:// page
-// (on Windows, `//host/x` is a network share), so those render as text.
-function MarkdownImage({ src, alt }: ComponentProps<"img"> & ExtraProps): ReactElement | null {
+// (on Windows, `//host/x` is a network share), so those render as text. Only a
+// link to the image itself may be labelled with its URL.
+function MarkdownImage({
+  src,
+  alt,
+  title,
+}: ComponentProps<"img"> & ExtraProps): ReactElement | null {
   const insideLink = useContext(InsideLinkContext);
-  const label = alt?.trim() || src;
+  const label = alt?.trim();
   if (!src || insideLink || !/^https?:\/\//i.test(src)) return label ? <>{label}</> : null;
-  return <MarkdownLink href={src}>{label}</MarkdownLink>;
+  return (
+    <MarkdownLink href={src} title={title}>
+      {label || src}
+    </MarkdownLink>
+  );
 }
 
 // Stable component types preserve DOM state, including table scroll positions.

