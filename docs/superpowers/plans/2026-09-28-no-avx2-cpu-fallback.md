@@ -43,7 +43,7 @@ The speech engine that ships with OpenWhispr is compiled to use newer processor 
 1. **Another startup crash** (SIGSEGV, an abort, or a missing-DLL exit code) on the CPU build must fail exactly as before and must not switch builds. Pinned by the D2 test "any other startup crash fails as before and keeps the primary build".
 2. **Launch pre-warm and the first dictation racing** through the switch must share one fallback. Pinned by the D2 test "two starts racing through the switch share one fallback".
 3. **The new error must reach the user as thrown.** `transcribe-local-whisper` in `ipcHandlers.js` relabels messages that contain `whisper-cpp`, `FFmpeg`, `not downloaded` or `Audio buffer is empty`, so the message must contain none of them. Pinned in the D2 test "with no build for older processors installed…".
-4. **A release that lacks one fallback asset** must fail the desktop build, not ship without it. Pinned by the D3 test "--current installs every build configured for the platform and fails if any is missing", and by the D4 entries test.
+4. **A release that lacks one fallback asset** must fail the desktop build, not ship without it. Pinned by the D3 test "--current installs every build configured for the platform and fails if any is missing", by the D4 entries test, and by afterPack's `verifyWhisperServerFallbackBuilds` (A4), which fails packaging whenever a listed fallback build is not in `resources/bin`, whatever the download script did.
 5. **The Windows exit code in signed form** (-1073741795, as cmd shows it) must still count as an illegal instruction. Pinned in the D2 `isIllegalInstructionExit` test.
 
 ---
@@ -55,7 +55,7 @@ What I checked, against the fork at tag 0.0.10 (6ac1454), the desktop at origin/
 - **Confirmed: every CPU build needs AVX2, FMA, F16C and BMI2.** `GGML_NATIVE=OFF` sets `INS_ENB` (`ggml/CMakeLists.txt:141-145`). The 0.0.10 logs print exactly the primary lines listed under Global Constraints.
 - **Confirmed: it dies before the server can answer.** `main()` calls `ggml_backend_load_all()` first (`examples/server/server.cpp:633`), loads the model at line 717 and binds the port at line 1244. `ggml_cpu_init()` builds the fp16 tables with F16C and FMA code and a BMI2 `shlx` (`ggml-cpu.c:3785-3799`). The Linux build hits `vfmadd213ss` (FMA) in `ggml_cpu_init` first, and #1613's fault offset is the `shlx`. The desktop only ever sees a startup death, which is what the fallback relies on.
 - **Refined: "even on --help" holds only when a ggml library sits beside the exe.** `ggml_backend_load_best()` touches the registry only when it finds a matching `ggml-*.dll` or `libggml-*.so` in the exe folder or the working folder (`ggml-backend-reg.cpp:473-553`). OpenWhispr's `resources/bin` has llama.cpp's, so there the crash comes at `load_all`. In an empty folder (CI) the registry is built later, inside model load. So **CI must start the server with a model, never with `--help`,** or the check that the primary gets rejected proves nothing.
-- **Refined: the next level down also dies at startup.** With `__F16C__` defined, `ggml_cpu_init` converts through `_cvtss_sh` / `_mm_cvtps_ph`. So the ivybridge build stops at startup on a Sandy Bridge, and the two-step fallback sees it. The fork CI checks this on every run (Decision 5, check 4).
+- **~~Refined: the next level down also dies at startup.~~ Disproved by the first fork CI run; see A3.** On x86, `ggml_cpu_init` builds its fp16 tables with the scalar `GGML_COMPUTE_FP16_TO_FP32` / `GGML_COMPUTE_FP32_TO_FP16`; F16C first runs in the transcription kernels. Both emulators showed the ivybridge build serving on a Sandy Bridge. The level check added in A3 is what makes it stop at startup.
 - **New: one Sandy Bridge-level build would be far slower than needed on every reported processor.** Every processor named in the reports (i3-3110M, i5-3570, FX-8350, AMD Jaguar) has F16C. Without F16C, ggml loads every fp16 weight one element at a time through a 256 KB lookup table and a stack buffer (`simd-mappings.h:636-644`), and whisper's models are fp16. Local x86_64 builds with the plan's flags, on the same host and model, interleaved (host heavily loaded, and under Rosetta, so ratios only): AVX2 build 6.3–8.2 s per jfk.wav request, ivybridge 6.6–11.6 s, sandybridge 48–85 s. So the plan ships both levels; see Decision 1.
 - **Checked locally: the flags do what they say.** Clang x86_64 builds with the GCC-branch flags printed exactly the Linux ivybridge and sandybridge lines above. A disassembly count found 0 AVX2, FMA3 or BMI2 instructions in either build; ivybridge has 40 F16C instructions, sandybridge none. The only hits were one `dr_wav` data word decoded as AVX-512, and `dr_flac`'s LZCNT, which sits behind a CPUID check. MSVC is only seen in CI.
 - **Checked locally: the verification script works.** Run natively on those builds, it transcribed jfk.wav with Silero VAD at both levels, read `AVX` and `AVX F16C` from each build's `system_info` line, and failed both rejection checks as designed, since nothing was emulated.
@@ -82,6 +82,8 @@ The committed fork and desktop code is authoritative where it differs from the s
 
 - **A1 (Task F2, Windows level check):** the ivybridge cache check asserts `/D__F16C__` in both `CMAKE_C_FLAGS` and `CMAKE_CXX_FLAGS`, and its absence from both for sandybridge. ggml's F16C table code is C (`ggml-cpu.c`), so the C++-only check could pass with the C define missing.
 - **A2 (Task F3, check 5):** the llama.cpp layout check runs for both fallback builds, each on its own level, and copies whisper.cpp's files first and llama.cpp's second. `release.yml` downloads whisper.cpp then llama.cpp into the same `resources/bin`, so llama's files win a name clash there too.
+- **A3 (fork, new): a startup level check, because check 4 failed.** Fork run 36502940851 (commit 0c73de8) passed every check except 4 on both platforms: the ivybridge build started and served on an emulated Sandy Bridge, so on a real one it would only have crashed mid-transcription, which the desktop fallback cannot see. Fork commit 1e57d00 adds `examples/server/cpu-level-check.cpp`: before `main()` it compares ggml's compiled-in sets (`ggml_cpu_has_avx/f16c/fma/avx2/bmi2`) with CPUID and XGETBV, prints `whisper-server: built for <set>, which this processor does not support`, and raises `ud2` (SIGILL / 0xC000001D, which `isIllegalInstructionExit` already classifies). It is opt-in (`OPENWHISPR_CPU_LEVEL_CHECK`) and enabled only for the ivybridge and sandybridge builds: Rosetta 2 reports no AVX in CPUID yet runs AVX2 code (confirmed locally; `ROSETTA_ADVERTISE_AVX=1` changes that), so a CPUID check on the primary could move a hypervisor or translator user off a build that works for them. `verify-cpu-levels.py` accepts the resulting illegal-instruction exit under SDE and requires the ivybridge build's refusal on Sandy Bridge to come from the check. Run 36504535683 (1e57d00): all 12 checks pass. **The desktop now depends on the 0.0.11 release containing this commit** (D4 Step 1 must confirm `verify-cpu-levels` passed on the release run).
+- **A4 (desktop, from the independent review):** documentation that describes the shipped fallback moves to D4 (the TROUBLESHOOTING line, and the CLAUDE.md sentence on which platforms get the builds), so no commit claims behaviour it cannot deliver; the spawning tests get a 30 s timeout so a relaunch loop fails instead of hanging CI; and afterPack gains `verifyWhisperServerFallbackBuilds`, which fails packaging when a fallback build that `download-whisper-cpp.js` lists for the platform is missing from `resources/bin` (a no-op until D4 lists them; the primary is left to the download step so local cross-arch packaging is unchanged).
 
 ## File structure
 
@@ -1688,7 +1690,7 @@ What this does, and what it keeps as it was:
 Run: `node --import tsx --test test/helpers/whisperServerCpuFallback.test.js test/helpers/whisperServerGpuGuard.test.js test/helpers/whisperCudaRequestFallback.test.js test/helpers/whisperServerVadArgs.test.js test/helpers/whisperServerWavInput.test.js test/helpers/whisperServerInferenceFields.test.js`
 Expected: `ℹ pass 70`, `ℹ fail 0` (11 new tests + 59 existing).
 
-- [ ] **Step 6: Document it**
+- [ ] **Step 6: Document it** (as executed, per A4: the CLAUDE.md entry without the platform sentence, and no TROUBLESHOOTING line; both land in D4 Step 3b)
 
 In `CLAUDE.md`, under `### whisper.cpp Integration`, directly after this line (the first of two similar lines; this one is indented):
 
@@ -2181,6 +2183,16 @@ and the same in `src/helpers/whisperVulkanManager.js`, with the two `-vulkan.zip
 
 In `src/utils/gpuDetection.js`, change `// The shipped CUDA whisper build (release 0.0.10) carries kernels for Pascal` to `// The shipped CUDA whisper builds (release 0.0.10 and later) carry kernels for Pascal`.
 
+- [ ] **Step 3b: Document the shipped fallback (moved here by A4)**
+
+In `CLAUDE.md`, end the `whisperServer.js` fallback bullet with: `download-whisper-cpp.js installs the level builds for win32-x64 and linux-x64 only; afterPack fails packaging if one is missing`.
+
+In `TROUBLESHOOTING.md`, after `5. Try cloud transcription as fallback`, add one list line (one line, so it merges cleanly with #2317's GPU paragraph two lines below):
+
+```markdown
+6. On Windows and Linux, processors with AVX but without AVX2 (for example 2nd- and 3rd-generation Intel Core, AMD FX, and older AMD A-series and Athlon) stop the standard engine at startup (Windows exit code 3221225501, Linux SIGILL), and OpenWhispr switches to a build for older processors by itself: transcription works, more slowly. If the error says whisper-server can't run on this processor, the processor also lacks AVX (for example first-generation Core i and many Celeron, Pentium and Atom models): use a cloud transcription provider. On a Mac the same error means the Intel build cannot run there; on Apple silicon, install the Apple silicon (arm64) build.
+```
+
 - [ ] **Step 4: Run the tests and real downloads of both platforms**
 
 ```bash
@@ -2262,7 +2274,7 @@ Acceptance, as a user sees it:
 3. On AVX2 machines nothing changes: the same primary build, no extra launches, no new log lines.
 4. On a processor without AVX, the toast reads "Local Whisper failed: … whisper-server can't run on this processor: whisper-server-…-sandybridge… stopped on an instruction the processor doesn't support (…), and no build for older processors is left to try". The app does not relaunch in a loop, and other providers keep working.
 5. With a CUDA or Vulkan pack on such a PC, dictation completes on CPU, and the GPU card shows the fallback as it does today.
-6. macOS is unchanged.
+6. macOS gets no level builds. A darwin-x64 build that dies of an illegal instruction (a patched pre-Haswell Mac, or Apple silicon running the Intel build under Rosetta before macOS 15) now fails with "can't run on this processor" and skips the thread retry, instead of the bare startup error.
 
 ## What this plan cannot verify here
 
@@ -2277,7 +2289,7 @@ Acceptance, as a user sees it:
 
 - GPU packs (CUDA, Vulkan) are built with the same AVX2 flags, so on these processors they fall back to CPU. They would need their own level builds.
 - A processor without AVX (SSE4.2 only: first-generation Core i, and many Celeron, Pentium and Atom chips): a `sse42` level would be one more entry in `CPU_FALLBACK_LEVELS` and the workflow.
-- Intel Macs without AVX2 on patched macOS: a darwin-x64 level build.
+- Intel Macs without AVX2 on patched macOS, and Apple silicon Macs running the Intel build under Rosetta before macOS 15 (no AVX there): a darwin-x64 level build, or a hint to install the arm64 build.
 - Skip `ggml_backend_load_all()` in the fork's static whisper-server (guard it with `GGML_BACKEND_DL`). It would stop loading llama.cpp's libraries for every user. That would remove the layout risk check 5 watches, but it is a source change.
 - Remember the working build across launches, as `.env` plus an upgrade reset like `whisperGpuUpgradeReset.js`, if the one startup crash per launch proves noisy (Windows Error Reporting, core dumps).
 - #963's localized "processor not supported" toast. It can key on the new message.

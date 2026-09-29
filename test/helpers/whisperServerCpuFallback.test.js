@@ -21,8 +21,11 @@ const CUDA = `whisper-server-${process.platform}-${process.arch}-cuda`;
 
 // The fake builds are POSIX shell scripts. CI runs this suite on Linux; the
 // Windows exit code is covered by the isIllegalInstructionExit test.
-const POSIX_ONLY =
-  process.platform === "win32" && "the fake whisper-server builds are shell scripts";
+// A timeout turns a relaunch loop into a failure instead of a hung CI job.
+const SPAWNS_FAKE_BUILDS = {
+  skip: process.platform === "win32" && "the fake whisper-server builds are shell scripts",
+  timeout: 30000,
+};
 
 // A temp install: fake whisper-server builds in <dir>/bin, found through
 // process.resourcesPath like a packaged app, and a CUDA pack under <dir>/userData.
@@ -126,7 +129,7 @@ test("isIllegalInstructionExit recognises the Windows and Unix illegal-instructi
 
 test(
   "an Ivy Bridge-class processor: the primary dies of SIGILL and the ivybridge build takes over",
-  { skip: POSIX_ONLY },
+  SPAWNS_FAKE_BUILDS,
   async (t) => {
     const install = createInstall(t, {
       [PRIMARY]: "sigill",
@@ -144,7 +147,7 @@ test(
 
 test(
   "a Sandy Bridge-class processor: each build that dies hands over to the next level",
-  { skip: POSIX_ONLY },
+  SPAWNS_FAKE_BUILDS,
   async (t) => {
     const install = createInstall(t, {
       [PRIMARY]: "sigill",
@@ -159,7 +162,7 @@ test(
   }
 );
 
-test("a level that is not installed is skipped", { skip: POSIX_ONLY }, async (t) => {
+test("a level that is not installed is skipped", SPAWNS_FAKE_BUILDS, async (t) => {
   const install = createInstall(t, { [PRIMARY]: "sigill", [SANDYBRIDGE]: "serve" });
 
   await install.manager.start(install.model, { threads: 4 });
@@ -169,7 +172,7 @@ test("a level that is not installed is skipped", { skip: POSIX_ONLY }, async (t)
 
 test(
   "with no build for older processors installed, the crash is reported once and the thread retry is skipped",
-  { skip: POSIX_ONLY },
+  SPAWNS_FAKE_BUILDS,
   async (t) => {
     // 8 logical CPUs resolve to 6 auto threads: the case that used to relaunch
     // the same crashing build with the default thread count
@@ -190,7 +193,7 @@ test(
 
 test(
   "when every build dies, each is launched once and later starts go straight to the last one",
-  { skip: POSIX_ONLY },
+  SPAWNS_FAKE_BUILDS,
   async (t) => {
     const install = createInstall(t, {
       [PRIMARY]: "sigill",
@@ -214,7 +217,7 @@ test(
 
 test(
   "the switch outlives stop(): a later start never re-runs the build that crashed",
-  { skip: POSIX_ONLY },
+  SPAWNS_FAKE_BUILDS,
   async (t) => {
     const install = createInstall(t, { [PRIMARY]: "sigill", [IVYBRIDGE]: "serve" });
 
@@ -228,7 +231,7 @@ test(
 
 test(
   "a CUDA pack on such a processor falls back to CPU, then down to the build that runs (#1613)",
-  { skip: POSIX_ONLY },
+  SPAWNS_FAKE_BUILDS,
   async (t) => {
     const install = createInstall(t, {
       [CUDA]: "sigill",
@@ -253,7 +256,7 @@ test(
 
 test(
   "any other startup crash fails as before and keeps the primary build",
-  { skip: POSIX_ONLY },
+  SPAWNS_FAKE_BUILDS,
   async (t) => {
     const install = createInstall(t, { [PRIMARY]: "sigsegv", [IVYBRIDGE]: "serve" });
 
@@ -265,7 +268,7 @@ test(
   }
 );
 
-test("two starts racing through the switch share one fallback", { skip: POSIX_ONLY }, async (t) => {
+test("two starts racing through the switch share one fallback", SPAWNS_FAKE_BUILDS, async (t) => {
   const install = createInstall(t, { [PRIMARY]: "sigill", [IVYBRIDGE]: "serve" });
 
   // Launch pre-warm and the first dictation arrive together

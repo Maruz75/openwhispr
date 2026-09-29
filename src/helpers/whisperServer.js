@@ -132,7 +132,7 @@ function describeProcessExit({ exitCode = null, signal = null } = {}) {
 // A process that executes an instruction its processor lacks is ended with
 // STATUS_ILLEGAL_INSTRUCTION (0xC000001D) on Windows and SIGILL on Unix. The
 // primary CPU build needs AVX2, FMA, F16C and BMI2, so this is how it dies at
-// startup on Intel processors before Haswell and on AMD FX (#2356).
+// startup on a processor without them (#2356).
 const STATUS_ILLEGAL_INSTRUCTION = 0xc000001d;
 
 function isIllegalInstructionExit({ exitCode = null, signal = null } = {}) {
@@ -470,7 +470,7 @@ class WhisperServerManager extends EventEmitter {
 
   // The CPU build to try after `binary` died of an illegal instruction: the
   // first CPU_FALLBACK_LEVELS build below it that is installed next to it, or
-  // null when none is left. Only win32-x64 and linux-x64 ship these builds.
+  // null when none is left.
   getCpuFallbackBinaryPath(binary) {
     const names = CPU_FALLBACK_LEVELS.map((level) =>
       cpuFallbackServerBinaryName(process.platform, process.arch, level)

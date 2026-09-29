@@ -227,7 +227,7 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
   - GGML model downloads from HuggingFace
   - Models stored in `~/.cache/openwhispr/whisper-models/`
 - **whisperServer.js**: whisper-server process lifecycle and fallbacks
-  - A CPU build that dies of an illegal instruction at startup (Windows exit code 3221225501 / 0xC000001D, Unix SIGILL: the AVX2 build on Intel before Haswell or AMD FX) is retried on the next installed build in `CPU_FALLBACK_LEVELS` (`whisperCppRelease.js`: `ivybridge`, then `sandybridge`, upstream ggml's level names), looked up next to the build that died. The build that starts becomes `cachedServerBinaryPath` for the rest of the session (`stop()` never clears it). With none left, startup fails with "whisper-server can't run on this processor" and skips the thread-count retry. Shipped for win32-x64 and linux-x64 (#2356)
+  - A CPU build that dies of an illegal instruction at startup (Windows exit code 3221225501 / 0xC000001D, Unix SIGILL: the AVX2 build on a processor without AVX2) is retried on the next build in `CPU_FALLBACK_LEVELS` (`whisperCppRelease.js`: `ivybridge`, then `sandybridge`, upstream ggml's level names) installed next to the build that died. Each fallback tried becomes `cachedServerBinaryPath`, so later CPU starts in the session go straight to it (`stop()` never clears it). With none left, startup fails with "whisper-server can't run on this processor" and skips the thread-count retry (#2356)
 
 ### NVIDIA Parakeet Integration (via sherpa-onnx)
 

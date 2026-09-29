@@ -193,8 +193,8 @@ async function downloadCurrentPlatform(
 async function downloadAllBinaries(release, isForce, download = downloadBinary) {
   let allSucceeded = true;
 
-  for (const platformArch of Object.keys(BINARIES)) {
-    const succeeded = await download(platformArch, BINARIES[platformArch], release, isForce);
+  for (const key of Object.keys(BINARIES)) {
+    const succeeded = await download(key, BINARIES[key], release, isForce);
     if (!succeeded) allSucceeded = false;
   }
 
