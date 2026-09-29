@@ -1117,6 +1117,32 @@ test("a reconnect main reports while preparing reads the same as one the store k
   assert.deepEqual(context.releases, ["approval_card", "email_draft"]);
 });
 
+test("a reconnect at Send keeps the user's edits, so a later retry sends their version", async (t) => {
+  await useEnglish();
+  const { approvals, key, pending, context } = await startGmailCard(
+    t,
+    {
+      connectorCommit: async () => ({
+        state: "failed",
+        errorCode: "reconnect_needed",
+        message: "Gmail needs to be reconnected.",
+      }),
+    },
+    "m26",
+    "call-26"
+  );
+  approvals.updateApprovalDraft(key, { fields: { to: ["dana@acme.test"] } });
+  await approvals.approveAction(key);
+  const result = await pending;
+
+  assert.equal(result.data.status, "unavailable");
+  assert.equal(result.data.reason, "reconnect_needed");
+  assert.match(result.data.guidance, /reconnect Gmail/);
+  assert.deepEqual(result.data.final.to, ["dana@acme.test"]);
+  assert.equal(result.displayText, "Gmail needs to be reconnected.");
+  assert.deepEqual(context.releases, ["email_draft"]);
+});
+
 test("a prepare call main rejects gives the slot back and tells the model not to retry", async (t) => {
   installBrowserGlobals(t, {
     window: {

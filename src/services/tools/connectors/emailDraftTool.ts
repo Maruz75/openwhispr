@@ -6,7 +6,7 @@ import {
   isValidEmailAddress,
   recipientLabel,
 } from "../../../helpers/connectors/emailCompose";
-import type { ConnectorDirectResult } from "../../../types/connectors";
+import type { ApprovalEdits, ConnectorDirectResult } from "../../../types/connectors";
 import type { ComposeTarget, EmailDraftTarget } from "../../../utils/emailDraftTarget";
 import { getCachedPlatform } from "../../../utils/platform";
 import { useConnectorStatusStore } from "../../../stores/connectorStatusStore";
@@ -18,6 +18,7 @@ import {
   notSentResult,
   unavailableResult,
   unknownResult,
+  userEdits,
 } from "./toolOutcome";
 import { findContactTool } from "./findContactTool";
 import type { ConnectorToolModule } from "./connectorToolModules";
@@ -27,9 +28,9 @@ import type { ConnectorToolModule } from "./connectorToolModules";
 // or cards.
 const MAX_DRAFTS_PER_TURN = 3;
 
-export const GMAIL_RECONNECT_GUIDANCE =
+const GMAIL_RECONNECT_GUIDANCE =
   "Tell the user to reconnect Gmail under Settings → Integrations → Connectors. Don't retry.";
-export const GMAIL_UNKNOWN_GUIDANCE = "Tell the user to check their Gmail Sent folder.";
+const GMAIL_UNKNOWN_GUIDANCE = "Tell the user to check their Gmail Sent folder.";
 
 // One line for both paths: the tool's own description says whether a card
 // or the user's mail app sends it.
@@ -114,9 +115,9 @@ function draftOpenedGuidance(
 
 // The tool step reads "Gmail needs to be reconnected.", the same copy a
 // failed reconnect_needed step shows, not the generic "connectors unavailable".
-function gmailReconnectResult(): ToolResult {
+function gmailReconnectResult(edits: ApprovalEdits = {}): ToolResult {
   return {
-    ...unavailableResult("reconnect_needed", GMAIL_RECONNECT_GUIDANCE),
+    ...unavailableResult("reconnect_needed", GMAIL_RECONNECT_GUIDANCE, edits),
     displayText: connectorErrorText(i18n.t, "toolStatus", "gmail", "reconnect_needed"),
   };
 }
@@ -161,7 +162,7 @@ function createGmailSendTool(): ToolDefinition {
         return notSentResult(
           "draft_limit",
           `Only ${MAX_DRAFTS_PER_TURN} emails can be prepared per request. Tell the user which emails are ready and ask them to request the rest again.`,
-          i18n.t("connectors.toolStatus.gmailDraftLimit", { count: MAX_DRAFTS_PER_TURN })
+          i18n.t("connectors.toolStatus.gmailDraftLimit", { max: MAX_DRAFTS_PER_TURN })
         );
       }
       const result = await runApprovalAction(
@@ -181,8 +182,11 @@ function createGmailSendTool(): ToolDefinition {
       const status = resultStatus(result);
       if (status !== "sent" && status !== "unknown") context?.releaseTurnSlot("email_draft");
       // The card itself shows a Send-time reconnect as failed; the model gets
-      // the same instruction either way: send the user to Settings.
-      return isReconnectFailure(result) ? gmailReconnectResult() : result;
+      // the same instruction either way: send the user to Settings. The
+      // user's edits ride along, so a later "send it again" uses their email.
+      return isReconnectFailure(result)
+        ? gmailReconnectResult(userEdits((result.data ?? {}) as ApprovalEdits))
+        : result;
     },
   };
 }
@@ -235,7 +239,7 @@ function createComposeDraftTool(target: ComposeTarget): ToolDefinition {
         return notSentResult(
           "draft_limit",
           `Only ${MAX_DRAFTS_PER_TURN} drafts can open per request. Tell the user which drafts opened and ask them to request the rest again.`,
-          i18n.t("connectors.toolStatus.draftLimit", { count: MAX_DRAFTS_PER_TURN })
+          i18n.t("connectors.toolStatus.draftLimit", { max: MAX_DRAFTS_PER_TURN })
         );
       }
       if (clipboardReserved && context && !context.claimTurnSlot("clipboard", 1)) {

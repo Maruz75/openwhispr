@@ -73,6 +73,12 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
   const problemText = issueProblemRef
     ? t(issueProblemRef.key, issueProblemRef.values)
     : emailProblemText;
+  // Announced by kind, never naming the address being typed, so a screen
+  // reader hears each new reason once instead of every partial address.
+  const problemAnnouncement =
+    problems && problems.invalid.length > 0
+      ? t("connectors.approval.email.invalidAddressAnnouncement")
+      : problemText;
   const hasFieldLayout = Boolean(emailFields || issueFields);
 
   // Each layout names its own button and outcomes ("Create issue",
@@ -98,7 +104,8 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
     cardRef.current?.focus();
   };
 
-  // Esc in a field ends editing and keeps the draft. It must not reach the
+  // Esc anywhere on the card while editing (a field, or the Edit button that
+  // keeps focus) ends editing and keeps the draft. It must not reach the
   // assistant panel, whose Esc cancels the whole turn and withdraws the card.
   const onEditorKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key !== "Escape") return;
@@ -122,6 +129,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
       tabIndex={-1}
       data-approval-card={entry.key}
       data-state={entry.state}
+      onKeyDown={showEditor ? onEditorKeyDown : undefined}
       className="my-1.5 rounded-lg border border-border/70 bg-surface-2/60 p-3 text-[13px] outline-none focus-visible:ring-1 focus-visible:ring-ring"
     >
       <p className="font-medium text-foreground">
@@ -142,7 +150,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
       </p>
 
       {emailFields ? (
-        <div className="mt-2" onKeyDown={showEditor ? onEditorKeyDown : undefined}>
+        <div className="mt-2">
           <EmailApprovalFields
             fields={emailFields}
             editing={showEditor}
@@ -152,7 +160,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
           />
         </div>
       ) : issueFields && verb ? (
-        <div className="mt-2" onKeyDown={showEditor ? onEditorKeyDown : undefined}>
+        <div className="mt-2">
           <IssueApprovalFields
             verb={verb}
             fields={issueFields}
@@ -163,7 +171,7 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
           />
         </div>
       ) : showEditor ? (
-        <div className="mt-2 space-y-2" onKeyDown={onEditorKeyDown}>
+        <div className="mt-2 space-y-2">
           {draft.title !== undefined && (
             <input
               aria-label={t("connectors.approval.titleLabel")}
@@ -190,12 +198,16 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
         </div>
       )}
 
-      {/* Polite and always present, so a screen reader hears each new
-          reason without being interrupted on every keystroke. */}
       {hasFieldLayout && entry.state === "pending" && (
-        <p id={problemsId} aria-live="polite" className="mt-2 text-xs text-destructive empty:mt-0">
-          {problemText}
-        </p>
+        <>
+          <p id={problemsId} className="mt-2 text-xs text-destructive empty:mt-0">
+            {problemText}
+          </p>
+          {/* Always present while pending, so each new reason is heard. */}
+          <p aria-live="polite" className="sr-only">
+            {problemAnnouncement}
+          </p>
+        </>
       )}
 
       {preview.notes?.map((note) => (
@@ -258,10 +270,15 @@ export function ApprovalCard({ entry }: { entry: ApprovalEntry }): ReactElement 
 
       {entry.state === "pending" && (
         <div className="mt-2 flex gap-2">
+          {/* aria-disabled rather than disabled: Send stays focusable, and
+              says why it can't send. */}
           <Button
             size="sm"
-            disabled={sendBlocked}
+            aria-disabled={sendBlocked || undefined}
+            aria-describedby={sendBlocked ? problemsId : undefined}
+            className={sendBlocked ? "cursor-not-allowed opacity-50" : undefined}
             onClick={() => {
+              if (sendBlocked) return;
               // Leaving the editor also means a frozen textarea never looks
               // editable while the draft sends.
               leaveEditingAndFocusCard();

@@ -31,7 +31,10 @@ const ADDRESS_SEPARATOR = /[,;،，、]/;
 /**
  * The addresses in a To or Cc input, in order. A pasted "Name <address>"
  * becomes its bare address, which is what Send uses; anything else is kept
- * as typed, so a bad one is named on the card instead of silently dropped.
+ * as typed, so a bad one is named on the card. A part with no address before
+ * a "Name <address>" reads as the start of that name (Outlook's "Last, First
+ * <address>"), so "josh, Dana <dana@acme.com>" is Dana alone; the card shows
+ * the resolved addresses whenever a name was stripped.
  */
 export function parseAddressList(text: string): string[] {
   const parts = text

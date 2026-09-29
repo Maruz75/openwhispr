@@ -3913,6 +3913,8 @@
         "bodyLabel": "內文",
         "addressHint": "多個地址請以逗號分隔。",
         "invalidAddress": "{{address}} 不是完整的電子郵件地址（例如 name@example.com）。",
+        "invalidAddressAnnouncement": "有一個地址不是完整的電子郵件地址。",
+        "sendsTo": "傳送至 {{addresses}}",
         "missingTo": "請在收件者中至少新增一個地址。",
         "tooManyRecipients": "一封郵件最多可寄給 {{max}} 個地址（收件者和副本合計）。",
         "subjectTooLong": "主旨不能超過 {{max}} 個字元。",
@@ -4070,7 +4072,7 @@
       "unknown": "未確認。請先檢查是否已完成，再重試。",
       "draftUnknown": "未確認：寄給 {{destination}} 的草稿可能沒有開啟。請先檢查，再重試。",
       "contactsFound": "找到的聯絡人：{{total}}",
-      "draftLimit": "每次請求最多只能開啟 {{count}} 份草稿。",
+      "draftLimit": "每次請求最多只能開啟 {{max}} 份草稿。",
       "clipboardBusy": "未開啟：另一份草稿的文字仍在剪貼簿中。",
       "errors": {
         "open_failed": "無法開啟您的郵件應用程式。",
@@ -4109,9 +4111,9 @@
       "unknownSent": {
         "gmail": "無法確認寄給 {{destination}} 的郵件是否已傳送，請檢查 Gmail 的「寄件備份」資料夾。"
       },
-      "gmailDraftLimit": "每次請求最多只能準備 {{count}} 封郵件。",
+      "gmailDraftLimit": "每次請求最多只能準備 {{max}} 封郵件。",
       "queryResults": "找到的結果：{{total}}",
-      "cardLimit": "每次請求最多只能準備 {{count}} 張卡片。"
+      "cardLimit": "每次請求最多只能準備 {{max}} 張卡片。"
     }
   },
   "calendar": {

@@ -29,7 +29,7 @@ import {
   getAgentSystemPrompt,
 } from "../../config/prompts";
 import { getDictionaryHintWords } from "../../utils/snippets";
-import { noteAttendeesContext } from "../../utils/noteAttendees";
+import { noteAttendeesContext, withoutAttendeesFence } from "../../utils/noteAttendees";
 import { createToolRegistry } from "../../services/tools";
 import {
   executeTool,
@@ -426,7 +426,13 @@ export function useChatStreaming({
           connectorsOffered ? buildNoteAttendeesContext(noteMeetingRef.current) : "",
         ]);
         if (cancelled() || !mountedRef.current) return;
-        const combinedContext = [noteContextRef.current, attendeesContext, ragContext]
+        // Only main's attendee block may carry its fence: note text and search
+        // results can't fake a second list.
+        const combinedContext = [
+          withoutAttendeesFence(noteContextRef.current ?? ""),
+          attendeesContext,
+          withoutAttendeesFence(ragContext),
+        ]
           .filter(Boolean)
           .join("\n\n");
         // The user's dictionary rides on every conversation so replies use their

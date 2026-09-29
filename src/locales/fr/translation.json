@@ -4082,6 +4082,8 @@
         "bodyLabel": "Message",
         "addressHint": "Séparez les adresses par des virgules.",
         "invalidAddress": "{{address}} n'est pas une adresse e-mail complète comme nom@exemple.com.",
+        "invalidAddressAnnouncement": "L'une des adresses n'est pas une adresse e-mail complète.",
+        "sendsTo": "Envoi à {{addresses}}",
         "missingTo": "Ajoutez au moins une adresse dans À.",
         "tooManyRecipients": "Un e-mail peut être envoyé à {{max}} adresses au maximum, À et Cc compris.",
         "subjectTooLong": "L'objet doit compter au plus {{max}} caractères.",
@@ -4127,7 +4129,7 @@
     "email": {
       "title": "Brouillons d'e-mails",
       "description": "L'assistant ouvre un brouillon pré-rempli dans votre application de messagerie. Vous le vérifiez et appuyez vous-même sur Envoyer.",
-      "descriptionSend": "L'assistant affiche une carte d'e-mail dans le chat. Elle n'est envoyée depuis votre Gmail que lorsque vous appuyez sur Envoyer.",
+      "descriptionSend": "L'assistant affiche une carte d'e-mail dans le chat. L'e-mail n'est envoyé depuis votre Gmail que lorsque vous appuyez sur Envoyer.",
       "proRequired": "Passez à un plan payant pour que l'assistant rédige des e-mails pour vous.",
       "unavailable": "Les brouillons d'e-mails ne sont pas disponibles pour le moment.",
       "targetLabel": "Rédiger les e-mails dans",
@@ -4239,7 +4241,7 @@
       "unknown": "Non confirmé. Vérifiez si l'action a abouti avant de réessayer.",
       "draftUnknown": "Non confirmé : le brouillon pour {{destination}} ne s'est peut-être pas ouvert. Vérifiez avant de réessayer.",
       "contactsFound": "Contacts trouvés : {{total}}",
-      "draftLimit": "Seuls {{count}} brouillons peuvent s'ouvrir par demande.",
+      "draftLimit": "Seuls {{max}} brouillons peuvent s'ouvrir par demande.",
       "clipboardBusy": "Non ouvert : le texte d'un autre brouillon est encore dans votre presse-papiers.",
       "errors": {
         "open_failed": "Impossible d'ouvrir votre application de messagerie.",
@@ -4278,9 +4280,9 @@
       "unknownSent": {
         "gmail": "Impossible de confirmer l'envoi de l'e-mail à {{destination}}. Vérifiez le dossier Messages envoyés de Gmail."
       },
-      "gmailDraftLimit": "Seuls {{count}} e-mails peuvent être préparés par demande.",
+      "gmailDraftLimit": "Seuls {{max}} e-mails peuvent être préparés par demande.",
       "queryResults": "Résultats trouvés : {{total}}",
-      "cardLimit": "Seules {{count}} cartes peuvent être préparées par demande."
+      "cardLimit": "Seules {{max}} cartes peuvent être préparées par demande."
     }
   },
   "notesView": {

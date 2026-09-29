@@ -45,10 +45,8 @@ const field = (root, labelKey) =>
   );
 
 const problemText = (root) =>
-  findElement(
-    root,
-    (element) => element.getAttribute?.("aria-live") === "polite" && element.getAttribute("id")
-  )?.textContent || null;
+  findElement(root, (element) => element.tagName === "P" && element.getAttribute?.("id"))
+    ?.textContent || null;
 
 const ISSUE_FIELDS = { title: "Fix login", body: "Safari users can't sign in." };
 const ISSUE_PREVIEW = {
@@ -163,11 +161,11 @@ test("an issue card blocks Send on a missing or long title and a long descriptio
     if (reason) {
       assert.equal(problemText(container), `connectors.approval.${reason}`, reason);
       assert.equal(field(container, labelKey).getAttribute("aria-invalid"), "true", reason);
-      assert.notEqual(send.getAttribute("disabled"), null, `${reason}: Send is disabled`);
+      assert.equal(send.getAttribute("aria-disabled"), "true", `${reason}: Send is blocked`);
       await React.act(async () => click(send));
     } else {
       assert.equal(problemText(container), null, labelKey);
-      assert.equal(send.getAttribute("disabled"), null, `${labelKey}: Send is enabled`);
+      assert.equal(send.getAttribute("aria-disabled"), null, `${labelKey}: Send is enabled`);
     }
   }
   assert.deepEqual(calls.commit, [], "a blocked Send never commits");
@@ -199,7 +197,7 @@ test("a comment card edits only its text and won't send an empty comment", async
   assert.equal(problemText(container), "connectors.approval.comment.missingBody");
   assert.equal(field(container, "comment.bodyLabel").getAttribute("aria-invalid"), "true");
   const send = button(container, "connectors.approval.send");
-  assert.notEqual(send.getAttribute("disabled"), null);
+  assert.equal(send.getAttribute("aria-disabled"), "true");
   await React.act(async () => click(send));
   assert.deepEqual(calls.commit, []);
 });

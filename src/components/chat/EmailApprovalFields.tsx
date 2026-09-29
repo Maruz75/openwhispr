@@ -18,7 +18,7 @@ const LABEL_CLASS = "w-14 shrink-0 text-xs text-muted-foreground";
 
 interface EmailApprovalFieldsProps {
   fields: EmailFields;
-  /** True only while a pending card is being edited, so the inputs are never disabled. */
+  /** Edit mode. The card sets it only while pending, so the inputs need no disabled state. */
   editing: boolean;
   /** What blocks Send, and the id of the text that says why. */
   problems: EmailFieldProblems | null;
@@ -40,6 +40,21 @@ function invalidFields(
     subject: Boolean(problems?.subjectTooLong),
     body: Boolean(problems?.bodyTooLong),
   };
+}
+
+// A pasted "Name <address>" (Outlook's "Last, First <address>" too) sends to
+// the bare address, so the card shows what it resolved to: a typed entry
+// read as part of a name can't disappear unnoticed.
+function ResolvedAddresses({ addresses }: { addresses: string[] }): ReactElement | null {
+  const { t } = useTranslation();
+  if (addresses.length === 0) return null;
+  return (
+    <p className="pl-16 text-xs text-muted-foreground" dir="auto">
+      {t("connectors.approval.email.sendsTo", {
+        addresses: addresses.map(recipientLabel).join(", "),
+      })}
+    </p>
+  );
 }
 
 // Mounted only while editing, so every edit session starts from the draft.
@@ -75,6 +90,7 @@ function EmailFieldsEditor({
           }}
         />
       </label>
+      {toText.includes("<") && <ResolvedAddresses addresses={fields.to} />}
       <label className="flex items-center gap-2">
         <span className={LABEL_CLASS}>{t("connectors.approval.email.ccLabel")}</span>
         <input
@@ -90,6 +106,7 @@ function EmailFieldsEditor({
           }}
         />
       </label>
+      {ccText.includes("<") && <ResolvedAddresses addresses={fields.cc} />}
       <p className="text-xs text-muted-foreground">{t("connectors.approval.email.addressHint")}</p>
       <label className="flex items-center gap-2">
         <span className={LABEL_CLASS}>{t("connectors.approval.email.subjectLabel")}</span>

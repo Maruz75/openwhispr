@@ -135,31 +135,30 @@ function normalizePreviewNote(note) {
     : { key: note.key };
 }
 
-// A card layout's fields (an email's to, cc, subject and body): each value a
-// string or a list of strings, so a connector can't hand the renderer
-// anything it would have to guess how to show.
-function normalizePreviewFields(fields) {
-  if (!fields || typeof fields !== "object" || Array.isArray(fields)) return null;
-  const clean = {};
-  for (const [name, value] of Object.entries(fields)) {
-    if (isString(value)) clean[name] = value;
-    else if (Array.isArray(value)) clean[name] = value.filter(isString);
-  }
-  return Object.keys(clean).length > 0 ? clean : null;
+// A card layout's fields (an email's to, cc, subject and body). Every field
+// the card can edit must be one the action declares editable, holding a value
+// of the declared type: an undeclared one (a typo in the declaration, say)
+// would let the user change it only for Send to drop it, and a mistyped one
+// would fail only at Send. Null when there are none; false when malformed.
+function normalizePreviewFields(fields, editable) {
+  if (fields === undefined || fields === null) return null;
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) return false;
+  const entries = Object.entries(fields);
+  const valid = entries.every(
+    ([name, value]) => Object.hasOwn(editable, name) && EDIT_TYPES[editable[name]](value)
+  );
+  if (!valid) return false;
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
 // The card renders exactly this, so a preview missing a field it needs is
-// malformed rather than shown half empty. Every field the card can edit must
-// be one the action declares editable: an undeclared one (a typo in the
-// declaration, say) would let the user change it only for Send to drop it.
+// malformed rather than shown half empty.
 function normalizePreview(preview, editable) {
   if (!preview || typeof preview !== "object") return null;
   const { verbKey, destinationLabel, accountLabel, body } = preview;
   if (![verbKey, destinationLabel, accountLabel, body].every(isString)) return null;
-  const fields = normalizePreviewFields(preview.fields);
-  if (fields && !Object.keys(fields).every((name) => Object.hasOwn(editable ?? {}, name))) {
-    return null;
-  }
+  const fields = normalizePreviewFields(preview.fields, editable);
+  if (fields === false) return null;
   return {
     verbKey,
     destinationLabel,
@@ -233,12 +232,17 @@ const EDIT_TYPES = {
   text: isString,
 };
 
-// A declaration naming a type that doesn't exist would drop that field's
+// Every approval action says which of its card's fields the user may edit.
+// A missing declaration, or one naming a type that doesn't exist, would drop
 // edits; it is a build fault, caught when the manager is created.
 function assertEditableTypes(connectors) {
   for (const connector of connectors) {
     for (const [action, spec] of Object.entries(connector.actions ?? {})) {
-      for (const [field, type] of Object.entries(spec?.editable ?? {})) {
+      if (spec?.kind !== "approval") continue;
+      if (!spec.editable || typeof spec.editable !== "object") {
+        throw new Error(`${connector.id}.${action}: an approval action must declare editable`);
+      }
+      for (const [field, type] of Object.entries(spec.editable)) {
         if (!Object.hasOwn(EDIT_TYPES, type)) {
           throw new Error(`${connector.id}.${action}.${field}: unknown editable type "${type}"`);
         }
@@ -250,12 +254,8 @@ function assertEditableTypes(connectors) {
 // The card's edits reach the connector only as the action declares them:
 // exactly the declared fields. A declared field of the wrong type returns
 // null, so Send refuses instead of sending the prepared value in its place.
-// An action with no declaration keeps the original title and body.
 function sanitizeEdits(edits, editable) {
   const source = edits && typeof edits === "object" ? edits : {};
-  if (!editable || typeof editable !== "object") {
-    return stringFields({ title: source.title, body: source.body });
-  }
   const clean = {};
   for (const [field, type] of Object.entries(editable)) {
     if (!Object.hasOwn(source, field) || source[field] === undefined) continue;
@@ -495,9 +495,10 @@ function createConnectorManager({
       await notifyStatusChanged();
       // A login for another account is left with nothing using it, so it is
       // revoked rather than left live. The same account's is kept: Google's
-      // revoke would end the new login's grant too.
+      // revoke would end the new login's grant too. Not awaited: the new
+      // login is already saved, and Settings shouldn't wait on the old one.
       if (replaced && connector.loginKey?.(replaced) !== connector.loginKey?.(credential)) {
-        await revokeQuietly(connector, replaced);
+        void revokeQuietly(connector, replaced);
       }
       const current = await statusOf(connector);
       return {

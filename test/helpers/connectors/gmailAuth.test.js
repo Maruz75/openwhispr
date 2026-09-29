@@ -839,6 +839,87 @@ test("a refused grant shared with a connected calendar is not revoked, and still
   assert.equal(credentials.saves.length, 0);
 });
 
+// Another OpenWhispr account on this device, signed in to Gmail as `login`.
+function withSecondAccount(login) {
+  const credentials = memoryCredentials(CONNECTED, { connectorId: "gmail" });
+  credentials.replace("acct-2", "gmail", login, 0);
+  return credentials;
+}
+
+const SAME_USER_ELSEWHERE = {
+  ...CONNECTED,
+  accessToken: "access-acct-2",
+  refreshToken: "refresh-acct-2",
+};
+
+test("a grant another OpenWhispr account's Gmail login holds is kept, unless the device is erased", async () => {
+  // Google's revoke would end acct-2's login to the same Google user too.
+  const shared = await setup({
+    credentials: withSecondAccount(SAME_USER_ELSEWHERE),
+    script: { [REVOKE]: [REVOKED_OK] },
+  });
+  assert.equal(await shared.auth.revoke(CONNECTED), null, "not the calendar's note");
+  assert.deepEqual(hits(shared.google, REVOKE), []);
+
+  const erasing = await setup({
+    credentials: withSecondAccount(SAME_USER_ELSEWHERE),
+    script: { [REVOKE]: [REVOKED_OK] },
+  });
+  await erasing.auth.revoke(CONNECTED, { erasingDevice: true });
+  assert.equal(hits(erasing.google, REVOKE).length, 1);
+
+  // Another Google user, or another Cloud project, is a separate grant.
+  for (const other of [
+    { ...SAME_USER_ELSEWHERE, sub: "sub-2", email: "Other@Example.test" },
+    { ...SAME_USER_ELSEWHERE, clientId: "999999999999-other.apps.googleusercontent.com" },
+  ]) {
+    const separate = await setup({
+      credentials: withSecondAccount(other),
+      script: { [REVOKE]: [REVOKED_OK] },
+    });
+    await separate.auth.revoke(CONNECTED);
+    assert.deepEqual(
+      hits(separate.google, REVOKE).map((call) => call.form),
+      [{ token: "refresh-1" }],
+      JSON.stringify(other)
+    );
+  }
+  // The same address in another case is the same Google user.
+  const upper = await setup({
+    credentials: withSecondAccount({ ...SAME_USER_ELSEWHERE, email: "YOU@example.test" }),
+    script: { [REVOKE]: [REVOKED_OK] },
+  });
+  await upper.auth.revoke(CONNECTED);
+  assert.deepEqual(hits(upper.google, REVOKE), []);
+});
+
+test("a refused sign-in doesn't revoke the grant this account's current login still uses", async () => {
+  const { auth, google, slot } = await setup({
+    credential: { ...CONNECTED, accessToken: "access-old", refreshToken: "refresh-old" },
+    script: {
+      [TOKEN]: [exchangeReply({ scope: "openid https://www.googleapis.com/auth/userinfo.email" })],
+      [REVOKE]: [REVOKED_OK],
+    },
+  });
+
+  await assert.rejects(
+    auth.authorize(),
+    (error) => error.redirectCode === "permission_not_granted"
+  );
+  assert.deepEqual(hits(google, REVOKE), [], "the old login keeps working");
+  assert.equal(slot().refreshToken, "refresh-old");
+});
+
+test("a login store that can't be read keeps the grant", async () => {
+  const credentials = memoryCredentials(CONNECTED, { connectorId: "gmail" });
+  credentials.readAllAccounts = () => {
+    throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+  };
+  const { auth, google } = await setup({ credentials, script: { [REVOKE]: [REVOKED_OK] } });
+  await assert.doesNotReject(auth.revoke(CONNECTED));
+  assert.deepEqual(hits(google, REVOKE), []);
+});
+
 test("the status shows the Google address and the reconnect flag", async () => {
   const { auth } = await setup();
   assert.deepEqual(auth.statusOf(CONNECTED), {

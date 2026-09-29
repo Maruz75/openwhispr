@@ -4082,6 +4082,8 @@
         "bodyLabel": "Nachricht",
         "addressHint": "Adressen mit Kommas trennen.",
         "invalidAddress": "{{address}} ist keine vollständige E-Mail-Adresse wie name@example.com.",
+        "invalidAddressAnnouncement": "Eine der Adressen ist keine vollständige E-Mail-Adresse.",
+        "sendsTo": "Geht an {{addresses}}",
         "missingTo": "Füge unter „An“ mindestens eine Adresse hinzu.",
         "tooManyRecipients": "Eine E-Mail kann an höchstens {{max}} Adressen gehen, An und Cc zusammen.",
         "subjectTooLong": "Der Betreff darf höchstens {{max}} Zeichen lang sein.",
@@ -4239,7 +4241,7 @@
       "unknown": "Nicht bestätigt. Prüfe, ob es geklappt hat, bevor du es erneut versuchst.",
       "draftUnknown": "Nicht bestätigt: Der Entwurf an {{destination}} wurde möglicherweise nicht geöffnet. Prüfe das, bevor du es erneut versuchst.",
       "contactsFound": "Gefundene Kontakte: {{total}}",
-      "draftLimit": "Pro Anfrage können nur {{count}} Entwürfe geöffnet werden.",
+      "draftLimit": "Pro Anfrage können nur {{max}} Entwürfe geöffnet werden.",
       "clipboardBusy": "Nicht geöffnet: Der Text eines anderen Entwurfs ist noch in deiner Zwischenablage.",
       "errors": {
         "open_failed": "Deine E-Mail-App konnte nicht geöffnet werden.",
@@ -4278,9 +4280,9 @@
       "unknownSent": {
         "gmail": "Konnte nicht bestätigen, dass die E-Mail an {{destination}} gesendet wurde. Prüfe den Gmail-Ordner „Gesendet“."
       },
-      "gmailDraftLimit": "Pro Anfrage können nur {{count}} E-Mails vorbereitet werden.",
+      "gmailDraftLimit": "Pro Anfrage können nur {{max}} E-Mails vorbereitet werden.",
       "queryResults": "Gefundene Ergebnisse: {{total}}",
-      "cardLimit": "Pro Anfrage können nur {{count}} Karten vorbereitet werden."
+      "cardLimit": "Pro Anfrage können nur {{max}} Karten vorbereitet werden."
     }
   },
   "notesView": {

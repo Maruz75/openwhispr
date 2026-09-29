@@ -35,7 +35,7 @@ export async function runApprovalAction(
     return notSentResult(
       "card_limit",
       CARD_LIMIT_GUIDANCE,
-      i18n.t("connectors.toolStatus.cardLimit", { count: MAX_APPROVAL_CARDS_PER_TURN })
+      i18n.t("connectors.toolStatus.cardLimit", { max: MAX_APPROVAL_CARDS_PER_TURN })
     );
   }
   // A rejected IPC call reads as unavailable, so the caller's turn slot is

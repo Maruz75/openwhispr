@@ -9,6 +9,8 @@ export interface ConnectorRowSpec {
   icon: ReactNode;
   /** Values for `connectors.<id>.connectedAs`. */
   accountSummary: (status: ConnectorStatus) => Record<string, string>;
+  /** A full-colour brand mark sits on a white tile, like the calendar rows'. */
+  brandIcon?: boolean;
   /** Shown under the row's summary while Connect is in progress (GitHub's device code). */
   connectingDetail?: ComponentType<{ connectorId: string }>;
 }
@@ -33,16 +35,17 @@ export const CONNECTOR_ROWS: readonly ConnectorRowSpec[] = [
     id: "gmail",
     // Gmail's mark, like the calendar rows' brand marks: the generic
     // envelope is the "Email drafts" row just above.
+    brandIcon: true,
     icon: (
       <img
         src={gmailMark}
         alt=""
         aria-hidden="true"
-        width={16}
-        height={12}
+        width={20}
+        height={15}
         decoding="async"
         draggable={false}
-        className="h-3 w-4 shrink-0 select-none"
+        className="h-[15px] w-5 shrink-0 select-none"
       />
     ),
     accountSummary: accountLabelSummary,

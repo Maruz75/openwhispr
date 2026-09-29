@@ -3913,6 +3913,8 @@
         "bodyLabel": "Mensagem",
         "addressHint": "Separe os endereços com vírgulas.",
         "invalidAddress": "{{address}} não é um endereço de e-mail completo como nome@exemplo.com.",
+        "invalidAddressAnnouncement": "Um dos endereços não é um endereço de e-mail completo.",
+        "sendsTo": "Enviado para {{addresses}}",
         "missingTo": "Adicione pelo menos um endereço em Para.",
         "tooManyRecipients": "Um e-mail pode ir para no máximo {{max}} endereços, somando Para e Cc.",
         "subjectTooLong": "O assunto pode ter no máximo {{max}} caracteres.",
@@ -3958,7 +3960,7 @@
     "email": {
       "title": "Rascunhos de e-mail",
       "description": "O assistente abre um rascunho pré-preenchido no seu aplicativo de e-mail. Você revisa e aperta Enviar.",
-      "descriptionSend": "O assistente mostra um cartão de e-mail no chat. Ele só é enviado pelo seu Gmail quando você aperta Enviar.",
+      "descriptionSend": "O assistente mostra um cartão de e-mail no chat. O e-mail só é enviado pelo seu Gmail quando você aperta Enviar.",
       "proRequired": "Atualize para um plano pago para que o assistente escreva rascunhos de e-mail para você.",
       "unavailable": "Os rascunhos de e-mail não estão disponíveis no momento.",
       "targetLabel": "Criar rascunhos de e-mail em",
@@ -4070,7 +4072,7 @@
       "unknown": "Não confirmado. Verifique se foi concluído antes de tentar novamente.",
       "draftUnknown": "Não confirmado: o rascunho para {{destination}} pode não ter sido aberto. Verifique antes de tentar novamente.",
       "contactsFound": "Contatos encontrados: {{total}}",
-      "draftLimit": "Só é possível abrir {{count}} rascunhos por solicitação.",
+      "draftLimit": "Só é possível abrir {{max}} rascunhos por solicitação.",
       "clipboardBusy": "Não aberto: o texto de outro rascunho ainda está na sua área de transferência.",
       "errors": {
         "open_failed": "Não foi possível abrir seu aplicativo de e-mail.",
@@ -4109,9 +4111,9 @@
       "unknownSent": {
         "gmail": "Não foi possível confirmar o envio do e-mail para {{destination}}. Verifique a pasta Enviados do Gmail."
       },
-      "gmailDraftLimit": "Só é possível preparar {{count}} e-mails por solicitação.",
+      "gmailDraftLimit": "Só é possível preparar {{max}} e-mails por solicitação.",
       "queryResults": "Resultados encontrados: {{total}}",
-      "cardLimit": "Só é possível preparar {{count}} cartões por solicitação."
+      "cardLimit": "Só é possível preparar {{max}} cartões por solicitação."
     }
   },
   "calendar": {

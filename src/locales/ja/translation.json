@@ -3913,6 +3913,8 @@
         "bodyLabel": "本文",
         "addressHint": "複数のアドレスはカンマで区切ってください。",
         "invalidAddress": "{{address}} は name@example.com のような完全なメールアドレスではありません。",
+        "invalidAddressAnnouncement": "完全なメールアドレスではない宛先があります。",
+        "sendsTo": "送信先: {{addresses}}",
         "missingTo": "宛先にアドレスを1つ以上入力してください。",
         "tooManyRecipients": "1通のメールの宛先は、宛先とCcを合わせて最大{{max}}件です。",
         "subjectTooLong": "件名は{{max}}文字以内にしてください。",
@@ -4070,7 +4072,7 @@
       "unknown": "未確認です。再試行する前に完了したかどうかを確認してください。",
       "draftUnknown": "未確認：{{destination}} 宛ての下書きが開かなかった可能性があります。再試行する前に確認してください。",
       "contactsFound": "見つかった連絡先: {{total}}",
-      "draftLimit": "1回のリクエストで開ける下書きは{{count}}件までです。",
+      "draftLimit": "1回のリクエストで開ける下書きは{{max}}件までです。",
       "clipboardBusy": "開いていません：別の下書きのテキストがまだクリップボードにあります。",
       "errors": {
         "open_failed": "メールアプリを開けませんでした。",
@@ -4109,9 +4111,9 @@
       "unknownSent": {
         "gmail": "{{destination}} 宛てのメールが送信されたか確認できませんでした。Gmailの送信済みフォルダを確認してください。"
       },
-      "gmailDraftLimit": "1回のリクエストで準備できるメールは{{count}}件までです。",
+      "gmailDraftLimit": "1回のリクエストで準備できるメールは{{max}}件までです。",
       "queryResults": "見つかった結果: {{total}}",
-      "cardLimit": "1回のリクエストで準備できるカードは{{count}}件までです。"
+      "cardLimit": "1回のリクエストで準備できるカードは{{max}}件までです。"
     }
   },
   "calendar": {

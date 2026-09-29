@@ -7,7 +7,6 @@ import type {
   ManagedEnterpriseRequestContext,
 } from "./enterpriseIdentity";
 import type {
-  CalendarAttendee,
   CalendarAvailabilityRequest,
   CalendarAvailabilityResult,
   MicrosoftCalendarAccount,

@@ -16,8 +16,6 @@ const { connectorResultPage } = require("./oauthResultPage");
 const { buildRawMessage } = require("./gmailMime");
 const { isTransportErrorCode } = require("./deliveryClassifier");
 
-const LINE_BREAK = /[\r\n]/;
-
 function stringList(value) {
   return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
 }
@@ -243,7 +241,7 @@ function createGmailConnector({ api, auth, credentials }) {
       if (recipients.to.length + recipients.cc.length > MAX_RECIPIENTS) {
         return commitFailed("too_many_recipients");
       }
-      if (LINE_BREAK.test(fields.subject)) {
+      if (/[\r\n]/.test(fields.subject)) {
         return commitFailed("invalid_message", "The subject must be a single line.");
       }
       if (characterCount(fields.subject) > MAX_SUBJECT_LENGTH) return commitFailed("too_long");
@@ -319,6 +317,4 @@ module.exports = {
   normalizeRecipients,
   sentMessageUrl,
   sentFolderUrl,
-  MAX_RECIPIENTS,
-  MAX_SUBJECT_LENGTH,
 };

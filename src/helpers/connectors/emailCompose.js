@@ -82,6 +82,9 @@ export function isValidEmailAddress(value) {
   // no backslash (which only a quoted local part may use). Mail servers
   // refuse anything else.
   if (/^\.|\.$|\.\.|\\/.test(local)) return false;
+  // RFC 5321 caps a local part at 64 octets. "=?" in one would be decoded as
+  // an encoded word in the To header, showing the recipient something else.
+  if (new TextEncoder().encode(local).length > 64 || local.includes("=?")) return false;
   if (domain.split(".").some(mixesLookalikeScripts)) return false;
   const ascii = asciiDomain(domain);
   // The URL parser reads a numeric domain (0x7f.01) as an IPv4 address, so
@@ -112,9 +115,16 @@ export function emailBodyBytes(body) {
 }
 
 // What an email card's header and receipt name: the first recipient, and how
-// many more. Never the subject or body.
+// many more, each counted once however often it's listed (as main sends it).
+// Never the subject or body.
 export function recipientsLabel(to, cc = []) {
-  const all = [...to, ...cc];
+  const seen = new Set();
+  const all = [...to, ...cc].filter((address) => {
+    const key = address.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   if (all.length === 0) return "";
   return all.length > 1 ? `${recipientLabel(all[0])} +${all.length - 1}` : recipientLabel(all[0]);
 }
