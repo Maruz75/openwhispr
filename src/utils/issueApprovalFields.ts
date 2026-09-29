@@ -20,7 +20,7 @@ export interface CopyRef {
   values?: Record<string, string | number>;
 }
 
-export function issueVerb(verbKey: string): IssueVerb | null {
+export function issueVerb(verbKey: string | undefined): IssueVerb | null {
   return verbKey === "issue" || verbKey === "comment" ? verbKey : null;
 }
 

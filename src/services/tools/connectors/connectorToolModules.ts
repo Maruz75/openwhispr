@@ -16,8 +16,7 @@ export interface ConnectorToolModule {
   createTools: (env: ConnectorToolEnv) => ToolDefinition[];
 }
 
-export interface ConnectorToolSettings {
-  emailDraftTarget: EmailDraftTarget;
+export interface ConnectorToolSettings extends ConnectorToolEnv {
   /** Connected and not waiting on a reconnect (connectorStatusStore.readyConnectorIds). */
   readyConnectorIds: readonly string[];
 }

@@ -103,7 +103,7 @@ export interface ApprovalOutcomeOptions {
 // Gmail Sent folder."); an issue or comment names what may not exist; any
 // other keeps the generic line.
 function unknownDisplayText(destination: string, connectorId?: string, verbKey?: string): string {
-  const verb = verbKey ? issueVerb(verbKey) : null;
+  const verb = issueVerb(verbKey);
   if (verb) {
     const copy = issueUnknownCopy(verb, destination);
     return i18n.t(copy.key, copy.values);
@@ -118,7 +118,7 @@ function unknownDisplayText(destination: string, connectorId?: string, verbKey?:
 }
 
 function sentDisplayText(destination: string, resultLabel?: string, verbKey?: string): string {
-  const verb = verbKey ? issueVerb(verbKey) : null;
+  const verb = issueVerb(verbKey);
   if (!verb) return i18n.t("connectors.approval.sent", { destination });
   const copy = issueSentCopy(verb, destination, resultLabel);
   return i18n.t(copy.key, copy.values);
