@@ -100,6 +100,9 @@ test("strings lose characters that hide text, but keep the joiners words and emo
     "\u0085", // NEL
     "\u202e", // right-to-left override
     "\u2066", // left-to-right isolate
+    "\u200f\u061c", // right-to-left and Arabic letter marks
+    "\ufff9\ufffa\ufffb", // interlinear annotation, which hides its text
+    "\u206a", // deprecated format control
     "\u200b", // zero-width space
     "\u2060", // word joiner
     "\ufeff", // BOM
@@ -197,20 +200,20 @@ test("a failure keeps its code and message, with defaults", async () => {
   assert.notEqual(queryFailed(), queryFailed(), "callers can't mutate a shared object");
 });
 
-test("a failure's errorCode reaches a log line uncapped, so only a short lowercase token passes through", async () => {
+test("a failure's errorCode reaches a log line uncapped, so only a short flat token passes through", async () => {
   const { normalizeQueryResult } = await load();
 
-  // A normal, well-formed code passes through as-is.
-  assert.equal(
-    normalizeQueryResult({ status: "failed", errorCode: "rate_limited" }).errorCode,
-    "rate_limited"
-  );
+  // Well-formed codes pass through as-is, transport codes included, so the
+  // tool step can show the network copy.
+  for (const errorCode of ["rate_limited", "ECONNRESET", "UND_ERR_SOCKET"]) {
+    assert.equal(normalizeQueryResult({ status: "failed", errorCode }).errorCode, errorCode);
+  }
 
   // Anything else falls back, so a connector can't smuggle arbitrary text
   // into the log line that prints errorCode uncapped.
   for (const errorCode of [
-    "Rate Limited", // uppercase
     "rate limited", // spaces
+    "rate-limited", // punctuation
     "https://evil.test/x", // URL-shaped
     "a".repeat(65), // longer than 64
   ]) {

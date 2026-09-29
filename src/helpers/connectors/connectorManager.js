@@ -151,6 +151,15 @@ function normalizePreviewFields(fields, editable) {
   return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
+// The fields an issue or comment card lays out. Fields without them would
+// drop the card to its plain layout, whose edits Send never commits.
+const LAYOUT_FIELDS = { issue: ["title", "body"], comment: ["body"] };
+
+function hasLayoutFields(verbKey, fields) {
+  const required = Object.hasOwn(LAYOUT_FIELDS, verbKey) ? LAYOUT_FIELDS[verbKey] : [];
+  return required.every((name) => isString(fields[name]));
+}
+
 // The card renders exactly this, so a preview missing a field it needs is
 // malformed rather than shown half empty.
 function normalizePreview(preview, editable) {
@@ -158,7 +167,7 @@ function normalizePreview(preview, editable) {
   const { verbKey, destinationLabel, accountLabel, body } = preview;
   if (![verbKey, destinationLabel, accountLabel, body].every(isString)) return null;
   const fields = normalizePreviewFields(preview.fields, editable);
-  if (fields === false) return null;
+  if (fields === false || (fields && !hasLayoutFields(verbKey, fields))) return null;
   return {
     verbKey,
     destinationLabel,

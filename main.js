@@ -475,7 +475,6 @@ function initializeCoreManagers() {
   const { createCredentialStore } = require("./src/helpers/connectors/credentialStore");
   const { createConnectorCredentials } = require("./src/helpers/connectors/connectorCredentials");
   const { createConnectors } = require("./src/helpers/connectors/createConnectors");
-  const { renderOAuthResultPage } = require("./src/helpers/connectors/oauthResultPage");
   const { runOAuthLoopbackFlow, OAuthFlowError } = require("./src/helpers/oauthLoopbackFlow");
   const { broadcastToWindows } = require("./src/helpers/windowBroadcast");
   const { connectorAccountIdFrom } = require("./src/helpers/connectors/connectorIpc");
@@ -502,7 +501,6 @@ function initializeCoreManagers() {
       i18n: i18nMain,
       runOAuthLoopbackFlow,
       OAuthFlowError,
-      renderOAuthResultPage,
       credentials: connectorCredentials,
       logger: debugLogger,
       env: process.env,

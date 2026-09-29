@@ -94,7 +94,7 @@ test("two tools with one name is a build fault, not a silent replacement", async
   );
 });
 
-test("the shipped list is email, Slack then GitHub, and every connector tool names its connector and prompt line", async (t) => {
+test("the shipped list is email, Slack, Linear then GitHub, and every connector tool names its connector and prompt line", async (t) => {
   const { CONNECTOR_TOOL_MODULES } = await loadModules(t);
 
   assert.deepEqual(
@@ -102,6 +102,7 @@ test("the shipped list is email, Slack then GitHub, and every connector tool nam
     [
       ["email", false],
       ["slack", true],
+      ["linear", true],
       ["github", true],
     ]
   );

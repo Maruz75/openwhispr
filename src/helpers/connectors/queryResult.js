@@ -15,15 +15,15 @@ const FIELD_NAME = /^[a-zA-Z][a-zA-Z0-9_]{0,39}$/;
 // A failure's errorCode reaches connectorManager.js's log line uncapped, so
 // it's the one connector-supplied string that must be a short, flat token —
 // never free text (a URL, a message) that could bloat or spoof a log line.
-const ERROR_CODE = /^[a-z0-9_]{1,64}$/;
+// Uppercase stays: transport codes (ECONNRESET) choose the network copy.
+const ERROR_CODE = /^[A-Za-z0-9_]{1,64}$/;
 // Characters that change what text says without being seen, so the model
-// could act on words the approval card never shows: C0 controls other than
-// tab and line feed, DEL and C1 (terminal escapes, NUL, CR), bidi overrides
-// and isolates, zero-width spaces and the BOM, and tag characters (hidden
-// ASCII). ZWNJ and ZWJ stay: Persian words and emoji need them.
-const HIDDEN_CHARACTERS =
-  // eslint-disable-next-line no-control-regex
-  /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u200B\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF\u{E0000}-\u{E007F}]/gu;
+// could act on words the approval card never shows: controls other than tab
+// and line feed (terminal escapes, NUL, CR, DEL, C1) and every format
+// character (bidi marks, overrides and isolates, zero-width spaces, the BOM,
+// interlinear annotations, tag characters that hide ASCII). ZWNJ and ZWJ
+// stay: Persian words and emoji need them.
+const HIDDEN_CHARACTERS = /(?![\t\n\u200C\u200D])[\p{Cc}\p{Cf}]/gu;
 // Unicode's line and paragraph separators read as line breaks.
 const LINE_SEPARATORS = /[\u2028\u2029]/g;
 const ELLIPSIS = "…";
@@ -133,12 +133,4 @@ function normalizeQueryResult(result) {
   }
 }
 
-module.exports = {
-  normalizeQueryResult,
-  queryFailed,
-  MAX_QUERY_ITEMS,
-  MAX_QUERY_ITEM_FIELDS,
-  MAX_QUERY_STRING_LENGTH,
-  MAX_QUERY_LIST_ITEMS,
-  MAX_QUERY_LIST_STRING_LENGTH,
-};
+module.exports = { normalizeQueryResult, queryFailed };

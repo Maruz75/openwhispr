@@ -13,6 +13,7 @@ import {
   Mail,
   Users,
   MessageSquare,
+  CheckCircle,
 } from "../icons";
 
 export const toolIcons: Record<string, typeof Search> = {
@@ -33,4 +34,7 @@ export const toolIcons: Record<string, typeof Search> = {
   github_create_issue: Code2,
   github_comment: Code2,
   slack_send_message: MessageSquare,
+  linear_search_issues: Search,
+  linear_create_issue: CheckCircle,
+  linear_comment: MessageSquare,
 };
