@@ -4143,7 +4143,14 @@
         "failedBody": "Вернитесь в OpenWhispr, чтобы попробовать снова."
       },
       "notes": {
-        "projectNotFound": "Проект не указан: {{project}} нет в {{destination}}."
+        "priority": {
+          "urgent": "Приоритет: Срочный",
+          "high": "Приоритет: Высокий",
+          "medium": "Приоритет: Средний",
+          "low": "Приоритет: Низкий",
+          "none": "Приоритет: Нет"
+        },
+        "assignedToYou": "Исполнитель: вы"
       }
     },
     "recent": {

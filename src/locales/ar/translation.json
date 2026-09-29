@@ -955,7 +955,14 @@
         "failedBody": "عد إلى OpenWhispr للمحاولة مرة أخرى."
       },
       "notes": {
-        "projectNotFound": "لم يُحدَّد المشروع: {{project}} ليس في {{destination}}."
+        "priority": {
+          "urgent": "الأولوية: عاجلة",
+          "high": "الأولوية: عالية",
+          "medium": "الأولوية: متوسطة",
+          "low": "الأولوية: منخفضة",
+          "none": "الأولوية: لا شيء"
+        },
+        "assignedToYou": "المُسنَد إليه: أنت"
       }
     },
     "recent": {

@@ -3,6 +3,8 @@
 // write; the card's Send commits exactly what the card shows, rebuilt and
 // re-checked here.
 const crypto = require("crypto");
+const { isTransportErrorCode } = require("./deliveryClassifier");
+const { connectorResultPage } = require("./oauthResultPage");
 const { createLinearApi } = require("./linearApi");
 const { createLinearAuth, linearRedirectUri } = require("./linearAuth");
 const { createLinearTeams } = require("./linearTeams");
@@ -18,17 +20,11 @@ const SNIPPET_LENGTH = 300;
 // refuses a second create with it, so an uncertain create can be looked up.
 const CREATE_LOOKUP = true;
 
-// Linear's own priority numbers and names (plan decision L9).
-const PRIORITIES = {
-  urgent: { value: 1, label: "Urgent" },
-  high: { value: 2, label: "High" },
-  medium: { value: 3, label: "Medium" },
-  low: { value: 4, label: "Low" },
-  none: { value: 0, label: "No priority" },
-};
+// Linear's own priority numbers (plan decision L9); the card words each
+// name from connectors.linear.notes.priority.<name>.
+const PRIORITIES = { urgent: 1, high: 2, medium: 3, low: 4, none: 0 };
 
 const LINE_BREAK = /[\r\n]/;
-const TRANSPORT_CODE = /^(E[A-Z0-9_]+|ERR_[A-Z0-9_]+|UND_ERR_[A-Z0-9_]+|timeout|network_error)$/;
 // What linearApi reports when Linear refused the token (401 or
 // AUTHENTICATION_ERROR): nothing happened, so the call may be repeated once
 // after refreshing the bound login.
@@ -140,29 +136,52 @@ function clip(text, max) {
     .trimEnd()}…`;
 }
 
+// Characters (code points), as the card counts them (issueApprovalFields.ts),
+// so a card the user could send is never refused here for its length.
+function characterCount(text) {
+  return [...text].length;
+}
+
 function titleProblem(title) {
   if (typeof title !== "string" || !title.trim()) return "missing_title";
   if (LINE_BREAK.test(title)) return "invalid_input";
-  // UTF-16 units, as the card counts them: never more than the card allows.
-  if (title.length > MAX_TITLE_LENGTH) return "too_long";
+  if (characterCount(title) > MAX_TITLE_LENGTH) return "too_long";
   return null;
 }
 
 function bodyProblem(body, { required }) {
   if (typeof body !== "string") return required ? "missing_body" : null;
   if (required && !body.trim()) return "missing_body";
-  if (body.length > MAX_DESCRIPTION_LENGTH) return "too_long";
+  if (characterCount(body) > MAX_DESCRIPTION_LENGTH) return "too_long";
   return null;
+}
+
+// A Linear issue link without its title slug, which receipts must not keep:
+// https://linear.app/<urlKey>/issue/ENG-123[#comment-…]. Null for anything
+// that isn't a Linear issue link.
+function issueLink(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.hostname !== "linear.app" || url.port) return null;
+  const [workspace, kind, identifier] = url.pathname.split("/").filter(Boolean);
+  if (!workspace || kind !== "issue" || !IDENTIFIER.test(identifier ?? "")) return null;
+  return `https://linear.app/${workspace}/issue/${identifier}${url.hash}`;
+}
+
+// The network or an outage, rather than an answer from Linear.
+function isNetworkCode(errorCode) {
+  return isTransportErrorCode(errorCode) || /^http_5\d\d$/.test(errorCode ?? "");
 }
 
 // The connector's own code for a failed call: Linear's refusals and the
 // network's, so the card and the tool step can word them.
 function failureCode(errorCode) {
   if (OWN_CODES.has(errorCode)) return errorCode;
-  if (TRANSPORT_CODE.test(errorCode ?? "") || /^http_5\d\d$/.test(errorCode ?? "")) {
-    return "network";
-  }
-  return "refused";
+  return isNetworkCode(errorCode) ? "network" : "refused";
 }
 
 // English for the model; the card and the tool step show translated copy by
@@ -221,8 +240,13 @@ function commitFailed(errorCode, message = failureMessage(errorCode)) {
 // prototype itself instead of failing as an unknown priority.
 function priorityFor(value) {
   return typeof value === "string" && Object.hasOwn(PRIORITIES, value)
-    ? PRIORITIES[value]
+    ? { name: value, value: PRIORITIES[value] }
     : undefined;
+}
+
+// Models often send null for an optional argument they leave out.
+function isAbsent(value) {
+  return value === undefined || value === null;
 }
 
 function stringOrNull(value) {
@@ -262,22 +286,6 @@ function createLinearConnector({
   credentials,
   randomId = () => crypto.randomUUID(),
 }) {
-  // The bound login, read locally with no refresh and no network call: the
-  // same identity check auth.getAccessToken makes. Null when the binding is
-  // stale, in which case getAccessToken fails the same way.
-  function boundCredential(binding) {
-    const entry = credentials.read(binding?.ownerAccountId ?? null, "linear");
-    if (
-      !entry ||
-      entry.generation !== binding?.generation ||
-      entry.credential.userId !== binding?.accountId ||
-      entry.credential.organizationId !== binding?.workspaceId
-    ) {
-      return null;
-    }
-    return entry.credential;
-  }
-
   // Linear refusing a token it just issued means the login itself is gone.
   function refusedAgain(binding) {
     return { ok: false, outcome: "failed", errorCode: auth.markReconnect(binding).errorCode };
@@ -309,14 +317,14 @@ function createLinearConnector({
   async function searchIssues(args, binding) {
     const term = typeof args?.query === "string" ? args.query.trim() : "";
     if (!term) return clarify("Ask the user what to search Linear for.");
-    if (term.length > MAX_QUERY_LENGTH) {
+    if (characterCount(term) > MAX_QUERY_LENGTH) {
       return prepareFailed("too_long", `Search with ${MAX_QUERY_LENGTH} characters or fewer.`);
     }
     const state = args?.state ?? "open";
     if (state !== "open" && state !== "all") {
       return prepareFailed("invalid_input", 'state is "open" or "all".');
     }
-    if (args?.assignedToMe !== undefined && typeof args.assignedToMe !== "boolean") {
+    if (!isAbsent(args?.assignedToMe) && typeof args.assignedToMe !== "boolean") {
       return prepareFailed("invalid_input", "assignedToMe is true or false.");
     }
 
@@ -369,7 +377,7 @@ function createLinearConnector({
     const description = typeof args?.description === "string" ? args.description : "";
     const problem = titleProblem(title) ?? bodyProblem(description, { required: false });
     if (problem) return prepareFailed(problem);
-    const priority = args?.priority === undefined ? null : priorityFor(args.priority);
+    const priority = isAbsent(args?.priority) ? null : priorityFor(args.priority);
     if (priority === undefined) {
       return prepareFailed("invalid_input", "priority is urgent, high, medium, low or none.");
     }
@@ -390,20 +398,19 @@ function createLinearConnector({
     const { team } = resolved.result;
 
     const notes = [];
-    if (priority) {
-      notes.push({
-        key: "connectors.approval.issue.notes.priority",
-        values: { priority: priority.label },
-      });
-    }
+    if (priority) notes.push({ key: `connectors.linear.notes.priority.${priority.name}` });
     const { credential } = access;
     // The card is the truth: an assigneeId is never sent without a note
     // saying so, even when Linear never told us the viewer's name.
     if (args?.assignToMe === true) {
-      notes.push({
-        key: "connectors.approval.issue.notes.assignee",
-        values: { assignee: nonEmptyString(credential.userName) ? credential.userName : "you" },
-      });
+      notes.push(
+        nonEmptyString(credential.userName)
+          ? {
+              key: "connectors.approval.issue.notes.assignee",
+              values: { assignee: credential.userName },
+            }
+          : { key: "connectors.linear.notes.assignedToYou" }
+      );
     }
 
     let projectId = null;
@@ -418,19 +425,11 @@ function createLinearConnector({
         return clarify(message, candidates);
       }
       if (!found.result.ok) return readFailed(found.result);
-      if (found.result.project) {
-        projectId = found.result.project.id;
-        notes.push({
-          key: "connectors.approval.issue.notes.project",
-          values: { project: found.result.project.name },
-        });
-      } else {
-        // Not found in the team: created without a project, and the card says so.
-        notes.push({
-          key: "connectors.linear.notes.projectNotFound",
-          values: { project: projectInput, destination: team.key },
-        });
-      }
+      projectId = found.result.project.id;
+      notes.push({
+        key: "connectors.approval.issue.notes.project",
+        values: { project: found.result.project.name },
+      });
     }
 
     return {
@@ -462,7 +461,7 @@ function createLinearConnector({
     const problem = bodyProblem(body, { required: true });
     if (problem) return prepareFailed(problem);
     // Checked on the stored login before any network call.
-    const bound = boundCredential(binding);
+    const bound = auth.boundCredential(binding);
     if (!bound) return prepareFailed("connection_changed");
     const reference = parseIssueReference(args?.issue, bound.organizationUrlKey);
     if (!reference.ok) return prepareFailed(reference.errorCode);
@@ -479,13 +478,12 @@ function createLinearConnector({
       );
     }
     if (!result.ok) return readFailed(result);
-    if (!nonEmptyString(issue.id) || !nonEmptyString(issue.url)) {
-      return prepareFailed("refused");
-    }
+    const issueUrl = issueLink(issue.url);
+    if (!nonEmptyString(issue.id) || !issueUrl) return prepareFailed("refused");
     const identifier = nonEmptyString(issue.identifier) ? issue.identifier : reference.identifier;
     return {
       status: "ready",
-      payload: { id: randomId(), issueId: issue.id, identifier, issueUrl: issue.url, body },
+      payload: { id: randomId(), issueId: issue.id, identifier, issueUrl, body },
       preview: {
         verbKey: "comment",
         destinationLabel: identifier,
@@ -503,16 +501,12 @@ function createLinearConnector({
     };
   }
 
-  // A lookup miss proves nothing unless the create's own uncertain answer was
-  // a completed HTTP 200 (a listed GraphQL error, or a 200 whose issueCreate
-  // didn't carry a usable issue). After a timeout, a connection reset or a
-  // 5xx, Linear may still commit the insert later, so a miss stays unknown.
-  function isCompletedAnswer(errorCode) {
-    return !TRANSPORT_CODE.test(errorCode ?? "") && !/^http_5\d\d$/.test(errorCode ?? "");
-  }
-
   // The create was sent with its client id, and Linear refuses a second
-  // create with the same one, so a single lookup settles it.
+  // create with the same one, so a single lookup settles it. A miss proves
+  // nothing unless the create's own uncertain answer was a completed HTTP 200
+  // (an unlisted GraphQL error, or a 200 whose issueCreate didn't carry a
+  // usable issue). After a timeout, a connection reset or a 5xx, Linear may
+  // still commit the insert later, so a miss stays unknown.
   async function settleUncertainCreate(binding, access, payload, uncertain) {
     const checkUrl = teamIssuesUrl(access.credential.organizationUrlKey, payload.teamKey);
     const stillUnknown = { state: "unknown", errorCode: uncertain.errorCode, checkUrl };
@@ -521,11 +515,12 @@ function createLinearConnector({
       api.graphql(ISSUE_QUERY, { id: payload.id }, { token })
     );
     const issue = result.ok ? result.data?.issue : null;
-    if (issue && nonEmptyString(issue.url) && nonEmptyString(issue.identifier)) {
-      return { state: "sent", url: issue.url, resultLabel: issue.identifier };
+    const url = issueLink(issue?.url);
+    if (url && nonEmptyString(issue.identifier)) {
+      return { state: "sent", url, resultLabel: issue.identifier };
     }
     const missing = (result.ok && result.data?.issue === null) || result.errorCode === "not_found";
-    if (missing && isCompletedAnswer(uncertain.errorCode)) {
+    if (missing && !isNetworkCode(uncertain.errorCode)) {
       return commitFailed("not_created");
     }
     return stillUnknown;
@@ -545,8 +540,8 @@ function createLinearConnector({
     const { result } = await withRefresh(binding, access, (token) =>
       api.graphql(COMMENT_QUERY, { id: payload.id }, { token })
     );
-    const comment = result.ok ? result.data?.comment : null;
-    return nonEmptyString(comment?.url) ? { state: "sent", url: comment.url } : stillUnknown;
+    const url = result.ok ? issueLink(result.data?.comment?.url) : null;
+    return url ? { state: "sent", url } : stillUnknown;
   }
 
   async function commitCreate(payload, edits, binding) {
@@ -576,13 +571,14 @@ function createLinearConnector({
       return commitFailed(failureCode(result.errorCode));
     }
     const issue = result.ok ? result.data?.issueCreate?.issue : null;
+    const url = issueLink(issue?.url);
     if (
       result.ok &&
       result.data?.issueCreate?.success === true &&
-      nonEmptyString(issue?.url) &&
-      nonEmptyString(issue?.identifier)
+      url &&
+      nonEmptyString(issue.identifier)
     ) {
-      return { state: "sent", url: issue.url, resultLabel: issue.identifier };
+      return { state: "sent", url, resultLabel: issue.identifier };
     }
     return settleUncertainCreate(
       binding,
@@ -620,9 +616,9 @@ function createLinearConnector({
     if (!result.ok && result.outcome === "failed") {
       return commitFailed(failureCode(result.errorCode));
     }
-    const comment = result.ok ? result.data?.commentCreate?.comment : null;
-    if (result.ok && result.data?.commentCreate?.success === true && nonEmptyString(comment?.url)) {
-      return { state: "sent", url: comment.url };
+    const url = result.ok ? issueLink(result.data?.commentCreate?.comment?.url) : null;
+    if (result.ok && result.data?.commentCreate?.success === true && url) {
+      return { state: "sent", url };
     }
     return settleUncertainComment(
       binding,
@@ -719,16 +715,7 @@ function buildLinearConnector(deps) {
     // the loopback server's random port can't be registered: sign-in goes
     // through the openwhispr.com relay instead (plan Task 9).
     redirectUri: linearRedirectUri(deps.env),
-    renderResultPage: ({ ok }) =>
-      deps.renderOAuthResultPage({
-        ok,
-        title: deps.i18n.t(
-          ok ? "connectors.linear.browser.connectedTitle" : "connectors.linear.browser.failedTitle"
-        ),
-        body: deps.i18n.t(
-          ok ? "connectors.linear.browser.connectedBody" : "connectors.linear.browser.failedBody"
-        ),
-      }),
+    renderResultPage: connectorResultPage(deps, "linear"),
     logger: deps.logger,
   });
   const teams = createLinearTeams({ api });

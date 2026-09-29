@@ -4099,7 +4099,14 @@
         "failedBody": "Volte para o OpenWhispr para tentar novamente."
       },
       "notes": {
-        "projectNotFound": "Projeto não definido: {{project}} não está em {{destination}}."
+        "priority": {
+          "urgent": "Prioridade: Urgente",
+          "high": "Prioridade: Alta",
+          "medium": "Prioridade: Média",
+          "low": "Prioridade: Baixa",
+          "none": "Prioridade: Nenhuma"
+        },
+        "assignedToYou": "Responsável: você"
       }
     },
     "recent": {

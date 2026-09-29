@@ -23,6 +23,9 @@ const ENG = { id: "team-eng", key: "ENG", name: "Engineering" };
 const DES = { id: "team-des", key: "DES", name: "Design" };
 const Q4 = { id: "proj-q4", name: "Q4 launch" };
 const ISSUE_URL = "https://linear.app/acme/issue/ENG-123/login-fails-after-update";
+// Links as main keeps them: without the title slug, which receipts must not hold.
+const ISSUE_LINK = "https://linear.app/acme/issue/ENG-123";
+const CREATED_LINK = "https://linear.app/acme/issue/ENG-431";
 const TEAM_ISSUES = "https://linear.app/acme/team/ENG/all";
 const ENG_123 = {
   id: "issue-123",
@@ -83,7 +86,7 @@ const CRASH = { team: "ENG", title: "Crash on launch", description: "It crashes.
 
 // linearTeams (plan Task 6) behind its interface: named teams resolve by key
 // or name, an omitted team resolves only in a one-team workspace, and a
-// project not in the team is dropped. `replies` answer resolveTeam first.
+// project not in the team is a question. `replies` answer resolveTeam first.
 function stubTeams({ teams = [ENG, DES], projects = { "team-eng": [Q4] }, replies = [] } = {}) {
   const calls = [];
   const queue = [...replies];
@@ -128,7 +131,15 @@ function stubTeams({ teams = [ENG, DES], projects = { "team-eng": [Q4] }, replie
       const project = (projects[teamId] ?? []).find(
         (candidate) => candidate.name.toLowerCase() === input.toLowerCase()
       );
-      return project ? { ok: true, project } : { ok: true, project: null, dropped: input };
+      return project
+        ? { ok: true, project }
+        : {
+            ok: false,
+            clarification: {
+              message: `No Linear project in this team matches "${input}".`,
+              candidates: (projects[teamId] ?? []).map((candidate) => candidate.name),
+            },
+          };
     },
     clear() {},
   };
@@ -460,7 +471,7 @@ test("prepare shows the issue the card will create, without calling Linear", asy
       body: "Steps:\n1. Open the app",
       fields: { title: "Crash on launch", body: "Steps:\n1. Open the app" },
       notes: [
-        { key: "connectors.approval.issue.notes.priority", values: { priority: "High" } },
+        { key: "connectors.linear.notes.priority.high" },
         { key: "connectors.approval.issue.notes.assignee", values: { assignee: "Dana" } },
         { key: "connectors.approval.issue.notes.project", values: { project: "Q4 launch" } },
       ],
@@ -491,18 +502,16 @@ test("with no team named, one team is used and several are a question listing th
   assert.deepEqual(asked.candidates, ["ENG · Engineering", "DES · Design"]);
 });
 
-test("a project that isn't in the team is left off, and the card says so", async () => {
+test("a project that isn't in the team is a question listing the team's projects, never dropped", async () => {
   const { connector } = await setupLinear();
 
-  const prepared = await prepareCrash(connector, { project: "Roadmap" });
+  const asked = await connector.prepare("create_issue", { ...CRASH, project: "Roadmap" }, BOUND);
 
-  assert.equal("projectId" in prepared.payload, false);
-  assert.deepEqual(prepared.preview.notes, [
-    {
-      key: "connectors.linear.notes.projectNotFound",
-      values: { project: "Roadmap", destination: "ENG" },
-    },
-  ]);
+  assert.deepEqual(asked, {
+    status: "needs_clarification",
+    message: 'No Linear project in this team matches "Roadmap".',
+    candidates: ["Q4 launch"],
+  });
 });
 
 test("assignToMe with no Linear name still shows an assignee note, and always sends the assigneeId with one", async () => {
@@ -511,10 +520,7 @@ test("assignToMe with no Linear name still shows an assignee note, and always se
   const prepared = await prepareCrash(connector, { assignToMe: true });
 
   assert.equal(prepared.payload.assigneeId, "user-1");
-  assert.deepEqual(
-    prepared.preview.notes.find((note) => note.key === "connectors.approval.issue.notes.assignee"),
-    { key: "connectors.approval.issue.notes.assignee", values: { assignee: "you" } }
-  );
+  assert.deepEqual(prepared.preview.notes, [{ key: "connectors.linear.notes.assignedToYou" }]);
 });
 
 test("prepare refuses a title or description Linear can't take, before any lookup", async () => {
@@ -538,6 +544,101 @@ test("prepare refuses a title or description Linear can't take, before any looku
   assert.equal(teams.calls.length, 2, "only the two that passed looked the team up");
 });
 
+test("lengths count characters as the card does, so a title of 256 emoji is ready", async () => {
+  const { connector } = await setupLinear();
+  assert.equal((await prepareCrash(connector, { title: "😀".repeat(256) })).status, "ready");
+  const over = await connector.prepare(
+    "create_issue",
+    { ...CRASH, title: "😀".repeat(257) },
+    BOUND
+  );
+  assert.deepEqual([over.status, over.errorCode], ["failed", "too_long"]);
+
+  const prepared = await prepareCrash(connector);
+  const { linear, connector: sending } = await setupLinear({
+    [GRAPHQL]: { LinearIssueCreate: [CREATED] },
+  });
+  const sent = await sending.commit(
+    "create_issue",
+    prepared.payload,
+    { title: "😀".repeat(256), body: "🧪".repeat(65536) },
+    BOUND
+  );
+  assert.equal(sent.state, "sent", "the card allowed it, so Send does too");
+  assert.equal(ops(linear, "LinearIssueCreate").length, 1);
+});
+
+test("an optional argument sent as null is left out, as if it weren't there", async () => {
+  const { connector, linear } = await setupLinear({
+    [GRAPHQL]: { LinearSearchIssues: [searchReply([issueNode(1)])] },
+  });
+
+  const prepared = await prepareCrash(connector, {
+    description: null,
+    priority: null,
+    assignToMe: null,
+    project: null,
+  });
+  assert.equal(prepared.payload.description, "");
+  assert.equal("priority" in prepared.payload, false);
+  assert.equal("assigneeId" in prepared.payload, false);
+  assert.equal("projectId" in prepared.payload, false);
+  assert.deepEqual(prepared.preview.notes, []);
+
+  const found = await connector.query(
+    "search_issues",
+    { query: "login", team: null, assignedToMe: null, state: null },
+    BOUND
+  );
+  assert.equal(found.status, "ok");
+  assert.deepEqual(ops(linear, "LinearSearchIssues")[0].variables.filter, {
+    state: { type: { nin: ["completed", "canceled"] } },
+  });
+});
+
+test("links keep no title slug or query, and a link that isn't Linear's is never kept", async () => {
+  const { connector } = await setupLinear({
+    [GRAPHQL]: {
+      LinearIssue: [
+        gql({ issue: { ...ENG_123, url: `${ISSUE_URL}?utm_source=x` } }),
+        gql({ issue: { ...ENG_123, url: "https://linear.example/acme/issue/ENG-123/x" } }),
+      ],
+    },
+  });
+  const kept = await connector.prepare("comment", { issue: "ENG-123", body: "hi" }, BOUND);
+  assert.equal(kept.payload.issueUrl, ISSUE_LINK);
+
+  const foreign = await connector.prepare("comment", { issue: "ENG-123", body: "hi" }, BOUND);
+  assert.deepEqual([foreign.status, foreign.errorCode], ["failed", "refused"]);
+
+  // A create whose answer links elsewhere isn't taken as sent: it is looked up.
+  const create = await setupLinear({
+    [GRAPHQL]: {
+      LinearIssueCreate: [
+        gql({
+          issueCreate: {
+            success: true,
+            issue: {
+              id: CLIENT_UUID,
+              identifier: "ENG-431",
+              url: "http://linear.app/acme/issue/ENG-431",
+            },
+          },
+        }),
+      ],
+      LinearIssue: [FOUND_CREATED],
+    },
+  });
+  const result = await create.connector.commit(
+    "create_issue",
+    (await prepareCrash(create.connector)).payload,
+    {},
+    BOUND
+  );
+  assert.deepEqual(result, { state: "sent", url: CREATED_LINK, resultLabel: "ENG-431" });
+  assert.deepEqual(create.linear.operations(), ["LinearIssueCreate", "LinearIssue"]);
+});
+
 test("Send creates exactly the card's issue, with its client id, and reports the new key", async () => {
   const { connector, linear } = await setupLinear({
     [GRAPHQL]: { LinearIssueCreate: [CREATED] },
@@ -559,7 +660,7 @@ test("Send creates exactly the card's issue, with its client id, and reports the
 
   assert.deepEqual(result, {
     state: "sent",
-    url: "https://linear.app/acme/issue/ENG-431/crash-on-launch",
+    url: CREATED_LINK,
     resultLabel: "ENG-431",
   });
   const [create] = ops(linear, "LinearIssueCreate");
@@ -664,7 +765,7 @@ test("an uncertain create found by its client id is sent, with its key", async (
 
     assert.deepEqual(result, {
       state: "sent",
-      url: "https://linear.app/acme/issue/ENG-431/crash-on-launch",
+      url: CREATED_LINK,
       resultLabel: "ENG-431",
     });
     assert.deepEqual(linear.operations(), ["LinearIssueCreate", "LinearIssue"]);
@@ -872,7 +973,7 @@ test("a comment card names the issue it goes on, from a key or a link", async ()
         id: CLIENT_UUID,
         issueId: "issue-123",
         identifier: "ENG-123",
-        issueUrl: ISSUE_URL,
+        issueUrl: ISSUE_LINK,
         body: "Fixed in 1.9.1.",
       },
       preview: {
@@ -942,7 +1043,7 @@ test("Send posts the card's comment once and links to it", async () => {
     BOUND
   );
 
-  assert.deepEqual(result, { state: "sent", url: `${ISSUE_URL}#comment-1` });
+  assert.deepEqual(result, { state: "sent", url: `${ISSUE_LINK}#comment-1` });
   assert.deepEqual(ops(linear, "LinearCommentCreate")[0].variables, {
     input: { id: CLIENT_UUID, issueId: "issue-123", body: "Fixed in 1.9.1, edited." },
   });
@@ -957,11 +1058,15 @@ test("a comment prepared by key whose Linear issue.url carries a different works
     },
   });
   const prepared = await connector.prepare("comment", { issue: "ENG-123", body: "hi" }, BOUND);
-  assert.equal(prepared.payload.issueUrl, renamedUrl, "prepare stored Linear's own (renamed) url");
+  assert.equal(
+    prepared.payload.issueUrl,
+    "https://linear.app/renamed/issue/ENG-123",
+    "prepare stored Linear's own (renamed) link, without its slug"
+  );
 
   const result = await connector.commit("comment", prepared.payload, {}, BOUND);
 
-  assert.deepEqual(result, { state: "sent", url: `${ISSUE_URL}#comment-1` });
+  assert.deepEqual(result, { state: "sent", url: `${ISSUE_LINK}#comment-1` });
   assert.deepEqual(ops(linear, "LinearCommentCreate")[0].variables, {
     input: { id: CLIENT_UUID, issueId: "issue-123", body: "hi" },
   });
@@ -980,7 +1085,7 @@ test("an uncertain comment found by its client id is sent, and is never repeated
 
     const result = await connector.commit("comment", prepared.payload, {}, BOUND);
 
-    assert.deepEqual(result, { state: "sent", url: `${ISSUE_URL}#comment-1` });
+    assert.deepEqual(result, { state: "sent", url: `${ISSUE_LINK}#comment-1` });
     assert.equal(ops(linear, "LinearCommentCreate").length, 1);
     assert.deepEqual(ops(linear, "LinearComment")[0].variables, { id: CLIENT_UUID });
   }
@@ -1008,7 +1113,7 @@ test("an uncertain comment its lookup doesn't find stays unknown, points at the 
       const result = await connector.commit("comment", prepared.payload, {}, BOUND);
 
       assert.equal(result.state, "unknown");
-      assert.equal(result.checkUrl, ISSUE_URL);
+      assert.equal(result.checkUrl, ISSUE_LINK);
       assert.deepEqual(ops(linear, "LinearCommentCreate").length, 1);
       assert.equal(ops(linear, "LinearComment").length, 1);
     }

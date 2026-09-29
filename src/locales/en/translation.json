@@ -4268,7 +4268,14 @@
         "failedBody": "Return to OpenWhispr to try again."
       },
       "notes": {
-        "projectNotFound": "Project not set: {{project}} isn't in {{destination}}."
+        "priority": {
+          "urgent": "Priority: Urgent",
+          "high": "Priority: High",
+          "medium": "Priority: Medium",
+          "low": "Priority: Low",
+          "none": "Priority: None"
+        },
+        "assignedToYou": "Assignee: you"
       }
     },
     "recent": {

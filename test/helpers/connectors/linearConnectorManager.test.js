@@ -45,11 +45,7 @@ const silentLogger = { info() {}, warn() {}, error() {} };
 const oneTeam = {
   list: async () => ({ ok: true, teams: [ENG] }),
   resolveTeam: async () => ({ ok: true, team: ENG }),
-  resolveProject: async (_binding, _token, _teamId, input) => ({
-    ok: true,
-    project: null,
-    dropped: input,
-  }),
+  resolveProject: async () => ({ ok: true, project: null }),
   clear() {},
 };
 
@@ -140,7 +136,11 @@ test("Send creates the card's issue, and the receipt names only the team", async
     ALLOWED
   );
 
-  assert.deepEqual(result, { state: "sent", url: ISSUE.url, resultLabel: "ENG-431" });
+  assert.deepEqual(result, {
+    state: "sent",
+    url: "https://linear.app/acme/issue/ENG-431",
+    resultLabel: "ENG-431",
+  });
   assert.deepEqual(ops(linear, "LinearIssueCreate")[0].variables.input, {
     id: CLIENT_UUID,
     teamId: "team-eng",
@@ -150,7 +150,11 @@ test("Send creates the card's issue, and the receipt names only the team", async
   const row = log.rows.get(prepared.actionId);
   assert.equal(row.state, "sent");
   assert.equal(row.destinationLabel, "ENG");
-  assert.doesNotMatch(JSON.stringify([...log.rows.values()]), /Crash on launch|crashes|Edited/);
+  assert.doesNotMatch(
+    JSON.stringify([...log.rows.values()]),
+    /Crash on launch|crash-on-launch|crashes|Edited/,
+    "not even the title's slug in the receipt's link"
+  );
 });
 
 test("a title edited to two lines never reaches Linear", async () => {

@@ -4152,7 +4152,14 @@
         "failedBody": "Vuelve a OpenWhispr para intentarlo de nuevo."
       },
       "notes": {
-        "projectNotFound": "Proyecto no asignado: {{project}} no está en {{destination}}."
+        "priority": {
+          "urgent": "Prioridad: Urgente",
+          "high": "Prioridad: Alta",
+          "medium": "Prioridad: Media",
+          "low": "Prioridad: Baja",
+          "none": "Prioridad: Ninguna"
+        },
+        "assignedToYou": "Asignado a: ti"
       }
     },
     "recent": {

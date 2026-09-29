@@ -314,33 +314,32 @@ test("a project resolves by name within the team, cached per team", async () => 
   assert.equal(count("LinearTeamProjects"), 2, "another team is its own list");
 });
 
-test("no project named means no project and nothing dropped, with no request", async () => {
+test("no project named means no project, with no request", async () => {
   const { directory, linear } = await setup();
   for (const input of [undefined, null, "", "  "]) {
     assert.deepEqual(await directory.resolveProject(BINDING, TOKEN, "team-eng", input), {
       ok: true,
       project: null,
-      dropped: null,
     });
   }
   assert.deepEqual(linear.calls, []);
 });
 
-test("an unknown project is dropped and reported, not guessed", async () => {
+test("an unknown project is a question listing the team's projects, not guessed or dropped", async () => {
   const { directory } = await setup();
 
   assert.deepEqual(await directory.resolveProject(BINDING, TOKEN, "team-eng", " Q5 launch "), {
-    ok: true,
-    project: null,
-    dropped: "Q5 launch",
+    ok: false,
+    clarification: {
+      message:
+        'No Linear project in this team matches "Q5 launch". Ask the user which project to use, or whether to create the issue without one.',
+      candidates: ["Q4 launch", "Onboarding"],
+    },
   });
 
   const noTeam = await setup({ projects: [gql({ team: null })] });
-  assert.deepEqual(await noTeam.directory.resolveProject(BINDING, TOKEN, "team-x", "Q4 launch"), {
-    ok: true,
-    project: null,
-    dropped: "Q4 launch",
-  });
+  const asked = await noTeam.directory.resolveProject(BINDING, TOKEN, "team-x", "Q4 launch");
+  assert.deepEqual(asked.clarification.candidates, []);
 });
 
 test("an ambiguous project asks, listing the candidates", async () => {
@@ -363,7 +362,7 @@ test("an ambiguous project asks, listing the candidates", async () => {
   });
 });
 
-test("a cut-off project list matches exact names only, and drops the rest", async () => {
+test("a cut-off project list matches exact names only, and asks about the rest", async () => {
   const { directory } = await setup({
     projects: [projectsReply([{ id: "proj-q4", name: "Q4 launch" }], true)],
   });
@@ -372,10 +371,59 @@ test("a cut-off project list matches exact names only, and drops the rest", asyn
     ok: true,
     project: { id: "proj-q4", name: "Q4 launch" },
   });
-  assert.deepEqual(await directory.resolveProject(BINDING, TOKEN, "team-eng", "Q4"), {
+  const asked = await directory.resolveProject(BINDING, TOKEN, "team-eng", "Q4");
+  assert.equal(asked.ok, false);
+  assert.match(asked.clarification.message, /No Linear project in this team matches "Q4"/);
+});
+
+test("a name that matches nothing in a list older than 30 s reads the list once more", async () => {
+  const { REFETCH_AFTER_MS } = await loadTeams();
+  assert.equal(REFETCH_AFTER_MS, 30 * 1000);
+  const GROWTH = { id: "team-grw", key: "GRW", name: "Growth" };
+  const { directory, advance, count } = await setup({
+    teams: [teamsReply([ENG, DES]), teamsReply([ENG, DES, GROWTH])],
+    projects: [
+      projectsReply([{ id: "proj-q4", name: "Q4 launch" }]),
+      projectsReply([
+        { id: "proj-q4", name: "Q4 launch" },
+        { id: "proj-q1", name: "Q1 plan" },
+      ]),
+    ],
+  });
+
+  // A fresh list is trusted: a miss asks without reading it again.
+  assert.equal((await directory.resolveTeam(BINDING, TOKEN, "Growth")).ok, false);
+  assert.equal((await directory.resolveProject(BINDING, TOKEN, "team-eng", "Q1 plan")).ok, false);
+  assert.deepEqual([count("LinearTeams"), count("LinearTeamProjects")], [1, 1]);
+
+  advance(REFETCH_AFTER_MS);
+  assert.deepEqual(await directory.resolveTeam(BINDING, TOKEN, "Growth"), {
     ok: true,
-    project: null,
-    dropped: "Q4",
+    team: GROWTH,
+  });
+  assert.deepEqual(await directory.resolveProject(BINDING, TOKEN, "team-eng", "Q1 plan"), {
+    ok: true,
+    project: { id: "proj-q1", name: "Q1 plan" },
+  });
+  assert.deepEqual([count("LinearTeams"), count("LinearTeamProjects")], [2, 2]);
+
+  // A match never reads again, and the fresher list is what's cached now.
+  await directory.resolveTeam(BINDING, TOKEN, "ENG");
+  assert.equal(count("LinearTeams"), 2);
+});
+
+test("a failed second read after a miss is passed on, never treated as 'not found'", async () => {
+  const { REFETCH_AFTER_MS } = await loadTeams();
+  const { directory, advance } = await setup({
+    teams: [teamsReply([ENG, DES]), httpStatus(503)],
+  });
+  await directory.list(BINDING, TOKEN);
+  advance(REFETCH_AFTER_MS);
+
+  assert.deepEqual(await directory.resolveTeam(BINDING, TOKEN, "Growth"), {
+    ok: false,
+    outcome: "unknown",
+    errorCode: "http_503",
   });
 });
 

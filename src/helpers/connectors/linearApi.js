@@ -7,12 +7,8 @@
 // Every value marked "Task 3" is an assumption about Linear's wire format
 // that plan Task 3 checks (<scratchpad>/linear-decisions.md). Each lives in
 // one constant, so a finding changes a constant, not the logic.
-const {
-  classifyTransportError,
-  classifyHttpStatus,
-  transportErrorCode,
-  retryAfterMs,
-} = require("./deliveryClassifier");
+const { classifyHttpStatus, retryAfterMs } = require("./deliveryClassifier");
+const { isPlainObject, readJson, formBody, createPost } = require("./providerHttp");
 
 // Task 3: the endpoints (plan decision L2).
 const LINEAR_AUTHORIZE_URL = "https://linear.app/oauth/authorize";
@@ -65,35 +61,17 @@ const INPUT_ERROR_MESSAGE_OVERRIDES = [
 // for its own limiter and may not send `Retry-After` at all, in which case
 // this stays safe (no retry, rate_limited) rather than wrong.
 const RETRY_AFTER_HEADER = "retry-after";
-// Task 3 (REVOKE): how a token is revoked. Both documented forms at once:
-// the token in the form body and as the bearer credential.
+// Task 3 (REVOKE): how a token is revoked: in the form body, the form Task 3
+// checked and Linear's docs describe (a bearer header is their legacy form).
 function revokeRequest(token) {
   return {
-    headers: { "Content-Type": FORM, Authorization: `Bearer ${token}` },
+    headers: { "Content-Type": FORM },
     body: new URLSearchParams({ token }).toString(),
   };
 }
-
-function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-// Error statuses can carry an empty or non-JSON body.
-async function readJson(response) {
-  try {
-    const text = await response.text();
-    return text ? JSON.parse(text) : null;
-  } catch {
-    return null;
-  }
-}
-
-function formBody(params) {
-  const defined = Object.entries(params ?? {}).filter(
-    ([, value]) => value !== undefined && value !== null
-  );
-  return new URLSearchParams(defined).toString();
-}
+// A throttled or timed-out token request can pass whatever its body says, so
+// it is never a verdict on the login.
+const TRANSIENT_TOKEN_STATUSES = new Set([408, 429]);
 
 // The listed field value ("code", else "type") found on this error, or
 // undefined if neither is a non-empty string.
@@ -138,26 +116,7 @@ function createLinearApi({
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   timeoutMs = REQUEST_TIMEOUT_MS,
 }) {
-  async function post(url, headers, body) {
-    try {
-      const response = await fetchImpl(url, {
-        method: "POST",
-        headers,
-        body,
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      return { response };
-    } catch (error) {
-      return {
-        response: null,
-        failure: {
-          ok: false,
-          outcome: classifyTransportError(error),
-          errorCode: transportErrorCode(error),
-        },
-      };
-    }
-  }
+  const post = createPost({ fetchImpl, timeoutMs });
 
   async function graphqlOnce(query, variables, token) {
     const { response, failure } = await post(
@@ -244,7 +203,9 @@ function createLinearApi({
       errorCode: oauthError || `http_${response.status}`,
       // Linear answered and said no (a 4xx with an OAuth error), as opposed
       // to a network failure or an outage, which may pass.
-      ...(oauthError && outcome === "failed" ? { refused: true } : {}),
+      ...(oauthError && outcome === "failed" && !TRANSIENT_TOKEN_STATUSES.has(response.status)
+        ? { refused: true }
+        : {}),
     };
   }
 

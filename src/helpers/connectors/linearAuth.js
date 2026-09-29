@@ -147,27 +147,31 @@ function createLinearAuth({
     return clientId() !== null;
   }
 
-  // Best effort, refresh token first: revoking it ends the grant, and the
+  // Best effort, both tokens at once so neither waits on the other under
+  // the manager's revoke deadline: the refresh token ends the grant, and the
   // access token is revoked too in case Linear only ends the token it gets.
   // revokeToken (linearApi.js) never throws, but the try/catch stays as a
   // last line of defense; either way a failed revoke is logged, by kind
   // only, never the token.
   async function revokeTokens(tokens) {
-    for (const { kind, token } of tokens) {
-      if (!nonEmptyString(token)) continue;
-      try {
-        const result = await api.revokeToken(token);
-        if (!result.ok) {
-          logger?.warn("linear revoke failed", { tokenKind: kind }, "connectors");
-        }
-      } catch (error) {
-        logger?.warn(
-          "linear revoke failed",
-          { tokenKind: kind, ...describeError(error) },
-          "connectors"
-        );
-      }
-    }
+    await Promise.all(
+      tokens
+        .filter(({ token }) => nonEmptyString(token))
+        .map(async ({ kind, token }) => {
+          try {
+            const result = await api.revokeToken(token);
+            if (!result.ok) {
+              logger?.warn("linear revoke failed", { tokenKind: kind }, "connectors");
+            }
+          } catch (error) {
+            logger?.warn(
+              "linear revoke failed",
+              { tokenKind: kind, ...describeError(error) },
+              "connectors"
+            );
+          }
+        })
+    );
   }
 
   // `signal` gives the sign-in up when a newer Connect replaces it. The
@@ -336,6 +340,7 @@ function createLinearAuth({
   return {
     authorize,
     getAccessToken: login.getAccessToken,
+    boundCredential: login.boundCredential,
     markReconnect: login.markReconnect,
     revoke,
     statusOf,

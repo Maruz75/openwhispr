@@ -333,6 +333,53 @@ test("linear_create_issue prepares a card from the cleaned arguments, reports th
   assert.deepEqual(context.releases, [], "a card that appeared keeps its slot");
 });
 
+test("Linear tools read a null optional argument as left out, and count lengths in characters", async (t) => {
+  const calls = { query: [], prepare: [] };
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorQuery: async (...params) => {
+          calls.query.push(params);
+          return FOUND;
+        },
+        connectorPrepare: async (...params) => {
+          calls.prepare.push(params);
+          return { status: "failed", errorCode: "refused", message: "stop here" };
+        },
+      },
+    },
+  });
+  await setLinearStatus();
+  const { linearSearchIssuesTool, linearCreateIssueTool } = await loadLinear();
+
+  const searched = await linearSearchIssuesTool.execute(
+    { query: "login", team: null, assignedToMe: null, state: null },
+    linearContext("m9", "call-s")
+  );
+  assert.equal(searched.data.status, "ok");
+  assert.deepEqual(calls.query, [["linear", "search_issues", { query: "login" }]]);
+
+  await linearCreateIssueTool.execute(
+    {
+      title: "😀".repeat(256),
+      description: null,
+      team: null,
+      priority: null,
+      assignToMe: null,
+      project: null,
+    },
+    linearContext("m9", "call-c")
+  );
+  assert.deepEqual(calls.prepare, [["linear", "create_issue", { title: "😀".repeat(256) }]]);
+
+  const over = await linearCreateIssueTool.execute(
+    { title: "😀".repeat(257) },
+    linearContext("m9", "call-o")
+  );
+  assert.equal(over.data.errorCode, "too_long");
+  assert.equal(calls.prepare.length, 1);
+});
+
 test("linear_create_issue refuses what Linear can't take before main, and still holds delivery", async (t) => {
   let prepared = 0;
   installBrowserGlobals(t, {

@@ -4099,7 +4099,14 @@
         "failedBody": "请返回 OpenWhispr 重试。"
       },
       "notes": {
-        "projectNotFound": "未设置项目：{{destination}} 中没有 {{project}}。"
+        "priority": {
+          "urgent": "优先级：紧急",
+          "high": "优先级：高",
+          "medium": "优先级：中",
+          "low": "优先级：低",
+          "none": "优先级：无"
+        },
+        "assignedToYou": "负责人：你"
       }
     },
     "recent": {

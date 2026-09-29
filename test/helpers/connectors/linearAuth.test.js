@@ -527,6 +527,9 @@ test("a transient refresh failure keeps the login, is asked once more, then repo
     oauthError(500, "server_error"),
     oauthError(400, "temporarily_unavailable"),
     { status: 429, rawBody: "" },
+    // A throttle is never a verdict on the login, whatever its body says.
+    oauthError(429, "rate_limited"),
+    oauthError(408, "invalid_request"),
     { body: { token_type: "Bearer" } },
   ];
   for (const [index, reply] of replies.entries()) {
@@ -705,14 +708,37 @@ test("a refreshed token that can't be saved is credential_save_failed, logged wi
   assert.doesNotMatch(JSON.stringify(warnings), /access-2|refresh-2|no space left/);
 });
 
-test("revoke revokes the refresh token, then the access token, and never throws", async () => {
+test("revoke revokes the refresh token and the access token together, and never throws", async () => {
   const online = await setup({ script: { [REVOKE]: [REVOKED_OK] } });
   await online.auth.revoke(CONNECTED);
   assert.deepEqual(revoked(online.linear), ["refresh-1", "access-1"]);
   assert.deepEqual(
     hits(online.linear, REVOKE).map((call) => call.authorization),
-    ["Bearer refresh-1", "Bearer access-1"]
+    [null, null],
+    "the token goes in the form only"
   );
+
+  // Neither waits on the other: both are out before either answers.
+  let release;
+  const held = new Promise((resolve) => (release = resolve));
+  let sent = 0;
+  const { createLinearAuth } = await import("../../../src/helpers/connectors/linearAuth.js");
+  const parallel = createLinearAuth({
+    api: {
+      revokeToken: async () => {
+        sent += 1;
+        await held;
+        return { ok: true };
+      },
+    },
+    credentials: null,
+    getClientId: () => "client-1",
+  });
+  const revoking = parallel.revoke(CONNECTED);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(sent, 2);
+  release();
+  await revoking;
 
   const accessOnly = await setup({ script: { [REVOKE]: [REVOKED_OK] } });
   await accessOnly.auth.revoke({ ...CONNECTED, refreshToken: null });

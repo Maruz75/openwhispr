@@ -123,7 +123,13 @@ test("the Linear row, browser page, card note, link and receipts have copy in ev
         `browser.${key}`,
         linear.browser[key],
       ]),
-      ["notes.projectNotFound", linear.notes.projectNotFound],
+      // Each priority the card can show, and "you" as the assignee, in the
+      // locale's own words (no English value interpolated into the note).
+      ...["urgent", "high", "medium", "low", "none"].map((name) => [
+        `notes.priority.${name}`,
+        linear.notes.priority[name],
+      ]),
+      ["notes.assignedToYou", linear.notes.assignedToYou],
       ["approval.openIn.linear", connectors.approval.openIn.linear],
       ["toolStatus.unknownSent.linear", connectors.toolStatus.unknownSent.linear],
       ["recent.actions.linear_create_issue", connectors.recent.actions.linear_create_issue],
@@ -143,7 +149,9 @@ test("the Linear row, browser page, card note, link and receipts have copy in ev
       /\{\{account\}\}.*\{\{workspace\}\}|\{\{workspace\}\}.*\{\{account\}\}/
     );
     assert.match(connectors.toolStatus.unknownSent.linear, /\{\{destination\}\}/);
-    assert.match(linear.notes.projectNotFound, /\{\{project\}\}/);
+    for (const note of [...Object.values(linear.notes.priority), linear.notes.assignedToYou]) {
+      assert.doesNotMatch(note, /\{\{/, `${locale}: a note with nothing left to fill in`);
+    }
     assert.equal(linear.title, "Linear");
   }
 });

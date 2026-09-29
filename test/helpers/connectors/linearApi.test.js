@@ -445,6 +445,9 @@ test("token endpoint failures are told apart: login gone, bad client, busy, 5xx,
       oauth(400, "unauthorized_client"),
       { ok: false, outcome: "failed", errorCode: "unauthorized_client", refused: true },
     ],
+    // A throttled or timed-out answer can pass, whatever its body says.
+    [oauth(429, "rate_limited"), { ok: false, outcome: "failed", errorCode: "rate_limited" }],
+    [oauth(408, "invalid_request"), { ok: false, outcome: "failed", errorCode: "invalid_request" }],
     [
       oauth(503, "temporarily_unavailable"),
       { ok: false, outcome: "unknown", errorCode: "temporarily_unavailable" },
@@ -479,14 +482,14 @@ test("token endpoint failures are told apart: login gone, bad client, busy, 5xx,
   assert.equal(seen.size, cases.length, "every failure must be told apart");
 });
 
-test("revokeToken sends the token in the form and as the bearer; any 2xx is success", async () => {
+test("revokeToken sends the token in the form only; any 2xx is success", async () => {
   const { LINEAR_REVOKE_URL } = await load();
   assert.equal(LINEAR_REVOKE_URL, "https://api.linear.app/oauth/revoke");
   const { client, linear } = await api({ [REVOKE]: [{ status: 200, rawBody: "" }] });
 
   assert.deepEqual(await client.revokeToken("refresh-1"), { ok: true });
   assert.deepEqual(linear.calls[0].form, { token: "refresh-1" });
-  assert.equal(linear.calls[0].authorization, "Bearer refresh-1");
+  assert.equal(linear.calls[0].authorization, null);
 });
 
 test("revokeToken reports a refusal or a network error as not ok, and never throws", async () => {

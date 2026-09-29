@@ -40,6 +40,16 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+// Models often send null for an optional argument they leave out.
+function isAbsent(value: unknown): value is undefined | null {
+  return value === undefined || value === null;
+}
+
+// Characters (code points), as the card and main count them.
+function characterCount(text: string): number {
+  return [...text].length;
+}
+
 // The tool step reads "Linear needs to be reconnected.", the same copy a
 // failed reconnect_needed step shows, not the generic "connectors unavailable".
 function linearReconnectResult(): ToolResult {
@@ -67,13 +77,13 @@ function withReconnectGuidance(result: ToolResult): ToolResult {
 function searchArgs(args: Record<string, unknown>): Checked {
   const query = typeof args.query === "string" ? args.query.trim() : "";
   if (!query) return needsClarificationResult("Ask the user what to search Linear for.");
-  if (query.length > MAX_QUERY_LENGTH) {
+  if (characterCount(query) > MAX_QUERY_LENGTH) {
     return tooLong(`Search with ${MAX_QUERY_LENGTH} characters or fewer.`);
   }
-  if (args.assignedToMe !== undefined && typeof args.assignedToMe !== "boolean") {
+  if (!isAbsent(args.assignedToMe) && typeof args.assignedToMe !== "boolean") {
     return invalid("assignedToMe is true or false.");
   }
-  if (args.state !== undefined && !STATES.includes(args.state as (typeof STATES)[number])) {
+  if (!isAbsent(args.state) && !STATES.includes(args.state as (typeof STATES)[number])) {
     return invalid('state is "open" or "all".');
   }
   const team = optionalString(args.team);
@@ -88,23 +98,23 @@ function searchArgs(args: Record<string, unknown>): Checked {
 function createArgs(args: Record<string, unknown>): Checked {
   const title = typeof args.title === "string" ? args.title.replace(/[\r\n]+/g, " ").trim() : "";
   if (!title) return needsClarificationResult("Ask the user what the issue should be called.");
-  if (title.length > MAX_TITLE_LENGTH) {
+  if (characterCount(title) > MAX_TITLE_LENGTH) {
     return tooLong(`Keep the title to ${MAX_TITLE_LENGTH} characters or fewer.`);
   }
-  if (args.description !== undefined && typeof args.description !== "string") {
+  if (!isAbsent(args.description) && typeof args.description !== "string") {
     return invalid("description is Markdown text.");
   }
   const description = typeof args.description === "string" ? args.description : "";
-  if (description.length > MAX_BODY_LENGTH) {
+  if (characterCount(description) > MAX_BODY_LENGTH) {
     return tooLong(`Keep the description to ${MAX_BODY_LENGTH} characters or fewer.`);
   }
   if (
-    args.priority !== undefined &&
+    !isAbsent(args.priority) &&
     !PRIORITIES.includes(args.priority as (typeof PRIORITIES)[number])
   ) {
     return invalid("priority is urgent, high, medium, low or none.");
   }
-  if (args.assignToMe !== undefined && typeof args.assignToMe !== "boolean") {
+  if (!isAbsent(args.assignToMe) && typeof args.assignToMe !== "boolean") {
     return invalid("assignToMe is true or false.");
   }
   const team = optionalString(args.team);
@@ -128,7 +138,7 @@ function commentArgs(args: Record<string, unknown>): Checked {
   }
   const body = typeof args.body === "string" ? args.body : "";
   if (!body.trim()) return failedResult("missing_body", "The comment is empty.", "linear");
-  if (body.length > MAX_BODY_LENGTH) {
+  if (characterCount(body) > MAX_BODY_LENGTH) {
     return tooLong(`Keep the comment to ${MAX_BODY_LENGTH} characters or fewer.`);
   }
   return { issue, body };

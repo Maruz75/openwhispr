@@ -4099,7 +4099,14 @@
         "failedBody": "OpenWhisprに戻ってもう一度お試しください。"
       },
       "notes": {
-        "projectNotFound": "プロジェクトは未設定です：{{project}} は {{destination}} にありません。"
+        "priority": {
+          "urgent": "優先度: 緊急",
+          "high": "優先度: 高",
+          "medium": "優先度: 中",
+          "low": "優先度: 低",
+          "none": "優先度: なし"
+        },
+        "assignedToYou": "担当者: あなた"
       }
     },
     "recent": {
