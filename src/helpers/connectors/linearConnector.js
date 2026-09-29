@@ -4,7 +4,7 @@
 // re-checked here.
 const crypto = require("crypto");
 const { createLinearApi } = require("./linearApi");
-const { createLinearAuth } = require("./linearAuth");
+const { createLinearAuth, linearRedirectUri } = require("./linearAuth");
 const { createLinearTeams } = require("./linearTeams");
 
 const MAX_TITLE_LENGTH = 256;
@@ -659,6 +659,10 @@ function buildLinearConnector(deps) {
     getClientId: () => deps.env?.LINEAR_CLIENT_ID,
     runOAuthLoopbackFlow: deps.runOAuthLoopbackFlow,
     OAuthFlowError: deps.OAuthFlowError,
+    // Linear matches a registered redirect URI exactly, port included, so
+    // the loopback server's random port can't be registered: sign-in goes
+    // through the openwhispr.com relay instead (plan Task 9).
+    redirectUri: linearRedirectUri(deps.env),
     renderResultPage: ({ ok }) =>
       deps.renderOAuthResultPage({
         ok,

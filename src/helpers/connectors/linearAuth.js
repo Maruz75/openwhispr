@@ -9,18 +9,40 @@ const { createBoundLogin } = require("./boundLogin");
 const { LINEAR_AUTHORIZE_URL } = require("./linearApi");
 
 // Least privilege (spec §2): read, create issues, create comments. Never
-// `write` or `admin`. Task 3 (TOKEN_SHAPE): Linear's comma-separated format.
+// `write` or `admin`. The authorize URL takes this comma-separated list,
+// which Linear accepted; Linear's token response returns scope as a
+// space-separated string instead, which grantedScopes() handles.
 const LINEAR_REQUIRED_SCOPES = ["read", "issues:create", "comments:create"];
 const LINEAR_SCOPES = LINEAR_REQUIRED_SCOPES.join(",");
-// Task 3 (LINEAR_REDIRECT): Linear redirects straight to the loopback server
-// on any port. If it needs HTTPS, plan Task 9 passes the relay's
-// `redirectUri` and nothing here changes. A first sign-in (workspace choice,
-// 2FA) can outlast the calendars' 120 s, so the flow waits 5 minutes.
+// The loopback server listens on a random port, and Linear can't be
+// registered for it (a registered redirect URI must match exactly, port
+// included), so buildLinearConnector passes the relay as `redirectUri`
+// (plan Task 9). A first sign-in (workspace choice, 2FA) can outlast the
+// calendars' 120 s, so the flow waits 5 minutes.
 const LINEAR_LOOPBACK = {
   ports: [0],
   callbackPath: "/linear/callback",
   timeoutMs: 5 * 60 * 1000,
 };
+
+// Task 3 recorded LINEAR_REDIRECT=relay: Linear matches a registered
+// redirect URI exactly, port included, so the loopback server's random port
+// can't be registered. Linear redirects to the openwhispr.com relay instead,
+// which forwards the browser to the loopback server by the port in state
+// (connector spec §7.2, as for Slack).
+const LINEAR_RELAY_REDIRECT_URI = "https://openwhispr.com/auth/linear/callback";
+
+// LINEAR_OAUTH_REDIRECT_URI points a dev build at a website preview of the
+// relay. Only an https: URL is accepted; anything else uses the real relay.
+function linearRedirectUri(env) {
+  const override = env?.LINEAR_OAUTH_REDIRECT_URI;
+  if (typeof override !== "string" || !override) return LINEAR_RELAY_REDIRECT_URI;
+  try {
+    return new URL(override).protocol === "https:" ? override : LINEAR_RELAY_REDIRECT_URI;
+  } catch {
+    return LINEAR_RELAY_REDIRECT_URI;
+  }
+}
 // Task 3: `prompt=consent` shows Linear's consent screen every time, so the
 // user picks the workspace instead of reusing the last one silently.
 const AUTHORIZE_PARAMS = { response_type: "code", prompt: "consent" };
@@ -305,6 +327,8 @@ module.exports = {
   createLinearAuth,
   LINEAR_SCOPES,
   LINEAR_LOOPBACK,
+  LINEAR_RELAY_REDIRECT_URI,
+  linearRedirectUri,
   OAUTH_LOGIN_GONE,
   EXPIRY_SKEW_MS,
 };

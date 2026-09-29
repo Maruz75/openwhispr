@@ -109,7 +109,11 @@ test("authorize asks for read, issues:create and comments:create only, with PKCE
   assert.equal(options.callbackPath, "/linear/callback");
   assert.equal(options.timeoutMs, 300000);
   assert.equal(options.renderResultPage, resultPage);
-  assert.equal(options.publicRedirectUri, null, "Linear redirects straight to the loopback");
+  assert.equal(
+    options.publicRedirectUri,
+    null,
+    "createLinearAuth defaults to no relay; buildLinearConnector passes it"
+  );
   assert.equal(authUrl.origin + authUrl.pathname, "https://linear.app/oauth/authorize");
   assert.deepEqual(Object.fromEntries(authUrl.searchParams), {
     client_id: CLIENT_ID,
