@@ -408,6 +408,28 @@ test("snippets keep at most 300 characters, cut on a whole character, whitespace
   assert.equal(second.snippet, "line one line two end");
 });
 
+test("an email address in a search result's title or body never reaches the model", async () => {
+  const { connector } = await setupGithub({
+    [SEARCH]: [
+      searchPage([
+        searchHit("acme/api", 1, {
+          title: "Contact John.Doe+test@example.test about this",
+          body: "mail sam@example.test for details, cc @alice",
+        }),
+      ]),
+    ],
+  });
+
+  const [item] = (await connector.query("search_issues", { query: "x" }, BOUND)).items;
+
+  assert.equal(item.title, "Contact [email] about this");
+  assert.equal(item.snippet, "mail [email] for details, cc @alice");
+  assert.doesNotMatch(item.title, /@example\.test/);
+  assert.doesNotMatch(item.snippet, /@example\.test/);
+  // A GitHub mention has no local part before the @, so it stays as-is.
+  assert.match(item.snippet, /@alice/);
+});
+
 test("a named repo narrows the search to it, and the type and state reach the query", async () => {
   const { connector, github } = await setupGithub({ [SEARCH]: [searchPage([])] });
 
@@ -933,6 +955,71 @@ test("an edited comment is checked again at Send, and an issue locked since prep
   const result = await lockedSince.connector.commit("comment", card.payload, {}, BOUND);
   assert.equal(result.errorCode, "locked");
   assert.equal(writes(lockedSince.github).length, 0);
+});
+
+test("a comment target whose read answers a different issue is refused as not found", async () => {
+  const wrongNumber = await setupGithub({
+    [ISSUE_45]: [
+      json({
+        number: 12,
+        title: "Wrong issue",
+        state: "open",
+        locked: false,
+        html_url: "https://github.com/acme/api/issues/12",
+      }),
+    ],
+  });
+  assert.deepEqual(
+    await wrongNumber.connector.prepare("comment", { target: "acme/api#45", body: "x" }, BOUND),
+    {
+      status: "failed",
+      errorCode: "not_found",
+      message: "GitHub couldn't find that issue or pull request in acme/api; it may have moved.",
+    }
+  );
+  assert.equal(writes(wrongNumber.github).length, 0);
+
+  const wrongRepo = await setupGithub({
+    [ISSUE_45]: [
+      json({
+        number: 45,
+        title: "Moved",
+        state: "open",
+        locked: false,
+        // A redirected reply (GitHub 301s a transferred issue): same
+        // number, but a different repo than the one asked about.
+        html_url: "https://github.com/acme/other/issues/45",
+      }),
+    ],
+  });
+  assert.equal(
+    (await wrongRepo.connector.prepare("comment", { target: "acme/api#45", body: "x" }, BOUND))
+      .errorCode,
+    "not_found"
+  );
+  assert.equal(writes(wrongRepo.github).length, 0);
+});
+
+test("a comment whose re-read at Send answers a different issue posts nothing", async () => {
+  const { connector, github } = await setupGithub({
+    [ISSUE_45]: [
+      ISSUE,
+      json({
+        number: 99,
+        title: "Different issue",
+        state: "open",
+        locked: false,
+        html_url: "https://github.com/acme/api/issues/99",
+      }),
+    ],
+  });
+  const { payload } = await prepareComment(connector);
+
+  const result = await connector.commit("comment", payload, {}, BOUND);
+
+  assert.equal(result.state, "failed");
+  assert.equal(result.errorCode, "not_found");
+  assert.equal(writes(github).length, 0);
 });
 
 test("a comment that may have reached GitHub is unknown, with the issue to check", async () => {

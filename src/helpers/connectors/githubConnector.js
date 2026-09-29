@@ -32,6 +32,9 @@ const SHORT_REFERENCE = /^([^/\s#]+)\/([^/\s#]+)#(\d+)$/;
 const SEARCH_REPO_URL = /^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)$/;
 const TRANSPORT_CODE = /^(E[A-Z0-9_]+|ERR_[A-Z0-9_]+|UND_ERR_[A-Z0-9_]+|timeout|network_error)$/;
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,99}$/i;
+// spec §6.1: no email address reaches the model. Conservative on purpose, so
+// a GitHub mention ("@alice", no local part before the @) is left alone.
+const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
 const NO_REPOSITORIES_MESSAGE =
   "The OpenWhispr GitHub App isn't installed on any repository yet. Tell the user to choose repositories for it in Settings → Integrations → Connectors.";
@@ -49,6 +52,10 @@ function collapseWhitespace(text) {
   return String(text ?? "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function redactEmails(text) {
+  return String(text ?? "").replace(EMAIL_PATTERN, "[email]");
 }
 
 // At most `max` UTF-16 units, cut between code points (never inside a
@@ -219,7 +226,7 @@ function searchItem(raw, fullName) {
   return {
     reference: `${fullName}#${raw.number}`,
     isPullRequest: Boolean(pullRequest),
-    title: clip(collapseWhitespace(raw.title), MAX_TITLE_LENGTH),
+    title: clip(collapseWhitespace(redactEmails(raw.title)), MAX_TITLE_LENGTH),
     state: state === "closed" || state === "merged" ? state : "open",
     url: raw.html_url,
     updatedAt: nonEmptyString(raw.updated_at) ? raw.updated_at : null,
@@ -228,7 +235,7 @@ function searchItem(raw, fullName) {
     labels: (Array.isArray(raw.labels) ? raw.labels : [])
       .map((label) => (typeof label === "string" ? label : label?.name))
       .filter(nonEmptyString),
-    snippet: clip(collapseWhitespace(raw.body), SNIPPET_LENGTH),
+    snippet: clip(collapseWhitespace(redactEmails(raw.body)), SNIPPET_LENGTH),
   };
 }
 
@@ -332,7 +339,28 @@ function createGithubConnector({
         failure: { errorCode: "bad_response", message: "GitHub's answer couldn't be read." },
       };
     }
-    const destination = `${repo.fullName}#${issue.number}`;
+    // fetch follows redirects, and GitHub 301s a transferred issue: the
+    // reply can be a different issue than the one asked for (another
+    // number, another repo, another title). Never trust it for the
+    // destination or the payload without checking it answered the number
+    // asked for, in this repo.
+    const expectedIssueUrl =
+      `https://github.com/${repo.fullName}/issues/${target.number}`.toLowerCase();
+    const expectedPullUrl =
+      `https://github.com/${repo.fullName}/pull/${target.number}`.toLowerCase();
+    const actualUrl = issue.html_url.toLowerCase();
+    if (
+      issue.number !== target.number ||
+      (actualUrl !== expectedIssueUrl && actualUrl !== expectedPullUrl)
+    ) {
+      return {
+        failure: {
+          errorCode: "not_found",
+          message: `GitHub couldn't find that issue or pull request in ${repo.fullName}; it may have moved.`,
+        },
+      };
+    }
+    const destination = `${repo.fullName}#${target.number}`;
     if (issue.locked === true) {
       return {
         failure: {
@@ -345,7 +373,7 @@ function createGithubConnector({
       repo,
       destination,
       issue: {
-        number: issue.number,
+        number: target.number,
         title: typeof issue.title === "string" ? issue.title : "",
         isPullRequest: Boolean(issue.pull_request),
         url: issue.html_url,
