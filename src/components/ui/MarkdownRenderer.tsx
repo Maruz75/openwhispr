@@ -8,31 +8,38 @@ interface MarkdownRendererProps {
 }
 
 const FootnotePrefixContext = createContext("");
+const InsideLinkContext = createContext(false);
 
 function MarkdownLink({ node: _node, ...props }: ComponentProps<"a"> & ExtraProps): ReactElement {
   const prefix = useContext(FootnotePrefixContext);
   return (
-    <a
-      {...props}
-      aria-describedby={
-        props["aria-describedby"] === "footnote-label"
-          ? `${prefix}footnote-label`
-          : props["aria-describedby"]
-      }
-      target={props.href?.startsWith("#") ? undefined : "_blank"}
-      rel="noopener noreferrer"
-      className="text-link underline decoration-link/30 hover:decoration-link/60 transition-colors"
-    />
+    <InsideLinkContext value={true}>
+      <a
+        {...props}
+        aria-describedby={
+          props["aria-describedby"] === "footnote-label"
+            ? `${prefix}footnote-label`
+            : props["aria-describedby"]
+        }
+        target={props.href?.startsWith("#") ? undefined : "_blank"}
+        rel="noopener noreferrer"
+        className="text-link underline decoration-link/30 hover:decoration-link/60 transition-colors wrap-break-word"
+      />
+    </InsideLinkContext>
   );
 }
 
 // Replies can be steered by prompt injections in notes, calendar events or web
 // results the agent read. An <img> would fetch its URL as soon as the reply
 // renders, leaking whatever the injection packed into it, so images only ever
-// render as a link the user has to click.
+// render as a link the user has to click. Inside another link, a nested link
+// would take the click, and a relative URL resolves against the file:// page
+// (on Windows, `//host/x` is a network share), so those render as text.
 function MarkdownImage({ src, alt }: ComponentProps<"img"> & ExtraProps): ReactElement | null {
-  if (!src) return alt ? <>{alt}</> : null;
-  return <MarkdownLink href={src}>{alt || src}</MarkdownLink>;
+  const insideLink = useContext(InsideLinkContext);
+  const label = alt?.trim() || src;
+  if (!src || insideLink || !/^https?:\/\//i.test(src)) return label ? <>{label}</> : null;
+  return <MarkdownLink href={src}>{label}</MarkdownLink>;
 }
 
 // Stable component types preserve DOM state, including table scroll positions.

