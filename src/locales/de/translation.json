@@ -4262,7 +4262,9 @@
         "policy_blocked": "Konnektoren wurden von deiner Organisation deaktiviert.",
         "policy_unavailable": "Die Einstellungen deiner Organisation konnten nicht geprüft werden. Versuche es erneut.",
         "code_expired": "Der Code ist abgelaufen. Versuche es erneut.",
-        "device_flow_disabled": "Die Anmeldung bei GitHub mit einem Code ist in dieser Version nicht eingerichtet."
+        "device_flow_disabled": "Die Anmeldung bei GitHub mit einem Code ist in dieser Version nicht eingerichtet.",
+        "network": "GitHub ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.",
+        "rate_limited": "GitHub ist gerade ausgelastet. Versuche es in einer Minute erneut."
       },
       "deviceCode": {
         "instructions": "Gib diesen Code auf GitHub ein:",

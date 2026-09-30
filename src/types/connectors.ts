@@ -98,6 +98,8 @@ export interface ConnectorStatus {
   configured: boolean;
   accountLabel: string | null;
   workspaceLabel: string | null;
+  /** GitHub: connected, and this login's first repository count hasn't been read yet. */
+  workspaceLabelPending?: true;
   needsReconnect: boolean;
   /** GitHub: the github.com page where the user chooses the repositories its App is installed on. */
   manageUrl?: string;

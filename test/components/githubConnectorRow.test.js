@@ -501,16 +501,28 @@ async function connectWhileFocused(t, connectedStatus) {
     row.broadcastStatus([connectedStatus]);
     connect.settle({ status: "connected" });
   });
-  return row.container;
+  return row;
 }
 
 test("a successful connect hands focus to the row's next step, not the page", async (t) => {
-  const container = await connectWhileFocused(t, GITHUB);
+  const { container } = await connectWhileFocused(t, GITHUB);
   assertFocused(container, "connectors.github.repositories.manage");
 });
 
 test("with no repositories button, a successful connect hands focus to Disconnect", async (t) => {
-  const container = await connectWhileFocused(t, { ...GITHUB, manageUrl: undefined });
+  const { container } = await connectWhileFocused(t, { ...GITHUB, manageUrl: undefined });
+  assertFocused(container, "connectors.github.disconnect");
+});
+
+test("a connect that lands before the count hands focus to Disconnect, and keeps it there", async (t) => {
+  const pending = { ...GITHUB, workspaceLabel: null, workspaceLabelPending: true };
+  const { container, broadcastStatus } = await connectWhileFocused(t, pending);
+  assertFocused(container, "connectors.github.disconnect");
+
+  // Main announces the count once it has read it.
+  await React.act(async () => broadcastStatus([{ ...GITHUB, workspaceLabel: "0" }]));
+
+  assert.equal(hasButton(container, "connectors.github.repositories.choose"), true);
   assertFocused(container, "connectors.github.disconnect");
 });
 
@@ -604,11 +616,14 @@ test("leaving Settings mid-connect leaves other connectors' sign-ins alone", asy
   assert.deepEqual(cancels, [], "the browser sign-in keeps going");
 });
 
-test("an expired code and a disabled device flow each get their own message", async (t) => {
+test("an expired code, a disabled device flow and an unreachable GitHub each get their own message", async (t) => {
   const answers = [
     { status: "failed", errorCode: "code_expired" },
     { status: "failed", errorCode: "device_flow_disabled" },
     { status: "failed", errorCode: "oauth_denied" },
+    // No code could be asked for: offline, or GitHub throttled the request.
+    { status: "failed", errorCode: "network" },
+    { status: "failed", errorCode: "rate_limited" },
   ];
   const { container } = await renderGithubRow(t, {
     status: DISCONNECTED,
@@ -623,6 +638,13 @@ test("an expired code and a disabled device flow each get their own message", as
 
   await React.act(async () => click(button(container, "connectors.github.connect")));
   assert.match(container.textContent, /connectors\.github\.errors\.oauth_denied/);
+  assert.doesNotMatch(container.textContent, /errors\.connect_failed/);
+
+  await React.act(async () => click(button(container, "connectors.github.connect")));
+  assert.match(container.textContent, /connectors\.github\.errors\.network/);
+
+  await React.act(async () => click(button(container, "connectors.github.connect")));
+  assert.match(container.textContent, /connectors\.github\.errors\.rate_limited/);
   assert.doesNotMatch(container.textContent, /errors\.connect_failed/);
 });
 
@@ -669,6 +691,21 @@ test("a repository count that couldn't be read shows just the login, never 'none
   assert.doesNotMatch(container.textContent, /"repositories"|"empty"/);
   assert.equal(hasButton(container, "connectors.github.repositories.choose"), false);
   assert.equal(hasButton(container, "connectors.github.repositories.manage"), true);
+});
+
+test("until the first count is read, the row shows just the login and no repositories button", async (t) => {
+  const { container } = await renderGithubRow(t, {
+    status: { ...GITHUB, workspaceLabel: "3", workspaceLabelPending: true },
+  });
+  assert.ok(
+    container.textContent.includes(
+      `connectors.github.connectedAs${JSON.stringify({ account: "@dana", context: "unknown" })}`
+    ),
+    "no count suffix while it is being read"
+  );
+  assert.equal(hasButton(container, "connectors.github.repositories.manage"), false);
+  assert.equal(hasButton(container, "connectors.github.repositories.choose"), false);
+  assert.equal(hasButton(container, "connectors.github.disconnect"), true);
 });
 
 test("with none chosen, every return to the window re-reads the count, however the install was made", async (t) => {
@@ -804,6 +841,34 @@ test("after Disconnect, the row links to GitHub's authorizations page", async (t
   assert.match(container.textContent, /connectors\.github\.disconnectedHint/);
   await React.act(async () => click(button(container, "connectors.github.reviewOnGithub")));
   assert.deepEqual(opened, ["https://github.com/settings/apps/authorizations"]);
+});
+
+test("switching OpenWhispr accounts clears the previous account's Disconnect note", async (t) => {
+  const scopeListeners = new Set();
+  let broadcast = () => {};
+  const { container, broadcastStatus } = await renderGithubRow(t, {
+    status: GITHUB,
+    electronAPI: {
+      connectorDisconnect: async () => {
+        broadcast([DISCONNECTED]);
+        return { status: "disconnected" };
+      },
+      onActiveAccountScopeChanged: (callback) => {
+        scopeListeners.add(callback);
+        return () => scopeListeners.delete(callback);
+      },
+    },
+  });
+  broadcast = broadcastStatus;
+  await React.act(async () => click(button(container, "connectors.github.disconnect")));
+  assert.match(container.textContent, /connectors\.github\.disconnectedHint/);
+
+  await React.act(async () => {
+    for (const listener of [...scopeListeners]) listener({ accountId: "someone-else" });
+  });
+
+  assert.doesNotMatch(container.textContent, /connectors\.github\.disconnectedHint/);
+  assert.equal(hasButton(container, "connectors.github.reviewOnGithub"), false);
 });
 
 test("a failed Disconnect doesn't point at GitHub's authorizations page", async (t) => {

@@ -4,6 +4,7 @@ import { githubFieldMentions } from "../../../utils/githubMentions";
 import {
   characterCount,
   MAX_ISSUE_BODY_LENGTH,
+  MAX_ISSUE_QUERY_LENGTH,
   MAX_ISSUE_TITLE_LENGTH,
 } from "../../../utils/issueApprovalFields";
 import type { ConnectorToolModule } from "./connectorToolModules";
@@ -19,14 +20,9 @@ import {
 export const GITHUB_RECONNECT_GUIDANCE =
   "Tell the user to reconnect GitHub under Settings → Integrations → Connectors. Don't retry.";
 const CREATE_UNKNOWN_GUIDANCE =
-  "Tell the user to check the repository's issues on GitHub (checkUrl) before asking for it again.";
+  "Tell the user to check the repository's issues on GitHub (checkUrl, when there is one) before asking for it again.";
 const COMMENT_UNKNOWN_GUIDANCE =
-  "Tell the user to check the issue or pull request on GitHub (checkUrl) before asking for the comment again.";
-
-// The limits main enforces (githubConnector.js), counted in characters as
-// main and the card count them. Checked here too, so an oversized call never
-// crosses IPC.
-const MAX_QUERY_LENGTH = 200;
+  "Tell the user to check the issue or pull request on GitHub (checkUrl, when there is one) before asking for the comment again.";
 
 const STATES = ["open", "all"] as const;
 const TYPES = ["issue", "pr", "any"] as const;
@@ -51,6 +47,14 @@ function text(args: Record<string, unknown>, name: string): string {
   const value = args[name];
   return typeof value === "string" ? value : "";
 }
+
+// Left out, main searches or picks among every installed repository; anything
+// else must be text, or a search meant for one repository would run over all.
+function hasRepoText(args: Record<string, unknown>): boolean {
+  return args.repo === undefined || args.repo === null || typeof args.repo === "string";
+}
+
+const REPO_NOT_TEXT = "repo is owner/name or a repository name, as text.";
 
 // Left out (models often send null for that) is the default; anything else
 // must be one of the allowed values, never silently replaced by the default.
@@ -154,7 +158,9 @@ export const githubSearchIssuesTool: ToolDefinition = {
     context?.onHoldDelivery();
     const query = text(args, "query").trim();
     if (!query) return needsClarificationResult("Ask the user what to search GitHub for.");
-    if (characterCount(query) > MAX_QUERY_LENGTH) return tooLong("search", MAX_QUERY_LENGTH);
+    if (characterCount(query) > MAX_ISSUE_QUERY_LENGTH) {
+      return tooLong("search", MAX_ISSUE_QUERY_LENGTH);
+    }
     const state = choice(args.state, STATES, "open");
     if (!state) {
       return invalid(
@@ -165,6 +171,7 @@ export const githubSearchIssuesTool: ToolDefinition = {
     if (!type) {
       return invalid('type is "issue", "pr" or "any" (the default).');
     }
+    if (!hasRepoText(args)) return invalid(REPO_NOT_TEXT);
     if (needsReconnectNow("github")) return githubReconnectResult();
     const repo = text(args, "repo").trim();
     const result = await runQueryAction(context, "github", "search_issues", {
@@ -190,7 +197,12 @@ export const githubCreateIssueTool: ToolDefinition = {
         type: "string",
         description: "The description, in Markdown, 65,536 characters at most",
       },
-      labels: { type: "array", items: { type: "string" }, description: "Existing label names" },
+      labels: {
+        type: "array",
+        items: { type: "string" },
+        maxItems: 10,
+        description: "Existing label names, 10 at most",
+      },
     },
     required: ["title"],
     additionalProperties: false,
@@ -232,6 +244,7 @@ export const githubCreateIssueTool: ToolDefinition = {
     if (!labels) {
       return invalid("labels is a list of existing label names, as text.");
     }
+    if (!hasRepoText(args)) return invalid(REPO_NOT_TEXT);
     if (needsReconnectNow("github")) return githubReconnectResult();
     const repo = text(args, "repo").trim();
     const result = await runApprovalAction(

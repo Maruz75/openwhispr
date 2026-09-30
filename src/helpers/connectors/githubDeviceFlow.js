@@ -17,6 +17,25 @@ function codedError(code) {
   return Object.assign(new Error(code), { code });
 }
 
+// GitHub answered and said no (incorrect_device_code, unsupported_grant_type,
+// a bare 4xx other than a 408 timeout), rather than being unreachable, out or
+// throttled, which may pass.
+function saidNo(result) {
+  return (
+    result.refused === true ||
+    (/^http_4\d\d$/.test(result.errorCode ?? "") && result.errorCode !== "http_408")
+  );
+}
+
+// Why no code could be shown. Only GitHub's own refusal is "didn't finish
+// connecting": offline or throttled, the user never saw a code to enter.
+function deviceCodeFailure(result) {
+  if (result.errorCode === "device_flow_disabled") return "device_flow_disabled";
+  if (result.rateLimited === true) return "rate_limited";
+  if (result.errorCode === "bad_response" || saidNo(result)) return "token_exchange_failed";
+  return "network";
+}
+
 function positiveNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
@@ -35,13 +54,7 @@ function createDeviceFlow({
     throwIfCancelled(signal);
     const result = await api.deviceCode({ client_id: clientId }, { signal });
     throwIfCancelled(signal);
-    if (!result.ok) {
-      throw codedError(
-        result.errorCode === "device_flow_disabled"
-          ? "device_flow_disabled"
-          : "token_exchange_failed"
-      );
-    }
+    if (!result.ok) throw codedError(deviceCodeFailure(result));
     const data = result.data;
     const verificationUri = data.verification_uri;
     if (
@@ -115,13 +128,8 @@ function createDeviceFlow({
         default:
           break;
       }
-      // GitHub said no in a way we don't expect (incorrect_device_code,
-      // unsupported_grant_type, a bare 4xx other than a 408 timeout): waiting
-      // will not change it.
-      const saidNo =
-        result.refused === true ||
-        (/^http_4\d\d$/.test(result.errorCode ?? "") && result.errorCode !== "http_408");
-      if (saidNo) throw codedError("token_exchange_failed");
+      // GitHub said no in a way we don't expect: waiting will not change it.
+      if (saidNo(result)) throw codedError("token_exchange_failed");
       // No answer (offline, a timeout, a reset), a 5xx or a throttle may pass,
       // so it is asked again at the interval until the code expires: the user
       // may still be typing the code on a phone while this machine's network

@@ -4093,7 +4093,9 @@
         "policy_blocked": "您的組織已關閉連接器。",
         "policy_unavailable": "無法檢查您的組織設定，請重試。",
         "code_expired": "代碼已過期，請重試。",
-        "device_flow_disabled": "此版本未設定使用代碼登入 GitHub。"
+        "device_flow_disabled": "此版本未設定使用代碼登入 GitHub。",
+        "network": "無法連線到 GitHub。請檢查網路連線後重試。",
+        "rate_limited": "GitHub 目前忙碌中，請一分鐘後重試。"
       },
       "deviceCode": {
         "instructions": "請在 GitHub 上輸入此代碼：",

@@ -1,7 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const load = () => import("../../src/utils/githubMentions.ts");
+// Most cases read one Markdown text, given as a body on its own.
+const load = async () => {
+  const { githubFieldMentions } = await import("../../src/utils/githubMentions.ts");
+  return { githubFieldMentions, githubMentions: (text) => githubFieldMentions({ body: text }) };
+};
 
 test("finds people and teams, in the order they first appear", async () => {
   const { githubMentions } = await load();

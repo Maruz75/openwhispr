@@ -4262,7 +4262,9 @@
         "policy_blocked": "Connectors are turned off by your organization.",
         "policy_unavailable": "Couldn't check your organization's settings. Try again.",
         "code_expired": "The code expired. Try again.",
-        "device_flow_disabled": "Signing in to GitHub with a code isn't set up for this build."
+        "device_flow_disabled": "Signing in to GitHub with a code isn't set up for this build.",
+        "network": "Couldn't reach GitHub. Check your connection and try again.",
+        "rate_limited": "GitHub is busy right now. Try again in a minute."
       },
       "deviceCode": {
         "instructions": "Enter this code on GitHub:",

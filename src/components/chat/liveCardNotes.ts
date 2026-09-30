@@ -34,7 +34,7 @@ function githubLiveNotes(fields: LiveCardFields, language: string): ConnectorPre
  * user edits, by connector. The notes a connector sends with its preview are
  * fixed at prepare; these follow the card.
  */
-export const LIVE_CARD_NOTES: Readonly<
+const LIVE_CARD_NOTES: Readonly<
   Record<string, (fields: LiveCardFields, language: string) => ConnectorPreviewNote[]>
 > = { github: githubLiveNotes };
 

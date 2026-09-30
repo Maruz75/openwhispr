@@ -48,11 +48,12 @@ const githubRow: ConnectorRowSpec = {
   icon: <Code2 className={ICON_CLASS} aria-hidden="true" />,
   // getStatus reports the installed repository count as workspaceLabel, or
   // null when the installations couldn't be read. The i18next context picks
-  // connectedAs_empty ("no repositories yet") or connectedAs_unknown (no count).
+  // connectedAs_empty ("no repositories yet") or connectedAs_unknown (no
+  // count), which also stands in until the first count is read.
   accountSummary: (status) => {
     const account = status.accountLabel ?? "";
     const count = status.workspaceLabel;
-    if (count === null) return { account, context: "unknown" };
+    if (count === null || status.workspaceLabelPending) return { account, context: "unknown" };
     return count === "0" ? { account, context: "empty" } : { account, repositories: count };
   },
   connectingDetail: GithubDeviceCode,

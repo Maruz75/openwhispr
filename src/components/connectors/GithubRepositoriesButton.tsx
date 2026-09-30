@@ -43,8 +43,10 @@ export function GithubRepositoriesButton({
     return () => window.removeEventListener("focus", onFocus);
   }, [none, manageUrl]);
 
-  // No App slug in this build: there is no page to open.
-  if (!manageUrl) return null;
+  // No App slug in this build: there is no page to open. Until the first
+  // count is read, "Choose" and "Manage" can't be told apart; guessing would
+  // swap the button (and its look) a moment later.
+  if (!manageUrl || status.workspaceLabelPending) return null;
 
   const openManage = (): void => {
     void window.electronAPI?.openExternal?.(manageUrl);

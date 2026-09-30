@@ -166,7 +166,7 @@ test("the status through the manager keeps the GitHub manage link, and the repos
     manageUrl: INSTALL_URL,
   };
 
-  assert.deepEqual(await manager.status(), [status]);
+  assert.deepEqual(await manager.status(), [{ ...status, workspaceLabelPending: true }]);
   await new Promise((resolve) => setTimeout(resolve, 20));
 
   assert.deepEqual(statusBroadcasts.at(-1), [{ ...status, workspaceLabel: "1" }]);
@@ -178,7 +178,8 @@ test("another connector's status never waits on a GitHub repository read", async
   const slack = {
     id: "slack",
     actions: {},
-    getStatus: async () => ({ connected: true, accountLabel: "chad" }),
+    // Only a literal true passes, so no other status gains the field.
+    getStatus: async () => ({ connected: true, accountLabel: "chad", workspaceLabelPending: 1 }),
     getBinding: async () => null,
   };
   const { manager } = await setup({ script: { [INSTALLATIONS]: [hang()] }, others: [slack] });
@@ -188,12 +189,13 @@ test("another connector's status never waits on a GitHub repository read", async
 
   assert.ok(Date.now() - started < 500, `${Date.now() - started} ms`);
   assert.deepEqual(
-    statuses.map((status) => [status.id, status.connected]),
+    statuses.map((status) => [status.id, status.connected, status.workspaceLabelPending]),
     [
-      ["slack", true],
-      ["github", true],
+      ["slack", true, undefined],
+      ["github", true, true],
     ]
   );
+  assert.equal("workspaceLabelPending" in statuses[0], false);
 });
 
 test("Send creates exactly the card's edited issue, and the receipt holds the repo only", async () => {
@@ -305,23 +307,36 @@ test("a status read whose token refresh GitHub refuses announces that the login 
   assert.equal(statusBroadcasts.at(-1)?.[0].needsReconnect, true);
 });
 
-test("Disconnect revokes the stored GitHub login's token", async () => {
+test("Disconnect deletes the GitHub login without revoking it", async () => {
   const { manager, credentials, revoked } = await setupRevokes({ signsIn: null });
 
   assert.deepEqual(await manager.disconnect("github"), { status: "disconnected" });
 
-  assert.deepEqual(revoked, [CONNECTED]);
+  // GitHub's revoke emails the user as if a token had leaked.
+  assert.deepEqual(revoked, []);
   assert.equal(credentials.read("acct-1", "github"), null);
 });
 
-test("reconnecting GitHub revokes the login it replaced, even for the same GitHub user", async () => {
+test("reconnecting GitHub replaces the login without revoking the old one", async () => {
   const renewed = { ...CONNECTED, accessToken: "ghu-9", refreshToken: "ghr-9" };
   const { manager, credentials, revoked } = await setupRevokes({ signsIn: renewed });
 
   assert.equal((await manager.connect("github", "allowed")).status, "connected");
   await new Promise((resolve) => setImmediate(resolve));
 
-  // GitHub revokes one token, so the new login is untouched.
-  assert.deepEqual(revoked, [CONNECTED]);
+  assert.deepEqual(revoked, []);
   assert.deepEqual(credentials.read("acct-1", "github").credential, renewed);
+});
+
+test("account deletion and Reset app data revoke the GitHub login", async () => {
+  for (const removeAll of [
+    (manager) => manager.disconnectAll({ erasingDevice: false }),
+    (manager) => manager.revokeAllStored(),
+  ]) {
+    const { manager, revoked } = await setupRevokes({ signsIn: null });
+
+    await removeAll(manager);
+
+    assert.deepEqual(revoked, [CONNECTED]);
+  }
 });

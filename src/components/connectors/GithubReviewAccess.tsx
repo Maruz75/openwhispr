@@ -6,9 +6,9 @@ import { Button } from "../ui/button";
 export const GITHUB_AUTHORIZATIONS_URL = "https://github.com/settings/apps/authorizations";
 
 /**
- * Shown after Disconnect. Revoking a GitHub App user token needs the App's
- * client secret, which never ships in the app, so the authorization stays
- * on github.com until the user removes it there.
+ * Shown after Disconnect, which only deletes the login on this computer
+ * (see githubConnector's revoke): the authorization stays on github.com
+ * until the user removes it there.
  */
 export function GithubReviewAccess(): ReactElement {
   const { t } = useTranslation();
@@ -18,6 +18,7 @@ export function GithubReviewAccess(): ReactElement {
       <Button
         size="sm"
         variant="link"
+        className="h-auto p-0"
         onClick={() => void window.electronAPI?.openExternal?.(GITHUB_AUTHORIZATIONS_URL)}
       >
         {t("connectors.github.reviewOnGithub")}

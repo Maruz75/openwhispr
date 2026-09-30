@@ -7,13 +7,19 @@ const { createGithubAuth } = require("./githubAuth");
 const { createGithubInstallations, REFETCH_AFTER_MS } = require("./githubInstallations");
 const { isTransportErrorCode } = require("./deliveryClassifier");
 const { formBody } = require("./providerHttp");
+const {
+  MAX_TITLE_LENGTH,
+  MAX_BODY_LENGTH,
+  MAX_QUERY_LENGTH,
+  MAX_RESULTS,
+  SNIPPET_LENGTH,
+  LINE_BREAK,
+  nonEmptyString,
+  characterCount,
+  clarify,
+} = require("./connectorText");
 
-const MAX_TITLE_LENGTH = 256;
-const MAX_BODY_LENGTH = 65536;
 const MAX_LABELS = 10;
-const MAX_QUERY_LENGTH = 200;
-const MAX_RESULTS = 10;
-const SNIPPET_LENGTH = 300;
 // GitHub's 256-character search limit counts only the words, never the
 // qualifiers, and MAX_QUERY_LENGTH already keeps the words under it. What
 // bounds the `repo:` list is the request URL: GitHub answered 250 qualifiers
@@ -31,10 +37,14 @@ const TYPES = new Set(["issue", "pr", "any"]);
 // GitHub refuses a `q` without one of these with a 422, so `any` is two
 // searches.
 const TYPE_QUALIFIERS = { issue: "is:issue", pr: "is:pull-request" };
-// The scope is always the installed repos, so the user's own scope
-// qualifiers (negated, quoted, after NOT or opening a group too) are
-// removed; every other qualifier (label:, author:, is:, …) passes through.
-const SCOPE_QUALIFIER = /(^|[\s(])(?:NOT\s+)*-?(?:repo|org|user):(?:"[^"]*"?|[^\s)]*)/gi;
+// The scope is always the installed repos and the type is always the tool's
+// own (the user's is:pr beside an added is:issue would match nothing), so
+// the user's own scope and type qualifiers (negated, quoted, after NOT or
+// opening a group too) are removed; every other qualifier (label:, author:,
+// is:closed, …) passes through. A quoted phrase is words to GitHub, so
+// nothing in one is removed.
+const OWN_QUALIFIER =
+  /(^|[\s(])(?:NOT\s+)*-?(?:(?:repo|org|user):(?:"[^"]*"?|[^\s)]*)|(?:is|type):(?:issue|pr|pull-request)(?=$|[\s)]))|"[^"]*"/gi;
 // What a removed qualifier can leave behind, each removed until none is
 // left: an empty group (with a NOT or - in front of it), AND or OR opening
 // the query or a group, an operator closing one, and an operator before AND
@@ -50,7 +60,6 @@ const LEFTOVERS = [
 // nothing.
 const STATE_QUALIFIER =
   /(^|[\s(])-?(?:is:(?:open|closed|merged|unmerged)|state:(?:open|closed))(?=$|[\s)])/i;
-const LINE_BREAK = /[\r\n]/;
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 const NUMBER_PATTERN = /^[1-9]\d{0,9}$/;
@@ -66,14 +75,6 @@ const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,99}$/i;
 const EMAIL_PATTERN = /[\p{L}\p{N}._%+-]+[@＠][\p{L}\p{N}.-]+\.\p{L}{2,}/gu;
 
 const INVALID_REFERENCE = { ok: false, errorCode: "invalid_reference" };
-
-function nonEmptyString(value) {
-  return typeof value === "string" && value.length > 0;
-}
-
-function characterCount(text) {
-  return [...text].length;
-}
 
 function collapseWhitespace(text) {
   return String(text ?? "")
@@ -157,6 +158,35 @@ function parseGithubTarget(input) {
   return reference(owner ?? "", repo ?? "", number ?? "");
 }
 
+// A quote left open would make the rest of the query, the qualifiers added
+// after the words included, one phrase; the last quote is dropped.
+function withoutOpenQuote(text) {
+  if ((text.match(/"/g) ?? []).length % 2 === 0) return text;
+  const last = text.lastIndexOf('"');
+  return text.slice(0, last) + text.slice(last + 1);
+}
+
+// A parenthesis without its pair (the user's own, or the ")" a removed
+// qualifier's value stopped at) is dropped: an open group would take in the
+// qualifiers added after the words. Parentheses in a quoted phrase are words.
+function balancedParentheses(text) {
+  const characters = [...text];
+  const unpaired = [];
+  const open = [];
+  let quoted = false;
+  characters.forEach((character, index) => {
+    if (character === '"') quoted = !quoted;
+    else if (quoted) return;
+    else if (character === "(") open.push(index);
+    else if (character === ")") {
+      if (open.length > 0) open.pop();
+      else unpaired.push(index);
+    }
+  });
+  const dropped = new Set([...unpaired, ...open]);
+  return characters.filter((_, index) => !dropped.has(index)).join("");
+}
+
 function withoutLeftovers(text) {
   let previous;
   let current = text;
@@ -175,7 +205,11 @@ function withoutLeftovers(text) {
  * within MAX_SEARCH_QUERY_LENGTH. `truncated` says some repos were left out.
  */
 function buildSearchQuery({ query, type, state = "open", repos = [] }) {
-  const words = withoutLeftovers(String(query ?? "").replace(SCOPE_QUALIFIER, "$1 "));
+  const unscoped = withoutOpenQuote(String(query ?? "")).replace(OWN_QUALIFIER, (match, lead) =>
+    // A quoted phrase stays as it is.
+    lead === undefined ? match : `${lead} `
+  );
+  const words = withoutLeftovers(balancedParentheses(unscoped));
   const stateQualifier = state === "all" || STATE_QUALIFIER.test(words) ? "" : "state:open";
   let q = [words, TYPE_QUALIFIERS[type], stateQualifier].filter(Boolean).join(" ");
   const searched = [];
@@ -246,10 +280,6 @@ function failedWith(failure) {
 
 function commitFailedWith(failure) {
   return commitFailed(failure.errorCode, failure.message);
-}
-
-function clarify(message, candidates = []) {
-  return { status: "needs_clarification", message, candidates };
 }
 
 // The distinct names, in the order given.
@@ -928,21 +958,24 @@ function createGithubConnector({
     return Promise.race([countRepos(binding, signal).catch(() => null), gaveUp]);
   }
 
-  // The last count read for this login, or null.
-  function lastRepoCount(binding) {
+  // The last read for this login ({ count }, a null count when it failed),
+  // or null before one has finished.
+  function lastRead(binding) {
     const last = repoCounts.get(binding.ownerAccountId);
-    return last?.generation === binding.generation ? last.count : null;
+    return last?.generation === binding.generation ? last : null;
   }
 
-  // Reads the count again in the background and announces a changed one.
-  // A count that couldn't be read keeps the last one.
+  // Reads the count again in the background and announces a changed one,
+  // and the first read for a login even when it failed, so the row stops
+  // waiting on it. A later count that couldn't be read keeps the last one.
   function refreshRepoCount(binding) {
     const key = countKey(binding);
     if (countReads.has(key)) return;
     countReads.add(key);
     void repoCount(binding).then((count) => {
       countReads.delete(key);
-      if (count === null || count === lastRepoCount(binding)) return;
+      const last = lastRead(binding);
+      if (last && (count === null || count === last.count)) return;
       repoCounts.set(binding.ownerAccountId, { generation: binding.generation, count });
       notifyStatusChanged();
     });
@@ -977,9 +1010,14 @@ function createGithubConnector({
       if (status.needsReconnect) return withManage(status);
       const binding = bindingFor(ownerAccountId, entry);
       refreshRepoCount(binding);
+      const last = lastRead(binding);
+      // Pending until the first read for this login (after a connect, or
+      // at launch) finishes, so the row doesn't offer to choose repositories
+      // that may be installed already.
       return withManage({
         ...status,
-        workspaceLabel: lastRepoCount(binding),
+        workspaceLabel: last?.count ?? null,
+        ...(last ? {} : { workspaceLabelPending: true }),
       });
     },
 
@@ -1007,10 +1045,14 @@ function createGithubConnector({
     },
 
     authorize: (options) => auth.authorize(options),
-    revoke: (credential) => auth.revoke(credential),
-    // GitHub revokes one token, never the user's other logins, so a login a
-    // reconnect replaced is revoked too, even for the same GitHub user.
-    loginKey: (credential) => credential?.refreshToken ?? credential?.accessToken ?? null,
+    // Only when every login is going (account deletion, Reset app data).
+    // GitHub's secret-free revoke is its endpoint for exposed credentials and
+    // emails the user, which reads as a leak after an ordinary Disconnect or
+    // reconnect; those only delete the login here, and the App's
+    // authorization stays on github.com either way.
+    revoke: async (credential, { removingAll = false } = {}) => {
+      if (removingAll) await auth.revoke(credential);
+    },
   };
 }
 

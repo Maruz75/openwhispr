@@ -30,6 +30,10 @@ const ROW_ERRORS = new Set([
   // has the device flow turned off.
   "code_expired",
   "device_flow_disabled",
+  // GitHub couldn't be reached, or throttled the request, before any code
+  // was shown.
+  "network",
+  "rate_limited",
 ]);
 
 export interface ConnectorLoginRowProps {
@@ -80,6 +84,17 @@ export function ConnectorLoginRow({
   useEffect(() => {
     void ensureConnectorStatus();
   }, []);
+
+  // Both notes are about the login this row just removed, which belonged to
+  // the OpenWhispr account that was active then.
+  useEffect(
+    () =>
+      window.electronAPI?.onActiveAccountScopeChanged?.(() => {
+        setDisconnected(false);
+        setGrantKept(false);
+      }),
+    []
+  );
 
   const connected = Boolean(status?.connected);
   const needsReconnect = connected && Boolean(status?.needsReconnect);

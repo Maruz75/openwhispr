@@ -4146,7 +4146,9 @@
         "policy_blocked": "Tu organización ha desactivado los conectores.",
         "policy_unavailable": "No se pudieron comprobar los ajustes de tu organización. Inténtalo de nuevo.",
         "code_expired": "El código caducó. Inténtalo de nuevo.",
-        "device_flow_disabled": "El inicio de sesión en GitHub con un código no está configurado en esta versión."
+        "device_flow_disabled": "El inicio de sesión en GitHub con un código no está configurado en esta versión.",
+        "network": "No se pudo conectar con GitHub. Comprueba tu conexión e inténtalo de nuevo.",
+        "rate_limited": "GitHub está ocupado en este momento. Inténtalo de nuevo en un minuto."
       },
       "deviceCode": {
         "instructions": "Introduce este código en GitHub:",

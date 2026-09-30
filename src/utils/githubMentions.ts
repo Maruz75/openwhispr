@@ -156,18 +156,11 @@ function* mentionsIn(text: string): Generator<string> {
 }
 
 /**
- * The people and teams GitHub notifies for this Markdown: `@name` and
- * `@org/team`, outside code spans, fenced code blocks and HTML comments. Each
+ * Who an issue or comment notifies: `@name` and `@org/team` in its title and
+ * body, outside code spans, fenced code blocks and HTML comments. Title and
+ * body are read apart (a title can't open a code block over the body). Each
  * appears once (GitHub handles ignore case), as first written, in first-seen
  * order. Where the Markdown is ambiguous it errs toward listing a mention.
- */
-export function githubMentions(text: string): string[] {
-  return uniqueMentions(mentionsIn(text));
-}
-
-/**
- * Who an issue or comment notifies: the mentions in its title and body, read
- * apart (a title can't open a code block over the body), each once.
  */
 export function githubFieldMentions(fields: { title?: unknown; body?: unknown }): string[] {
   const text = (value: unknown): string => (typeof value === "string" ? value : "");

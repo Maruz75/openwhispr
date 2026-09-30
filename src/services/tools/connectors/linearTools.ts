@@ -1,6 +1,7 @@
 import {
   characterCount,
   MAX_ISSUE_BODY_LENGTH,
+  MAX_ISSUE_QUERY_LENGTH,
   MAX_ISSUE_TITLE_LENGTH,
 } from "../../../utils/issueApprovalFields";
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "../ToolRegistry";
@@ -21,9 +22,6 @@ const CREATE_UNKNOWN_GUIDANCE =
 const COMMENT_UNKNOWN_GUIDANCE =
   "Tell the user to check the issue in Linear before asking for the comment again.";
 
-// The connector's own search limit (linearConnector.js), checked here too so
-// a call that can't succeed never reaches main. Issues use the card's limits.
-const MAX_QUERY_LENGTH = 200;
 const PRIORITIES = ["urgent", "high", "medium", "low", "none"] as const;
 const STATES = ["open", "all"] as const;
 
@@ -66,8 +64,8 @@ function withReconnectGuidance(result: ToolResult): ToolResult {
 function searchArgs(args: Record<string, unknown>): Checked {
   const query = typeof args.query === "string" ? args.query.trim() : "";
   if (!query) return needsClarificationResult("Ask the user what to search Linear for.");
-  if (characterCount(query) > MAX_QUERY_LENGTH) {
-    return tooLong(`Search with ${MAX_QUERY_LENGTH} characters or fewer.`);
+  if (characterCount(query) > MAX_ISSUE_QUERY_LENGTH) {
+    return tooLong(`Search with ${MAX_ISSUE_QUERY_LENGTH} characters or fewer.`);
   }
   if (!isAbsent(args.assignedToMe) && typeof args.assignedToMe !== "boolean") {
     return invalid("assignedToMe is true or false.");

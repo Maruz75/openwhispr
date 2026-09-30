@@ -1406,6 +1406,9 @@ test("connect refuses on policy or no account, and reports flow errors by code",
     // error, not the loopback flow's oauth_denied): kept as its own code
     // rather than collapsed to connect_failed.
     [Object.assign(new Error("domain_policy"), { code: "domain_policy" }), "domain_policy"],
+    // GitHub couldn't ask for a device code: offline or throttled.
+    [Object.assign(new Error("network"), { code: "network" }), "network"],
+    [Object.assign(new Error("rate_limited"), { code: "rate_limited" }), "rate_limited"],
     [new Error("GET https://slack.com/api/oauth.v2.access?code=secret failed"), "connect_failed"],
   ]) {
     const failing = await setup(
@@ -1669,11 +1672,11 @@ test("a disconnect that kept a shared grant says so; the IPC can't ask to erase"
   );
 
   assert.deepEqual(await manager.disconnect("fake"), { status: "disconnected", grantKept: true });
-  assert.deepEqual(options, [{ erasingDevice: false }]);
+  assert.deepEqual(options, [{ erasingDevice: false, removingAll: false }]);
   assert.equal(credentials.read("acct-1", "fake"), null, "the local login is gone either way");
 });
 
-test("disconnectAll disconnects every connector that can revoke, erasing when asked", async () => {
+test("disconnectAll disconnects every connector that can revoke, as removing all, erasing when asked", async () => {
   const credentials = memoryCredentials({ accessToken: "t" }, { connectorId: "fake" });
   const options = [];
   const { manager } = await setup(
@@ -1688,7 +1691,16 @@ test("disconnectAll disconnects every connector that can revoke, erasing when as
   // Delete account with device erase: a grant shared with a calendar goes too.
   await manager.disconnectAll({ erasingDevice: true });
   assert.equal(credentials.read("acct-1", "fake"), null);
-  assert.deepEqual(options, [{ erasingDevice: true }]);
+  assert.deepEqual(options, [{ erasingDevice: true, removingAll: true }]);
+  // Delete account without it: every login still goes.
+  credentials.replace(
+    "acct-1",
+    "fake",
+    { accessToken: "t" },
+    credentials.generation("acct-1", "fake")
+  );
+  await manager.disconnectAll({ erasingDevice: false });
+  assert.deepEqual(options.at(-1), { erasingDevice: false, removingAll: true });
 });
 
 test("revokeAllStored (Reset app data) revokes every account's login with no one signed in", async () => {
@@ -1709,8 +1721,8 @@ test("revokeAllStored (Reset app data) revokes every account's login with no one
   await manager.revokeAllStored();
 
   assert.deepEqual(revoked.sort(), [
-    ["mine", { erasingDevice: true }],
-    ["theirs", { erasingDevice: true }],
+    ["mine", { erasingDevice: true, removingAll: true }],
+    ["theirs", { erasingDevice: true, removingAll: true }],
   ]);
 });
 

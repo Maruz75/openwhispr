@@ -4093,7 +4093,9 @@
         "policy_blocked": "Sua organização desativou os conectores.",
         "policy_unavailable": "Não foi possível verificar as configurações da sua organização. Tente novamente.",
         "code_expired": "O código expirou. Tente novamente.",
-        "device_flow_disabled": "O login no GitHub com um código não está configurado nesta versão."
+        "device_flow_disabled": "O login no GitHub com um código não está configurado nesta versão.",
+        "network": "Não foi possível acessar o GitHub. Verifique sua conexão e tente novamente.",
+        "rate_limited": "O GitHub está ocupado agora. Tente novamente em um minuto."
       },
       "deviceCode": {
         "instructions": "Digite este código no GitHub:",

@@ -94,13 +94,13 @@ test("startDeviceAuthorization asks for a code with the client id only", async (
   assert.deepEqual(api.calls.deviceCode, [{ params: { client_id: CLIENT_ID }, hasSignal: false }]);
 });
 
-test("startDeviceAuthorization refuses a disabled flow, a failed request and a bad reply", async () => {
+test("startDeviceAuthorization refuses a disabled flow, a refused request and a bad reply", async () => {
   const { createDeviceFlow } = await load();
   const cases = [
     [refusal("device_flow_disabled"), "device_flow_disabled"],
     [refusal("incorrect_client_credentials"), "token_exchange_failed"],
-    [{ ok: false, outcome: "failed", errorCode: "ENOTFOUND" }, "token_exchange_failed"],
-    [{ ok: false, outcome: "unknown", errorCode: "http_502" }, "token_exchange_failed"],
+    [{ ok: false, outcome: "failed", errorCode: "http_404" }, "token_exchange_failed"],
+    [{ ok: false, outcome: "unknown", errorCode: "bad_response" }, "token_exchange_failed"],
     [{ ok: true, data: { ...FIXTURES.deviceCode, user_code: "" } }, "token_exchange_failed"],
     [{ ok: true, data: { ...FIXTURES.deviceCode, device_code: 7 } }, "token_exchange_failed"],
     [
@@ -127,6 +127,33 @@ test("startDeviceAuthorization refuses a disabled flow, a failed request and a b
     { code: "oauth_cancelled" }
   );
   assert.equal(api.calls.deviceCode.length, 0);
+});
+
+test("startDeviceAuthorization reports no answer or a throttle apart from a refusal", async () => {
+  const { createDeviceFlow } = await load();
+  const { createGithubApi } = await import("../../../src/helpers/connectors/githubApi.js");
+  const offline = Object.assign(new Error("getaddrinfo ENOTFOUND github.com"), {
+    code: "ENOTFOUND",
+  });
+  const cases = [
+    [{ throw: offline }, "network"],
+    [{ throw: Object.assign(new Error("timed out"), { name: "TimeoutError" }) }, "network"],
+    [json({ message: "Bad gateway" }, 502), "network"],
+    [oauthError("server_error"), "network"],
+    [json({ message: "Request timeout" }, 408), "network"],
+    [json({ message: "Too many requests" }, 429), "rate_limited"],
+    [json({ error: "slow_down" }, 429), "rate_limited"],
+    [json({ message: "Not found" }, 404), "token_exchange_failed"],
+    [oauthError("incorrect_client_credentials"), "token_exchange_failed"],
+  ];
+  for (const [reply, code] of cases) {
+    const github = fakeGithubFetch({ "POST /login/device/code": [reply] });
+    const flow = createDeviceFlow({
+      api: createGithubApi({ fetchImpl: github.fetchImpl }),
+      now: () => NOW,
+    });
+    await assert.rejects(flow.startDeviceAuthorization({ clientId: CLIENT_ID }), { code });
+  }
 });
 
 test("startDeviceAuthorization falls back to GitHub's default interval and expiry", async () => {

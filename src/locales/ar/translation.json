@@ -943,7 +943,9 @@
         "policy_blocked": "أوقفت مؤسستك تشغيل الموصلات.",
         "policy_unavailable": "تعذّر التحقق من إعدادات مؤسستك. حاول مرة أخرى.",
         "code_expired": "انتهت صلاحية الرمز. حاول مرة أخرى.",
-        "device_flow_disabled": "تسجيل الدخول إلى GitHub برمز غير مُعدّ في هذا الإصدار."
+        "device_flow_disabled": "تسجيل الدخول إلى GitHub برمز غير مُعدّ في هذا الإصدار.",
+        "network": "تعذّر الوصول إلى GitHub. تحقّق من اتصالك وحاول مرة أخرى.",
+        "rate_limited": "GitHub مشغول الآن. حاول مرة أخرى بعد دقيقة."
       },
       "deviceCode": {
         "instructions": "أدخل هذا الرمز على GitHub:",

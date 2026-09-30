@@ -4262,7 +4262,9 @@
         "policy_blocked": "Votre organisation a désactivé les connecteurs.",
         "policy_unavailable": "Impossible de vérifier les paramètres de votre organisation. Réessayez.",
         "code_expired": "Le code a expiré. Réessayez.",
-        "device_flow_disabled": "La connexion à GitHub avec un code n'est pas configurée dans cette version."
+        "device_flow_disabled": "La connexion à GitHub avec un code n'est pas configurée dans cette version.",
+        "network": "Impossible de joindre GitHub. Vérifiez votre connexion et réessayez.",
+        "rate_limited": "GitHub est occupé pour le moment. Réessayez dans une minute."
       },
       "deviceCode": {
         "instructions": "Saisissez ce code sur GitHub :",

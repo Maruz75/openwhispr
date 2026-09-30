@@ -55,10 +55,19 @@ function whenAborted(signal) {
 }
 
 function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
-  // Keyed by the login (its slot generation changes on every reconnect), so a
-  // list read for one login is never served to another.
+  // One list per OpenWhispr account, for the login that read it (its slot
+  // generation changes on every reconnect): a list is never served to
+  // another login, and a reconnect's list replaces the old login's.
   const cache = new Map();
+  // The read in flight per login, shared by everyone who asks meanwhile (the
+  // status, a tool and a card's Send can ask at once).
+  const loads = new Map();
   const keyOf = (binding) => `${binding?.ownerAccountId}:${binding?.generation}`;
+
+  function cached(binding) {
+    const hit = cache.get(binding?.ownerAccountId);
+    return hit?.generation === binding?.generation ? hit : null;
+  }
 
   // `truncated` says an installation had more repositories than restAll
   // reads (1,000), so a repo missing from the list may still be installed.
@@ -95,21 +104,49 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
     };
   }
 
-  // `signal` lets a caller stop waiting (the Settings status gives up after
-  // a few seconds). A read it gave up on is never cached, even if it lands.
-  // `maxAgeMs` asks for a list younger than the cache keeps.
-  async function list(binding, token, { signal, maxAgeMs = ttlMs } = {}) {
+  // The login's read in flight, or a new one. Only the read still current
+  // when it lands is cached: one that began before a clear (a refusal, a
+  // 422) may hold the very list the clear threw away.
+  function join(binding, token) {
     const key = keyOf(binding);
-    const hit = cache.get(key);
+    const current = loads.get(key);
+    if (current) return current;
+    const flight = { controller: new AbortController(), waiting: 0 };
+    flight.promise = load(token, flight.controller.signal)
+      .then((result) => {
+        // Only a full answer is cached: a failure is asked again next time.
+        if (loads.get(key) === flight && result.ok) {
+          cache.set(binding.ownerAccountId, { generation: binding.generation, at: now(), result });
+        }
+        return result;
+      })
+      .finally(() => {
+        if (loads.get(key) === flight) loads.delete(key);
+      });
+    loads.set(key, flight);
+    return flight;
+  }
+
+  // `signal` lets a caller stop waiting (the Settings status gives up after
+  // a few seconds). A read everyone gave up on is stopped, so it doesn't keep
+  // paging through GitHub in the background, and is never cached, even if
+  // it lands. `maxAgeMs` asks for a list younger than the cache keeps.
+  async function list(binding, token, { signal, maxAgeMs = ttlMs } = {}) {
+    const hit = cached(binding);
     if (hit && now() - hit.at < maxAgeMs) return hit.result;
-    // The signal also stops the requests, so a read given up on doesn't keep
-    // paging through GitHub in the background.
-    const result = signal
-      ? await Promise.race([load(token, signal), whenAborted(signal)])
-      : await load(token);
-    // Only a full answer is cached: a failure is asked again next time.
-    if (result.ok && !signal?.aborted) cache.set(key, { at: now(), result });
-    return result;
+    const flight = join(binding, token);
+    // A caller without a signal waits to the end.
+    flight.waiting += signal ? 1 : Infinity;
+    if (!signal) return flight.promise;
+    const gaveUp = whenAborted(signal).then((timedOut) => {
+      flight.waiting -= 1;
+      if (flight.waiting === 0 && loads.get(keyOf(binding)) === flight) {
+        loads.delete(keyOf(binding));
+        flight.controller.abort();
+      }
+      return timedOut;
+    });
+    return Promise.race([flight.promise, gaveUp]);
   }
 
   // The list, read once more when `found(repos, truncated)` rejects one
@@ -181,7 +218,8 @@ function createGithubInstallations({ api, now = Date.now, ttlMs = 60 * 1000 }) {
   }
 
   function clear(binding) {
-    cache.delete(keyOf(binding));
+    if (cached(binding)) cache.delete(binding.ownerAccountId);
+    loads.delete(keyOf(binding));
   }
 
   return { list, listFinding, resolveRepo, clear };

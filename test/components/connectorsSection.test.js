@@ -235,7 +235,8 @@ test("an unresolved policy doesn't hide the upsell from a free user", async (t) 
 });
 
 test("a change of main's account scope clears and refetches the receipts", async (t) => {
-  let onScopeChanged = null;
+  // The login rows listen too, as main's preload allows.
+  const scopeListeners = new Set();
   let answerSecondFetch = null;
   const answers = [
     Promise.resolve([receipt("a", "first@example.com")]),
@@ -249,18 +250,19 @@ test("a change of main's account scope clears and refetches the receipts", async
     { usageState: usage(true) },
     {
       onActiveAccountScopeChanged: (callback) => {
-        onScopeChanged = callback;
-        return () => {
-          onScopeChanged = null;
-        };
+        scopeListeners.add(callback);
+        return () => scopeListeners.delete(callback);
       },
       connectorRecentActions: () => answers[fetches++],
     }
   );
   assert.match(listItems(container).join(), /first@example\.com/);
 
-  assert.equal(typeof onScopeChanged, "function");
-  await React.act(async () => onScopeChanged({ accountId: "acct-b", authGeneration: 2 }));
+  assert.ok(scopeListeners.size > 0);
+  await React.act(async () => {
+    for (const listener of [...scopeListeners])
+      listener({ accountId: "acct-b", authGeneration: 2 });
+  });
   assert.equal(fetches, 2);
   assert.deepEqual(listItems(container), []);
 

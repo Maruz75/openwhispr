@@ -222,6 +222,95 @@ test("another login, or a cleared cache, reads the list again", async () => {
   assert.equal(github.calls.length, 8);
 });
 
+test("a reconnect's list replaces the old login's, which is read again if ever asked for", async () => {
+  const { installations, github } = await setup(oneInstallation());
+  await installations.list(BINDING, TOKEN);
+  await installations.list({ ...BINDING, generation: 2 }, TOKEN);
+  assert.equal(github.calls.length, 4);
+
+  await installations.list(BINDING, TOKEN);
+  assert.equal(github.calls.length, 6);
+});
+
+// GitHub answers only once the test lets it.
+async function heldSetup(script = oneInstallation()) {
+  const [{ createGithubInstallations }, { createGithubApi }] = await Promise.all([
+    loadInstallations(),
+    loadApi(),
+  ]);
+  const github = fakeGithubFetch(script);
+  let release;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const signals = [];
+  const api = createGithubApi({
+    fetchImpl: async (url, init) => {
+      signals.push(init.signal);
+      await held;
+      return github.fetchImpl(url, init);
+    },
+    sleep: async () => {},
+    now: () => NOW,
+  });
+  const installations = createGithubInstallations({ api, now: () => NOW });
+  const reads = () => github.calls.filter((call) => call.path === "/user/installations").length;
+  return { installations, release, signals, reads };
+}
+
+test("lists asked for at once share one read", async () => {
+  const { installations, release, reads } = await heldSetup();
+  const controller = new AbortController();
+
+  const lists = Promise.all([
+    installations.list(BINDING, TOKEN),
+    installations.list(BINDING, TOKEN, { signal: controller.signal }),
+    installations.listFinding(BINDING, TOKEN, () => true),
+  ]);
+  release();
+
+  assert.deepEqual(
+    (await lists).map((listed) => listed.repos.length),
+    [2, 2, 2]
+  );
+  assert.equal(reads(), 1);
+});
+
+test("a read someone still waits on isn't stopped when another caller gives up", async () => {
+  const { installations, release, signals } = await heldSetup();
+  const controller = new AbortController();
+
+  const waited = installations.list(BINDING, TOKEN);
+  const gaveUp = installations.list(BINDING, TOKEN, { signal: controller.signal });
+  controller.abort();
+  assert.equal((await gaveUp).errorCode, "timeout");
+  assert.ok(signals.every((signal) => !signal.aborted));
+
+  release();
+  assert.equal((await waited).repos.length, 2);
+});
+
+test("a read in flight when the list is cleared never puts the old list back", async () => {
+  const stale = await heldSetup();
+  const landing = stale.installations.list(BINDING, TOKEN);
+  await new Promise((resolve) => setImmediate(resolve));
+  stale.installations.clear(BINDING);
+  stale.release();
+  await landing;
+  await stale.installations.list(BINDING, TOKEN);
+  assert.equal(stale.reads(), 2);
+
+  // Asked for after the clear: a read of its own, not the one in flight.
+  const fresh = await heldSetup();
+  const before = fresh.installations.list(BINDING, TOKEN);
+  await new Promise((resolve) => setImmediate(resolve));
+  fresh.installations.clear(BINDING);
+  const after = fresh.installations.list(BINDING, TOKEN);
+  fresh.release();
+  await Promise.all([before, after]);
+  assert.equal(fresh.reads(), 2);
+});
+
 test("a failed read is reported, never cached, and never half a list", async () => {
   const outage = await setup({
     [INSTALLATIONS]: [json({ message: "Server Error" }, 502), installationsPage([])],

@@ -317,6 +317,62 @@ test("buildSearchQuery removes a scope qualifier in a group and leaves no operat
   }
 });
 
+test("buildSearchQuery leaves a quoted phrase as written", async () => {
+  const { buildSearchQuery } = await setupGithub();
+  const q = (query) => buildSearchQuery({ query, type: "issue", state: "all", repos: ["a/b"] }).q;
+
+  assert.equal(
+    q('"quoted repo:a/b phrase" crash'),
+    '"quoted repo:a/b phrase" crash is:issue repo:a/b'
+  );
+  assert.equal(q('"fails (sometimes" crash'), '"fails (sometimes" crash is:issue repo:a/b');
+  // A quote left open would make the qualifiers added after it one phrase,
+  // and hide a scope qualifier inside it.
+  assert.equal(q('crash "repo:evil/x'), "crash is:issue repo:a/b");
+  assert.equal(q('"login page" "timeout'), '"login page" timeout is:issue repo:a/b');
+});
+
+test("buildSearchQuery keeps the tool's type over one the query names", async () => {
+  const { buildSearchQuery } = await setupGithub();
+  const q = (query, type) => buildSearchQuery({ query, type, state: "all", repos: ["a/b"] }).q;
+
+  for (const query of [
+    "crash is:pr",
+    "crash IS:PULL-REQUEST",
+    "crash type:pr",
+    "crash -is:issue",
+  ]) {
+    assert.equal(q(query, "issue"), "crash is:issue repo:a/b", query);
+  }
+  assert.equal(q("crash is:issue", "pr"), "crash is:pull-request repo:a/b");
+  assert.equal(q("(is:pr OR label:bug) crash", "issue"), "( label:bug) crash is:issue repo:a/b");
+  // Only the type: is:prime is a word, and other is: qualifiers pass.
+  assert.equal(
+    q("crash is:prime is:locked", "issue"),
+    "crash is:prime is:locked is:issue repo:a/b"
+  );
+});
+
+test("buildSearchQuery leaves no parenthesis without its pair", async () => {
+  const { buildSearchQuery } = await setupGithub();
+  const words = (query) =>
+    buildSearchQuery({ query, type: "issue", state: "all", repos: ["a/b"] }).q.replace(
+      / is:issue repo:a\/b$/,
+      ""
+    );
+
+  for (const [query, expected] of [
+    ["crash repo:evil/x)", "crash"],
+    ["crash) login", "crash login"],
+    ["(crash OR login", "crash OR login"],
+    ["(crash OR (login) timeout", "crash OR (login) timeout"],
+    ["(crash repo:evil/x) login", "(crash ) login"],
+    ["crash repo:evil(x login)", "crash login"],
+  ]) {
+    assert.equal(words(query), expected, query);
+  }
+});
+
 test("buildSearchQuery adds state:open only when the query names no state of its own", async () => {
   const { buildSearchQuery } = await setupGithub();
   const q = (query) => buildSearchQuery({ query, type: "pr", repos: ["a/b"] }).q;
@@ -332,7 +388,7 @@ test("buildSearchQuery adds state:open only when the query names no state of its
   ]) {
     assert.equal(q(query), `${query} is:pull-request repo:a/b`, query);
   }
-  for (const query of ["crash is:issue", "crash label:state:closed", "crash is:closedish"]) {
+  for (const query of ["crash is:locked", "crash label:state:closed", "crash is:closedish"]) {
     assert.equal(q(query), `${query} is:pull-request state:open repo:a/b`, query);
   }
 });
@@ -1931,7 +1987,8 @@ test("the status shows the GitHub user, the installed repository count once read
     needsReconnect: false,
     manageUrl: INSTALL_URL,
   };
-  assert.deepEqual(await connector.getStatus(), status);
+  // Not read yet for this login, rather than none installed.
+  assert.deepEqual(await connector.getStatus(), { ...status, workspaceLabelPending: true });
   await countReadLands();
   assert.equal(statusChanges.length, 1);
   assert.deepEqual(await connector.getStatus(), { ...status, workspaceLabel: "3" });
@@ -1940,11 +1997,29 @@ test("the status shows the GitHub user, the installed repository count once read
   await none.connector.getStatus();
   await countReadLands();
   assert.equal((await none.connector.getStatus()).workspaceLabel, "0");
-  const unreadable = await setupGithub({ [INSTALLATIONS]: [offline()] });
-  await unreadable.connector.getStatus();
+});
+
+test("a first repository count that can't be read still ends the wait, announced once", async () => {
+  const { connector, github, credentials, statusChanges } = await setupGithub({
+    [INSTALLATIONS]: [offline()],
+  });
+
+  assert.equal((await connector.getStatus()).workspaceLabelPending, true);
   await countReadLands();
-  assert.equal((await unreadable.connector.getStatus()).workspaceLabel, null);
-  assert.equal(unreadable.statusChanges.length, 0);
+  assert.equal(statusChanges.length, 1);
+
+  // The announced status reads again; that failure changes nothing, so it
+  // announces nothing and no status loop follows.
+  const status = await connector.getStatus();
+  await countReadLands();
+  assert.equal(status.workspaceLabel, null);
+  assert.equal("workspaceLabelPending" in status, false);
+  assert.equal(statusChanges.length, 1);
+  assert.equal(hits(github, INSTALLATIONS).length, 2);
+
+  // A reconnect is a new login: its count is pending again.
+  credentials.replace("acct-1", "github", OTHER_LOGIN, 1);
+  assert.equal((await connector.getStatus()).workspaceLabelPending, true);
 });
 
 test("a repository count cut at the read limit says there are more", async () => {
@@ -2027,7 +2102,8 @@ test("a repository read that hangs is given up after the bound, so the next stat
   await countReadLands();
 
   assert.equal(hits(github, INSTALLATIONS).length, 2);
-  assert.equal(statusChanges.length, 0);
+  // Only the first read given up on is announced: the row stops waiting.
+  assert.equal(statusChanges.length, 1);
 });
 
 test("a token refresh that hangs never holds up the status", async () => {
@@ -2083,6 +2159,7 @@ test("a login that needs reconnecting reports it without asking GitHub", async (
 
   assert.equal(status.needsReconnect, true);
   assert.equal(status.workspaceLabel, null);
+  assert.equal("workspaceLabelPending" in status, false);
   assert.equal(github.calls.length, 0);
 });
 

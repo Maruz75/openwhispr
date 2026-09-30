@@ -4093,7 +4093,9 @@
         "policy_blocked": "組織によってコネクタが無効にされています。",
         "policy_unavailable": "組織の設定を確認できませんでした。もう一度お試しください。",
         "code_expired": "コードの有効期限が切れました。もう一度お試しください。",
-        "device_flow_disabled": "このビルドでは、コードによるGitHubへのサインインが設定されていません。"
+        "device_flow_disabled": "このビルドでは、コードによるGitHubへのサインインが設定されていません。",
+        "network": "GitHubに接続できませんでした。接続を確認して、もう一度お試しください。",
+        "rate_limited": "GitHubが混み合っています。1分後にもう一度お試しください。"
       },
       "deviceCode": {
         "instructions": "GitHubでこのコードを入力してください:",

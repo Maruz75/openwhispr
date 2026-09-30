@@ -451,6 +451,33 @@ test("a description or label that isn't text is refused, never dropped", async (
   assert.equal(holds.count, 4);
 });
 
+test("a repo that isn't text is refused, never widened to every repository", async (t) => {
+  let asked = 0;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorQuery: async () => (asked += 1),
+        connectorPrepare: async () => (asked += 1),
+      },
+    },
+  });
+  await setGithubStatus(t);
+  const { githubSearchIssuesTool, githubCreateIssueTool } = await loadTools();
+  const { context } = await turn();
+
+  const results = [
+    await githubSearchIssuesTool.execute({ query: "timeout", repo: ["acme/api"] }, context()),
+    await githubCreateIssueTool.execute({ title: "Bug", repo: { name: "acme/api" } }, context()),
+  ];
+
+  for (const result of results) {
+    assert.equal(result.data.status, "failed");
+    assert.equal(result.data.errorCode, "invalid_input");
+    assert.match(result.data.error, /repo is owner\/name or a repository name, as text/);
+  }
+  assert.equal(asked, 0);
+});
+
 test("the GitHub tools tell the model their limits and short targets", async () => {
   const { githubSearchIssuesTool, githubCreateIssueTool, githubCommentTool } = await loadTools();
   const describe = (tool, name) => tool.parameters.properties[name].description;
@@ -459,6 +486,9 @@ test("the GitHub tools tell the model their limits and short targets", async () 
   assert.match(describe(githubSearchIssuesTool, "state"), /all, which includes closed and merged/);
   assert.match(describe(githubCreateIssueTool, "title"), /256 characters/);
   assert.match(describe(githubCreateIssueTool, "body"), /65,536 characters/);
+  assert.match(describe(githubCreateIssueTool, "labels"), /10 at most/);
+  // Main refuses more (too_many_labels).
+  assert.equal(githubCreateIssueTool.parameters.properties.labels.maxItems, 10);
   assert.match(describe(githubCommentTool, "body"), /65,536 characters/);
   assert.match(describe(githubCommentTool, "target"), /repo#12, #12/);
   assert.match(githubCreateIssueTool.promptInstruction, /one call per issue/);
@@ -696,9 +726,13 @@ test("an unconfirmed issue or comment sends the user to GitHub to check before r
   );
   assert.equal(issue.status, "unknown");
   assert.equal(issue.checkUrl, "https://github.com/acme/api/issues");
-  assert.match(issue.guidance, /check the repository's issues on GitHub \(checkUrl\)/);
+  assert.match(
+    issue.guidance,
+    /check the repository's issues on GitHub \(checkUrl, when there is one\)/
+  );
   assert.equal(comment.status, "unknown");
-  assert.match(comment.guidance, /check the issue or pull request on GitHub/);
+  // A commit whose IPC threw has no checkUrl, so the guidance never assumes one.
+  assert.match(comment.guidance, /on GitHub \(checkUrl, when there is one\)/);
   assert.match(comment.guidance, /before asking for the comment again/);
 });
 
