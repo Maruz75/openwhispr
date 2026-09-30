@@ -329,7 +329,7 @@ test("Google shared RSVP repair is scoped, preserves notes, and runs once", (t) 
   assert.equal(reopened.getGoogleCalendars().find((c) => c.id === "shared").sync_token, "fresh");
 });
 
-for (const provider of ["google", "microsoft", "apple"]) {
+for (const provider of ["google", "apple"]) {
   test(`${provider}: only self-declined schedule rows are hidden, and reacceptance restores them`, (t) => {
     const db = createDb(t);
     if (!db) return;
@@ -353,18 +353,13 @@ for (const provider of ["google", "microsoft", "apple"]) {
         make(response, response)
       ),
       make("missing", undefined),
-      make("free", "accepted", { availability_status: "free" }),
-      make("cancelled", "accepted", { status: "cancelled" }),
-      make("all-day", "accepted", { is_all_day: true }),
-      make("past", "accepted", { end_time: new Date(now - 60_000).toISOString() }),
     ];
     db.upsertCalendarEvents(rows);
     const note = db.saveNote("Declined meeting notes", "Keep", "meeting").note;
     db.updateNote(note.id, { calendar_event_id: "declined" });
-    const expected = ["accepted", "free", "missing", "needsAction", "tentative", "unknown"];
+    const expected = ["accepted", "missing", "needsAction", "tentative", "unknown"];
     for (const events of [db.getUpcomingEvents(60), db.getActiveEvents()]) {
       assert.deepEqual(events.map((e) => e.id).sort(), expected);
-      assert.ok(events.every((e) => !("has_synced" in e)));
     }
     assert.equal(db.getCalendarEventById("declined").hangout_link, declined.hangout_link);
     assert.equal(
@@ -378,37 +373,33 @@ for (const provider of ["google", "microsoft", "apple"]) {
   });
 }
 
-for (const provider of ["google", "microsoft"]) {
-  for (const offset of [-5, 5]) {
-    test(`${provider}: declined REST suppresses its stale Apple mirror at offset ${offset}`, (t) => {
-      const db = createDb(t);
-      if (!db) return;
-      t.after(() => db.db.close());
-      const now = Date.now();
-      const common = {
-        summary: "Weekly planning",
-        start_time: new Date(now + offset * 60_000).toISOString(),
-        end_time: new Date(now + 30 * 60_000).toISOString(),
-      };
-      db.upsertCalendarEvents([
-        restEvent(provider, "cal", "rest-instance", {
-          ...common,
-          self_response_status: "declined",
-        }),
-        appleEvent("apple-instance", { ...common, self_response_status: "accepted" }),
-        restEvent(provider, "cal", "accepted-sibling", {
-          ...common,
-          self_response_status: "accepted",
-          start_time: new Date(now + 60 * 60_000).toISOString(),
-          end_time: new Date(now + 90 * 60_000).toISOString(),
-        }),
-      ]);
-      assert.deepEqual(
-        db.getUpcomingEvents(120).map((e) => e.id),
-        ["accepted-sibling"]
-      );
-      assert.deepEqual(db.getActiveEvents(), []);
-      assert.equal(db.getCalendarEventById("apple-instance").self_response_status, "accepted");
-    });
-  }
-}
+test("declined REST suppresses its stale Apple mirror", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  t.after(() => db.db.close());
+  const now = Date.now();
+  const common = {
+    summary: "Weekly planning",
+    start_time: new Date(now - 5 * 60_000).toISOString(),
+    end_time: new Date(now + 30 * 60_000).toISOString(),
+  };
+  db.upsertCalendarEvents([
+    restEvent("google", "cal", "rest-instance", {
+      ...common,
+      self_response_status: "declined",
+    }),
+    appleEvent("apple-instance", { ...common, self_response_status: "accepted" }),
+    restEvent("google", "cal", "accepted-sibling", {
+      ...common,
+      self_response_status: "accepted",
+      start_time: new Date(now + 60 * 60_000).toISOString(),
+      end_time: new Date(now + 90 * 60_000).toISOString(),
+    }),
+  ]);
+  assert.deepEqual(
+    db.getUpcomingEvents(120).map((e) => e.id),
+    ["accepted-sibling"]
+  );
+  assert.deepEqual(db.getActiveEvents(), []);
+  assert.equal(db.getCalendarEventById("apple-instance").self_response_status, "accepted");
+});

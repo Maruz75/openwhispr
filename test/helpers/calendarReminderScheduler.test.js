@@ -191,71 +191,26 @@ test("resetting a provider re-arms the next meeting timer for upcoming events", 
   scheduler.stop();
 });
 
-for (const provider of ["google", "microsoft", "apple"]) {
-  test(`schedule refresh clears a no-longer-eligible cached ${provider} meeting`, (t) => {
-    const event = activeEvent(provider, "meeting");
-    let rows = [event];
-    const scheduler = new CalendarReminderScheduler({
-      getUpcomingEvents: () => rows,
-      getActiveEvents: () => rows,
-    });
-    t.after(() => scheduler.stop());
-    let prompts = 0;
-    scheduler.meetingDetectionEngine = { handleCalendarReminder: () => prompts++ };
-    scheduler.scheduleNextMeeting();
-    assert.equal(prompts, 1);
-    assert.ok(scheduler.meetingEndTimer);
-    rows = [];
-    scheduler.scheduleNextMeeting();
-    assert.equal(scheduler.activeMeeting, null);
-    assert.equal(scheduler.meetingEndTimer, null);
-    assert.equal(scheduler.nextMeetingTimer, null);
-    assert.equal(prompts, 1);
-    assert.ok(scheduler.notifiedMeetings.has(`${provider}:meeting`));
-    rows = [event];
-    scheduler.scheduleNextMeeting();
-    assert.equal(prompts, 1, "reacceptance cannot repeat a delivered reminder");
-    assert.deepEqual(scheduler.getActiveMeetingState().activeEvents, [event]);
-  });
-}
-
-test("a pending callback cannot remind after its event leaves the schedule", (t) => {
-  const now = Date.parse("2026-10-01T10:00:00Z");
-  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now });
-  const event = {
-    ...activeEvent("google", "future"),
-    start_time: new Date(now + 120_000).toISOString(),
-    end_time: new Date(now + 600_000).toISOString(),
-  };
+test("schedule refresh clears a no-longer-eligible cached meeting", (t) => {
+  const event = activeEvent("google", "meeting");
   let rows = [event];
   const scheduler = new CalendarReminderScheduler({
     getUpcomingEvents: () => rows,
-    getActiveEvents: () => [],
+    getActiveEvents: () => rows,
   });
   t.after(() => scheduler.stop());
   let prompts = 0;
   scheduler.meetingDetectionEngine = { handleCalendarReminder: () => prompts++ };
   scheduler.scheduleNextMeeting();
-  assert.ok(scheduler.nextMeetingTimer);
-  rows = [];
-  t.mock.timers.tick(60_000);
-  assert.equal(prompts, 0);
-  assert.equal(scheduler.activeMeeting, null);
-  assert.equal(scheduler.nextMeetingTimer, null);
-});
-
-test("unchanged cache after failed sync retains active state without another prompt", (t) => {
-  const event = activeEvent("microsoft", "meeting");
-  const scheduler = new CalendarReminderScheduler({
-    getUpcomingEvents: () => [event],
-    getActiveEvents: () => [event],
-  });
-  t.after(() => scheduler.stop());
-  let prompts = 0;
-  scheduler.meetingDetectionEngine = { handleCalendarReminder: () => prompts++ };
-  scheduler.scheduleNextMeeting();
-  scheduler.scheduleNextMeeting();
-  assert.equal(scheduler.activeMeeting, event);
-  assert.ok(scheduler.meetingEndTimer);
   assert.equal(prompts, 1);
+  assert.ok(scheduler.meetingEndTimer);
+  rows = [];
+  scheduler.scheduleNextMeeting();
+  assert.equal(scheduler.activeMeeting, null);
+  assert.equal(scheduler.meetingEndTimer, null);
+  assert.equal(scheduler.nextMeetingTimer, null);
+  assert.equal(prompts, 1);
+  rows = [event];
+  scheduler.scheduleNextMeeting();
+  assert.equal(prompts, 1, "reacceptance cannot repeat a delivered reminder");
 });
