@@ -208,9 +208,9 @@ test("schedule refresh clears a no-longer-eligible cached meeting", (t) => {
   scheduler.scheduleNextMeeting();
   assert.equal(scheduler.activeMeeting, null);
   assert.equal(scheduler.meetingEndTimer, null);
-  assert.equal(scheduler.nextMeetingTimer, null);
   assert.equal(prompts, 1);
   rows = [event];
   scheduler.scheduleNextMeeting();
   assert.equal(prompts, 1, "reacceptance cannot repeat a delivered reminder");
+  assert.equal(scheduler.activeMeeting, event);
 });

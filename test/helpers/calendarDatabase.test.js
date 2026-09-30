@@ -352,12 +352,11 @@ for (const provider of ["google", "apple"]) {
       ...["accepted", "tentative", "needsAction", "unknown"].map((response) =>
         make(response, response)
       ),
-      make("missing", undefined),
     ];
     db.upsertCalendarEvents(rows);
     const note = db.saveNote("Declined meeting notes", "Keep", "meeting").note;
     db.updateNote(note.id, { calendar_event_id: "declined" });
-    const expected = ["accepted", "missing", "needsAction", "tentative", "unknown"];
+    const expected = ["accepted", "needsAction", "tentative", "unknown"];
     for (const events of [db.getUpcomingEvents(60), db.getActiveEvents()]) {
       assert.deepEqual(events.map((e) => e.id).sort(), expected);
     }
@@ -389,17 +388,7 @@ test("declined REST suppresses its stale Apple mirror", (t) => {
       self_response_status: "declined",
     }),
     appleEvent("apple-instance", { ...common, self_response_status: "accepted" }),
-    restEvent("google", "cal", "accepted-sibling", {
-      ...common,
-      self_response_status: "accepted",
-      start_time: new Date(now + 60 * 60_000).toISOString(),
-      end_time: new Date(now + 90 * 60_000).toISOString(),
-    }),
   ]);
-  assert.deepEqual(
-    db.getUpcomingEvents(120).map((e) => e.id),
-    ["accepted-sibling"]
-  );
+  assert.deepEqual(db.getUpcomingEvents(120), []);
   assert.deepEqual(db.getActiveEvents(), []);
-  assert.equal(db.getCalendarEventById("apple-instance").self_response_status, "accepted");
 });

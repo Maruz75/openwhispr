@@ -773,22 +773,21 @@ class DatabaseManager {
           .run();
       }
 
-      // Older builds took a shared calendar owner's RSVP as the connected user's.
-      // Clear uncertain cached responses and reload those calendars once.
+      // One-time reset (user_version 4): older builds took a shared Google
+      // calendar owner's RSVP as the connected user's; clear those cached
+      // responses and force a full sync of those calendars.
       if (this.db.pragma("user_version", { simple: true }) < 4) {
-        this.db.transaction(() => {
-          this.db.exec(`
-            UPDATE calendar_events SET self_response_status = 'unknown'
-            WHERE provider = 'google' AND NOT EXISTS (
-              SELECT 1 FROM google_calendars c
-              WHERE c.id = calendar_events.calendar_id
-                AND (c.is_primary = 1 OR c.id = c.account_email)
-            );
-            UPDATE google_calendars SET sync_token = NULL, sync_token_expires_at = NULL
-            WHERE is_primary = 0 AND (account_email IS NULL OR id != account_email);
-          `);
-          this.db.pragma("user_version = 4");
-        })();
+        this.db.exec(`
+          UPDATE calendar_events SET self_response_status = 'unknown'
+          WHERE provider = 'google' AND NOT EXISTS (
+            SELECT 1 FROM google_calendars c
+            WHERE c.id = calendar_events.calendar_id
+              AND (c.is_primary = 1 OR c.id = c.account_email)
+          );
+          UPDATE google_calendars SET sync_token = NULL, sync_token_expires_at = NULL
+          WHERE is_primary = 0 AND (account_email IS NULL OR id != account_email);
+        `);
+        this.db.pragma("user_version = 4");
       }
 
       this.db.exec(`

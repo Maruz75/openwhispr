@@ -28,6 +28,16 @@ class CalendarReminderScheduler {
   scheduleNextMeeting() {
     if (this.activeMeeting) {
       this.reconcileProvider(this.activeMeeting.provider);
+    } else {
+      // A delivered meeting that became eligible again (re-accepted while
+      // running) is active again, without a second reminder.
+      const delivered = this.databaseManager
+        .getActiveEvents()
+        .find((event) => this.notifiedMeetings.has(notificationKey(event)));
+      if (delivered) {
+        this.activeMeeting = delivered;
+        this._scheduleMeetingEnd(delivered);
+      }
     }
 
     if (this.nextMeetingTimer) {
@@ -108,9 +118,9 @@ class CalendarReminderScheduler {
     };
   }
 
-  // Refresh or clear the cached active event after a provider replaces its
-  // rows. Keep notifiedMeetings intact so periodic snapshots cannot re-fire a
-  // reminder that was already delivered.
+  // Refresh or clear the cached active event on every schedule refresh. Keep
+  // notifiedMeetings intact so periodic snapshots cannot re-fire a reminder
+  // that was already delivered.
   reconcileProvider(provider) {
     if (!this.activeMeeting || this.activeMeeting.provider !== provider) return;
 

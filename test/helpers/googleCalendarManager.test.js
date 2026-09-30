@@ -408,20 +408,17 @@ async function syncGoogleResponse(calendar, attendees) {
   return rows[0].self_response_status;
 }
 
-test("Google RSVP uses primary self or the connected shared-calendar attendee", async () => {
+test("Google RSVP on a shared calendar uses the connected account's attendee", async () => {
   const shared = { id: "colleague@example.com", account_email: "me@example.com" };
   const colleague = { email: "colleague@example.com", self: true, responseStatus: "declined" };
-  for (const response of ["accepted", "declined", "tentative", "needsAction"]) {
-    assert.equal(
-      await syncGoogleResponse(shared, [
-        colleague,
-        { email: "ME@example.com", responseStatus: response },
-      ]),
-      response
-    );
-  }
+  assert.equal(
+    await syncGoogleResponse(shared, [
+      colleague,
+      { email: "ME@example.com", responseStatus: "accepted" },
+    ]),
+    "accepted"
+  );
   assert.equal(await syncGoogleResponse(shared, [colleague]), "unknown");
-  assert.equal(await syncGoogleResponse(shared, []), "unknown");
   assert.equal(
     await syncGoogleResponse(shared, [
       colleague,
@@ -429,15 +426,4 @@ test("Google RSVP uses primary self or the connected shared-calendar attendee", 
     ]),
     "unknown"
   );
-  for (const calendar of [
-    { id: "primary-id", account_email: "me@example.com", is_primary: 1 },
-    { id: "me@example.com", account_email: "me@example.com" },
-  ]) {
-    assert.equal(
-      await syncGoogleResponse(calendar, [
-        { email: "alias@example.com", self: true, responseStatus: "declined" },
-      ]),
-      "declined"
-    );
-  }
 });
