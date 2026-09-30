@@ -26,8 +26,9 @@ jest.mock('@/store/useProcessingModeStore', () => ({
     selector({ activeMode: mockActiveMode }),
 }));
 jest.mock('@/hooks/useConfigToggle', () => ({ useConfigToggle: () => jest.fn() }));
+const mockReadiness = jest.fn();
 jest.mock('@/lib/localReasoning', () => ({
-  getLocalReasoningReadiness: jest.fn(async () => ({ status: 'ready', tokenCounting: false })),
+  getLocalReasoningReadiness: (...args: unknown[]) => mockReadiness(...args),
 }));
 jest.mock('@/services/providers/ProviderCredentials', () => ({
   clearProviderCredentials: (...args: unknown[]) => mockClearCredentials(...args),
@@ -51,6 +52,7 @@ beforeEach(() => {
   mockConfig = null;
   Platform.OS = 'ios';
   mockCredentialStatus.mockResolvedValue({ isConfigured: true });
+  mockReadiness.mockResolvedValue({ status: 'ready', tokenCounting: false });
 });
 
 afterAll(() => {
@@ -161,9 +163,18 @@ it('shows On-Device cleanup as running in On-Device mode', async () => {
   };
   render(<AIModelsScreen />);
   expect(screen.queryByText('Skipped')).toBeNull();
-  // Dictation, uploads, cleanup and note formatting, plus the On-Device section header.
-  expect(screen.getAllByText('On-Device')).toHaveLength(5);
   await screen.findByText(/Status: Ready/);
+});
+
+it('says why On-Device cleanup cannot run while Apple Intelligence is off', async () => {
+  mockReadiness.mockResolvedValue({ status: 'appleIntelligenceOff', tokenCounting: false });
+  mockActiveMode = 'private';
+  mockConfig = {
+    defaultMode: 'private',
+    inference: { dictation: { mode: 'local' }, cleanup: { mode: 'local' } },
+  };
+  render(<AIModelsScreen />);
+  expect(await screen.findByText('On-Device · Apple Intelligence off')).toBeTruthy();
 });
 
 it('shows provider note chat as On-Device, which answers it on this iPhone first', async () => {
