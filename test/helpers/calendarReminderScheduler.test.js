@@ -214,3 +214,25 @@ test("schedule refresh clears a no-longer-eligible cached meeting", (t) => {
   assert.equal(prompts, 1, "reacceptance cannot repeat a delivered reminder");
   assert.equal(scheduler.activeMeeting, event);
 });
+
+test("clearing the cached meeting restores another reminded running meeting", (t) => {
+  const first = activeEvent("apple", "first");
+  const second = activeEvent("apple", "second");
+  let rows = [first];
+  const scheduler = new CalendarReminderScheduler({
+    getUpcomingEvents: () => rows,
+    getActiveEvents: () => rows,
+  });
+  t.after(() => scheduler.stop());
+  let prompts = 0;
+  scheduler.meetingDetectionEngine = { handleCalendarReminder: () => prompts++ };
+  scheduler.scheduleNextMeeting();
+  rows = [first, second];
+  scheduler.scheduleNextMeeting();
+  assert.equal(scheduler.activeMeeting, second);
+  rows = [first];
+  scheduler.scheduleNextMeeting();
+  assert.equal(scheduler.activeMeeting, first);
+  scheduler.onWakeFromSleep();
+  assert.equal(prompts, 2, "waking cannot repeat a delivered reminder");
+});

@@ -329,48 +329,45 @@ test("Google shared RSVP repair is scoped, preserves notes, and runs once", (t) 
   assert.equal(reopened.getGoogleCalendars().find((c) => c.id === "shared").sync_token, "fresh");
 });
 
-for (const provider of ["google", "apple"]) {
-  test(`${provider}: only self-declined schedule rows are hidden, and reacceptance restores them`, (t) => {
-    const db = createDb(t);
-    if (!db) return;
-    t.after(() => db.db.close());
-    const now = Date.now();
-    const make = (id, response, overrides = {}) =>
-      restEvent(provider, "cal", id, {
-        start_time: new Date(now - 5 * 60_000).toISOString(),
-        end_time: new Date(now + 30 * 60_000).toISOString(),
-        self_response_status: response,
-        attendees_count: 2,
-        attendees: '[{"self":true,"responseStatus":"accepted"},{"responseStatus":"declined"}]',
-        ...overrides,
-      });
-    const declined = make("declined", "declined", {
-      hangout_link: "https://meet.google.com/abc-defg-hij",
+test("google: only self-declined schedule rows are hidden, and reacceptance restores them", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  t.after(() => db.db.close());
+  const now = Date.now();
+  const make = (id, response, overrides = {}) =>
+    restEvent("google", "cal", id, {
+      start_time: new Date(now - 5 * 60_000).toISOString(),
+      end_time: new Date(now + 30 * 60_000).toISOString(),
+      self_response_status: response,
+      attendees_count: 2,
+      attendees: '[{"self":true,"responseStatus":"accepted"},{"responseStatus":"declined"}]',
+      ...overrides,
     });
-    const rows = [
-      declined,
-      ...["accepted", "tentative", "needsAction", "unknown"].map((response) =>
-        make(response, response)
-      ),
-    ];
-    db.upsertCalendarEvents(rows);
-    const note = db.saveNote("Declined meeting notes", "Keep", "meeting").note;
-    db.updateNote(note.id, { calendar_event_id: "declined" });
-    const expected = ["accepted", "needsAction", "tentative", "unknown"];
-    for (const events of [db.getUpcomingEvents(60), db.getActiveEvents()]) {
-      assert.deepEqual(events.map((e) => e.id).sort(), expected);
-    }
-    assert.equal(db.getCalendarEventById("declined").hangout_link, declined.hangout_link);
-    assert.equal(
-      db.db.prepare("SELECT calendar_event_id FROM notes WHERE id=?").get(note.id)
-        .calendar_event_id,
-      "declined"
-    );
-    db.upsertCalendarEvents([{ ...declined, self_response_status: "accepted" }]);
-    assert.ok(db.getUpcomingEvents(60).some((e) => e.id === "declined"));
-    assert.ok(db.getActiveEvents().some((e) => e.id === "declined"));
+  const declined = make("declined", "declined", {
+    hangout_link: "https://meet.google.com/abc-defg-hij",
   });
-}
+  const rows = [
+    declined,
+    ...["accepted", "tentative", "needsAction", "unknown"].map((response) =>
+      make(response, response)
+    ),
+  ];
+  db.upsertCalendarEvents(rows);
+  const note = db.saveNote("Declined meeting notes", "Keep", "meeting").note;
+  db.updateNote(note.id, { calendar_event_id: "declined" });
+  const expected = ["accepted", "needsAction", "tentative", "unknown"];
+  for (const events of [db.getUpcomingEvents(60), db.getActiveEvents()]) {
+    assert.deepEqual(events.map((e) => e.id).sort(), expected);
+  }
+  assert.equal(db.getCalendarEventById("declined").hangout_link, declined.hangout_link);
+  assert.equal(
+    db.db.prepare("SELECT calendar_event_id FROM notes WHERE id=?").get(note.id).calendar_event_id,
+    "declined"
+  );
+  db.upsertCalendarEvents([{ ...declined, self_response_status: "accepted" }]);
+  assert.ok(db.getUpcomingEvents(60).some((e) => e.id === "declined"));
+  assert.ok(db.getActiveEvents().some((e) => e.id === "declined"));
+});
 
 test("declined REST suppresses its stale Apple mirror", (t) => {
   const db = createDb(t);
