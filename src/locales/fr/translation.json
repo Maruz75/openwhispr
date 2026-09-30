@@ -3280,7 +3280,6 @@
     "createMenu": {
       "note": "Note",
       "assistantChat": "Chat avec l'assistant",
-      "teamSpace": "Espace d'équipe",
       "chooseType": "Choisir quoi créer"
     },
     "editor": {

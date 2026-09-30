@@ -2957,7 +2957,6 @@
     "createMenu": {
       "note": "Заметка",
       "assistantChat": "Чат с помощником",
-      "teamSpace": "Командное пространство",
       "chooseType": "Выбрать, что создать"
     },
     "editor": {
