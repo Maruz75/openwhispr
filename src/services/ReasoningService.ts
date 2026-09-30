@@ -11,10 +11,14 @@ import { SecureCache } from "../utils/SecureCache";
 import { withRetry, createApiRetryStrategy, httpError } from "../utils/retry";
 import { API_ENDPOINTS, TOKEN_LIMITS, buildApiUrl, ensureV1Suffix } from "../config/constants";
 import logger from "../utils/logger";
+import { assertValidCleanupOutput } from "../utils/cleanupOutput";
 import { getSettings, isCloudCleanupMode } from "../stores/settingsStore";
 import { wrapCleanupTranscript } from "../config/prompts";
 import { stripThinkingTags } from "../helpers/stripThinking.js";
-import { getLlmRequestTimeoutSeconds } from "../helpers/llmRequestTimeout.js";
+import {
+  getLlmRequestTimeoutSeconds,
+  llmRequestTimeoutError,
+} from "../helpers/llmRequestTimeout.js";
 import { streamText, stepCountIs } from "ai";
 import { getAIModel } from "./ai/providers";
 import { createEnterpriseChatModel } from "./ai/enterpriseChatModel";
@@ -332,7 +336,7 @@ class ReasoningService extends BaseReasoningService {
       }
       const controller = new AbortController();
       this.activeRequestControllers.add(controller);
-      const timeoutSeconds = getLlmRequestTimeoutSeconds();
+      const timeoutSeconds = getLlmRequestTimeoutSeconds({ scope: config.inferenceScope });
       const timeoutId = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
       try {
         const headers: Record<string, string> = {
@@ -396,7 +400,7 @@ class ReasoningService extends BaseReasoningService {
           if (requestGeneration !== this.requestCancellationGeneration) {
             throw httpError("Request cancelled", 499);
           }
-          throw new Error(`Request timed out after ${timeoutSeconds}s`);
+          throw llmRequestTimeoutError(timeoutSeconds);
         }
         throw error;
       } finally {
@@ -458,6 +462,11 @@ class ReasoningService extends BaseReasoningService {
     ({ model, config } = managed);
     const trimmedModel = model?.trim?.() || "";
     const settings = getSettings();
+    const validateCleanup =
+      config.inferenceScope === "dictationCleanup" &&
+      !config.systemPrompt &&
+      !config.requiresAgent &&
+      !settings.customPrompts.cleanup;
     const isImplicitCleanup =
       config.provider === undefined && config.baseUrl === undefined && config.lanUrl === undefined;
     const implicitProvider =
@@ -514,6 +523,8 @@ class ReasoningService extends BaseReasoningService {
         config: dispatchConfig,
         ctx: this.providerContext,
       });
+
+      if (validateCleanup) assertValidCleanupOutput(text, result);
 
       logger.logReasoning("PROVIDER_SUCCESS", {
         provider: providerId,
@@ -919,11 +930,18 @@ class ReasoningService extends BaseReasoningService {
           const output = chunk.output;
           const displayText =
             typeof output === "string" ? output : output?.error ? String(output.error) : "Done";
+          // Mirror the cloud path: successful object outputs become metadata so
+          // tool-result cards (note cards) render on BYOK/local too.
+          const metadata =
+            output && typeof output === "object" && !("error" in output)
+              ? (output as ToolMetadata)
+              : undefined;
           yield {
             type: "tool_result",
             callId: chunk.toolCallId,
             toolName: chunk.toolName,
             displayText,
+            ...(metadata ? { metadata } : {}),
           };
         } else if (chunk.type === "abort") {
           canFlushFilteredText = false;
@@ -1093,7 +1111,11 @@ class ReasoningService extends BaseReasoningService {
     config: {
       systemPrompt: string;
       tools?: Array<{ name: string; description: string; parameters: Record<string, unknown> }>;
-      executeToolCall?: (name: string, args: string) => Promise<ToolExecutionResult>;
+      executeToolCall?: (
+        name: string,
+        args: string,
+        toolCallId: string
+      ) => Promise<ToolExecutionResult>;
       screenContext?: { data: string; mediaType: string };
     }
   ): AsyncGenerator<AgentStreamChunk, void, unknown> {
@@ -1107,7 +1129,11 @@ class ReasoningService extends BaseReasoningService {
     config: {
       systemPrompt: string;
       tools?: Array<{ name: string; description: string; parameters: Record<string, unknown> }>;
-      executeToolCall?: (name: string, args: string) => Promise<ToolExecutionResult>;
+      executeToolCall?: (
+        name: string,
+        args: string,
+        toolCallId: string
+      ) => Promise<ToolExecutionResult>;
       screenContext?: { data: string; mediaType: string };
     },
     operationGeneration: number
@@ -1155,7 +1181,7 @@ class ReasoningService extends BaseReasoningService {
         if (operationWasCancelled()) return;
         let toolResult: ToolExecutionResult;
         try {
-          toolResult = await config.executeToolCall(call.name, call.arguments);
+          toolResult = await config.executeToolCall(call.name, call.arguments, call.id);
         } catch (error) {
           const errMsg = `Error: ${(error as Error).message}`;
           toolResult = { data: errMsg, displayText: errMsg };
