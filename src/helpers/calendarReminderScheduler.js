@@ -32,10 +32,9 @@ class CalendarReminderScheduler {
     if (!this.activeMeeting) {
       // A delivered meeting that became eligible again (re-accepted before or
       // during the meeting) is active again, without a second reminder.
-      const delivered = [
-        ...this.databaseManager.getActiveEvents(),
-        ...this.databaseManager.getUpcomingEvents(1),
-      ].find((event) => this.notifiedMeetings.has(notificationKey(event)));
+      const delivered = this.databaseManager
+        .getUpcomingEvents(1)
+        .find((event) => this.notifiedMeetings.has(notificationKey(event)));
       if (delivered) {
         this.activeMeeting = delivered;
         this._scheduleMeetingEnd(delivered);
