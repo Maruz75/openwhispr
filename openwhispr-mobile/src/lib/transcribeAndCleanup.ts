@@ -32,7 +32,7 @@ export interface DictationProcessingLifecycle {
   onCleanupDone?: (result: TranscriptionResponse) => void;
   onRawTranscript?: (text: string, result: TranscriptionResponse) => void;
   onFusedCleanupFallback?: (error: unknown) => void;
-  // Polled after transcription completes, before the (cloud-only) cleanup pass.
+  // Polled after transcription completes, before the cleanup pass.
   // When it returns true the cleanup call is skipped and the raw transcript is
   // returned — the caller discards it. Lets a keyboard cancel avoid paying for
   // cleanup of a result the user already abandoned.
@@ -48,7 +48,7 @@ export interface DictationProcessingResult {
 }
 
 // The transcript before any cleanup pass: returned for local/private transcripts
-// (cleanup is cloud-only) and when a cancel short-circuits cleanup.
+// that On-Device cleanup won't clean, and when a cancel short-circuits cleanup.
 function rawTranscriptResult(transcription: TranscriptionResponse): DictationProcessingResult {
   const originalText = transcription.originalText || transcription.text;
   return {
@@ -58,6 +58,16 @@ function rawTranscriptResult(transcription: TranscriptionResponse): DictationPro
     cleanupApplied: false,
     fusedCleanup: false,
   };
+}
+
+// The pinned route keeps a local transcript on the phone; the saved choice says
+// whether the user wants it cleaned there. A local route alone only means the
+// job ran On-Device, whatever cleanup is set to.
+function cleansOnDevice(request: TranscriptionRequest): boolean {
+  return (
+    request.cleanupRoute?.mode === 'local' &&
+    useConfigStore.getState().config?.inference?.cleanup?.mode === 'local'
+  );
 }
 
 function cleanupToneForRequest(request: TranscriptionRequest): KeyboardTone | undefined {
@@ -176,16 +186,16 @@ async function runSerialTranscribeAndCleanup(
   const originalText = transcription.text;
   lifecycle.onRawTranscript?.(originalText, transcription);
 
-  // Cleanup runs only when the transcription itself went to the cloud.
   // Local/private transcripts must never leave the device — not even for the
-  // cleanup pass. (transcription.provider, not request.provider, so the
-  // local-model-missing → cloud fallback still gets cleaned.)
-  if (transcription.provider === 'local') {
+  // cleanup pass — so they are cleaned only by On-Device cleanup.
+  // (transcription.provider, not request.provider, so the local-model-missing →
+  // cloud fallback still gets cleaned.)
+  if (transcription.provider === 'local' && !cleansOnDevice(request)) {
     return rawTranscriptResult(transcription);
   }
 
-  // Cancelled while transcribing: skip the cloud cleanup call entirely. The
-  // caller discards this result, so cleaning it would only waste cloud spend.
+  // Cancelled while transcribing: skip the cleanup call entirely. The
+  // caller discards this result, so cleaning it would only waste the work.
   if (lifecycle.shouldCancel?.()) {
     return rawTranscriptResult(transcription);
   }

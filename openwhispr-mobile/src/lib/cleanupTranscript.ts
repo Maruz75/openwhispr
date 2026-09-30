@@ -12,6 +12,7 @@ import {
   detectAgentMention,
 } from './dictationAgent';
 import { buildDictationHints } from './dictationHints';
+import { getLocalReasoningReadiness, getLocalReasoningUnavailableMessage } from './localReasoning';
 import { withRetry, createApiRetryStrategy } from './retry';
 
 // Only 'keyboard' and 'recording' may receive agentName — notes/meeting are not dictation flows.
@@ -116,6 +117,16 @@ export async function cleanupTranscript(
     return rawText;
   }
   const inferenceRoute = resolved.route;
+  // Say why an on-device pass can't run, rather than retrying into a generic failure.
+  if (inferenceRoute.mode === 'local') {
+    const readiness = await getLocalReasoningReadiness();
+    if (readiness.status !== 'ready') {
+      options.onSkipped?.(
+        `${getLocalReasoningUnavailableMessage(readiness)} Your raw transcript is saved.`,
+      );
+      return rawText;
+    }
+  }
   // Only provider and on-device routes take the privacy hint. A Cloud route is
   // either the user's choice or a Cloud fallback they just consented to while
   // still in private mode; hinting it would make ReasoningService demand local

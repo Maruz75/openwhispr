@@ -751,7 +751,7 @@ it('adds no pins when an existing user re-saves dictation with their own key', a
 it.each([
   [
     'cleanup',
-    'On-Device mode keeps the raw transcript, so cleanup is skipped. Your choice applies when dictation leaves On-Device.',
+    'On-Device cleanup runs on this iPhone. Any other choice is skipped until dictation leaves On-Device, so the transcript never leaves this phone.',
   ],
   [
     'agent',

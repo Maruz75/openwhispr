@@ -28,7 +28,7 @@ export const ON_DEVICE_MODE_NOTES: Partial<Record<MobileInferenceScope, string>>
   notes:
     'On-Device mode formats notes on this iPhone and asks before sending one to your choice here.',
   cleanup:
-    'On-Device mode keeps the raw transcript, so cleanup is skipped. Your choice applies when dictation leaves On-Device.',
+    'On-Device cleanup runs on this iPhone. Any other choice is skipped until dictation leaves On-Device, so the transcript never leaves this phone.',
   agent:
     'In On-Device mode the voice assistant is off, and note chat asks before sending a note off this iPhone.',
 };
@@ -57,10 +57,11 @@ export function workflowSummary(
   activeMode: ProcessingMode,
   keyMissing = false,
 ): string {
-  // On-Device mode skips cleanup and runs everything else on this phone first, whatever
-  // is saved. Only note chat set to OpenWhispr, or not set, goes straight to Cloud.
+  // On-Device mode runs everything on this phone first, whatever is saved. Cleanup runs
+  // only when set to On-Device, and only note chat set to OpenWhispr, or not set, goes
+  // straight to Cloud.
   if (activeMode === 'private') {
-    if (scope === 'cleanup') return 'Skipped';
+    if (scope === 'cleanup' && config?.inference?.cleanup?.mode !== 'local') return 'Skipped';
     const chatOnCloud = (config?.inference?.agent?.mode ?? 'openwhispr') === 'openwhispr';
     if (scope === 'agent' && chatOnCloud) return MODE_LABELS.openwhispr;
   }
