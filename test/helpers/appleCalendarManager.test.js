@@ -115,7 +115,7 @@ test("rooms and resources are flagged in attendees and kept, with the user, out 
       replaceAppleCalendarEvents: (events) => saved.push(...events),
       syncCalendarContacts: (...args) => synced.push(args),
     },
-    { reconcileProvider: () => {}, scheduleNextMeeting: () => {} }
+    { scheduleNextMeeting: () => {} }
   );
 
   manager._applySnapshot({

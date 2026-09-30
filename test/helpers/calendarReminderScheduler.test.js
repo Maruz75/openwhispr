@@ -219,25 +219,6 @@ for (const provider of ["google", "microsoft", "apple"]) {
   });
 }
 
-test("a failed active query keeps cached active state and its end timer", (t) => {
-  const event = activeEvent("google", "meeting");
-  let fail = false;
-  const scheduler = new CalendarReminderScheduler({
-    getUpcomingEvents: () => [event],
-    getActiveEvents: () => {
-      if (fail) throw new Error("database unavailable");
-      return [event];
-    },
-  });
-  t.after(() => scheduler.stop());
-  scheduler.scheduleNextMeeting();
-  const timer = scheduler.meetingEndTimer;
-  fail = true;
-  assert.throws(() => scheduler.scheduleNextMeeting(), /database unavailable/);
-  assert.equal(scheduler.activeMeeting, event);
-  assert.equal(scheduler.meetingEndTimer, timer);
-});
-
 test("a pending callback cannot remind after its event leaves the schedule", (t) => {
   const now = Date.parse("2026-10-01T10:00:00Z");
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now });

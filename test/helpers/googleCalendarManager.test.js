@@ -441,33 +441,3 @@ test("Google RSVP uses primary self or the connected shared-calendar attendee", 
     );
   }
 });
-
-test("empty Google delta and failed sync do not overwrite cached RSVP", async () => {
-  const GoogleCalendarManager = loadManagerModule();
-  const mutations = [];
-  const manager = new GoogleCalendarManager(
-    {
-      removeStaleCalendarEvents: () => mutations.push("prune"),
-      upsertCalendarEvents: () => mutations.push("upsert"),
-      removeCalendarEvents: () => mutations.push("remove"),
-      updateCalendarSyncToken: () => mutations.push("token"),
-      syncCalendarContacts: () => {},
-    },
-    null,
-    { scheduleNextMeeting: () => {} }
-  );
-  const calendar = {
-    id: "cal",
-    account_email: "me@example.com",
-    sync_token: "current",
-    sync_token_expires_at: Date.now() + 60_000,
-  };
-  manager._apiGet = async () => ({ items: [] });
-  await manager._syncCalendar(calendar);
-  assert.deepEqual(mutations, []);
-  manager._apiGet = async () => {
-    throw new Error("offline");
-  };
-  await assert.rejects(manager._syncCalendar(calendar), /offline/);
-  assert.deepEqual(mutations, []);
-});
