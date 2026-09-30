@@ -7,7 +7,6 @@ import {
   Sparkles,
   AlignLeft,
   MessageSquareText,
-  Mic,
   LinkIcon,
   Link2,
   Lock,
@@ -15,9 +14,11 @@ import {
   Search,
   Plus,
   Check,
+  ShieldCheck,
   Users,
 } from "../icons";
 import ShareNoteDialog, { type NoteExportOption } from "./ShareNoteDialog";
+import { reconcileLocalShareState } from "./shareNoteRules";
 import {
   canOrganizeNote,
   noteCapabilities,
@@ -66,7 +67,9 @@ import type { NoteActionProgress } from "../../stores/actionProcessingStore";
 import ActionProcessingOverlay from "./ActionProcessingOverlay";
 import NoteBottomBar from "./NoteBottomBar";
 import NoteRecordControl, { RecordingWave } from "./NoteRecordControl";
-import EmptyStateCard from "../ui/EmptyStateCard";
+import ThemedEmptyIllustration from "../ui/ThemedEmptyIllustration";
+import transcriptsEmptyLight from "../../assets/empty-states/notes-transcripts-light.svg";
+import transcriptsEmptyDark from "../../assets/empty-states/notes-transcripts-dark.svg";
 import { Button } from "../ui/button";
 import EmbeddedChat, { type EmbeddedChatMode } from "./EmbeddedChat";
 import { useEmbeddedChat } from "../../hooks/useEmbeddedChat";
@@ -79,7 +82,7 @@ import {
   serializeTranscriptSegments,
 } from "../../utils/transcriptSpeakerState";
 import NoteParticipants from "./NoteParticipants";
-import type { CalendarAttendee } from "../../types/calendar";
+import { parseNoteParticipants } from "../../utils/noteAttendees";
 import { observeFloatingChatLayout } from "./floatingChatLayout";
 import {
   NOTE_META_CHIP_CLASS,
@@ -252,8 +255,27 @@ export default function NoteEditor({
   const { t } = useTranslation();
   const locale = useUiLocale();
   const defaultViewMode: MeetingViewMode = enhancement ? "enhanced" : "raw";
-  const [viewMode, setViewMode] = useState<MeetingViewMode>(defaultViewMode);
+  const [selectedViewMode, setSelectedViewMode] = useState<MeetingViewMode>(defaultViewMode);
+  // Stored as chosen, clamped on read: AI Summary is the only tab that can stop
+  // rendering, and a tab that no longer renders can never be the current one.
+  const viewMode: MeetingViewMode =
+    selectedViewMode === "enhanced" && !enhancement ? "raw" : selectedViewMode;
   const [chatMode, setChatMode] = useState<EmbeddedChatMode>("hidden");
+  // The in-view chat mounts on its first open and then stays, so it can fade out as it
+  // closes; a note whose chat is never opened doesn't render its conversation at all.
+  const [inViewChatMounted, setInViewChatMounted] = useState(false);
+  if (chatMode === "floating" && !inViewChatMounted) setInViewChatMounted(true);
+  const [chatDraft, setChatDraft] = useState("");
+  const handleChatModeChange = useCallback((mode: EmbeddedChatMode) => {
+    if (
+      mode === "hidden" &&
+      document.activeElement instanceof HTMLElement &&
+      document.activeElement.closest("[data-note-chat-panel]")
+    ) {
+      document.activeElement.blur();
+    }
+    setChatMode(mode);
+  }, []);
   const [folderSearch, setFolderSearch] = useState("");
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -313,12 +335,14 @@ export default function NoteEditor({
           access: res.access ?? entry?.access,
           rawToken: entry?.rawToken ?? null,
         }));
-        const serverShared = res.share.visibility !== "private";
-        if (serverShared !== Boolean(note.is_shared)) {
-          void persistNoteShareState(
-            note.id,
-            serverShared ? { is_shared: 1 } : { is_shared: 0, share_token: null }
-          ).catch((err) => console.error("Share flag persist failed:", err));
+        const update = reconcileLocalShareState(
+          { isShared: Boolean(note.is_shared), shareToken: note.share_token ?? null },
+          res.share
+        );
+        if (update) {
+          void persistNoteShareState(note.id, update).catch((err) =>
+            console.error("Share flag persist failed:", err)
+          );
         }
       })
       .catch((err) => {
@@ -329,7 +353,15 @@ export default function NoteEditor({
     return () => {
       cancelled = true;
     };
-  }, [aclRetryVersion, isSignedIn, note.cloud_id, note.id, note.is_shared, shareCache]);
+  }, [
+    aclRetryVersion,
+    isSignedIn,
+    note.cloud_id,
+    note.id,
+    note.is_shared,
+    note.share_token,
+    shareCache,
+  ]);
   useEffect(() => {
     if (
       !isSignedIn ||
@@ -378,12 +410,21 @@ export default function NoteEditor({
   >([]);
   const editorRef = useRef<Editor | null>(null);
 
+  const parsedParticipants = useMemo(
+    () => parseNoteParticipants(note.participants),
+    [note.participants]
+  );
+
   const embeddedChat = useEmbeddedChat({
     noteId: note.id,
     folderId: note.folder_id,
     noteTitle: note.title,
     noteContent: note.content,
     noteTranscript: note.transcript ?? undefined,
+    noteParticipants: parsedParticipants,
+    noteOwnedByUser: ownsNote(note, user?.id),
+    selfEmail: user?.email ?? null,
+    noteCalendarEventId: note.calendar_event_id,
   });
   const titleRef = useRef<HTMLDivElement>(null);
   const prevNoteIdRef = useRef<number>(note.id);
@@ -426,14 +467,6 @@ export default function NoteEditor({
     [displaySegments, speakerMappings, speakerProfiles]
   );
 
-  const parsedParticipants = useMemo<CalendarAttendee[]>(() => {
-    try {
-      return note.participants ? JSON.parse(note.participants) : [];
-    } catch {
-      return [];
-    }
-  }, [note.participants]);
-
   const mentionPeople = useMemo(
     () =>
       collectKnownPeople(
@@ -466,7 +499,10 @@ export default function NoteEditor({
 
     const buttons = container.querySelectorAll<HTMLButtonElement>("[data-segment-button]");
     const activeBtn = Array.from(buttons).find((btn) => btn.dataset.segmentValue === viewMode);
-    if (!activeBtn) return;
+    if (!activeBtn) {
+      setIndicatorStyle((style) => ({ ...style, opacity: 0 }));
+      return;
+    }
 
     const cr = container.getBoundingClientRect();
     const br = activeBtn.getBoundingClientRect();
@@ -493,7 +529,7 @@ export default function NoteEditor({
     let cancelScheduledUpdate: (() => void) | undefined;
 
     if (prevProcessingStateRef.current === "processing" && actionProcessingState === "success") {
-      cancelScheduledUpdate = scheduleUiUpdate(() => setViewMode("enhanced"));
+      cancelScheduledUpdate = scheduleUiUpdate(() => setSelectedViewMode("enhanced"));
     }
     prevProcessingStateRef.current = actionProcessingState;
 
@@ -505,10 +541,11 @@ export default function NoteEditor({
       prevNoteIdRef.current = note.id;
       return scheduleUiUpdate(() => {
         setChatMode("hidden");
+        setChatDraft("");
         setDiarizedSegments(null);
         setIsDiarizing(false);
         setSpeakerMappings({});
-        setViewMode(defaultViewMode);
+        setSelectedViewMode(defaultViewMode);
         if (titleRef.current && titleRef.current.textContent !== note.title) {
           titleRef.current.textContent = note.title || "";
         }
@@ -738,10 +775,9 @@ export default function NoteEditor({
   }, []);
 
   const floatingChatPanelRef = useCallback(
-    (panel: HTMLDivElement | null): (() => void) | undefined => {
-      const container = panel?.parentElement;
+    (panel: HTMLDivElement, container: HTMLElement): (() => void) | undefined => {
       const contentRoot = contentScrollRef.current;
-      if (!panel || !container || !contentRoot) return undefined;
+      if (!contentRoot) return undefined;
 
       return observeFloatingChatLayout({
         panel,
@@ -771,6 +807,11 @@ export default function NoteEditor({
     (text: string) => {
       if (chatMode === "hidden") {
         setChatMode("floating");
+      }
+      // The chat is still replying: keep the question as the draft instead of dropping it.
+      if (embeddedChat.agentState !== "idle") {
+        setChatDraft(text);
+        return;
       }
       embeddedChat.sendMessage(text);
     },
@@ -1030,7 +1071,7 @@ export default function NoteEditor({
                 <button
                   data-segment-button
                   data-segment-value="transcript"
-                  onClick={() => setViewMode("transcript")}
+                  onClick={() => setSelectedViewMode("transcript")}
                   className={cn(
                     SEGMENT_BUTTON_CLASS,
                     viewMode === "transcript"
@@ -1044,7 +1085,7 @@ export default function NoteEditor({
                 <button
                   data-segment-button
                   data-segment-value="raw"
-                  onClick={() => setViewMode("raw")}
+                  onClick={() => setSelectedViewMode("raw")}
                   className={cn(
                     SEGMENT_BUTTON_CLASS,
                     viewMode === "raw"
@@ -1059,7 +1100,7 @@ export default function NoteEditor({
                   <button
                     data-segment-button
                     data-segment-value="enhanced"
-                    onClick={() => setViewMode("enhanced")}
+                    onClick={() => setSelectedViewMode("enhanced")}
                     className={cn(
                       SEGMENT_BUTTON_CLASS,
                       viewMode === "enhanced"
@@ -1195,19 +1236,34 @@ export default function NoteEditor({
             ) : viewMode === "transcript" && hasMeetingTranscript ? (
               <RichTextEditor value={note.transcript || ""} disabled />
             ) : viewMode === "transcript" ? (
-              <EmptyStateCard
-                icon={Mic}
-                title={t("notes.editor.transcriptEmptyTitle")}
-                description={t("notes.editor.transcriptEmptyDescription")}
-                className={cn(PAGE_CONTENT_WIDTH_CLASS, "mt-2")}
+              <div
+                className={cn(
+                  PAGE_CONTENT_WIDTH_CLASS,
+                  "flex min-h-80 flex-col items-center px-4 pt-16 text-center"
+                )}
               >
+                <ThemedEmptyIllustration
+                  light={transcriptsEmptyLight}
+                  dark={transcriptsEmptyDark}
+                  width={590}
+                  height={77}
+                />
+                <h2 className="mt-12 text-xl font-semibold text-foreground">
+                  {t("notes.editor.transcriptEmptyTitle")}
+                </h2>
+                <p className="mt-2 max-w-xs text-base leading-6 text-muted-foreground">
+                  {t("notes.editor.transcriptEmptyDescription")}
+                </p>
                 {canEditNote && recordingAllowed && (
-                  <Button size="sm" onClick={onStartRecording} disabled={isProcessing}>
-                    <Mic size={13} />
+                  <Button
+                    className="mt-6 rounded-full px-5 font-medium"
+                    onClick={onStartRecording}
+                    disabled={isProcessing}
+                  >
                     {t("notes.editor.startRecording")}
                   </Button>
                 )}
-              </EmptyStateCard>
+              </div>
             ) : viewMode === "enhanced" && enhancement ? (
               <RichTextEditor
                 value={enhancement.content}
@@ -1252,42 +1308,70 @@ export default function NoteEditor({
           )}
           <NoteBottomBar
             isRecording={isRecording}
+            draftText={chatDraft}
+            onDraftChange={setChatDraft}
             onAskSubmit={handleAskSubmit}
             onInputFocus={handleChatInputFocus}
-            actionPicker={isRecording || !canEditNote ? undefined : actionPicker}
+            onInputEscape={() => handleChatModeChange("hidden")}
+            chatOpen={chatMode === "floating"}
+            agentState={chatMode === "floating" ? embeddedChat.agentState : "idle"}
+            onCancel={embeddedChat.cancelStream}
+            floatingPanelRef={floatingChatPanelRef}
+            chatContent={
+              chatMode !== "sidebar" &&
+              inViewChatMounted && (
+                <EmbeddedChat
+                  mode="floating"
+                  active={chatMode === "floating"}
+                  onModeChange={handleChatModeChange}
+                  messages={embeddedChat.messages}
+                  agentState={embeddedChat.agentState}
+                  onTextSubmit={embeddedChat.sendMessage}
+                  onCancel={embeddedChat.cancelStream}
+                  noteConversations={embeddedChat.noteConversations}
+                  activeConversationId={embeddedChat.activeConversationId}
+                  onSwitchConversation={embeddedChat.switchConversation}
+                  onNewChat={embeddedChat.startNewChat}
+                />
+              )
+            }
+            actionPicker={
+              isRecording ||
+              !canEditNote ||
+              (viewMode === "transcript" && !hasMeetingTranscript && !hasChatSegments)
+                ? undefined
+                : actionPicker
+            }
             callout={
-              showSummaryCallout && (
+              showSummaryCallout &&
+              selectedSegmentIds.size === 0 && (
                 <Button className="h-9 gap-2 px-4 text-sm" onClick={onGenerateSummary}>
                   <AlignLeft size={16} />
                   {t("notes.editor.generateSummary")}
                 </Button>
               )
             }
-            hideInput={chatMode !== "hidden"}
+            footnote={
+              viewMode === "transcript" &&
+              (hasChatSegments || isRecording) && (
+                <>
+                  <ShieldCheck size={10} className="shrink-0" />
+                  <span>{t("notes.speaker.consentNotice")}</span>
+                </>
+              )
+            }
+            hideInput={chatMode === "sidebar"}
           />
-          {chatMode === "floating" && (
-            <EmbeddedChat
-              mode="floating"
-              floatingPanelRef={floatingChatPanelRef}
-              onModeChange={setChatMode}
-              messages={embeddedChat.messages}
-              agentState={embeddedChat.agentState}
-              onTextSubmit={embeddedChat.sendMessage}
-              onCancel={embeddedChat.cancelStream}
-              noteConversations={embeddedChat.noteConversations}
-              activeConversationId={embeddedChat.activeConversationId}
-              onSwitchConversation={embeddedChat.switchConversation}
-              onNewChat={embeddedChat.startNewChat}
-            />
-          )}
         </div>
       </div>
       {chatMode === "sidebar" && (
         <EmbeddedChat
           mode="sidebar"
-          onModeChange={setChatMode}
+          onModeChange={handleChatModeChange}
           messages={embeddedChat.messages}
           agentState={embeddedChat.agentState}
+          draftText={chatDraft}
+          onDraftChange={setChatDraft}
           onTextSubmit={embeddedChat.sendMessage}
           onCancel={embeddedChat.cancelStream}
           noteConversations={embeddedChat.noteConversations}

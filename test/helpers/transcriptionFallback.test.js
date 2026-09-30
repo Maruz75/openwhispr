@@ -1,5 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const {
+  createPolicyResponseError,
+  toPolicyFailure,
+} = require("../../src/helpers/policyResponseError");
 
 const load = () => import("../../src/helpers/transcriptionFallback.js");
 
@@ -58,6 +62,22 @@ test("a disabled Orukeet rollout falls back to batch as feature_disabled", async
   );
 });
 
+test("a language exclusion keeps the feature_disabled batch fallback", async () => {
+  // The start result the session route's 403 body becomes over IPC.
+  const result = toPolicyFailure(
+    createPolicyResponseError(
+      403,
+      {
+        error: "Orukeet dictation is not enabled for this account",
+        code: "FEATURE_NOT_ENABLED",
+        reason: "language_unsupported",
+      },
+      "Orukeet session unavailable (403)"
+    )
+  );
+  assert.equal(await orukeetStart(result), "feature_disabled");
+});
+
 test("an exhausted session mint window falls back to batch as rate_limited", async () => {
   assert.equal(
     await orukeetStart({ success: false, code: "RATE_LIMITED", status: 429 }),
@@ -73,9 +93,10 @@ test("an unavailable session service falls back to batch as session_unavailable"
 
 test("a start that fails without a denial to act on falls back instead of losing the dictation", async () => {
   const failures = [
-    // Network error or the 10 s session request timeout.
+    // Network error.
     { success: false, code: "NETWORK_ERROR" },
-    { success: false, error: "The operation was aborted due to timeout" },
+    // The 10 s session request timeout, as it crosses IPC.
+    toPolicyFailure(new DOMException("The operation was aborted due to timeout", "TimeoutError")),
     // WebSocket handshake failure or a rejected session body.
     { success: false, error: "Orukeet connection closed before completion" },
     { success: false, error: "Invalid Orukeet cloud session" },

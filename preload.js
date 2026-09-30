@@ -244,8 +244,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     "active-account-scope-changed",
     (callback) => (_event, scope) => callback(scope)
   ),
-  deleteAccountData: (accountId, expectedAuthGeneration) =>
-    ipcRenderer.invoke("delete-account-data", accountId, expectedAuthGeneration),
+  deleteAccountData: (accountId, expectedAuthGeneration, options) =>
+    ipcRenderer.invoke("delete-account-data", accountId, expectedAuthGeneration, options),
   updateSpace: (id, updates) => ipcRenderer.invoke("db-update-space", id, updates),
   purgeSpace: (id, options) => ipcRenderer.invoke("db-purge-space", id, options),
   upsertSpaceFromCloud: (space) => ipcRenderer.invoke("db-upsert-space-from-cloud", space),
@@ -1263,6 +1263,34 @@ contextBridge.exposeInMainWorld("electronAPI", {
   gcalSyncEvents: () => ipcRenderer.invoke("gcal-sync-events"),
   gcalGetUpcomingEvents: (windowMinutes) =>
     ipcRenderer.invoke("gcal-get-upcoming-events", windowMinutes),
+  connectorStatus: () => ipcRenderer.invoke("connector-status"),
+  connectorPrepare: (connectorId, action, args) =>
+    ipcRenderer.invoke("connector-prepare", connectorId, action, args),
+  connectorQuery: (connectorId, action, args) =>
+    ipcRenderer.invoke("connector-query", connectorId, action, args),
+  connectorCommit: (actionId, edits) => ipcRenderer.invoke("connector-commit", actionId, edits),
+  connectorCancel: (actionId, reason) => ipcRenderer.invoke("connector-cancel", actionId, reason),
+  connectorRunDirect: (connectorId, action, args, runId) =>
+    ipcRenderer.invoke("connector-run-direct", connectorId, action, args, runId),
+  connectorRecentActions: (connectorId, limit) =>
+    ipcRenderer.invoke("connector-recent-actions", connectorId, limit),
+  connectorFindContacts: (query) => ipcRenderer.invoke("connector-find-contacts", query),
+  connectorNoteAttendees: (request) => ipcRenderer.invoke("connector-note-attendees", request),
+  connectorConnect: (connectorId) => ipcRenderer.invoke("connector-connect", connectorId),
+  connectorCancelConnect: (connectorId) =>
+    ipcRenderer.invoke("connector-cancel-connect", connectorId),
+  connectorDisconnect: (connectorId) => ipcRenderer.invoke("connector-disconnect", connectorId),
+  onConnectorStatusChanged: (callback) => {
+    const listener = (_event, statuses) => callback(statuses);
+    ipcRenderer.on("connector-status-changed", listener);
+    return () => ipcRenderer.removeListener("connector-status-changed", listener);
+  },
+  // A connect's progress, such as the code GitHub's device flow shows.
+  onConnectorConnectProgress: (callback) => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on("connector-connect-progress", listener);
+    return () => ipcRenderer.removeListener("connector-connect-progress", listener);
+  },
   calendarGetAvailability: (request) => ipcRenderer.invoke("calendar-get-availability", request),
   gcalGetEvent: (eventId) => ipcRenderer.invoke("gcal-get-event", eventId),
 
