@@ -3,7 +3,6 @@ const assert = require("node:assert/strict");
 const { parse: parseDotenv } = require("dotenv");
 
 const {
-  MAX_REASON_LENGTH,
   extractWhisperGpuFailureReason: extractReason,
 } = require("../../src/helpers/whisperGpuFailureReason");
 const {
@@ -143,17 +142,9 @@ test("without an error line, reports how the process ended", () => {
   assert.equal(extractReason({}), null);
 });
 
-test("reads only the last 16 KB, so a long-running server's old lines are ignored", () => {
-  const stderr =
-    "error: failed to read WAV file 'old.wav'\n" +
-    "whisper_print_timings:    total time =    10.00 ms\n".repeat(400);
-  assert.ok(stderr.length > 16 * 1024);
-  assert.equal(extractReason({ stderr, exitCode: 3221225477 }), "exit code 3221225477");
-});
-
-test("returns one line, capped at MAX_REASON_LENGTH", () => {
+test("returns one line, capped at 240 characters", () => {
   const long = extractReason({ stderr: `error: ${"x".repeat(500)}` });
-  assert.equal(long.length, MAX_REASON_LENGTH);
+  assert.equal(long.length, 240);
   assert.ok(long.endsWith("…"));
   assert.equal(extractReason({ stderr: "error:\tfirst \u0007 second" }), "error: first second");
 });

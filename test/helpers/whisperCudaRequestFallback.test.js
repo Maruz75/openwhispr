@@ -107,6 +107,7 @@ function createManager(port, { useCuda, useVulkan = false }) {
   manager.useVulkan = useVulkan;
   manager.canConvert = true;
   manager.process = {};
+  manager._lastProcessInfo = () => ({ stderr: "", exitCode: null, signal: null });
   manager.modelPath = "/tmp/model.bin";
   manager.lastStartOptions = { useCuda, useVulkan };
   manager._convertToWav = async (buffer) => buffer;
@@ -238,7 +239,8 @@ test("the mid-transcription reason ignores what earlier requests printed", async
   let manager;
   let requestCount = 0;
   // A bad earlier request left an error line in the long-running server's stderr
-  const stderr = "error: failed to read audio data\nwhisper_print_timings:    total time =   9.12 ms\n";
+  const stderr =
+    "error: failed to read audio data\nwhisper_print_timings:    total time =   9.12 ms\n";
 
   const { server, port } = await startServer((req, res) => {
     requestCount += 1;

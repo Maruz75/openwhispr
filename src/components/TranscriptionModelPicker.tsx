@@ -47,7 +47,11 @@ import { API_ENDPOINTS, normalizeBaseUrl } from "../config/constants";
 import { GetApiKeyLink } from "./ui/GetApiKeyLink";
 import { getCachedPlatform } from "../utils/platform";
 import logger from "../utils/logger";
-import type { ParakeetCheckResult } from "../types/electron";
+import type {
+  CudaWhisperStatus,
+  ParakeetCheckResult,
+  VulkanWhisperStatus,
+} from "../types/electron";
 
 interface LocalModel {
   model: string;
@@ -782,22 +786,21 @@ export default function TranscriptionModelPicker({
     // failed, not the installed-pack preference above: with both packs
     // installed, the card can show CUDA while the server ran Vulkan (#1736).
     const onFallback =
-      (readStatus: () => Promise<{ gpuFailReason?: string | null } | undefined> | undefined) =>
-      () => {
+      (readStatus: () => Promise<CudaWhisperStatus | VulkanWhisperStatus>) => () => {
         setGpuFailed(true);
         // Never show the previous failure's reason while the new one loads
         setGpuFailReason(null);
         setGpuActivating(false);
         setGpuActive(false);
         readStatus()
-          ?.then((status) => setGpuFailReason(status?.gpuFailReason ?? null))
+          .then((status) => setGpuFailReason(status.gpuFailReason ?? null))
           .catch(() => {});
       };
     const disposeCuda = window.electronAPI?.onCudaFallbackNotification?.(
-      onFallback(() => window.electronAPI?.getCudaWhisperStatus?.())
+      onFallback(window.electronAPI.getCudaWhisperStatus)
     );
     const disposeVulkan = window.electronAPI?.onGpuFallbackNotification?.(
-      onFallback(() => window.electronAPI?.getVulkanWhisperStatus?.())
+      onFallback(window.electronAPI.getVulkanWhisperStatus)
     );
     return () => {
       disposeCuda?.();
@@ -1392,7 +1395,7 @@ export default function TranscriptionModelPicker({
                           {gpuFailReason && (
                             <p
                               dir="ltr"
-                              className="mt-1 select-text wrap-break-word font-mono text-[11px] leading-snug text-muted-foreground"
+                              className="mt-1 wrap-break-word font-mono text-[11px] leading-snug text-muted-foreground"
                             >
                               {gpuFailReason}
                             </p>

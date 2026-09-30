@@ -143,7 +143,11 @@ test("a failure saved before this change renders the card exactly as before", as
   try {
     const card = picker.find(isFailedCard);
     assert.ok(card, "the failed card still shows");
-    assert.equal(findElement(card, (node) => node.props?.dir === "ltr"), null, "no empty line");
+    assert.equal(
+      findElement(card, (node) => node.props?.dir === "ltr"),
+      null,
+      "no empty line"
+    );
   } finally {
     await picker.unmount();
   }
