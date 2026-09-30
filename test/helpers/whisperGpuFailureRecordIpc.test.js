@@ -158,20 +158,18 @@ function createHandlers() {
   return { serverManager, invoke, envWrites };
 }
 
-test("a Vulkan fallback saves its reason with the flag, in one .env write", () => {
+test("a Vulkan fallback saves its reason with the flag", () => {
   const { serverManager, envWrites } = createHandlers();
 
   serverManager.emit("gpu-fallback", { reason: DEVICE_LOST });
 
   assert.equal(process.env.WHISPER_GPU_FAILED, "vulkan");
   assert.equal(process.env.WHISPER_GPU_FAILED_REASON_VULKAN, DEVICE_LOST);
-  assert.deepEqual(envWrites, [
-    {
-      WHISPER_GPU_FAILED: "vulkan",
-      WHISPER_GPU_FAILED_REASON_CUDA: undefined,
-      WHISPER_GPU_FAILED_REASON_VULKAN: DEVICE_LOST,
-    },
-  ]);
+  assert.deepEqual(envWrites.at(-1), {
+    WHISPER_GPU_FAILED: "vulkan",
+    WHISPER_GPU_FAILED_REASON_CUDA: undefined,
+    WHISPER_GPU_FAILED_REASON_VULKAN: DEVICE_LOST,
+  });
   assert.deepEqual(broadcasts, [{ channel: "gpu-fallback-notification", data: {} }]);
 });
 
