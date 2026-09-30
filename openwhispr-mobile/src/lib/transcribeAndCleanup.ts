@@ -11,6 +11,7 @@ import { getActiveCustomCleanupPrompt } from '@/store/useCustomPromptsStore';
 import { useProcessingModeStore } from '@/store/useProcessingModeStore';
 import { useSnippetsStore } from '@/store/useSnippetsStore';
 import { requiresRealAccount } from './accountAccess';
+import { cleanupSavedOnDevice } from './aiWorkflows';
 import { cleanupTranscript, AGENT_ACTION_TIMEOUT_MS } from './cleanupTranscript';
 import {
   getDictationAgentName,
@@ -60,13 +61,11 @@ function rawTranscriptResult(transcription: TranscriptionResponse): DictationPro
   };
 }
 
-// The pinned route keeps a local transcript on the phone; the saved choice says
-// whether the user wants it cleaned there. A local route alone only means the
-// job ran On-Device, whatever cleanup is set to.
+// The pinned route decides where cleanup runs, and a local job always pins a local one;
+// the saved choice decides whether it runs, read live like cleanupEnabled.
 function cleansOnDevice(request: TranscriptionRequest): boolean {
   return (
-    request.cleanupRoute?.mode === 'local' &&
-    useConfigStore.getState().config?.inference?.cleanup?.mode === 'local'
+    request.cleanupRoute?.mode === 'local' && cleanupSavedOnDevice(useConfigStore.getState().config)
   );
 }
 
@@ -188,8 +187,6 @@ async function runSerialTranscribeAndCleanup(
 
   // Local/private transcripts must never leave the device — not even for the
   // cleanup pass — so they are cleaned only by On-Device cleanup.
-  // (transcription.provider, not request.provider, so the local-model-missing →
-  // cloud fallback still gets cleaned.)
   if (transcription.provider === 'local' && !cleansOnDevice(request)) {
     return rawTranscriptResult(transcription);
   }
