@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PermissionGuideId, PermissionGuideProgress } from "../../types/permissionGuide";
+import type { PermissionGuideId } from "../../types/permissionGuide";
 import { createPermissionGuideController, type GuidePermission } from "./permissionGuideController";
 
 interface Options {
   enabled: boolean;
-  progress: PermissionGuideProgress | null;
-  save: (progress: PermissionGuideProgress | null) => void;
+  progress: PermissionGuideId | null;
+  save: (progress: PermissionGuideId | null) => void;
+  dismissed: () => void;
   rows: GuidePermission[];
 }
 
 export function usePermissionGuide(options: Options): {
-  start: (permission?: PermissionGuideId) => Promise<void>;
+  start: (permission: PermissionGuideId) => Promise<void>;
   error: boolean;
 } {
   const latest = useRef(options);
@@ -22,7 +23,6 @@ export function usePermissionGuide(options: Options): {
   useEffect(() => {
     if (!options.enabled) return;
     const api = window.electronAPI;
-    let disposed = false;
     const guide = createPermissionGuideController({
       sessionId: crypto.randomUUID(),
       rows: () => latest.current.rows,
@@ -34,16 +34,12 @@ export function usePermissionGuide(options: Options): {
           return false;
         }
       },
-      unavailable: () => {
-        if (!disposed) setError(true);
-      },
+      unavailable: () => setError(true),
+      dismissed: () => latest.current.dismissed(),
       close: () => {
         void api.closePermissionGuide?.().catch(() => {});
       },
-      restart: async () => {
-        if (!api.relaunchApp) throw new Error("Relaunch unavailable");
-        await api.relaunchApp();
-      },
+      restart: api.relaunchApp,
     });
     controller.current = guide;
     const unsubscribe = api.onPermissionGuideAction?.((action) => {
@@ -59,7 +55,6 @@ export function usePermissionGuide(options: Options): {
     window.addEventListener("focus", refresh);
     if (latest.current.progress) void guide.start(undefined, latest.current.progress);
     return () => {
-      disposed = true;
       controller.current = null;
       guide.dispose();
       unsubscribe?.();
@@ -73,8 +68,7 @@ export function usePermissionGuide(options: Options): {
     void controller.current?.reconcile();
   }, [eligibility]);
 
-  const start = useCallback(async (permission?: PermissionGuideId): Promise<void> => {
-    setError(false);
+  const start = useCallback(async (permission: PermissionGuideId): Promise<void> => {
     await controller.current?.start(permission);
   }, []);
   return { start, error };

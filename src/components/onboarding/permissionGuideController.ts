@@ -1,7 +1,6 @@
 import type {
   PermissionGuideAction,
   PermissionGuideId,
-  PermissionGuideProgress,
   PermissionGuideState,
 } from "../../types/permissionGuide";
 
@@ -10,7 +9,7 @@ export interface GuideAccess {
   needsRelaunch?: boolean;
 }
 
-export interface GuidePermission extends GuideAccess {
+export interface GuidePermission {
   id: PermissionGuideId;
   request: () => Promise<unknown>;
   check: () => Promise<GuideAccess>;
@@ -22,11 +21,12 @@ export interface GuidePermission extends GuideAccess {
 interface ControllerOptions {
   sessionId: string;
   rows: () => GuidePermission[];
-  save: (progress: PermissionGuideProgress | null) => void;
+  save: (progress: PermissionGuideId | null) => void;
   publish: (state: PermissionGuideState) => Promise<boolean>;
   // The helper could not be opened for a request that is still live; a false
   // publish for a superseded request is expected and not reported.
   unavailable: () => void;
+  dismissed: () => void;
   close: () => void;
   restart: () => Promise<unknown>;
 }
@@ -50,7 +50,7 @@ export async function requestMicrophoneForGuide(
 }
 
 export function createPermissionGuideController(options: ControllerOptions): {
-  start: (requested?: PermissionGuideId, saved?: PermissionGuideProgress) => Promise<void>;
+  start: (requested?: PermissionGuideId, saved?: PermissionGuideId) => Promise<void>;
   act: (action: PermissionGuideAction) => Promise<void>;
   refresh: () => Promise<void>;
   reconcile: () => Promise<void>;
@@ -115,9 +115,13 @@ export function createPermissionGuideController(options: ControllerOptions): {
     const expected = revision;
     checking = true;
     try {
+      const before = access;
       accept(await permission.check(), expected);
       if (!valid(expected)) return;
-      await publish();
+      // Only a change is published: a publish racing a close from main would
+      // reopen the overlay the user just dismissed.
+      if (access.granted !== before.granted || !!access.needsRelaunch !== !!before.needsRelaunch)
+        await publish();
     } catch {
       if (valid(expected)) {
         error = true;
@@ -128,12 +132,9 @@ export function createPermissionGuideController(options: ControllerOptions): {
     }
   };
 
-  const start = async (
-    requested?: PermissionGuideId,
-    saved?: PermissionGuideProgress
-  ): Promise<void> => {
+  const start = async (requested?: PermissionGuideId, saved?: PermissionGuideId): Promise<void> => {
     if (busy) return;
-    const permission = options.rows().find((item) => item.id === (saved?.current ?? requested));
+    const permission = options.rows().find((item) => item.id === (saved ?? requested));
     if (!permission) {
       if (saved) close();
       return;
@@ -145,7 +146,7 @@ export function createPermissionGuideController(options: ControllerOptions): {
     error = false;
     const expected = ++revision;
     // Save before the native request; macOS can restart the app while applying access.
-    options.save({ current });
+    options.save(current);
     try {
       // The onboarding Enable button is the consent action. Never put a helper in front
       // of a native prompt or require a second click before opening System Settings.
@@ -169,6 +170,7 @@ export function createPermissionGuideController(options: ControllerOptions): {
     if (!current || message.sessionId !== options.sessionId || message.permission !== current)
       return;
     if (message.action === "close") {
+      options.dismissed();
       close();
       return;
     }

@@ -1,9 +1,5 @@
 export type PermissionGuideId = "microphone" | "accessibility" | "system-audio" | "screen-context";
 
-export interface PermissionGuideProgress {
-  current: PermissionGuideId;
-}
-
 export interface PermissionGuideState {
   sessionId: string;
   permission: PermissionGuideId;

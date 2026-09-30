@@ -41,8 +41,6 @@ interface CompactPermissionsStepProps {
   onContinue: () => void;
 }
 
-type PermissionRowId = "microphone" | "accessibility" | "system-audio" | "screen-context";
-
 interface PermissionRowProps {
   title: string;
   description: string;
@@ -132,7 +130,7 @@ export default function CompactPermissionsStep({
   onContinue,
 }: CompactPermissionsStepProps) {
   const { t } = useTranslation();
-  const [busyPermission, setBusyPermission] = useState<PermissionRowId | null>(null);
+  const [busyPermission, setBusyPermission] = useState<PermissionGuideId | null>(null);
   const platform = getPlatform();
   const canRequestSystemAudio = canManageSystemAudioInApp(systemAudio);
   const requiredGranted = areRequiredPermissionsMet(permissions.micPermissionGranted);
@@ -150,10 +148,10 @@ export default function CompactPermissionsStep({
     permissions.pasteToolsInfo !== null &&
     needsLinuxPasteToolGuidance(permissions.pasteToolsInfo);
 
-  const request = async (id: PermissionRowId, action: () => Promise<unknown>) => {
+  const request = async (id: PermissionGuideId, action: () => Promise<unknown>) => {
     setBusyPermission(id);
     try {
-      if (platform === "darwin" && guide?.ready && !guide.error) await guide.start(id);
+      if (guide?.ready && !guide.error) await guide.start(id);
       else await action();
     } finally {
       setBusyPermission(null);

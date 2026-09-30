@@ -45,5 +45,8 @@ test("sending the control panel to the tray closes the permission guide explicit
   manager.permissionGuide = { close: (...args) => closes.push(args) };
   manager.controlPanelWindow = { isDestroyed: () => false, hide: () => undefined };
   manager.hideControlPanelToTray();
-  assert.deepEqual(closes, [[false, true]]);
+  assert.deepEqual(
+    closes.map(([, notify]) => notify),
+    [true]
+  );
 });

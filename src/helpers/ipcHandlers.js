@@ -5,7 +5,6 @@ const os = require("os");
 const { isRestorablePasteTarget } = require("./windowsPasteTarget");
 const crypto = require("crypto");
 const debugLogger = require("./debugLogger");
-const { PermissionGuideManager } = require("./permissionGuideManager");
 const { ANALYTICS_HISTORY_BACKFILL_VERSION } = require("./analytics");
 const { PARAKEET_UNSUPPORTED_OS_CODE } = require("./parakeetCapability");
 const { getModelType, isSherpaLocalProvider } = require("./parakeetModelInfo");
@@ -1355,9 +1354,24 @@ class IPCHandlers {
   }
 
   setupHandlers() {
-    this.windowManager.permissionGuide = new PermissionGuideManager(this.windowManager);
     ipcMain.handle("onboarding-set-window-mode", (_event, mode) =>
       this.windowManager.setOnboardingWindowMode(mode)
+    );
+
+    ipcMain.handle("permission-guide-open", (event, state) =>
+      this.windowManager.permissionGuide.open(event, state)
+    );
+    ipcMain.handle("permission-guide-close", (event) =>
+      this.windowManager.permissionGuide.closeFromOwner(event)
+    );
+    ipcMain.handle("permission-guide-state", (event) =>
+      this.windowManager.permissionGuide.stateFor(event)
+    );
+    ipcMain.on("permission-guide-action", (event, action) =>
+      this.windowManager.permissionGuide.handleAction(event, action)
+    );
+    ipcMain.on("permission-guide-drag", (event, target) =>
+      this.windowManager.permissionGuide.startDrag(event, target)
     );
 
     // WindowManager owns every teardown path for a demo (id-matched end,
@@ -5876,15 +5890,8 @@ class IPCHandlers {
 
     ipcMain.handle("check-system-audio-access", () => getSystemAudioAccess());
 
-    ipcMain.handle("permission-guide-verify-system-audio", async (event) => {
-      const guide = this.windowManager.permissionGuide;
-      if (
-        !guide.isOwner(event) ||
-        guide.state?.permission !== "system-audio" ||
-        !this.audioTapManager?.isSupported()
-      ) {
-        return buildSystemAudioAccess();
-      }
+    ipcMain.handle("permission-guide-verify-system-audio", async () => {
+      if (!this.audioTapManager?.isSupported()) return buildSystemAudioAccess();
       const result = await this.audioTapManager.requestAccess();
       return buildSystemAudioAccess({ ...result, mode: "native", strategy: "native" });
     });

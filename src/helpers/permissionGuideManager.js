@@ -1,6 +1,5 @@
-const { app, BrowserWindow, ipcMain, nativeImage, screen } = require("electron");
+const { app, BrowserWindow, nativeImage, screen } = require("electron");
 const path = require("path");
-const fs = require("fs");
 const DevServerManager = require("./devServerManager");
 const debugLogger = require("./debugLogger");
 const { computeGuideBounds } = require("./permissionGuidePlacement");
@@ -13,9 +12,6 @@ const PERMISSIONS = new Set(["microphone", "accessibility", "system-audio", "scr
 const ACTIONS = new Set(["check", "settings", "close", "restart"]);
 const GUIDE_SIZE = { width: 560, height: 124 };
 const POLL_MS = 500;
-// Dragging the dialog between displays drops it out of the window list for a
-// moment, so only a sustained disappearance counts as closed.
-const SETTINGS_MISSES_BEFORE_CLOSE = 2;
 // System Settings takes a moment to put its window up after the Enable click.
 // Showing before then is what made the overlay appear low and then jump.
 const SETTINGS_WAIT_ATTEMPTS = 6;
@@ -53,7 +49,6 @@ class PermissionGuideManager {
     this.icon = null;
     this.wait = wait ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.sawSettings = false;
-    this.missedSettings = 0;
     this.steppedAside = false;
     this.pollTimer = null;
     // The onboarding document that owns this guide is gone: closed, crashed, or
@@ -65,36 +60,37 @@ class PermissionGuideManager {
     this.ownerNavigated = (navigation) => {
       if (navigation.isMainFrame && !navigation.isSameDocument) this.ownerGone();
     };
+  }
 
-    ipcMain.handle("permission-guide-open", (event, state) => this.open(event, state));
-    // Not restoring focus: the renderer closes on a grant, and the user may
-    // still be in System Settings for the next permission.
-    ipcMain.handle("permission-guide-close", (event) => {
-      if (!this.isOwner(event)) return false;
-      this.close();
-      return true;
-    });
-    ipcMain.handle("permission-guide-state", (event) =>
-      fromWindow(event, this.window) ? this.snapshot() : null
-    );
-    ipcMain.on("permission-guide-action", (event, action) => {
-      if (!fromWindow(event, this.window) || !this.matches(action) || !ACTIONS.has(action.action))
-        return;
-      // Closing is done here, not echoed back through the owner: the owner may
-      // no longer be listening, and the guide must never outlive its controls.
-      if (action.action === "close") this.close(true, true);
-      else this.sendAction(action.action);
-    });
-    ipcMain.on("permission-guide-drag", (event, target) => {
-      if (!fromWindow(event, this.window) || !this.matches(target) || !this.snapshot()?.canDrag)
-        return;
-      try {
-        event.sender.startDrag({ file: this.bundlePath, icon: this.icon });
-      } catch (error) {
-        debugLogger.warn("Permission guide drag failed", { error: error.message });
-        this.setState({ ...this.state, error: true });
-      }
-    });
+  // Not restoring focus: the renderer closes on a grant, and the user may
+  // still be in System Settings for the next permission.
+  closeFromOwner(event) {
+    if (!this.isOwner(event)) return false;
+    this.close();
+    return true;
+  }
+
+  stateFor(event) {
+    return fromWindow(event, this.window) ? this.snapshot() : null;
+  }
+
+  handleAction(event, action) {
+    if (!fromWindow(event, this.window) || !this.matches(action) || !ACTIONS.has(action.action))
+      return;
+    // Closing is done here, not echoed back through the owner: the owner may
+    // no longer be listening, and the guide must never outlive its controls.
+    if (action.action === "close") this.close(true, true);
+    else this.sendAction(action.action);
+  }
+
+  startDrag(event, target) {
+    if (!fromWindow(event, this.window) || !this.matches(target) || !this.snapshot().canDrag)
+      return;
+    try {
+      event.sender.startDrag({ file: this.bundlePath, icon: this.icon });
+    } catch (error) {
+      debugLogger.warn("Permission guide drag failed", { error: error.message });
+    }
   }
 
   isOwner(event) {
@@ -107,7 +103,6 @@ class PermissionGuideManager {
 
   matches(target) {
     return (
-      this.windowManager._onboardingActive &&
       target &&
       this.state &&
       target.sessionId === this.state.sessionId &&
@@ -121,7 +116,6 @@ class PermissionGuideManager {
       ...this.state,
       canDrag:
         !!this.bundlePath &&
-        !!this.icon &&
         !this.state.busy &&
         !this.state.granted &&
         ["accessibility", "screen-context"].includes(this.state.permission),
@@ -175,8 +169,7 @@ class PermissionGuideManager {
   // step aside for an authorization prompt, and close with it.
   async poll() {
     const window = this.window;
-    const owner = this.owner;
-    if (!window || window.isDestroyed() || !owner || owner.isDestroyed()) return;
+    if (!window || window.isDestroyed()) return;
 
     const state = await readSettingsWindowState();
     // A failed read is unknown, not closed: acting on it would dismiss the
@@ -184,14 +177,9 @@ class PermissionGuideManager {
     if (!state || this.window !== window || window.isDestroyed()) return;
 
     if (state.settings) {
-      this.missedSettings = 0;
       this.sawSettings = true;
       this.applyBounds(window, state.settings);
-    } else if (
-      this.sawSettings &&
-      !state.settingsRunning &&
-      ++this.missedSettings >= SETTINGS_MISSES_BEFORE_CLOSE
-    ) {
+    } else if (this.sawSettings && !state.settingsRunning) {
       this.close(true, true);
       return;
     }
@@ -213,12 +201,13 @@ class PermissionGuideManager {
   }
 
   // One read at a time: an interval would keep firing while a slow helper is
-  // still running, and two ticks in flight double-count a miss.
+  // still running, and two reads in flight can answer out of order.
   startPolling() {
     this.stopPolling();
+    const window = this.window;
     const tick = async () => {
       await this.poll();
-      if (this.pollTimer !== null) this.pollTimer = setTimeout(tick, POLL_MS);
+      if (this.window === window) this.pollTimer = setTimeout(tick, POLL_MS);
     };
     this.pollTimer = setTimeout(tick, POLL_MS);
   }
@@ -230,13 +219,8 @@ class PermissionGuideManager {
   }
 
   sendAction(action) {
-    if (
-      this.state &&
-      this.owner &&
-      !this.owner.isDestroyed() &&
-      !this.owner.webContents.isDestroyed()
-    ) {
-      this.owner.webContents.send("permission-guide-action", {
+    if (this.state && this.ownerContents && !this.ownerContents.isDestroyed()) {
+      this.ownerContents.send("permission-guide-action", {
         sessionId: this.state.sessionId,
         permission: this.state.permission,
         action,
@@ -287,6 +271,12 @@ class PermissionGuideManager {
         sandbox: true,
       },
     });
+    // System Settings may be on another Space; without this the overlay can be
+    // ordered onto the Space being left and stay invisible there.
+    window.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+      skipTransformProcessType: true,
+    });
     this.window = window;
     this.setState(state);
     owner.on("closed", this.ownerGone);
@@ -310,34 +300,12 @@ class PermissionGuideManager {
       this.applyBounds(window, settingsState?.settings ?? null);
 
       if (app.isPackaged) {
-        const executable = app.getPath("exe");
-        const bundle = path.resolve(executable, "../../..");
-        if (
-          bundle.endsWith(".app") &&
-          path.dirname(path.dirname(executable)) === path.join(bundle, "Contents") &&
-          fs.existsSync(bundle)
-        ) {
-          // getFileIcon hands back a generic icon for a bundle LaunchServices
-          // has not registered, which is every unsigned local build, so the
-          // bundled icon file wins whenever it can be read. Downscaled because
-          // the snapshot carries it as a data URL on every state publish.
-          // The PNG, not icon.icns: nativeImage cannot read .icns and hands back
-          // an empty image, which silently drops us onto the generic icon.
-          const iconFile = process.resourcesPath
-            ? nativeImage.createFromPath(
-                path.join(process.resourcesPath, "src", "assets", "icon.png")
-              )
-            : null;
-          const icon =
-            iconFile && !iconFile.isEmpty()
-              ? iconFile.resize({ width: 64, height: 64 })
-              : await app.getFileIcon(bundle, { size: "normal" });
-          if (this.window !== window || window.isDestroyed()) return false;
-          if (!icon.isEmpty()) {
-            this.bundlePath = bundle;
-            this.icon = icon;
-          }
-        }
+        this.bundlePath = path.resolve(app.getPath("exe"), "../../..");
+        // The PNG, not icon.icns: nativeImage cannot read .icns. Downscaled
+        // because the snapshot carries it as a data URL on every state publish.
+        this.icon = nativeImage
+          .createFromPath(path.join(process.resourcesPath, "src", "assets", "icon.png"))
+          .resize({ width: 64, height: 64 });
       }
       if (process.env.NODE_ENV === "development") {
         await window.loadURL(`${DevServerManager.DEV_SERVER_URL}?permission-guide=true`);
@@ -347,12 +315,13 @@ class PermissionGuideManager {
       }
       if (this.window !== window || window.isDestroyed()) return false;
       window.webContents.send("permission-guide-state-changed", this.snapshot());
-      window.showInactive();
+      this.steppedAside = Boolean(settingsState && this.shouldStepAside(settingsState));
+      if (!this.steppedAside) window.showInactive();
       this.startPolling();
       return true;
     } catch (error) {
       debugLogger.error("Could not open permission guide", { error: error.message });
-      if (this.window === window) this.close(false, true);
+      if (this.window === window) this.close();
       return false;
     }
   }
@@ -370,7 +339,6 @@ class PermissionGuideManager {
     this.bundlePath = null;
     this.icon = null;
     this.sawSettings = false;
-    this.missedSettings = 0;
     this.steppedAside = false;
     if (owner) owner.removeListener("closed", this.ownerGone);
     if (ownerContents) {

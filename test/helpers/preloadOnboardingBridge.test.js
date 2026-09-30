@@ -66,7 +66,6 @@ test("permission guide bridge uses narrow channels and strips IPC events", async
   listeners.get("permission-guide-state-changed")({ sender: "native" }, state);
   assert.equal(received, state);
   stop();
-  assert.equal(api.updatePermissionGuide, undefined);
   assert.equal(listeners.has("permission-guide-state-changed"), false);
 });
 

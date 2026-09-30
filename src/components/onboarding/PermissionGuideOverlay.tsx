@@ -67,7 +67,16 @@ export function PermissionGuideCard({ state, onAction, onDrag }: CardProps): Rea
             className={`mt-2 flex items-center gap-2.5 rounded-lg border border-[var(--onboarding-control-border)] px-3 py-2 ${state.canDrag ? "cursor-grab active:cursor-grabbing" : "opacity-60"}`}
           >
             {state.appIcon && (
-              <img src={state.appIcon} alt="" draggable={false} className="size-7" />
+              <img
+                src={state.appIcon}
+                alt=""
+                aria-hidden="true"
+                width={28}
+                height={28}
+                decoding="async"
+                draggable={false}
+                className="size-7"
+              />
             )}
             <span className="text-sm font-medium">OpenWhispr</span>
             <span className="ms-auto text-[11px] text-[var(--onboarding-text-secondary)]">

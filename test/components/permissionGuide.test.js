@@ -10,9 +10,6 @@ test("saved sessions default to no helper and preserve explicit pending permissi
   const parse = (permissionGuide) =>
     parseOnboardingSession(JSON.stringify({ ...session, permissionGuide })).permissionGuide;
   assert.equal(parse(undefined), null);
-  assert.deepEqual(parse({ current: "screen-context" }), { current: "screen-context" });
-  assert.equal(parse({ current: "files" }), null);
-  assert.deepEqual(parse({ current: "accessibility", history: ["microphone"] }), {
-    current: "accessibility",
-  });
+  assert.equal(parse("screen-context"), "screen-context");
+  assert.equal(parse("files"), null);
 });

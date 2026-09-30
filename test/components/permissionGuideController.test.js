@@ -11,13 +11,14 @@ async function fixture(permission = "accessibility") {
   let granted = false;
   let closed = 0;
   let unavailable = 0;
+  let dismissed = 0;
   let publishResult = async () => true;
   const rows = [
     {
       id: permission,
       granted: false,
       request: () => {
-        assert.equal(saves.at(-1).current, permission);
+        assert.equal(saves.at(-1), permission);
         calls.push("request");
         return new Promise((resolve) => {
           finish = resolve;
@@ -47,6 +48,9 @@ async function fixture(permission = "accessibility") {
     unavailable: () => {
       unavailable++;
     },
+    dismissed: () => {
+      dismissed++;
+    },
     close: () => {
       closed++;
     },
@@ -66,6 +70,7 @@ async function fixture(permission = "accessibility") {
     },
     closed: () => closed,
     unavailable: () => unavailable,
+    dismissed: () => dismissed,
     failPublish: (result) => {
       publishResult = result;
     },
@@ -124,7 +129,7 @@ test("resuming saved intent after the grant landed applies consent without a nat
   const setup = await fixture("screen-context");
   setup.rows[0].onGranted = () => setup.calls.push("consent");
   setup.grant();
-  await setup.controller.start(undefined, { current: "screen-context" });
+  await setup.controller.start(undefined, "screen-context");
   assert.deepEqual(setup.calls, ["check", "consent"]);
   assert.equal(setup.states.length, 0);
   assert.equal(setup.saves.at(-1), null);
@@ -134,11 +139,12 @@ test("resuming saved intent that was never granted clears it instead of opening 
   // Quitting mid-guide and relaunching later must not float a "drag OpenWhispr
   // into Accessibility" card over a desktop with no System Settings window.
   const setup = await fixture();
-  await setup.controller.start(undefined, { current: "accessibility" });
+  await setup.controller.start(undefined, "accessibility");
   assert.deepEqual(setup.calls, ["check"]);
   assert.equal(setup.states.length, 0);
   assert.equal(setup.saves.at(-1), null);
   assert.equal(setup.closed(), 1);
+  assert.equal(setup.dismissed(), 0);
 });
 
 test("screen consent is applied once, not on every refresh while a restart is pending", async () => {
@@ -163,6 +169,56 @@ test("a helper that cannot open is reported unavailable and the request ends", a
   setup.finish();
   await pending;
   assert.equal(setup.unavailable(), 1);
+  assert.equal(setup.saves.at(-1), null);
+});
+
+test("dismissing any permission's guide is reported, an overlay that cannot open or a grant is not", async () => {
+  // A dismissal withdraws a pending Screen Context opt-in even while the guide
+  // shows another permission; a failed open or a grant must leave it in place.
+  const setup = await fixture();
+  setup.failPublish(async () => false);
+  const unavailable = setup.controller.start("accessibility");
+  setup.finish();
+  await unavailable;
+  assert.equal(setup.unavailable(), 1);
+  assert.equal(setup.dismissed(), 0);
+
+  setup.failPublish(async () => true);
+  const dismissed = setup.controller.start("accessibility");
+  setup.finish();
+  await dismissed;
+  await setup.controller.act({ sessionId: "test", permission: "accessibility", action: "close" });
+  assert.equal(setup.dismissed(), 1);
+
+  const granted = setup.controller.start("accessibility");
+  setup.finish();
+  await granted;
+  setup.grant();
+  await setup.controller.refresh();
+  assert.equal(setup.saves.at(-1), null);
+  assert.equal(setup.dismissed(), 1);
+});
+
+test("a refresh publishes only a change, so it cannot reopen an overlay main just closed", async () => {
+  const setup = await fixture();
+  const pending = setup.controller.start("accessibility");
+  setup.finish();
+  await pending;
+  const published = setup.states.length;
+  await setup.controller.refresh();
+  await setup.controller.refresh();
+  assert.equal(setup.states.length, published);
+
+  const check = setup.rows[0].check;
+  setup.rows[0].check = async () => {
+    throw new Error("check failed");
+  };
+  await setup.controller.refresh();
+  assert.equal(setup.states.at(-1).error, true);
+
+  setup.rows[0].check = check;
+  setup.grant();
+  await setup.controller.refresh();
   assert.equal(setup.saves.at(-1), null);
 });
 

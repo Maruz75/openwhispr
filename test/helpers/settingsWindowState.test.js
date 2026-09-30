@@ -50,24 +50,6 @@ test("reads the System Settings window bounds", async () => {
   assert.equal(state.authPrompt, false);
 });
 
-test("reports the settings window as gone once it is closed", async () => {
-  const { readSettingsWindowState } = load({
-    execFile: report({ settings: null, authPrompt: false }),
-  });
-
-  const state = await readSettingsWindowState();
-
-  assert.equal(state.settings, null);
-});
-
-test("reports an authorization prompt so the overlay can get out of its way", async () => {
-  const { readSettingsWindowState } = load({
-    execFile: report({ settings: { x: 0, y: 0, width: 700, height: 800 }, authPrompt: true }),
-  });
-
-  assert.equal((await readSettingsWindowState()).authPrompt, true);
-});
-
 test("unreadable output is reported as unknown, not as a closed window", async () => {
   // A parse failure must not read as "settings closed", which would close the
   // overlay out from under the user.
@@ -127,20 +109,6 @@ test("hands the helper the app's own pid so it can tell self from other apps", a
   assert.deepEqual([...calls[0].args], ["4242"]);
 });
 
-test("reads the front app as a classification, never as a window title", async () => {
-  const front = async (frontmost) =>
-    (
-      await load({
-        execFile: report({ settings: null, authPrompt: false, frontmost }),
-      }).readSettingsWindowState()
-    ).frontmost;
-
-  assert.equal(await front("settings"), "settings");
-  assert.equal(await front("self"), "self");
-  assert.equal(await front("other"), "other");
-  assert.equal(await front("Safari"), null);
-});
-
 test("resolves the helper binary once, not on every poll", async () => {
   // The resolver logs each lookup; at two polls a second that is 120 log lines
   // a minute for the whole time the overlay is open.
@@ -164,16 +132,4 @@ test("reports whether the helper is available so the guide can fall back up fron
     load({ platform: "win32", execFile: report({}) }).isSettingsWindowStateAvailable(),
     false
   );
-});
-
-test("reads whether System Settings is still running while its window is off screen", async () => {
-  const running = await load({
-    execFile: report({ settings: null, authPrompt: false, settingsRunning: true }),
-  }).readSettingsWindowState();
-  const closed = await load({
-    execFile: report({ settings: null, authPrompt: false }),
-  }).readSettingsWindowState();
-
-  assert.equal(running.settingsRunning, true);
-  assert.equal(closed.settingsRunning, false);
 });

@@ -1,6 +1,5 @@
 import { PENDING_LOCAL_MODELS_KEY } from "./pendingLocalModels";
-import { parsePermissionGuideProgress } from "./permissionGuideState";
-import type { PermissionGuideProgress } from "../../types/permissionGuide";
+import type { PermissionGuideId } from "../../types/permissionGuide";
 
 export const ONBOARDING_SESSION_KEY = "onboardingSessionV2";
 export const LEGACY_ONBOARDING_STEP_KEY = "onboardingCurrentStep";
@@ -90,7 +89,7 @@ export interface OnboardingSession {
    * dropped with the session at finalization.
    */
   screenContextRequested: boolean;
-  permissionGuide: PermissionGuideProgress | null;
+  permissionGuide: PermissionGuideId | null;
   resume: OnboardingResumeState;
 }
 
@@ -293,6 +292,13 @@ export function isOnboardingStepId(value: unknown): value is OnboardingStepId {
   return typeof value === "string" && KNOWN_STEPS.has(value as OnboardingStepId);
 }
 
+function isPermissionGuideId(value: unknown): value is PermissionGuideId {
+  return (
+    typeof value === "string" &&
+    ["microphone", "accessibility", "system-audio", "screen-context"].includes(value)
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -441,7 +447,7 @@ export function parseOnboardingSession(value: string | null): OnboardingSession 
       setupMode,
       selfHostedRequested: parsed.selfHostedRequested ?? false,
       screenContextRequested: parsed.screenContextRequested ?? false,
-      permissionGuide: parsePermissionGuideProgress(parsed.permissionGuide),
+      permissionGuide: isPermissionGuideId(parsed.permissionGuide) ? parsed.permissionGuide : null,
       resume: parseOnboardingResumeState(parsed.resume, parsed.currentStepId),
     };
   } catch {

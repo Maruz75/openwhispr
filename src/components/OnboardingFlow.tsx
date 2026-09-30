@@ -205,11 +205,9 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   );
   const systemAudio = useSystemAudioPermission();
   const {
-    isMacOS,
     granted: screenRecordingGranted,
     needsRelaunch: screenRecordingNeedsRelaunch,
     loaded: screenRecordingLoaded,
-    supported: screenRecordingSupported,
     check: checkScreenRecording,
     request: requestScreenRecordingAccess,
   } = useScreenRecordingPermission();
@@ -299,11 +297,9 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   }, [
     agentAllowed,
     applyScreenContext,
-    isMacOS,
     screenContextAllowed,
     screenContextRequested,
     screenRecordingGranted,
-    settingsStore.voiceAgentScreenContext,
   ]);
 
   const requiredModels = useRequiredLocalModels();
@@ -351,18 +347,16 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
       macAccessibilityChecksEnabled: shouldInitializeMacAccessibilityFeatures(currentStepId),
     }
   );
-  const openMicrophoneSettings = async (): Promise<void> => {
-    const result = await window.electronAPI.openMicrophoneSettings();
-    if (!result.success) throw new Error(result.error);
-  };
-  const openAccessibilitySettings = async (): Promise<void> => {
-    const result = await window.electronAPI.openAccessibilitySettings();
-    if (!result.success) throw new Error(result.error);
-  };
+  const openSettings =
+    (open: () => Promise<{ success: boolean; error?: string }>) => async (): Promise<void> => {
+      const result = await open();
+      if (!result.success) throw new Error(result.error);
+    };
+  const openMicrophoneSettings = openSettings(window.electronAPI.openMicrophoneSettings);
+  const openAccessibilitySettings = openSettings(window.electronAPI.openAccessibilitySettings);
   const guideRows: GuidePermission[] = [
     {
       id: "microphone",
-      granted: permissions.micPermissionGranted,
       request: async () => {
         const result = await requestMicrophoneForGuide({
           requestAccess: window.electronAPI.requestMicrophoneAccess,
@@ -380,7 +374,6 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     },
     {
       id: "accessibility",
-      granted: permissions.accessibilityPermissionGranted,
       request: openAccessibilitySettings,
       check: async () => {
         const granted = await window.electronAPI.checkAccessibilityPermission(true);
@@ -393,7 +386,6 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   if (systemAudio.mode === "native")
     guideRows.push({
       id: "system-audio",
-      granted: systemAudio.granted,
       request: systemAudio.request,
       check: async () => {
         await systemAudio.check();
@@ -404,16 +396,11 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         await systemAudio.check();
         return result;
       },
-      openSettings: async () => {
-        const result = await window.electronAPI.openSystemAudioSettings();
-        if (!result.success) throw new Error(result.error);
-      },
+      openSettings: openSettings(window.electronAPI.openSystemAudioSettings),
     });
-  if (agentAllowed && screenContextAllowed && screenRecordingSupported)
+  if (agentAllowed && screenContextAllowed)
     guideRows.push({
       id: "screen-context",
-      granted: settingsStore.voiceAgentScreenContext && screenRecordingGranted,
-      needsRelaunch: screenRecordingNeedsRelaunch,
       request: async () => {
         setScreenContextRequested(true);
         return requestScreenRecordingAccess();
@@ -424,16 +411,16 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         await checkScreenRecording();
         return result;
       },
-      openSettings: async () => {
-        const result = await window.electronAPI.openScreenRecordingSettings();
-        if (!result.success) throw new Error(result.error);
-      },
+      openSettings: openSettings(window.electronAPI.openScreenRecordingSettings),
     });
   const guideReady = platform === "darwin" && systemAudio.loaded && screenRecordingLoaded;
   const permissionGuide = usePermissionGuide({
     enabled: currentStepId === "permissions" && guideReady,
     progress: session.permissionGuide,
     save: setPermissionGuide,
+    // Dismissing the guide withdraws the Screen Context opt-in; enabling
+    // another permission while it is still pending does not.
+    dismissed: () => setScreenContextRequested(false),
     rows: guideRows,
   });
 
@@ -963,7 +950,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         return (
           <CompactPermissionsStep
             permissions={permissions}
-            guide={platform === "darwin" ? { ...permissionGuide, ready: guideReady } : undefined}
+            guide={{ ...permissionGuide, ready: guideReady }}
             systemAudio={systemAudio}
             screenContext={
               agentAllowed && screenContextAllowed
