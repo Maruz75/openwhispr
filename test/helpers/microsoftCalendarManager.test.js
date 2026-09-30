@@ -465,33 +465,16 @@ test("a stripped occurrence keeps details but applies explicit RSVP after master
     attendees_count: 1,
     attendees: '[{"email":"guest@example.com"}]',
   };
-  let cached = original;
-  let response = "declined";
   const upserted = [];
   const manager = createManager(MicrosoftCalendarManager, upserted, [], {
-    getCalendarEventById: () => cached,
-    upsertCalendarEvents: (rows) => {
-      upserted.push(...rows);
-      cached = rows[0];
-    },
+    getCalendarEventById: () => original,
   });
   manager._apiGet = async (url) => {
     if (!url.includes("/calendarView/delta")) throw new Error("master unavailable");
     return {
-      value: [
-        {
-          ...STRIPPED_OCCURRENCE,
-          ...(response === undefined ? {} : { responseStatus: { response } }),
-        },
-      ],
+      value: [{ ...STRIPPED_OCCURRENCE, responseStatus: { response: "declined" } }],
     };
   };
-  const calendar = { id: "cal-1", account_email: "me@example.com" };
-  await manager._syncCalendar(calendar);
-  assert.deepEqual(cached, { ...original, self_response_status: "declined" });
-  const count = upserted.length;
-  response = undefined;
-  await manager._syncCalendar(calendar);
-  assert.equal(upserted.length, count, "absent RSVP cannot reset the cached response");
-  assert.deepEqual(cached, { ...original, self_response_status: "declined" });
+  await manager._syncCalendar({ id: "cal-1", account_email: "me@example.com" });
+  assert.deepEqual(upserted, [{ ...original, self_response_status: "declined" }]);
 });

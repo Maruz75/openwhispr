@@ -194,9 +194,11 @@ test("resetting a provider re-arms the next meeting timer for upcoming events", 
 test("schedule refresh clears a no-longer-eligible cached meeting", (t) => {
   const event = activeEvent("google", "meeting");
   let rows = [event];
+  // Not started yet: the reminder fires in the minute before start.
+  let active = [];
   const scheduler = new CalendarReminderScheduler({
     getUpcomingEvents: () => rows,
-    getActiveEvents: () => rows,
+    getActiveEvents: () => active,
   });
   t.after(() => scheduler.stop());
   let prompts = 0;
@@ -213,6 +215,9 @@ test("schedule refresh clears a no-longer-eligible cached meeting", (t) => {
   scheduler.scheduleNextMeeting();
   assert.equal(prompts, 1, "reacceptance cannot repeat a delivered reminder");
   assert.equal(scheduler.activeMeeting, event);
+  active = rows;
+  scheduler.onWakeFromSleep();
+  assert.equal(prompts, 1, "waking after the start cannot repeat it either");
 });
 
 test("clearing the cached meeting restores another reminded running meeting", (t) => {
