@@ -90,7 +90,7 @@ import {
 } from "./shared";
 
 const SEGMENT_BUTTON_CLASS =
-  "relative z-1 flex h-[26px] items-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition-colors duration-150";
+  "relative z-1 flex h-[26px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-medium transition-colors duration-150 @max-[400px]/note-editor:gap-1 @max-[400px]/note-editor:px-2 @max-[400px]/note-editor:text-[11px] @max-[330px]/note-editor:[&>svg]:hidden @max-[330px]/note-editor:[&>span[aria-hidden]]:hidden";
 
 const TRANSCRIPT_EXPORT_LABEL_KEYS = {
   txt: "notes.editor.asTranscriptText",
@@ -855,8 +855,10 @@ export default function NoteEditor({
 
   return (
     <div className="flex h-full min-h-0">
-      <div className="flex-1 min-w-0 flex flex-col">
-        <div className={cn(PAGE_CONTENT_WIDTH_CLASS, "px-5 pt-5 pb-0")}>
+      <div className="@container/note-editor flex-1 min-w-0 flex flex-col">
+        <div
+          className={cn(PAGE_CONTENT_WIDTH_CLASS, "px-5 pt-5 pb-0 @max-[400px]/note-editor:px-4")}
+        >
           <div
             dir="auto"
             ref={titleRef}
@@ -866,11 +868,11 @@ export default function NoteEditor({
             onKeyDown={handleTitleKeyDown}
             onPaste={handleTitlePaste}
             data-placeholder={t("notes.editor.untitled")}
-            className="text-3xl font-medium leading-tight text-foreground bg-transparent outline-none tracking-[-0.01em] empty:before:content-[attr(data-placeholder)] empty:before:text-foreground/45 empty:before:pointer-events-none"
+            className="text-3xl font-medium leading-tight text-foreground bg-transparent outline-none tracking-[-0.01em] [overflow-wrap:anywhere] @max-[400px]/note-editor:text-[26px] empty:before:content-[attr(data-placeholder)] empty:before:text-foreground/45 empty:before:pointer-events-none"
             role="textbox"
             aria-label={t("notes.editor.noteTitle")}
           />
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2 [&>*]:max-w-full">
             <NoteParticipants
               noteId={note.id}
               participants={parsedParticipants}
@@ -911,7 +913,9 @@ export default function NoteEditor({
             {folders && onMoveToFolder && !canMoveToFolders && folderName && (
               <span className={cn(NOTE_META_CHIP_CLASS, "cursor-default")}>
                 <FolderOpen size={14} className="shrink-0 text-foreground/60" />
-                <span dir="auto">{folderName}</span>
+                <span dir="auto" className="truncate">
+                  {folderName}
+                </span>
               </span>
             )}
             {folders && onMoveToFolder && canMoveToFolders && (
@@ -927,7 +931,13 @@ export default function NoteEditor({
                 <DropdownMenuTrigger asChild>
                   <button className={NOTE_META_CHIP_CLASS}>
                     <FolderOpen size={14} className="shrink-0 text-foreground/60" />
-                    {folderName ? <span dir="auto">{folderName}</span> : t("notes.editor.noFolder")}
+                    {folderName ? (
+                      <span dir="auto" className="truncate">
+                        {folderName}
+                      </span>
+                    ) : (
+                      t("notes.editor.noFolder")
+                    )}
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" sideOffset={6} className="min-w-44 p-1">
@@ -1036,8 +1046,8 @@ export default function NoteEditor({
               </span>
             )}
           </div>
-          <div className="mt-5 flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center">
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 max-w-full items-center overflow-x-auto">
               <div
                 ref={segmentContainerRef}
                 className="relative flex shrink-0 items-center rounded-full bg-surface-3 p-0.5 dark:bg-surface-2"
@@ -1098,7 +1108,7 @@ export default function NoteEditor({
                 )}
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex w-full shrink-0 flex-wrap items-center justify-between gap-2 @[650px]/note-editor:w-auto">
               {canEditNote && (
                 <NoteRecordControl
                   isRecording={isRecording}
@@ -1108,7 +1118,7 @@ export default function NoteEditor({
                   onStop={onStopRecording}
                 />
               )}
-              <div className={cn(SPLIT_BUTTON_GROUP_CLASS, "h-[30px]")}>
+              <div className={cn(SPLIT_BUTTON_GROUP_CLASS, "ms-auto h-[30px] shrink-0")}>
                 <button
                   type="button"
                   onClick={() => openShare("open")}
