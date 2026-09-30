@@ -1261,11 +1261,11 @@ class IPCHandlers {
   // and the settings card can say why (#1736). Cleared by retry, re-download,
   // delete, and the once-per-upgrade reset.
   _attachWhisperServerListeners(serverManager) {
-    serverManager.on("cuda-fallback", ({ reason } = {}) => {
+    serverManager.on("cuda-fallback", ({ reason }) => {
       this._recordWhisperGpuFailure("cuda", reason);
       broadcastToWindows("cuda-fallback-notification", {});
     });
-    serverManager.on("gpu-fallback", ({ reason } = {}) => {
+    serverManager.on("gpu-fallback", ({ reason }) => {
       this._recordWhisperGpuFailure("vulkan", reason);
       broadcastToWindows("gpu-fallback-notification", {});
     });

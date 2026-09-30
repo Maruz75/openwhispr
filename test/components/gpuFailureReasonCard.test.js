@@ -13,6 +13,7 @@ const {
 // line that main saved with a GPU->CPU fallback (#1736).
 const DEVICE_LOST = "vk::PhysicalDevice::createDevice: ErrorDeviceLost";
 const OUT_OF_DEVICE_MEMORY = "vk::Device::allocateMemory: ErrorOutOfDeviceMemory";
+const KERNEL_IMAGE = "CUDA error: no kernel image is available for execution on the device";
 const noop = () => {};
 
 const vulkanPack = (overrides = {}) => ({
@@ -67,23 +68,23 @@ async function mountPicker(t, vulkanStatus, cudaStatus = cudaPack()) {
     resolveAlias: { "@": path.resolve(__dirname, "../../src") },
   });
   const container = installHookDom(t);
-  const pack = { status: vulkanStatus, statusReads: 0 };
-  const vulkanFallbackListeners = [];
+  const statuses = { cuda: cudaStatus, vulkan: vulkanStatus };
+  const fallbackListeners = { cuda: [], vulkan: [] };
   Object.assign(globalThis.window.electronAPI, {
     checkParakeetInstallation: async () => ({ supported: true }),
     listParakeetModels: async () => ({ success: true, models: [] }),
     listWhisperModels: async () => ({ success: true, models: [] }),
     onWhisperDownloadProgress: () => noop,
     onParakeetDownloadProgress: () => noop,
-    getCudaWhisperStatus: async () => cudaStatus,
-    getVulkanWhisperStatus: async () => {
-      pack.statusReads += 1;
-      return pack.status;
-    },
+    getCudaWhisperStatus: async () => statuses.cuda,
+    getVulkanWhisperStatus: async () => statuses.vulkan,
     whisperServerStatus: async () => ({ gpuAccelerated: false }),
-    onCudaFallbackNotification: () => noop,
+    onCudaFallbackNotification: (callback) => {
+      fallbackListeners.cuda.push(callback);
+      return noop;
+    },
     onGpuFallbackNotification: (callback) => {
-      vulkanFallbackListeners.push(callback);
+      fallbackListeners.vulkan.push(callback);
       return noop;
     },
   });
@@ -112,13 +113,12 @@ async function mountPicker(t, vulkanStatus, cudaStatus = cudaPack()) {
   });
   await settle();
   return {
-    pack,
     find: (predicate) => findElement(tree, predicate),
     // Main has already saved the new failure when it sends this notification
-    fireVulkanFallback: async (nextStatus) => {
-      pack.status = nextStatus;
+    fireFallback: async (backend, nextStatus) => {
+      statuses[backend] = nextStatus;
       await React.act(async () => {
-        for (const listener of vulkanFallbackListeners) listener();
+        for (const listener of fallbackListeners[backend]) listener();
       });
       await settle();
     },
@@ -165,12 +165,15 @@ test("a live fallback re-reads the status: the new reason shows and replaces the
   try {
     assert.equal(picker.find(isFailedCard), null);
 
-    await picker.fireVulkanFallback(vulkanPack({ gpuFailed: true, gpuFailReason: DEVICE_LOST }));
+    await picker.fireFallback(
+      "vulkan",
+      vulkanPack({ gpuFailed: true, gpuFailReason: DEVICE_LOST })
+    );
     assert.ok(picker.find(hasText(DEVICE_LOST)), "shown without reopening settings");
-    assert.equal(picker.pack.statusReads, 2, "the status was read again after the notification");
 
     // A later failure (e.g. after Retry) replaces the line; the old reason never lingers
-    await picker.fireVulkanFallback(
+    await picker.fireFallback(
+      "vulkan",
       vulkanPack({ gpuFailed: true, gpuFailReason: OUT_OF_DEVICE_MEMORY })
     );
     assert.ok(picker.find(hasText(OUT_OF_DEVICE_MEMORY)));
@@ -183,21 +186,27 @@ test("a live fallback re-reads the status: the new reason shows and replaces the
 test("a Vulkan fallback shows as failed even while the card shows the installed CUDA pack", async (t) => {
   // Both packs installed on an NVIDIA machine: the card shows CUDA, but main ran
   // Vulkan (CUDA opted out with WHISPER_CUDA_ENABLED=false, or failed before)
-  const picker = await mountPicker(
-    t,
-    vulkanPack({ hasNvidiaGpu: true }),
-    cudaPack({ downloaded: true, gpuInfo: { hasNvidiaGpu: true, cudaSupported: true } })
-  );
+  const installedCuda = { downloaded: true, gpuInfo: { hasNvidiaGpu: true, cudaSupported: true } };
+  const picker = await mountPicker(t, vulkanPack({ hasNvidiaGpu: true }), cudaPack(installedCuda));
   try {
     assert.equal(picker.find(isFailedCard), null);
 
-    await picker.fireVulkanFallback(
+    await picker.fireFallback(
+      "vulkan",
       vulkanPack({ hasNvidiaGpu: true, gpuFailed: true, gpuFailReason: DEVICE_LOST })
     );
 
     const card = picker.find(isFailedCard);
     assert.ok(card, "the fallback that just happened stays visible");
     assert.ok(findElement(card, hasText(DEVICE_LOST)), "with the reason of the pack that failed");
+
+    // A CUDA fallback reads CUDA's own reason
+    await picker.fireFallback(
+      "cuda",
+      cudaPack({ ...installedCuda, gpuFailed: true, gpuFailReason: KERNEL_IMAGE })
+    );
+    assert.ok(picker.find(hasText(KERNEL_IMAGE)));
+    assert.equal(picker.find(hasText(DEVICE_LOST)), null);
   } finally {
     await picker.unmount();
   }

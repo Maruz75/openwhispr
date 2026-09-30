@@ -280,6 +280,12 @@ test("falls back to CPU when a peer's replacement is another doomed CUDA server"
       manager.process = null;
       manager.startGeneration += 1;
       manager.ready = true;
+      // The replacement is a new process: its output is read from the start
+      manager._lastProcessInfo = () => ({
+        stderr: CUDA_KERNEL_IMAGE_STDERR,
+        exitCode: null,
+        signal: "SIGABRT",
+      });
       req.socket.destroy();
       return;
     }
@@ -295,6 +301,9 @@ test("falls back to CPU when a peer's replacement is another doomed CUDA server"
   t.after(() => server.close());
 
   manager = createManager(port, { useCuda: true });
+  // The crashed server's long output, longer than all of the replacement's
+  const crashedStderr = "whisper_print_timings:    total time =   640.12 ms\n".repeat(40);
+  manager._lastProcessInfo = () => ({ stderr: crashedStderr, exitCode: null, signal: null });
 
   const startCalls = [];
   manager.start = async (modelPath, options) => {
@@ -303,16 +312,16 @@ test("falls back to CPU when a peer's replacement is another doomed CUDA server"
     manager.ready = true;
   };
 
-  let fallbackEvents = 0;
-  manager.on("cuda-fallback", () => {
-    fallbackEvents += 1;
-  });
+  const fallbackEvents = [];
+  manager.on("cuda-fallback", (payload) => fallbackEvents.push(payload));
 
   const result = await manager.transcribe(Buffer.from("audio"));
 
   assert.equal(result.text, "hello");
   assert.equal(requestCount, 3);
-  assert.equal(fallbackEvents, 1);
+  assert.deepEqual(fallbackEvents, [
+    { reason: "CUDA error: no kernel image is available for execution on the device" },
+  ]);
   assert.equal(startCalls.length, 1);
   assert.equal(startCalls[0].options.useCuda, false);
 });

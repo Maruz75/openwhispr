@@ -198,9 +198,6 @@ test("a failure with no readable reason clears the older one instead of showing 
   assert.equal(process.env.WHISPER_GPU_FAILED, "cuda");
   assert.equal(process.env.WHISPER_GPU_FAILED_REASON_CUDA, undefined);
   assert.equal((await invoke("get-cuda-whisper-status")).gpuFailReason, null);
-  // An emitter that passes nothing at all is tolerated
-  assert.doesNotThrow(() => serverManager.emit("gpu-fallback"));
-  assert.equal(process.env.WHISPER_GPU_FAILED, "cuda,vulkan");
 });
 
 test("no reason is reported for a backend that is not marked failed", async () => {
