@@ -26,6 +26,10 @@ class CalendarReminderScheduler {
   }
 
   scheduleNextMeeting() {
+    if (this.activeMeeting) {
+      this.reconcileProvider(this.activeMeeting.provider);
+    }
+
     if (this.nextMeetingTimer) {
       clearTimeout(this.nextMeetingTimer);
       this.nextMeetingTimer = null;

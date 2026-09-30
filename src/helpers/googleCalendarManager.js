@@ -244,7 +244,11 @@ class GoogleCalendarManager {
       }
 
       const isAllDay = !item.start?.dateTime;
-      const selfAttendee = item.attendees?.find((attendee) => attendee.self === true);
+      const selfAttendee = selfIsUser
+        ? item.attendees?.find((attendee) => attendee.self === true)
+        : item.attendees?.find(
+            (attendee) => ownEmail && attendee.email?.toLowerCase() === ownEmail
+          );
       toUpsert.push({
         id: item.id,
         calendar_id: calendar.id,

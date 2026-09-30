@@ -77,7 +77,7 @@ test("_syncCalendar fetches all pages when nextPageToken is returned", async () 
     throw new Error(`Unexpected path: ${path}`);
   };
 
-  const calendar = { id: "cal-1", account_email: "test@example.com" };
+  const calendar = { id: "cal-1", account_email: "test@example.com", is_primary: 1 };
   await manager._syncCalendar(calendar);
 
   assert.equal(apiCalls.length, 2, "should make 2 API calls for 2 pages");
@@ -376,4 +376,98 @@ test("_syncCalendar trusts self as the user only on the account's primary calend
       [1, []],
     ]
   );
+});
+
+async function syncGoogleResponse(calendar, attendees) {
+  const rows = [];
+  const GoogleCalendarManager = loadManagerModule();
+  const manager = new GoogleCalendarManager(
+    {
+      removeStaleCalendarEvents: () => {},
+      upsertCalendarEvents: (events) => rows.push(...events),
+      removeCalendarEvents: () => {},
+      updateCalendarSyncToken: () => {},
+      syncCalendarContacts: () => {},
+    },
+    null,
+    { scheduleNextMeeting: () => {} }
+  );
+  manager._apiGet = async () => ({
+    items: [
+      {
+        id: "meeting",
+        summary: "Planning",
+        status: "confirmed",
+        start: { dateTime: "2026-10-01T10:00:00Z" },
+        end: { dateTime: "2026-10-01T11:00:00Z" },
+        attendees,
+      },
+    ],
+  });
+  await manager._syncCalendar(calendar);
+  return rows[0].self_response_status;
+}
+
+test("Google RSVP uses primary self or the connected shared-calendar attendee", async () => {
+  const shared = { id: "colleague@example.com", account_email: "me@example.com" };
+  const colleague = { email: "colleague@example.com", self: true, responseStatus: "declined" };
+  for (const response of ["accepted", "declined", "tentative", "needsAction"]) {
+    assert.equal(
+      await syncGoogleResponse(shared, [
+        colleague,
+        { email: "ME@example.com", responseStatus: response },
+      ]),
+      response
+    );
+  }
+  assert.equal(await syncGoogleResponse(shared, [colleague]), "unknown");
+  assert.equal(await syncGoogleResponse(shared, []), "unknown");
+  assert.equal(
+    await syncGoogleResponse(shared, [
+      colleague,
+      { email: "me@example.com", responseStatus: "unrecognized" },
+    ]),
+    "unknown"
+  );
+  for (const calendar of [
+    { id: "primary-id", account_email: "me@example.com", is_primary: 1 },
+    { id: "me@example.com", account_email: "me@example.com" },
+  ]) {
+    assert.equal(
+      await syncGoogleResponse(calendar, [
+        { email: "alias@example.com", self: true, responseStatus: "declined" },
+      ]),
+      "declined"
+    );
+  }
+});
+
+test("empty Google delta and failed sync do not overwrite cached RSVP", async () => {
+  const GoogleCalendarManager = loadManagerModule();
+  const mutations = [];
+  const manager = new GoogleCalendarManager(
+    {
+      removeStaleCalendarEvents: () => mutations.push("prune"),
+      upsertCalendarEvents: () => mutations.push("upsert"),
+      removeCalendarEvents: () => mutations.push("remove"),
+      updateCalendarSyncToken: () => mutations.push("token"),
+      syncCalendarContacts: () => {},
+    },
+    null,
+    { scheduleNextMeeting: () => {} }
+  );
+  const calendar = {
+    id: "cal",
+    account_email: "me@example.com",
+    sync_token: "current",
+    sync_token_expires_at: Date.now() + 60_000,
+  };
+  manager._apiGet = async () => ({ items: [] });
+  await manager._syncCalendar(calendar);
+  assert.deepEqual(mutations, []);
+  manager._apiGet = async () => {
+    throw new Error("offline");
+  };
+  await assert.rejects(manager._syncCalendar(calendar), /offline/);
+  assert.deepEqual(mutations, []);
 });

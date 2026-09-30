@@ -177,7 +177,7 @@ test("_syncCalendar backfills stripped recurring occurrences from their series m
       return {
         "@odata.deltaLink": "delta-link",
         value: [
-          STRIPPED_OCCURRENCE,
+          { ...STRIPPED_OCCURRENCE, responseStatus: { response: "declined" } },
           {
             ...STRIPPED_OCCURRENCE,
             id: "occ-2",
@@ -197,6 +197,7 @@ test("_syncCalendar backfills stripped recurring occurrences from their series m
     return {
       id: "master-1",
       subject: "Standup",
+      responseStatus: { response: "accepted" },
       isAllDay: false,
       onlineMeeting: { joinUrl: "https://teams.microsoft.com/l/meetup-join/abc" },
       organizer: { emailAddress: { address: "organizer@example.com" } },
@@ -216,6 +217,8 @@ test("_syncCalendar backfills stripped recurring occurrences from their series m
 
   const occurrence = upserted.find((event) => event.id === "occ-1");
   assert.equal(occurrence.summary, "Standup");
+  assert.equal(occurrence.self_response_status, "declined");
+  assert.equal(upserted.find((event) => event.id === "occ-2").self_response_status, "accepted");
   assert.equal(occurrence.start_time, "2026-07-20T09:25:00Z");
   assert.equal(occurrence.hangout_link, "https://teams.microsoft.com/l/meetup-join/abc");
   assert.equal(occurrence.organizer_email, "organizer@example.com");
@@ -446,4 +449,62 @@ test("fetchCalendars still saves the calendars when the address lookup fails", a
 
   assert.equal(calendars.length, 1);
   assert.equal(savedCalendars.length, 1);
+});
+
+test("a stripped occurrence keeps details but applies explicit RSVP after master failure", async () => {
+  const MicrosoftCalendarManager = loadManagerModule();
+  const original = {
+    id: "occ-1",
+    calendar_id: "cal-1",
+    provider: "microsoft",
+    summary: "Standup",
+    start_time: "2026-10-01T10:00:00Z",
+    end_time: "2026-10-01T11:00:00Z",
+    is_all_day: 0,
+    status: "confirmed",
+    availability_status: "busy",
+    self_response_status: "accepted",
+    hangout_link: "https://teams.live.com/meet/123",
+    attendees_count: 1,
+    attendees: '[{"email":"guest@example.com"}]',
+  };
+  let cached = original;
+  let response;
+  const upserted = [];
+  const manager = createManager(MicrosoftCalendarManager, upserted, [], {
+    getCalendarEventById: () => cached,
+    upsertCalendarEvents: (rows) => {
+      upserted.push(...rows);
+      cached = rows[0];
+    },
+  });
+  manager._apiGet = async (url) => {
+    if (!url.includes("/calendarView/delta")) throw new Error("master unavailable");
+    return {
+      value: [
+        {
+          ...STRIPPED_OCCURRENCE,
+          ...(response === undefined ? {} : { responseStatus: { response } }),
+        },
+      ],
+    };
+  };
+  const calendar = { id: "cal-1", account_email: "me@example.com" };
+  for (const [raw, normalized] of [
+    ["declined", "declined"],
+    ["accepted", "accepted"],
+    ["tentativelyAccepted", "tentative"],
+    ["notResponded", "unknown"],
+  ]) {
+    response = raw;
+    await manager._syncCalendar(calendar);
+    assert.deepEqual(cached, { ...original, self_response_status: normalized });
+  }
+  response = "declined";
+  await manager._syncCalendar(calendar);
+  const count = upserted.length;
+  response = undefined;
+  await manager._syncCalendar(calendar);
+  assert.equal(upserted.length, count, "absent RSVP cannot reset the cached response");
+  assert.deepEqual(cached, { ...original, self_response_status: "declined" });
 });
