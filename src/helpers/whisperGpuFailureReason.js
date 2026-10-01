@@ -1,20 +1,15 @@
 const os = require("os");
 const { getSystemErrorName } = require("util");
 
-// A GPU whisper-server that falls back to CPU used to leave only its backend
-// name behind (WHISPER_GPU_FAILED), so neither the settings card nor a bug
-// report could say why (#1736). This picks the stderr line that explains it.
+// When a GPU whisper-server falls back to CPU, this picks the stderr line that
+// explains why, for the settings card and bug reports (#1736).
 
-// The cause is printed last, just before the process exits. Reading only the
-// tail also keeps a long-running server's older output out of the answer.
-const STDERR_TAIL_CHARS = 16 * 1024;
 const MAX_REASON_LENGTH = 240;
 // The high bit marks an NTSTATUS warning or error; POSIX exit codes stop at 255
 const WINDOWS_STATUS_MIN = 0x80000000;
 
 // Where the reason is saved: one .env key per backend beside WHISPER_GPU_FAILED,
-// set and cleared with it (ipcHandlers, whisperGpuUpgradeReset) and listed in
-// environment.js PERSISTED_KEYS so a .env rewrite keeps it.
+// set and cleared with it.
 const WHISPER_GPU_FAILURE_REASON_KEYS = Object.freeze({
   cuda: "WHISPER_GPU_FAILED_REASON_CUDA",
   vulkan: "WHISPER_GPU_FAILED_REASON_VULKAN",
@@ -77,21 +72,17 @@ function describeExitCode(exitCode) {
   return `exit code ${exitCode}`;
 }
 
-function escapeRegExp(text) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 // One line that is safe to show and to save. EnvironmentManager writes .env
 // values raw (KEY=value), and dotenv reads "#" as a comment and a leading
 // quote as the start of a quoted value that can run over later keys. A trailing
 // quote can close one an earlier line left open (a backtick hotkey).
 function sanitizeReason(text, homeDir) {
-  let reason = String(text);
+  let reason = text;
   if (homeDir) {
     // People screenshot this into public issues, and a home folder is often
     // named after its owner.
     for (const home of new Set([homeDir, homeDir.replace(/\\/g, "/")])) {
-      reason = reason.replace(new RegExp(escapeRegExp(home), "gi"), "~");
+      reason = reason.replace(new RegExp(home.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "~");
     }
   }
   reason = reason
@@ -117,9 +108,8 @@ function extractWhisperGpuFailureReason({
   signal = null,
   timeoutMs = null,
   homeDir = os.homedir(),
-} = {}) {
-  const lines = String(stderr || "")
-    .slice(-STDERR_TAIL_CHARS)
+}) {
+  const lines = stderr
     .split(/\r\n|\r|\n/)
     .map((line) => line.trim())
     .filter((line) => line && !RECOVERED_WARNING.test(line));
@@ -134,7 +124,6 @@ function extractWhisperGpuFailureReason({
 }
 
 module.exports = {
-  MAX_REASON_LENGTH,
   WHISPER_GPU_FAILURE_REASON_KEYS,
   extractWhisperGpuFailureReason,
 };

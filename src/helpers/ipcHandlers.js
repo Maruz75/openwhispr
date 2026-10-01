@@ -1256,16 +1256,12 @@ class IPCHandlers {
     return resolveFailedGpuBackends(process.env.WHISPER_GPU_FAILED);
   }
 
-  // Remember the failed backend, and the error line that explains it, so the
-  // backend isn't re-attempted (and its model reload re-paid) on every launch
-  // and the settings card can say why (#1736). Cleared by retry, re-download,
-  // delete, and the once-per-upgrade reset.
   _attachWhisperServerListeners(serverManager) {
-    serverManager.on("cuda-fallback", ({ reason } = {}) => {
+    serverManager.on("cuda-fallback", ({ reason }) => {
       this._recordWhisperGpuFailure("cuda", reason);
       broadcastToWindows("cuda-fallback-notification", {});
     });
-    serverManager.on("gpu-fallback", ({ reason } = {}) => {
+    serverManager.on("gpu-fallback", ({ reason }) => {
       this._recordWhisperGpuFailure("vulkan", reason);
       broadcastToWindows("gpu-fallback-notification", {});
     });
@@ -1279,9 +1275,13 @@ class IPCHandlers {
     });
   }
 
-  // The reason is written in the same .env write as the flag. A failure with
-  // no readable reason clears the older one, so a stale cause is never shown.
-  _recordWhisperGpuFailure(backend, reason = null) {
+  // Remember the failed backend, and the error line that explains it, so the
+  // backend isn't re-attempted (and its model reload re-paid) on every launch
+  // and the settings card can say why (#1736). Cleared by retry, re-download,
+  // delete, and the once-per-upgrade reset. The reason is written in the same
+  // .env write as the flag. A failure with no readable reason clears the older
+  // one, so a stale cause is never shown.
+  _recordWhisperGpuFailure(backend, reason) {
     const failed = this._whisperGpuFailedBackends();
     if (!failed.includes(backend)) failed.push(backend);
     const reasonKey = WHISPER_GPU_FAILURE_REASON_KEYS[backend];
@@ -1301,7 +1301,6 @@ class IPCHandlers {
     }
   }
 
-  // A reason is only ever reported for a backend that is marked failed
   _whisperGpuFailureStatus(backend) {
     const gpuFailed = this._whisperGpuFailedBackends().includes(backend);
     const reason = gpuFailed ? process.env[WHISPER_GPU_FAILURE_REASON_KEYS[backend]] : null;

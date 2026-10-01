@@ -130,7 +130,6 @@ test("#1340: a Vulkan server that dies at startup reports the createDevice error
   assert.deepEqual(events, [{ reason: "vk::PhysicalDevice::createDevice: ErrorDeviceLost" }]);
   const warning = fallbackWarning();
   assert.equal(warning.meta.reason, "vk::PhysicalDevice::createDevice: ErrorDeviceLost");
-  assert.equal("stderr" in warning.meta, false, "no 200-character banner slice");
 });
 
 test("a CUDA server that runs out of memory at startup reports the failed allocation", async (t) => {

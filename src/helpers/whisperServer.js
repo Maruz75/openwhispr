@@ -685,8 +685,7 @@ class WhisperServerManager extends EventEmitter {
         // (missing kernels), die late (VRAM OOM mid-model-load), or hang, and
         // in every case the CPU binary is the working answer. stop() reaps a
         // hung process before the CPU restart. The reason travels with the
-        // event so it is saved beside the failure and shown on the GPU card:
-        // the device banner is far longer than 200 characters (#1736).
+        // event so it is saved beside the failure and shown on the GPU card (#1736).
         const reason = extractWhisperGpuFailureReason({
           ...getProcessInfo(),
           timeoutMs: startupTimeoutMs,
@@ -1103,11 +1102,11 @@ class WhisperServerManager extends EventEmitter {
     // Read the crashed server's output now (the CPU start below replaces it),
     // from where the failing request began. A peer's replacement server is a
     // different process, so its output is read whole.
-    const processInfo = this._lastProcessInfo?.() ?? {};
-    const offset = stderrMark?.processInfo === this._lastProcessInfo ? stderrMark.offset : 0;
+    const processInfo = this._lastProcessInfo();
+    const offset = stderrMark.processInfo === this._lastProcessInfo ? stderrMark.offset : 0;
     const reason = extractWhisperGpuFailureReason({
       ...processInfo,
-      stderr: processInfo.stderr?.slice(offset),
+      stderr: processInfo.stderr.slice(offset),
     });
     debugLogger.warn(`${backend} whisper-server died during transcription, falling back to CPU`, {
       port: this.port,

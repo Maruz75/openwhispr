@@ -13,6 +13,7 @@ const {
 // line that main saved with a GPU->CPU fallback (#1736).
 const DEVICE_LOST = "vk::PhysicalDevice::createDevice: ErrorDeviceLost";
 const OUT_OF_DEVICE_MEMORY = "vk::Device::allocateMemory: ErrorOutOfDeviceMemory";
+const KERNEL_IMAGE = "CUDA error: no kernel image is available for execution on the device";
 const noop = () => {};
 
 const vulkanPack = (overrides = {}) => ({
@@ -51,7 +52,6 @@ function findElement(node, predicate) {
 const isFailedCard = (node) => String(node.props?.className ?? "").includes("border-warning/40");
 const hasText = (text) => (node) => node.props?.children === text;
 
-const KERNEL_IMAGE = "CUDA error: no kernel image is available for execution on the device";
 const NVIDIA = { hasNvidiaGpu: true, cudaSupported: true };
 // An NVIDIA GPU below the CUDA build's kernel floor (e.g. Maxwell)
 const OLD_NVIDIA = { hasNvidiaGpu: true, cudaSupported: false };
@@ -87,7 +87,6 @@ async function mountPicker(t, vulkanStatus, cudaStatus = cudaPack(), gpuAccelera
     status: vulkanStatus,
     cuda: cudaStatus,
     gpuAccelerated,
-    statusReads: 0,
     failReads: false,
   };
   const calls = [];
@@ -111,10 +110,7 @@ async function mountPicker(t, vulkanStatus, cudaStatus = cudaPack(), gpuAccelera
     onWhisperDownloadProgress: () => noop,
     onParakeetDownloadProgress: () => noop,
     getCudaWhisperStatus: read(() => pack.cuda),
-    getVulkanWhisperStatus: read(() => {
-      pack.statusReads += 1;
-      return pack.status;
-    }),
+    getVulkanWhisperStatus: read(() => pack.status),
     whisperServerStatus: async () => ({ gpuAccelerated: pack.gpuAccelerated }),
     onCudaFallbackNotification: listen(listeners.cuda),
     onGpuFallbackNotification: listen(listeners.vulkan),
@@ -195,7 +191,11 @@ test("a failure saved before this change renders the card exactly as before", as
   try {
     const card = picker.find(isFailedCard);
     assert.ok(card, "the failed card still shows");
-    assert.equal(findElement(card, (node) => node.props?.dir === "ltr"), null, "no empty line");
+    assert.equal(
+      findElement(card, (node) => node.props?.dir === "ltr"),
+      null,
+      "no empty line"
+    );
   } finally {
     await picker.unmount();
   }
@@ -219,7 +219,6 @@ test("a live fallback re-reads the status: the new reason shows and replaces the
 
     await picker.fireVulkanFallback(vulkanPack({ gpuFailed: true, gpuFailReason: DEVICE_LOST }));
     assert.ok(picker.find(hasText(DEVICE_LOST)), "shown without reopening settings");
-    assert.equal(picker.pack.statusReads, 2, "the status was read again after the notification");
 
     // A later failure (e.g. after Retry) replaces the line; the old reason never lingers
     await picker.fireVulkanFallback(

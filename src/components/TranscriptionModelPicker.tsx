@@ -1404,7 +1404,7 @@ export default function TranscriptionModelPicker({
                           {gpuFailReason && (
                             <p
                               dir="ltr"
-                              className="mt-1 select-text wrap-break-word font-mono text-[11px] leading-snug text-muted-foreground"
+                              className="mt-1 wrap-break-word font-mono text-[11px] leading-snug text-muted-foreground"
                             >
                               {gpuFailReason}
                             </p>
