@@ -73,7 +73,7 @@ function settle() {
   });
 }
 
-async function mountPicker(t, vulkanStatus, cudaStatus = cudaPack()) {
+async function mountPicker(t, vulkanStatus, cudaStatus = cudaPack(), gpuAccelerated = false) {
   installBrowserGlobals(t, {
     window: { location: { search: "" }, electronAPI: { getPlatform: () => "win32" } },
   });
@@ -83,7 +83,13 @@ async function mountPicker(t, vulkanStatus, cudaStatus = cudaPack()) {
   });
   const container = installHookDom(t);
   // `status` is the Vulkan pack's; `calls` lists the pack IPCs the card made
-  const pack = { status: vulkanStatus, cuda: cudaStatus, statusReads: 0, failReads: false };
+  const pack = {
+    status: vulkanStatus,
+    cuda: cudaStatus,
+    gpuAccelerated,
+    statusReads: 0,
+    failReads: false,
+  };
   const calls = [];
   const listeners = { cuda: [], vulkan: [], changed: [] };
   const listen = (list) => (callback) => {
@@ -109,7 +115,7 @@ async function mountPicker(t, vulkanStatus, cudaStatus = cudaPack()) {
       pack.statusReads += 1;
       return pack.status;
     }),
-    whisperServerStatus: async () => ({ gpuAccelerated: false }),
+    whisperServerStatus: async () => ({ gpuAccelerated: pack.gpuAccelerated }),
     onCudaFallbackNotification: listen(listeners.cuda),
     onGpuFallbackNotification: listen(listeners.vulkan),
     onWhisperGpuStatusChanged: listen(listeners.changed),
@@ -143,7 +149,7 @@ async function mountPicker(t, vulkanStatus, cudaStatus = cudaPack()) {
   });
   await settle();
   // Main has already saved the change when it sends any of these events.
-  // `next` replaces what the status IPCs answer: { status, cuda }.
+  // `next` replaces what the status IPCs answer: { status, cuda, gpuAccelerated }.
   const fire = async (event, next = {}) => {
     Object.assign(pack, next);
     await React.act(async () => {
@@ -372,6 +378,26 @@ test("the card re-reads when main says the GPU state changed, without remounting
     assert.equal(picker.shows(isFailedCard), false);
     assert.equal(picker.shows(hasText(DEVICE_LOST)), false, "the old reason is gone");
     assert.ok(picker.shows(hasText("GPU acceleration ready")));
+  } finally {
+    await picker.unmount();
+  }
+});
+
+test("a card that switches packs reads the server again, not the old pack's state", async (t) => {
+  const vulkanRunning = bothPacks({ inUse: "vulkan" });
+  const picker = await mountPicker(t, vulkanRunning.vulkan, vulkanRunning.cuda, true);
+  try {
+    assert.ok(picker.shows(hasText("GPU acceleration active")));
+
+    // CUDA is opted out: Remove on another tab deleted Vulkan, so the server restarts on CPU
+    const cudaLeft = onlyCuda({ inUse: false });
+    await picker.fire("changed", {
+      status: cudaLeft.vulkan,
+      cuda: cudaLeft.cuda,
+      gpuAccelerated: false,
+    });
+
+    assert.ok(picker.shows(hasText("GPU acceleration ready")), "without waiting for the 5 s poll");
   } finally {
     await picker.unmount();
   }

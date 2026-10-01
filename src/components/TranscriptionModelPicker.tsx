@@ -380,9 +380,10 @@ function ModeToggle({ useLocalWhisper, onModeChange }: ModeToggleProps) {
   );
 }
 
-// The pack the GPU card describes. Main reports the one it runs, would start
-// with, or last failed on (#1736), so Remove and Retry act on the pack the
-// server uses. With none in use, the card picks which pack to offer.
+// The pack the GPU card describes. Main reports the one it runs or would start
+// with, else an installed pack that failed, CUDA first (#1736), so Remove and
+// Retry act on the pack the server uses. With none in use, the card picks
+// which pack to offer.
 function pickGpuCardPack(
   cuda: CudaWhisperStatus | undefined,
   vulkan: VulkanWhisperStatus | undefined
@@ -771,6 +772,7 @@ export default function TranscriptionModelPicker({
   // Live server state: "GPU acceleration active" reflects what the server is
   // actually running on, not just that a pack is on disk (a crashed GPU server
   // silently falls back to CPU). Faster poll while an activation is in flight.
+  // Polls again at once when a re-read switches the card to another pack.
   useEffect(() => {
     if (!effectiveLocal || internalLocalProvider !== "whisper" || !gpuDownloaded) return;
     const poll = () => {
@@ -785,7 +787,7 @@ export default function TranscriptionModelPicker({
     poll();
     const id = setInterval(poll, gpuActivating ? 1000 : 5000);
     return () => clearInterval(id);
-  }, [effectiveLocal, internalLocalProvider, gpuDownloaded, gpuActivating]);
+  }, [effectiveLocal, internalLocalProvider, gpuDownloaded, gpuActivating, gpuBackend]);
 
   // Safety valve: a Vulkan cold start can take up to ~2 minutes (see #698);
   // past that the live status or a fallback notification settles the state.
