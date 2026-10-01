@@ -192,23 +192,25 @@ test("the skipped pack is logged again when debug mode is switched on without a 
 const ONLY_CUDA = { cuda: true };
 const ONLY_VULKAN = { vulkan: true };
 const BOTH = { cuda: true, vulkan: true };
-for (const [name, packs, failed, cudaOptedOut, expected] of [
-  ["only CUDA", ONLY_CUDA, "", false, "cuda"],
-  ["only CUDA, failed", ONLY_CUDA, "cuda", false, "cuda"],
-  ["only CUDA, opted out", ONLY_CUDA, "", true, null],
-  ["only Vulkan", ONLY_VULKAN, "", false, "vulkan"],
-  ["only Vulkan, failed", ONLY_VULKAN, "vulkan", false, "vulkan"],
-  ["no pack", {}, "cuda,vulkan", false, null],
-  ["both packs", BOTH, "", false, "cuda"],
-  ["both packs, CUDA failed", BOTH, "cuda", false, "vulkan"],
-  ["both packs, CUDA opted out", BOTH, "", true, "vulkan"],
-  ["both packs, Vulkan failed", BOTH, "vulkan", false, "cuda"],
-  ["both packs, both failed", BOTH, "cuda,vulkan", false, "cuda"],
-  ["both packs, CUDA opted out, Vulkan failed", BOTH, "vulkan", true, "vulkan"],
+for (const [name, packs, failed, optedOut, expected] of [
+  ["only CUDA", ONLY_CUDA, "", "", "cuda"],
+  ["only CUDA, failed", ONLY_CUDA, "cuda", "", "cuda"],
+  ["only CUDA, opted out", ONLY_CUDA, "", "CUDA", null],
+  ["only Vulkan", ONLY_VULKAN, "", "", "vulkan"],
+  ["only Vulkan, failed", ONLY_VULKAN, "vulkan", "", "vulkan"],
+  ["only Vulkan, opted out", ONLY_VULKAN, "", "VULKAN", null],
+  ["no pack", {}, "cuda,vulkan", "", null],
+  ["both packs", BOTH, "", "", "cuda"],
+  ["both packs, CUDA failed", BOTH, "cuda", "", "vulkan"],
+  ["both packs, CUDA opted out", BOTH, "", "CUDA", "vulkan"],
+  ["both packs, CUDA failed, Vulkan opted out", BOTH, "cuda", "VULKAN", "cuda"],
+  ["both packs, Vulkan failed", BOTH, "vulkan", "", "cuda"],
+  ["both packs, both failed", BOTH, "cuda,vulkan", "", "cuda"],
+  ["both packs, CUDA opted out, Vulkan failed", BOTH, "vulkan", "CUDA", "vulkan"],
 ]) {
   test(`the pack in use with ${name}: ${expected}`, () => {
     process.env.WHISPER_GPU_FAILED = failed;
-    if (cudaOptedOut) process.env.WHISPER_CUDA_ENABLED = "false";
+    if (optedOut) process.env[`WHISPER_${optedOut}_ENABLED`] = "false";
     const { cuda = false, vulkan = false } = packs;
     const manager = managerWith({ cudaDownloaded: cuda, vulkanDownloaded: vulkan });
 

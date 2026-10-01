@@ -110,7 +110,8 @@ class WhisperManager {
   // runs on it; while a pack change restarts the server, it names the target),
   // else the installed pack that fell back to CPU, CUDA first, so its reason
   // and Retry show. null when neither applies (no pack, or a pack opted out
-  // with WHISPER_*_ENABLED=false): the card then chooses which pack to offer.
+  // with WHISPER_*_ENABLED=false that never failed): the card then chooses
+  // which pack to offer.
   resolveGpuPackInUse() {
     const { useCuda, useVulkan } = this.resolveGpuStartOptions();
     if (useCuda) return "cuda";
