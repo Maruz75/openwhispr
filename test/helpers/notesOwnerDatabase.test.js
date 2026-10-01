@@ -227,3 +227,60 @@ test("markNoteSynced and markNoteSyncedIfUnchanged persist the returned owner", 
 
   db.db.close();
 });
+
+// Join & transcribe resumes the user's note for a calendar event. Google gives
+// every invitee's copy of an event the same id, so a teammate's synced note for
+// the same meeting must never be resumed: both apps would record into one note.
+test("getOwnNoteByCalendarEventId never resumes a teammate's note for the same event", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  const space = createTestTeamSpace(db, "Eng");
+
+  db.upsertNoteFromCloud(
+    cloudNote({ id: "cloud-teammate", calendar_event_id: "event-1", user_id: "teammate" }),
+    null,
+    space.id
+  );
+  assert.equal(db.getOwnNoteByCalendarEventId("event-1"), null);
+
+  const own = db.saveNote("Weekly sync", "", "meeting").note;
+  db.updateNote(own.id, { calendar_event_id: "event-1" });
+  assert.equal(db.getOwnNoteByCalendarEventId("event-1").id, own.id);
+
+  db.db.close();
+});
+
+test("getOwnNoteByCalendarEventId resumes notes the user owns, newest first", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  const space = createTestTeamSpace(db, "Eng");
+  const insert = db.db.prepare(
+    `INSERT INTO notes (title, content, client_note_id, space_id, cloud_id, owner_user_id, calendar_event_id, created_at)
+     VALUES (?, '', ?, ?, ?, ?, ?, ?)`
+  );
+  const lookup = (eventId) => db.getOwnNoteByCalendarEventId(eventId)?.title ?? null;
+
+  insert.run("own team", "c-1", space.id, "cloud-1", "test-account", "event-team", "2026-07-01");
+  // Synced before ownership was recorded; only the user's notes live in Personal.
+  insert.run(
+    "legacy",
+    "c-2",
+    db.getPrivateSpaceId(),
+    "cloud-2",
+    null,
+    "event-legacy",
+    "2026-07-01"
+  );
+  // A team note whose owner the pull hasn't backfilled yet could be anyone's.
+  insert.run("unknown", "c-3", space.id, "cloud-3", null, "event-unknown", "2026-07-01");
+  insert.run("older", "c-4", db.getPrivateSpaceId(), null, null, "event-many", "2026-07-01");
+  insert.run("newer", "c-5", db.getPrivateSpaceId(), null, null, "event-many", "2026-07-02");
+  insert.run("teammate newest", "c-6", space.id, "cloud-6", "teammate", "event-many", "2026-07-03");
+
+  assert.equal(lookup("event-team"), "own team");
+  assert.equal(lookup("event-legacy"), "legacy");
+  assert.equal(lookup("event-unknown"), null);
+  assert.equal(lookup("event-many"), "newer");
+
+  db.db.close();
+});
