@@ -4002,10 +4002,8 @@
   },
   "integrations": {
     "title": "Intégrations",
-    "description": "Connectez des services pour booster votre productivité",
     "googleCalendar": {
       "title": "Google Calendar",
-      "optional": "Facultatif",
       "description": "Remplissez automatiquement les titres et participants des réunions depuis votre calendrier.",
       "connect": "Connecter Google Calendar",
       "connecting": "Connexion...",
@@ -4024,7 +4022,6 @@
     },
     "microsoftCalendar": {
       "title": "Microsoft Calendar",
-      "optional": "Facultatif",
       "description": "Lisez les réunions depuis votre calendrier Outlook ou Microsoft 365.",
       "connect": "Connecter Microsoft Calendar",
       "connected": "Connecté",
@@ -4039,7 +4036,6 @@
     },
     "appleCalendar": {
       "title": "Calendrier Apple",
-      "optional": "Facultatif",
       "description": "Lisez les réunions depuis Calendar.app — iCloud, Google, Exchange et Outlook au même endroit.",
       "connect": "Connecter le Calendrier Apple",
       "connected": "Connecté",
@@ -4052,35 +4048,23 @@
       "connectFailed": "Échec de la connexion",
       "connectFailedDescription": "Une erreur s'est produite lors de la connexion à Calendar.app. Redémarrez OpenWhispr et réessayez."
     },
-    "sections": {
-      "connectors": "Connecteurs",
-      "calendar": "Calendrier",
-      "api": "API",
-      "mcp": "MCP",
-      "cli": "CLI"
-    },
     "api": {
       "title": "Clés API",
       "description": "Gérez les clés API pour un accès programmatique",
       "proRequired": "Passez à un plan payant pour accéder à l'API",
-      "manage": "Gérer les clés",
       "viewPlans": "Voir les forfaits",
-      "dialogTitle": "Clés API"
+      "useWith": "Utilisez une clé avec"
     },
     "mcp": {
-      "title": "Apportez vos notes à vos outils d'IA",
       "description": "Discutez, recherchez et travaillez avec vos notes dans Claude, ChatGPT et Cursor.",
       "step1": "Dans votre outil d'IA, ajoutez OpenWhispr MCP avec l'URL publique",
-      "step2": "Créez une clé API ci-dessus avec les permissions dont vous avez besoin.",
+      "step2": "Créez une clé API avec les permissions dont vous avez besoin.",
       "step3": "Collez la clé comme en-tête Authorization pour vous connecter.",
       "learnMore": "En savoir plus",
-      "viewPlans": "Voir les forfaits",
-      "copyUrl": "Copier l'URL MCP",
       "proRequired": "Passez à un plan payant pour connecter OpenWhispr à Claude, ChatGPT et Cursor.",
-      "copied": "Copié"
+      "worksWith": "Fonctionne avec"
     },
     "cli": {
-      "title": "Accès en ligne de commande",
       "description": "Donnez à votre assistant l'accès à vos notes depuis le terminal.",
       "installLabel": "Installer",
       "learnMore": "Lire la documentation",
@@ -4110,8 +4094,26 @@
       "upgrade": "Passer au supérieur"
     },
     "notABot": {
-      "title": "OpenWhispr est un enregistreur de réunions, pas un bot",
       "description": "OpenWhispr capture l'audio directement depuis votre système — il ne rejoint jamais vos réunions en tant que participant. Connectez simplement votre calendrier et prenez vos notes normalement."
+    },
+    "nav": {
+      "label": "Sections des intégrations",
+      "groups": {
+        "assistant": "Assistant",
+        "meetings": "Réunions",
+        "developer": "Développeurs"
+      },
+      "sections": {
+        "connectors": "Connecteurs",
+        "calendars": "Calendriers",
+        "api": "Clés API",
+        "mcp": "Serveur MCP",
+        "cli": "Ligne de commande"
+      },
+      "docs": "Documentation des intégrations"
+    },
+    "connectors": {
+      "description": "Laissez l'assistant utiliser vos outils. Vous approuvez chaque e-mail, message et ticket avant son envoi."
     }
   },
   "connectors": {
@@ -4277,7 +4279,6 @@
       "title": "Brouillons d'e-mails",
       "description": "L'assistant ouvre un brouillon pré-rempli dans votre application de messagerie. Vous le vérifiez et appuyez vous-même sur Envoyer.",
       "descriptionSend": "L'assistant affiche une carte d'e-mail dans le chat. L'e-mail n'est envoyé depuis votre Gmail que lorsque vous appuyez sur Envoyer.",
-      "proRequired": "Passez à un plan payant pour que l'assistant rédige des e-mails pour vous.",
       "unavailable": "Les brouillons d'e-mails ne sont pas disponibles pour le moment.",
       "targetLabel": "Rédiger les e-mails dans",
       "autoResolved": "Automatique · {{target}}",
@@ -4292,14 +4293,13 @@
     },
     "slack": {
       "title": "Slack",
-      "description": "L'assistant peut publier des messages dans des canaux et à des personnes en votre nom. Vous approuvez chaque message avant son envoi.",
+      "description": "Publie des messages dans des canaux et à des personnes.",
       "connect": "Connecter",
       "reconnect": "Reconnecter",
       "disconnect": "Déconnecter",
       "connecting": "Terminez la connexion dans votre navigateur…",
       "connectedAs": "Connecté en tant que {{account}} dans {{workspace}}",
       "needsReconnect": "Slack doit être reconnecté.",
-      "proRequired": "Passez à un plan payant pour que l'assistant envoie des messages Slack pour vous.",
       "errors": {
         "connect_failed": "Impossible de connecter Slack. Réessayez.",
         "disconnect_failed": "Impossible de déconnecter Slack. Réessayez.",
@@ -4323,7 +4323,7 @@
     },
     "github": {
       "title": "GitHub",
-      "description": "L'assistant peut rechercher des issues et des pull requests, créer des issues et commenter en votre nom, uniquement dans les dépôts que vous choisissez. Il ne peut pas lire votre code, et vous approuvez chaque issue et chaque commentaire avant sa publication.",
+      "description": "Tickets et commentaires dans les dépôts de votre choix. Il ne peut pas lire votre code.",
       "connect": "Connecter",
       "reconnect": "Reconnecter",
       "disconnect": "Déconnecter",
@@ -4332,7 +4332,6 @@
       "connectedAs_empty": "Connecté en tant que {{account}} · aucun dépôt pour l'instant",
       "connectedAs_unknown": "Connecté en tant que {{account}}",
       "needsReconnect": "GitHub doit être reconnecté.",
-      "proRequired": "Passez à un plan payant pour que l'assistant gère les issues GitHub pour vous.",
       "reviewOnGithub": "Vérifier sur GitHub",
       "disconnectedHint": "Déconnecté de cet ordinateur. GitHub conserve l'autorisation d'OpenWhispr jusqu'à ce que vous la retiriez sur GitHub.",
       "errors": {
@@ -4364,7 +4363,7 @@
     },
     "gmail": {
       "title": "Gmail",
-      "description": "L'assistant peut envoyer des e-mails depuis votre compte Gmail. Il ne peut pas lire vos e-mails, et vous appuyez vous-même sur Envoyer pour chaque e-mail.",
+      "description": "Envoie des e-mails depuis votre compte. Il ne peut pas lire vos e-mails.",
       "connect": "Connecter",
       "reconnect": "Reconnecter",
       "disconnect": "Déconnecter",
@@ -4372,7 +4371,6 @@
       "connectedAs": "Connecté en tant que {{account}}",
       "needsReconnect": "Gmail doit être reconnecté.",
       "grantKept": "Déconnecté. Google Agenda utilise la même autorisation Google : OpenWhispr reste donc listé dans votre compte Google jusqu'à ce que vous déconnectiez aussi Google Agenda.",
-      "proRequired": "Passez à un plan payant pour que l'assistant envoie des e-mails depuis Gmail pour vous.",
       "errors": {
         "connect_failed": "Impossible de connecter Gmail. Réessayez.",
         "disconnect_failed": "Impossible de déconnecter Gmail. Réessayez.",
@@ -4399,14 +4397,13 @@
     },
     "linear": {
       "title": "Linear",
-      "description": "L'assistant peut rechercher vos tickets Linear et créer des tickets et des commentaires en votre nom. Vous approuvez chaque ticket et chaque commentaire avant son envoi.",
+      "description": "Recherche des tickets, crée des tickets et des commentaires.",
       "connect": "Connecter",
       "reconnect": "Reconnecter",
       "disconnect": "Déconnecter",
       "connecting": "Terminez la connexion dans votre navigateur…",
       "connectedAs": "Connecté en tant que {{account}} dans {{workspace}}",
       "needsReconnect": "Linear doit être reconnecté.",
-      "proRequired": "Passez à un plan payant pour que l'assistant travaille dans Linear pour vous.",
       "errors": {
         "connect_failed": "Impossible de connecter Linear. Réessayez.",
         "disconnect_failed": "Impossible de déconnecter Linear. Réessayez.",
@@ -4563,7 +4560,9 @@
       "gmailDraftLimit": "Seuls {{max}} e-mails peuvent être préparés par demande.",
       "queryResults": "Résultats trouvés : {{total}}",
       "cardLimit": "Seules {{max}} cartes peuvent être préparées par demande."
-    }
+    },
+    "beta": "Bêta",
+    "upsell": "Les connecteurs sont inclus dans les forfaits payants. Passez à un forfait payant pour que l'assistant agisse dans vos outils."
   },
   "notesView": {
     "searchPlaceholder": "Rechercher des notes…",

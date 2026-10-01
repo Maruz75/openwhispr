@@ -4002,10 +4002,8 @@
   },
   "integrations": {
     "title": "Integrations",
-    "description": "Connect services to supercharge your workflow",
     "googleCalendar": {
       "title": "Google Calendar",
-      "optional": "Optional",
       "description": "Auto-fill meeting titles and attendees from your calendar.",
       "connect": "Connect Google Calendar",
       "connecting": "Connecting...",
@@ -4024,7 +4022,6 @@
     },
     "microsoftCalendar": {
       "title": "Microsoft Calendar",
-      "optional": "Optional",
       "description": "Read meetings from your Outlook or Microsoft 365 calendar.",
       "connect": "Connect Microsoft Calendar",
       "connected": "Connected",
@@ -4039,7 +4036,6 @@
     },
     "appleCalendar": {
       "title": "Apple Calendar",
-      "optional": "Optional",
       "description": "Read meetings from Calendar.app — iCloud, Google, Exchange, and Outlook in one place.",
       "connect": "Connect Apple Calendar",
       "connected": "Connected",
@@ -4052,35 +4048,23 @@
       "connectFailed": "Connection Failed",
       "connectFailedDescription": "Something went wrong while connecting to Calendar.app. Please restart OpenWhispr and try again."
     },
-    "sections": {
-      "connectors": "Connectors",
-      "calendar": "Calendar",
-      "api": "API",
-      "mcp": "MCP",
-      "cli": "CLI"
-    },
     "api": {
       "title": "API keys",
       "description": "Manage API keys for programmatic access",
       "proRequired": "Upgrade to a paid plan to access the API",
-      "manage": "Manage keys",
       "viewPlans": "View Plans",
-      "dialogTitle": "API keys"
+      "useWith": "Use a key with"
     },
     "mcp": {
-      "title": "Bring your notes to your AI tools",
       "description": "Chat, search, and work with your notes inside Claude, ChatGPT, and Cursor.",
       "step1": "In your AI tool, add OpenWhispr MCP using the public URL",
-      "step2": "Create an API key above with the scopes you need.",
+      "step2": "Create an API key with the scopes you need.",
       "step3": "Paste the key as the Authorization header to connect.",
       "learnMore": "Learn more",
-      "viewPlans": "View Plans",
-      "copyUrl": "Copy MCP URL",
       "proRequired": "Upgrade to a paid plan to connect OpenWhispr to Claude, ChatGPT, and Cursor.",
-      "copied": "Copied"
+      "worksWith": "Works with"
     },
     "cli": {
-      "title": "Command-line access",
       "description": "Give your assistant access to your notes from the terminal.",
       "installLabel": "Install",
       "learnMore": "Read the docs",
@@ -4110,8 +4094,26 @@
       "upgrade": "Upgrade"
     },
     "notABot": {
-      "title": "OpenWhispr is a meeting recorder, not a bot",
       "description": "OpenWhispr captures audio directly from your system — it never joins your meetings as a participant. Just connect your calendar and take notes as normal."
+    },
+    "nav": {
+      "label": "Integration sections",
+      "groups": {
+        "assistant": "Assistant",
+        "meetings": "Meetings",
+        "developer": "Developer"
+      },
+      "sections": {
+        "connectors": "Connectors",
+        "calendars": "Calendars",
+        "api": "API keys",
+        "mcp": "MCP server",
+        "cli": "Command line"
+      },
+      "docs": "Integration docs"
+    },
+    "connectors": {
+      "description": "Let the assistant use your tools. You approve every email, message and issue before it goes out."
     }
   },
   "connectors": {
@@ -4277,7 +4279,6 @@
       "title": "Email drafts",
       "description": "The assistant opens a pre-filled draft in your email app. You review it and press Send yourself.",
       "descriptionSend": "The assistant shows an email card in the chat. It's sent from your Gmail only when you press Send.",
-      "proRequired": "Upgrade to a paid plan to let the assistant draft emails for you.",
       "unavailable": "Email drafts aren't available right now.",
       "targetLabel": "Draft emails in",
       "autoResolved": "Automatic · {{target}}",
@@ -4292,14 +4293,13 @@
     },
     "slack": {
       "title": "Slack",
-      "description": "The assistant can post messages to channels and people as you. You approve every message before it's sent.",
+      "description": "Post messages to channels and people.",
       "connect": "Connect",
       "reconnect": "Reconnect",
       "disconnect": "Disconnect",
       "connecting": "Finish connecting in your browser…",
       "connectedAs": "Connected as {{account}} in {{workspace}}",
       "needsReconnect": "Slack needs to be reconnected.",
-      "proRequired": "Upgrade to a paid plan to let the assistant send Slack messages for you.",
       "errors": {
         "connect_failed": "Couldn't connect Slack. Try again.",
         "disconnect_failed": "Couldn't disconnect Slack. Try again.",
@@ -4323,7 +4323,7 @@
     },
     "github": {
       "title": "GitHub",
-      "description": "The assistant can search issues and pull requests, create issues and comment as you, only in the repositories you choose. It can't read your code, and you approve every issue and comment before it's posted.",
+      "description": "Issues and comments in the repositories you choose. It can't read your code.",
       "connect": "Connect",
       "reconnect": "Reconnect",
       "disconnect": "Disconnect",
@@ -4332,7 +4332,6 @@
       "connectedAs_empty": "Connected as {{account}} · no repositories yet",
       "connectedAs_unknown": "Connected as {{account}}",
       "needsReconnect": "GitHub needs to be reconnected.",
-      "proRequired": "Upgrade to a paid plan to let the assistant work with GitHub issues for you.",
       "reviewOnGithub": "Review on GitHub",
       "disconnectedHint": "Disconnected from this computer. GitHub keeps OpenWhispr's authorization until you remove it there.",
       "errors": {
@@ -4364,7 +4363,7 @@
     },
     "gmail": {
       "title": "Gmail",
-      "description": "The assistant can send emails from your Gmail account. It can't read your mail, and you press Send on every email yourself.",
+      "description": "Send email from your account. It can't read your mail.",
       "connect": "Connect",
       "reconnect": "Reconnect",
       "disconnect": "Disconnect",
@@ -4372,7 +4371,6 @@
       "connectedAs": "Connected as {{account}}",
       "needsReconnect": "Gmail needs to be reconnected.",
       "grantKept": "Disconnected. Google Calendar uses the same Google permission, so OpenWhispr stays listed in your Google Account until you disconnect Google Calendar too.",
-      "proRequired": "Upgrade to a paid plan to let the assistant send emails from Gmail for you.",
       "errors": {
         "connect_failed": "Couldn't connect Gmail. Try again.",
         "disconnect_failed": "Couldn't disconnect Gmail. Try again.",
@@ -4399,14 +4397,13 @@
     },
     "linear": {
       "title": "Linear",
-      "description": "The assistant can search your Linear issues and create issues and comments as you. You approve every issue and comment before it's sent.",
+      "description": "Search issues and create issues and comments.",
       "connect": "Connect",
       "reconnect": "Reconnect",
       "disconnect": "Disconnect",
       "connecting": "Finish connecting in your browser…",
       "connectedAs": "Connected as {{account}} in {{workspace}}",
       "needsReconnect": "Linear needs to be reconnected.",
-      "proRequired": "Upgrade to a paid plan to let the assistant work in Linear for you.",
       "errors": {
         "connect_failed": "Couldn't connect Linear. Try again.",
         "disconnect_failed": "Couldn't disconnect Linear. Try again.",
@@ -4563,7 +4560,9 @@
       "gmailDraftLimit": "Only {{max}} emails can be prepared per request.",
       "queryResults": "Results found: {{total}}",
       "cardLimit": "Only {{max}} cards can be prepared per request."
-    }
+    },
+    "beta": "Beta",
+    "upsell": "Connectors are included with paid plans. Upgrade to let the assistant work in your tools."
   },
   "notesView": {
     "searchPlaceholder": "Search notes…",

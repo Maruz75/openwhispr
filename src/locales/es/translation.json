@@ -3884,10 +3884,8 @@
   },
   "integrations": {
     "title": "Integraciones",
-    "description": "Conecta servicios para potenciar tu flujo de trabajo",
     "googleCalendar": {
       "title": "Google Calendar",
-      "optional": "Opcional",
       "description": "Rellena automáticamente los títulos y asistentes de las reuniones desde tu calendario.",
       "connect": "Conectar Google Calendar",
       "connecting": "Conectando...",
@@ -3906,7 +3904,6 @@
     },
     "microsoftCalendar": {
       "title": "Microsoft Calendar",
-      "optional": "Opcional",
       "description": "Lee reuniones de tu calendario de Outlook o Microsoft 365.",
       "connect": "Conectar Microsoft Calendar",
       "connected": "Conectado",
@@ -3921,7 +3918,6 @@
     },
     "appleCalendar": {
       "title": "Calendario de Apple",
-      "optional": "Opcional",
       "description": "Lee reuniones de Calendar.app — iCloud, Google, Exchange y Outlook en un solo lugar.",
       "connect": "Conectar Calendario de Apple",
       "connected": "Conectado",
@@ -3934,35 +3930,23 @@
       "connectFailed": "Error de conexión",
       "connectFailedDescription": "Se produjo un error al conectar con Calendar.app. Reinicia OpenWhispr e inténtalo de nuevo."
     },
-    "sections": {
-      "connectors": "Conectores",
-      "calendar": "Calendario",
-      "api": "API",
-      "mcp": "MCP",
-      "cli": "CLI"
-    },
     "api": {
       "title": "Claves API",
       "description": "Administra las claves API para acceso programático",
       "proRequired": "Actualiza a un plan de pago para acceder a la API",
-      "manage": "Administrar claves",
       "viewPlans": "Ver planes",
-      "dialogTitle": "Claves API"
+      "useWith": "Usa una clave con"
     },
     "mcp": {
-      "title": "Lleva tus notas a tus herramientas de IA",
       "description": "Chatea, busca y trabaja con tus notas en Claude, ChatGPT y Cursor.",
       "step1": "En tu herramienta de IA, añade OpenWhispr MCP usando la URL pública",
-      "step2": "Crea una clave API arriba con los permisos que necesites.",
+      "step2": "Crea una clave API con los permisos que necesites.",
       "step3": "Pega la clave como cabecera Authorization para conectar.",
       "learnMore": "Más información",
-      "viewPlans": "Ver planes",
-      "copyUrl": "Copiar URL de MCP",
       "proRequired": "Actualiza a un plan de pago para conectar OpenWhispr con Claude, ChatGPT y Cursor.",
-      "copied": "Copiado"
+      "worksWith": "Funciona con"
     },
     "cli": {
-      "title": "Acceso por línea de comandos",
       "description": "Dale a tu asistente acceso a tus notas desde la terminal.",
       "installLabel": "Instalar",
       "learnMore": "Leer la documentación",
@@ -3992,8 +3976,26 @@
       "upgrade": "Mejorar"
     },
     "notABot": {
-      "title": "OpenWhispr es un grabador de reuniones, no un bot",
       "description": "OpenWhispr captura el audio directamente de tu sistema — nunca se une a tus reuniones como participante. Solo conecta tu calendario y toma notas con normalidad."
+    },
+    "nav": {
+      "label": "Secciones de integraciones",
+      "groups": {
+        "assistant": "Asistente",
+        "meetings": "Reuniones",
+        "developer": "Desarrolladores"
+      },
+      "sections": {
+        "connectors": "Conectores",
+        "calendars": "Calendarios",
+        "api": "Claves API",
+        "mcp": "Servidor MCP",
+        "cli": "Línea de comandos"
+      },
+      "docs": "Documentación de integraciones"
+    },
+    "connectors": {
+      "description": "Deja que el asistente use tus herramientas. Apruebas cada correo, mensaje e incidencia antes de que se envíe."
     }
   },
   "connectors": {
@@ -4159,7 +4161,6 @@
       "title": "Borradores de correo",
       "description": "El asistente abre un borrador prellenado en tu aplicación de correo. Tú lo revisas y pulsas Enviar.",
       "descriptionSend": "El asistente muestra una tarjeta de correo en el chat. Solo se envía desde tu Gmail cuando pulsas Enviar.",
-      "proRequired": "Actualiza a un plan de pago para que el asistente redacte correos por ti.",
       "unavailable": "Los borradores de correo no están disponibles en este momento.",
       "targetLabel": "Redactar correos en",
       "autoResolved": "Automático · {{target}}",
@@ -4174,14 +4175,13 @@
     },
     "slack": {
       "title": "Slack",
-      "description": "El asistente puede publicar mensajes en canales y a personas en tu nombre. Apruebas cada mensaje antes de que se envíe.",
+      "description": "Publica mensajes en canales y a personas.",
       "connect": "Conectar",
       "reconnect": "Reconectar",
       "disconnect": "Desconectar",
       "connecting": "Termina de conectar en tu navegador…",
       "connectedAs": "Conectado como {{account}} en {{workspace}}",
       "needsReconnect": "Slack debe reconectarse.",
-      "proRequired": "Actualiza a un plan de pago para que el asistente envíe mensajes de Slack por ti.",
       "errors": {
         "connect_failed": "No se pudo conectar Slack. Inténtalo de nuevo.",
         "disconnect_failed": "No se pudo desconectar Slack. Inténtalo de nuevo.",
@@ -4205,7 +4205,7 @@
     },
     "github": {
       "title": "GitHub",
-      "description": "El asistente puede buscar issues y pull requests, crear issues y comentar en tu nombre, solo en los repositorios que elijas. No puede leer tu código y apruebas cada issue y comentario antes de que se publique.",
+      "description": "Incidencias y comentarios en los repositorios que elijas. No puede leer tu código.",
       "connect": "Conectar",
       "reconnect": "Reconectar",
       "disconnect": "Desconectar",
@@ -4214,7 +4214,6 @@
       "connectedAs_empty": "Conectado como {{account}} · aún no hay repositorios",
       "connectedAs_unknown": "Conectado como {{account}}",
       "needsReconnect": "GitHub debe reconectarse.",
-      "proRequired": "Actualiza a un plan de pago para que el asistente trabaje con issues de GitHub por ti.",
       "reviewOnGithub": "Revisar en GitHub",
       "disconnectedHint": "Desconectado de este equipo. GitHub conserva la autorización de OpenWhispr hasta que la quites allí.",
       "errors": {
@@ -4246,7 +4245,7 @@
     },
     "gmail": {
       "title": "Gmail",
-      "description": "El asistente puede enviar correos desde tu cuenta de Gmail. No puede leer tu correo y tú pulsas Enviar en cada correo.",
+      "description": "Envía correos desde tu cuenta. No puede leer tu correo.",
       "connect": "Conectar",
       "reconnect": "Reconectar",
       "disconnect": "Desconectar",
@@ -4254,7 +4253,6 @@
       "connectedAs": "Conectado como {{account}}",
       "needsReconnect": "Gmail debe reconectarse.",
       "grantKept": "Desconectado. Google Calendar usa el mismo permiso de Google, así que OpenWhispr seguirá apareciendo en tu cuenta de Google hasta que también desconectes Google Calendar.",
-      "proRequired": "Actualiza a un plan de pago para que el asistente envíe correos desde Gmail por ti.",
       "errors": {
         "connect_failed": "No se pudo conectar Gmail. Inténtalo de nuevo.",
         "disconnect_failed": "No se pudo desconectar Gmail. Inténtalo de nuevo.",
@@ -4281,14 +4279,13 @@
     },
     "linear": {
       "title": "Linear",
-      "description": "El asistente puede buscar tus incidencias de Linear y crear incidencias y comentarios en tu nombre. Apruebas cada incidencia y comentario antes de que se envíe.",
+      "description": "Busca incidencias y crea incidencias y comentarios.",
       "connect": "Conectar",
       "reconnect": "Reconectar",
       "disconnect": "Desconectar",
       "connecting": "Termina de conectar en tu navegador…",
       "connectedAs": "Conectado como {{account}} en {{workspace}}",
       "needsReconnect": "Linear debe reconectarse.",
-      "proRequired": "Actualiza a un plan de pago para que el asistente trabaje en Linear por ti.",
       "errors": {
         "connect_failed": "No se pudo conectar Linear. Inténtalo de nuevo.",
         "disconnect_failed": "No se pudo desconectar Linear. Inténtalo de nuevo.",
@@ -4445,7 +4442,9 @@
       "gmailDraftLimit": "Solo se pueden preparar {{max}} correos por solicitud.",
       "queryResults": "Resultados encontrados: {{total}}",
       "cardLimit": "Solo se pueden preparar {{max}} tarjetas por solicitud."
-    }
+    },
+    "beta": "Beta",
+    "upsell": "Los conectores se incluyen en los planes de pago. Mejora tu plan para que el asistente trabaje en tus herramientas."
   },
   "calendar": {
     "title": "Google Calendar",

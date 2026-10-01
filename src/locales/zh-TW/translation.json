@@ -3831,10 +3831,8 @@
   },
   "integrations": {
     "title": "整合",
-    "description": "連接服務以增強您的工作流程",
     "googleCalendar": {
       "title": "Google 日曆",
-      "optional": "可選",
       "description": "從日曆自動填入會議名稱和參與者。",
       "connect": "連接 Google 日曆",
       "connecting": "連接中...",
@@ -3853,7 +3851,6 @@
     },
     "microsoftCalendar": {
       "title": "Microsoft 日曆",
-      "optional": "可選",
       "description": "從 Outlook 或 Microsoft 365 日曆讀取會議。",
       "connect": "連接 Microsoft 日曆",
       "connected": "已連接",
@@ -3868,7 +3865,6 @@
     },
     "appleCalendar": {
       "title": "Apple 日曆",
-      "optional": "可選",
       "description": "從 Calendar.app 讀取會議 — iCloud、Google、Exchange 和 Outlook 一站式接入。",
       "connect": "連接 Apple 日曆",
       "connected": "已連接",
@@ -3881,35 +3877,23 @@
       "connectFailed": "連線失敗",
       "connectFailedDescription": "連線 Calendar.app 時發生錯誤。請重新啟動 OpenWhispr 後再試一次。"
     },
-    "sections": {
-      "connectors": "連接器",
-      "calendar": "行事曆",
-      "api": "API",
-      "mcp": "MCP",
-      "cli": "CLI"
-    },
     "api": {
       "title": "API 金鑰",
       "description": "管理用於程式存取的 API 金鑰",
       "proRequired": "升級到付費方案以存取 API",
-      "manage": "管理金鑰",
       "viewPlans": "查看方案",
-      "dialogTitle": "API 金鑰"
+      "useWith": "金鑰可用於"
     },
     "mcp": {
-      "title": "將筆記帶到你的 AI 工具中",
       "description": "在 Claude、ChatGPT 和 Cursor 中與你的筆記一起聊天、搜尋和工作。",
       "step1": "在你的 AI 工具中，使用公開 URL 新增 OpenWhispr MCP",
-      "step2": "在上方建立具有所需權限的 API 金鑰。",
+      "step2": "建立具有所需權限的 API 金鑰。",
       "step3": "將金鑰貼上為 Authorization 標頭以連線。",
       "learnMore": "瞭解更多",
-      "viewPlans": "查看方案",
-      "copyUrl": "複製 MCP URL",
       "proRequired": "升級到付費方案，以將 OpenWhispr 連接到 Claude、ChatGPT 和 Cursor。",
-      "copied": "已複製"
+      "worksWith": "支援"
     },
     "cli": {
-      "title": "命令列存取",
       "description": "讓你的助理透過終端機存取你的筆記。",
       "installLabel": "安裝",
       "learnMore": "查看文件",
@@ -3939,8 +3923,26 @@
       "upgrade": "升級"
     },
     "notABot": {
-      "title": "OpenWhispr 是會議錄製工具，不是機器人",
       "description": "OpenWhispr 直接從您的系統擷取音訊 — 它不會以參與者身分加入您的會議。只需連接日曆，正常記錄筆記即可。"
+    },
+    "nav": {
+      "label": "整合分區",
+      "groups": {
+        "assistant": "助理",
+        "meetings": "會議",
+        "developer": "開發者"
+      },
+      "sections": {
+        "connectors": "連接器",
+        "calendars": "行事曆",
+        "api": "API 金鑰",
+        "mcp": "MCP 伺服器",
+        "cli": "命令列"
+      },
+      "docs": "整合文件"
+    },
+    "connectors": {
+      "description": "讓助理使用您的工具。每封郵件、每則訊息和每個議題送出前都需要您核准。"
     }
   },
   "connectors": {
@@ -4106,7 +4108,6 @@
       "title": "郵件草稿",
       "description": "助理會在您的郵件應用程式中開啟預先填寫的草稿，由您檢查並親自按下傳送。",
       "descriptionSend": "助理會在聊天中顯示一張郵件卡片，只有在您按下傳送後才會透過您的 Gmail 寄出。",
-      "proRequired": "升級到付費方案，讓助理為您草擬郵件。",
       "unavailable": "郵件草稿暫時無法使用。",
       "targetLabel": "在此撰寫郵件",
       "autoResolved": "自動 · {{target}}",
@@ -4121,14 +4122,13 @@
     },
     "slack": {
       "title": "Slack",
-      "description": "助理可以代表您在頻道和向他人發佈訊息。每則訊息傳送前都需要您核准。",
+      "description": "在頻道中和向他人發佈訊息。",
       "connect": "連接",
       "reconnect": "重新連接",
       "disconnect": "中斷連接",
       "connecting": "請在瀏覽器中完成連接…",
       "connectedAs": "已以 {{account}} 身分連接到 {{workspace}}",
       "needsReconnect": "需要重新連接 Slack。",
-      "proRequired": "升級到付費方案，讓助理為您傳送 Slack 訊息。",
       "errors": {
         "connect_failed": "無法連接 Slack，請重試。",
         "disconnect_failed": "無法中斷 Slack 連接，請重試。",
@@ -4152,7 +4152,7 @@
     },
     "github": {
       "title": "GitHub",
-      "description": "助理可以僅在您選擇的存放庫中，以您的身分搜尋 Issue 和提取要求、建立 Issue 以及發表留言。它無法讀取您的程式碼，每個 Issue 和留言在發佈前都需要您核准。",
+      "description": "您所選儲存庫中的議題和留言。無法讀取您的程式碼。",
       "connect": "連接",
       "reconnect": "重新連接",
       "disconnect": "中斷連接",
@@ -4161,7 +4161,6 @@
       "connectedAs_empty": "已以 {{account}} 身分連接 · 尚無存放庫",
       "connectedAs_unknown": "已以 {{account}} 身分連接",
       "needsReconnect": "需要重新連接 GitHub。",
-      "proRequired": "升級到付費方案，讓助理為您處理 GitHub Issue。",
       "reviewOnGithub": "在 GitHub 上查看",
       "disconnectedHint": "已在這台電腦上中斷連接。在您於 GitHub 上移除之前，GitHub 會保留 OpenWhispr 的授權。",
       "errors": {
@@ -4193,7 +4192,7 @@
     },
     "gmail": {
       "title": "Gmail",
-      "description": "助理可以透過您的 Gmail 帳戶傳送郵件。它無法讀取您的郵件，每封郵件都由您親自按下傳送。",
+      "description": "從您的帳戶傳送郵件。無法讀取您的郵件。",
       "connect": "連接",
       "reconnect": "重新連接",
       "disconnect": "中斷連接",
@@ -4201,7 +4200,6 @@
       "connectedAs": "已以 {{account}} 身分連接",
       "needsReconnect": "需要重新連接 Gmail。",
       "grantKept": "已中斷連線。Google 日曆使用相同的 Google 權限，因此在您也中斷 Google 日曆的連線之前，OpenWhispr 仍會顯示在您的 Google 帳戶中。",
-      "proRequired": "升級到付費方案，讓助理透過 Gmail 為您傳送郵件。",
       "errors": {
         "connect_failed": "無法連接 Gmail，請重試。",
         "disconnect_failed": "無法中斷 Gmail 連接，請重試。",
@@ -4228,14 +4226,13 @@
     },
     "linear": {
       "title": "Linear",
-      "description": "助理可以搜尋您的 Linear 議題，並以您的身分建立議題和留言。每個議題和留言傳送前都需要您核准。",
+      "description": "搜尋議題，建立議題和留言。",
       "connect": "連接",
       "reconnect": "重新連接",
       "disconnect": "中斷連接",
       "connecting": "請在瀏覽器中完成連接…",
       "connectedAs": "已以 {{account}} 身分連接到 {{workspace}}",
       "needsReconnect": "需要重新連接 Linear。",
-      "proRequired": "升級到付費方案，讓助理為您在 Linear 中工作。",
       "errors": {
         "connect_failed": "無法連接 Linear，請重試。",
         "disconnect_failed": "無法中斷 Linear 連接，請重試。",
@@ -4392,7 +4389,9 @@
       "gmailDraftLimit": "每次請求最多只能準備 {{max}} 封郵件。",
       "queryResults": "找到的結果：{{total}}",
       "cardLimit": "每次請求最多只能準備 {{max}} 張卡片。"
-    }
+    },
+    "beta": "測試版",
+    "upsell": "連接器包含在付費方案中。升級後，助理即可在您的工具中執行操作。"
   },
   "calendar": {
     "title": "Google 日曆",

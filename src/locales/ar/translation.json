@@ -608,10 +608,8 @@
   },
   "integrations": {
     "title": "التكاملات (Integrations)",
-    "description": "قم بتوصيل الخدمات لتعزيز سير عملك",
     "googleCalendar": {
       "title": "تقويم Google",
-      "optional": "اختياري",
       "description": "الملء التلقائي لعناوين الاجتماعات والحاضرين من التقويم الخاص بك.",
       "connect": "ربط تقويم Google",
       "connecting": "جاري الربط...",
@@ -630,7 +628,6 @@
     },
     "microsoftCalendar": {
       "title": "تقويم Microsoft",
-      "optional": "اختياري",
       "description": "قراءة الاجتماعات من تقويم Outlook أو Microsoft 365 الخاص بك.",
       "connect": "ربط تقويم Microsoft",
       "connected": "متصل",
@@ -645,7 +642,6 @@
     },
     "appleCalendar": {
       "title": "تقويم Apple",
-      "optional": "اختياري",
       "description": "قراءة الاجتماعات من تطبيق التقويم (Calendar.app) — iCloud وGoogle وExchange وOutlook في مكان واحد.",
       "connect": "ربط تقويم Apple",
       "connected": "متصل",
@@ -658,35 +654,23 @@
       "connectFailed": "فشل الاتصال",
       "connectFailedDescription": "حدث خطأ ما أثناء الاتصال بتطبيق Calendar.app. يرجى إعادة تشغيل OpenWhispr والمحاولة مرة أخرى."
     },
-    "sections": {
-      "connectors": "الموصلات",
-      "calendar": "التقويم (Calendar)",
-      "api": "API",
-      "mcp": "MCP",
-      "cli": "CLI"
-    },
     "api": {
       "title": "مفاتيح API",
       "description": "إدارة مفاتيح API للوصول البرمجي",
       "proRequired": "قم بالترقية إلى خطة مدفوعة للوصول إلى API",
-      "manage": "إدارة المفاتيح",
       "viewPlans": "عرض الخطط",
-      "dialogTitle": "مفاتيح API"
+      "useWith": "استخدم مفتاحًا مع"
     },
     "mcp": {
-      "title": "اجلب ملاحظاتك إلى أدوات الذكاء الاصطناعي الخاصة بك",
       "description": "الدردشة والبحث والعمل مع ملاحظاتك داخل Claude وChatGPT وCursor.",
       "step1": "في أداة الذكاء الاصطناعي الخاصة بك، أضف OpenWhispr MCP باستخدام عنوان URL العام",
-      "step2": "قم بإنشاء مفتاح API أعلاه بالنطاقات (scopes) التي تحتاجها.",
+      "step2": "أنشئ مفتاح API بالنطاقات (scopes) التي تحتاجها.",
       "step3": "الصق المفتاح في ترويسة Authorization للاتصال.",
       "learnMore": "اعرف المزيد",
-      "viewPlans": "عرض الخطط",
-      "copyUrl": "نسخ عنوان URL لـ MCP",
       "proRequired": "قم بالترقية إلى خطة مدفوعة لتوصيل OpenWhispr بـ Claude وChatGPT وCursor.",
-      "copied": "تم النسخ"
+      "worksWith": "يعمل مع"
     },
     "cli": {
-      "title": "الوصول عبر سطر الأوامر (Command-line)",
       "description": "امنح مساعدك حق الوصول إلى ملاحظاتك من الجهاز الطرفي (terminal).",
       "installLabel": "تثبيت",
       "learnMore": "اقرأ الوثائق",
@@ -716,8 +700,26 @@
       "upgrade": "ترقية"
     },
     "notABot": {
-      "title": "OpenWhispr هو مسجل اجتماعات، وليس روبوتًا",
       "description": "يلتقط OpenWhispr الصوت مباشرة من نظامك — فهو لا ينضم أبدًا إلى اجتماعاتك كمشارك. ما عليك سوى ربط التقويم الخاص بك وتدوين الملاحظات كالمعتاد."
+    },
+    "nav": {
+      "label": "أقسام التكاملات",
+      "groups": {
+        "assistant": "المساعد",
+        "meetings": "الاجتماعات",
+        "developer": "المطوّرون"
+      },
+      "sections": {
+        "connectors": "الموصلات",
+        "calendars": "التقويمات",
+        "api": "مفاتيح API",
+        "mcp": "خادم MCP",
+        "cli": "سطر الأوامر"
+      },
+      "docs": "وثائق التكاملات"
+    },
+    "connectors": {
+      "description": "دع المساعد يستخدم أدواتك. توافق على كل بريد ورسالة ومهمة قبل إرسالها."
     }
   },
   "connectors": {
@@ -883,7 +885,6 @@
       "title": "مسودات البريد الإلكتروني",
       "description": "يفتح المساعد مسودة معبأة مسبقًا في تطبيق البريد الإلكتروني الخاص بك. راجعها واضغط إرسال بنفسك.",
       "descriptionSend": "يعرض المساعد بطاقة بريد إلكتروني في الدردشة، ولا يُرسل البريد من Gmail الخاص بك إلا عندما تضغط إرسال.",
-      "proRequired": "قم بالترقية إلى خطة مدفوعة ليكتب المساعد مسودات رسائلك الإلكترونية.",
       "unavailable": "مسودات البريد الإلكتروني غير متاحة حاليًا.",
       "targetLabel": "صياغة رسائل البريد الإلكتروني في",
       "autoResolved": "تلقائي · {{target}}",
@@ -898,14 +899,13 @@
     },
     "slack": {
       "title": "Slack",
-      "description": "يمكن للمساعد نشر الرسائل في القنوات وللأشخاص نيابةً عنك. توافق على كل رسالة قبل إرسالها.",
+      "description": "ينشر الرسائل في القنوات وللأشخاص.",
       "connect": "ربط",
       "reconnect": "إعادة الربط",
       "disconnect": "قطع الربط",
       "connecting": "أكمل الربط في متصفحك…",
       "connectedAs": "متصل بصفتك {{account}} في {{workspace}}",
       "needsReconnect": "يلزم إعادة ربط Slack.",
-      "proRequired": "قم بالترقية إلى خطة مدفوعة ليتمكن المساعد من إرسال رسائل Slack نيابةً عنك.",
       "errors": {
         "connect_failed": "تعذّر ربط Slack. حاول مرة أخرى.",
         "disconnect_failed": "تعذّر قطع ربط Slack. حاول مرة أخرى.",
@@ -929,7 +929,7 @@
     },
     "github": {
       "title": "GitHub",
-      "description": "يمكن للمساعد البحث في المشكلات وطلبات السحب وإنشاء المشكلات والتعليق نيابةً عنك، في المستودعات التي تختارها فقط. لا يمكنه قراءة الكود الخاص بك، وتوافق على كل مشكلة وكل تعليق قبل نشره.",
+      "description": "المهام والتعليقات في المستودعات التي تختارها. لا يمكنه قراءة الكود الخاص بك.",
       "connect": "ربط",
       "reconnect": "إعادة الربط",
       "disconnect": "قطع الربط",
@@ -938,7 +938,6 @@
       "connectedAs_empty": "متصل بصفتك {{account}} · لا توجد مستودعات بعد",
       "connectedAs_unknown": "متصل بصفتك {{account}}",
       "needsReconnect": "يلزم إعادة ربط GitHub.",
-      "proRequired": "قم بالترقية إلى خطة مدفوعة ليتمكن المساعد من العمل على مشكلات GitHub نيابةً عنك.",
       "reviewOnGithub": "المراجعة على GitHub",
       "disconnectedHint": "تم قطع الربط على هذا الكمبيوتر. يحتفظ GitHub بتفويض OpenWhispr إلى أن تزيله من هناك.",
       "errors": {
@@ -970,7 +969,7 @@
     },
     "gmail": {
       "title": "Gmail",
-      "description": "يمكن للمساعد إرسال الرسائل الإلكترونية من حسابك على Gmail. لا يمكنه قراءة بريدك، وتضغط إرسال بنفسك لكل رسالة.",
+      "description": "يرسل البريد من حسابك. لا يمكنه قراءة بريدك.",
       "connect": "ربط",
       "reconnect": "إعادة الربط",
       "disconnect": "قطع الربط",
@@ -978,7 +977,6 @@
       "connectedAs": "متصل بصفتك {{account}}",
       "needsReconnect": "يلزم إعادة ربط Gmail.",
       "grantKept": "تم قطع الاتصال. يستخدم تقويم Google إذن Google نفسه، لذا سيظل OpenWhispr مدرجًا في حسابك على Google حتى تقطع اتصال تقويم Google أيضًا.",
-      "proRequired": "قم بالترقية إلى خطة مدفوعة ليتمكن المساعد من إرسال الرسائل الإلكترونية من Gmail نيابةً عنك.",
       "errors": {
         "connect_failed": "تعذّر ربط Gmail. حاول مرة أخرى.",
         "disconnect_failed": "تعذّر قطع ربط Gmail. حاول مرة أخرى.",
@@ -1005,14 +1003,13 @@
     },
     "linear": {
       "title": "Linear",
-      "description": "يمكن للمساعد البحث في مشكلات Linear وإنشاء مشكلات وتعليقات نيابةً عنك. توافق على كل مشكلة وتعليق قبل إرسالهما.",
+      "description": "يبحث في المهام وينشئ المهام والتعليقات.",
       "connect": "ربط",
       "reconnect": "إعادة الربط",
       "disconnect": "قطع الربط",
       "connecting": "أكمل الربط في متصفحك…",
       "connectedAs": "متصل بصفتك {{account}} في {{workspace}}",
       "needsReconnect": "يلزم إعادة ربط Linear.",
-      "proRequired": "قم بالترقية إلى خطة مدفوعة ليتمكن المساعد من العمل في Linear نيابةً عنك.",
       "errors": {
         "connect_failed": "تعذّر ربط Linear. حاول مرة أخرى.",
         "disconnect_failed": "تعذّر قطع ربط Linear. حاول مرة أخرى.",
@@ -1169,7 +1166,9 @@
       "gmailDraftLimit": "يمكن تجهيز {{max}} رسائل بريد إلكتروني فقط لكل طلب.",
       "queryResults": "النتائج التي عُثر عليها: {{total}}",
       "cardLimit": "يمكن تجهيز {{max}} بطاقات فقط لكل طلب."
-    }
+    },
+    "beta": "تجريبي",
+    "upsell": "الموصلات متاحة في الخطط المدفوعة. قم بالترقية ليعمل المساعد في أدواتك."
   },
   "auth": {
     "cloudNotConfigured": "السحابة غير مهيأة",
