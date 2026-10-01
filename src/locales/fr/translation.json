@@ -4049,7 +4049,6 @@
       "connectFailedDescription": "Une erreur s'est produite lors de la connexion à Calendar.app. Redémarrez OpenWhispr et réessayez."
     },
     "api": {
-      "title": "Clés API",
       "description": "Gérez les clés API pour un accès programmatique",
       "proRequired": "Passez à un plan payant pour accéder à l'API",
       "viewPlans": "Voir les forfaits",
@@ -4062,7 +4061,9 @@
       "step3": "Collez la clé comme en-tête Authorization pour vous connecter.",
       "learnMore": "En savoir plus",
       "proRequired": "Passez à un plan payant pour connecter OpenWhispr à Claude, ChatGPT et Cursor.",
-      "worksWith": "Fonctionne avec"
+      "worksWith": "Fonctionne avec",
+      "copyUrl": "Copier l'URL MCP",
+      "copied": "Copié"
     },
     "cli": {
       "description": "Donnez à votre assistant l'accès à vos notes depuis le terminal.",
@@ -4562,7 +4563,8 @@
       "cardLimit": "Seules {{max}} cartes peuvent être préparées par demande."
     },
     "beta": "Bêta",
-    "upsell": "Les connecteurs sont inclus dans les forfaits payants. Passez à un forfait payant pour que l'assistant agisse dans vos outils."
+    "upsell": "Les connecteurs sont inclus dans les forfaits payants. Passez à un forfait payant pour que l'assistant agisse dans vos outils.",
+    "locked": "Inclus dans les forfaits payants"
   },
   "notesView": {
     "searchPlaceholder": "Rechercher des notes…",

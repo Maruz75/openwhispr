@@ -4,6 +4,7 @@ import { ExternalLink } from "../icons";
 import { Button } from "../ui/button";
 import { CopyableCommand } from "../ui/CopyableCommand";
 import { SettingsPanel, SettingsPanelRow } from "../ui/SettingsSection";
+import { useToast } from "../ui/useToast";
 import { IntegrationsPane, UpsellBar } from "./IntegrationsPane";
 import claudeIcon from "../../assets/icons/providers/claude.svg";
 import openaiIcon from "../../assets/icons/providers/openai.svg";
@@ -34,9 +35,13 @@ interface StepProps {
 
 function Step({ number, centered = false, children }: StepProps): ReactElement {
   return (
-    <SettingsPanelRow>
+    <SettingsPanelRow as="li">
       <div className={`flex gap-3 ${centered ? "items-center" : "items-start"}`}>
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+        {/* The list already gives each step its position. */}
+        <span
+          aria-hidden="true"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
+        >
           {number}
         </span>
         <div className="flex-1 min-w-0">{children}</div>
@@ -47,6 +52,7 @@ function Step({ number, centered = false, children }: StepProps): ReactElement {
 
 export function McpPane({ title, isPaid, onUpgrade, onCreateKey }: McpPaneProps): ReactElement {
   const { t } = useTranslation();
+  const { toast } = useToast();
 
   return (
     <IntegrationsPane
@@ -85,12 +91,18 @@ export function McpPane({ title, isPaid, onUpgrade, onCreateKey }: McpPaneProps)
 
       {!isPaid && <UpsellBar message={t("integrations.mcp.proRequired")} onUpgrade={onUpgrade} />}
 
-      <SettingsPanel>
+      <SettingsPanel as="ol">
         <Step number={1}>
           <p className="text-xs leading-5 font-medium text-foreground mb-2">
             {t("integrations.mcp.step1")}
           </p>
-          <CopyableCommand command={MCP_URL} />
+          <CopyableCommand
+            command={MCP_URL}
+            copyLabel={t("integrations.mcp.copyUrl")}
+            onCopied={() =>
+              toast({ title: t("integrations.mcp.copied"), variant: "success", duration: 2000 })
+            }
+          />
         </Step>
         <Step number={2} centered>
           <div className="flex items-center gap-3">

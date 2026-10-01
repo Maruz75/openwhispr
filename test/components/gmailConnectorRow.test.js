@@ -249,3 +249,59 @@ test("with connectors turned off and no login, the row is hidden", async (t) => 
   const container = await renderGmailRow(t, { status: DISCONNECTED, blockedByOrg: true });
   assert.equal(container.textContent, "");
 });
+
+// Whether `node` sits inside something drawn at reduced opacity.
+function isDimmed(node) {
+  for (let current = node; current; current = current.parentNode) {
+    if (current.getAttribute?.("class")?.split(/\s+/).includes("opacity-60")) return true;
+  }
+  return false;
+}
+
+function textNode(root, text) {
+  const found = findElement(
+    root,
+    (element) => element.tagName === "P" && element.textContent === text
+  );
+  assert.ok(found, `${text} is rendered`);
+  return found;
+}
+
+const lockIcon = (root) =>
+  findElement(root, (element) => element.getAttribute?.("aria-label") === "connectors.locked");
+
+test("a free plan without a login sees Gmail dimmed, with a lock that says why", async (t) => {
+  const container = await renderGmailRow(t, { status: DISCONNECTED, isPaid: false });
+  assert.equal(isDimmed(textNode(container, "connectors.gmail.title")), true);
+  assert.equal(isDimmed(textNode(container, "connectors.gmail.description")), true);
+  assert.ok(lockIcon(container), "the lock is labelled for screen readers");
+});
+
+test("a free plan with a login sees Gmail at full contrast and unlocked", async (t) => {
+  const container = await renderGmailRow(t, { status: GMAIL, isPaid: false });
+  assert.equal(isDimmed(textNode(container, "connectors.gmail.title")), false);
+  assert.equal(isDimmed(button(container, "connectors.gmail.disconnect")), false);
+  assert.equal(lockIcon(container), null);
+});
+
+test("on a free plan, what a disconnect leaves behind isn't dimmed with the locked row", async (t) => {
+  let broadcast = null;
+  const container = await renderGmailRow(t, {
+    status: GMAIL,
+    isPaid: false,
+    electronAPI: {
+      onConnectorStatusChanged: (listener) => {
+        broadcast = listener;
+        return () => {};
+      },
+      connectorDisconnect: async () => ({ status: "disconnected", grantKept: true }),
+    },
+  });
+
+  await React.act(async () => click(button(container, "connectors.gmail.disconnect")));
+  await React.act(async () => broadcast([DISCONNECTED]));
+
+  assert.ok(lockIcon(container), "the row is locked once the login is gone");
+  assert.equal(isDimmed(textNode(container, "connectors.gmail.title")), true);
+  assert.equal(isDimmed(textNode(container, "connectors.gmail.grantKept")), false);
+});

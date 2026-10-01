@@ -3878,7 +3878,6 @@
       "connectFailedDescription": "连接 Calendar.app 时出错。请重启 OpenWhispr 后重试。"
     },
     "api": {
-      "title": "API 密钥",
       "description": "管理用于程序访问的 API 密钥",
       "proRequired": "升级到付费计划以访问 API",
       "viewPlans": "查看套餐",
@@ -3891,7 +3890,9 @@
       "step3": "将密钥粘贴为 Authorization 标头以连接。",
       "learnMore": "了解更多",
       "proRequired": "升级到付费计划，以将 OpenWhispr 连接到 Claude、ChatGPT 和 Cursor。",
-      "worksWith": "支持"
+      "worksWith": "支持",
+      "copyUrl": "复制 MCP URL",
+      "copied": "已复制"
     },
     "cli": {
       "description": "让你的助手通过终端访问你的笔记。",
@@ -4391,7 +4392,8 @@
       "cardLimit": "每次请求最多只能准备 {{max}} 张卡片。"
     },
     "beta": "测试版",
-    "upsell": "连接器包含在付费方案中。升级后，助手即可在您的工具中执行操作。"
+    "upsell": "连接器包含在付费方案中。升级后，助手即可在您的工具中执行操作。",
+    "locked": "付费方案包含此功能"
   },
   "calendar": {
     "title": "Google 日历",

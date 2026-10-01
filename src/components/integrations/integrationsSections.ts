@@ -30,19 +30,22 @@ export type SectionMeta =
 
 export interface SectionMetaInput {
   isPaid: boolean;
-  connectedConnectors: number;
+  /** Connectors decide their plan and org policy as the Connectors pane does. */
+  connectors: { isPaid: boolean; blockedByOrg: boolean; ready: number };
   connectedCalendars: number;
 }
 
 /** The status shown beside a section in the nav: what's connected, or which plan it needs. */
 export function sectionMeta(
   section: IntegrationsSection,
-  { isPaid, connectedConnectors, connectedCalendars }: SectionMetaInput
+  { isPaid, connectors, connectedCalendars }: SectionMetaInput
 ): SectionMeta | null {
   switch (section) {
     case "connectors":
-      if (!isPaid) return { kind: "badge", badge: "pro" };
-      return connectedConnectors > 0 ? { kind: "count", value: connectedConnectors } : null;
+      // Turned off by the organization: no plan would change that, and no login can act.
+      if (connectors.blockedByOrg) return null;
+      if (!connectors.isPaid) return { kind: "badge", badge: "pro" };
+      return connectors.ready > 0 ? { kind: "count", value: connectors.ready } : null;
     case "calendars":
       return connectedCalendars > 0 ? { kind: "count", value: connectedCalendars } : null;
     case "api":

@@ -3878,7 +3878,6 @@
       "connectFailedDescription": "Calendar.app への接続中にエラーが発生しました。OpenWhispr を再起動してもう一度お試しください。"
     },
     "api": {
-      "title": "APIキー",
       "description": "プログラムからのアクセス用にAPIキーを管理",
       "proRequired": "APIを利用するには有料プランへのアップグレードが必要です",
       "viewPlans": "プランを表示",
@@ -3891,7 +3890,9 @@
       "step3": "キーを Authorization ヘッダーとして貼り付けて接続します。",
       "learnMore": "詳細",
       "proRequired": "OpenWhispr を Claude、ChatGPT、Cursor に接続するには、有料プランへのアップグレードが必要です。",
-      "worksWith": "対応アプリ"
+      "worksWith": "対応アプリ",
+      "copyUrl": "MCP URLをコピー",
+      "copied": "コピーしました"
     },
     "cli": {
       "description": "ターミナルからアシスタントにメモへのアクセスを許可します。",
@@ -4391,7 +4392,8 @@
       "cardLimit": "1回のリクエストで準備できるカードは{{max}}件までです。"
     },
     "beta": "ベータ",
-    "upsell": "コネクタは有料プランに含まれています。アップグレードすると、アシスタントがあなたのツールで操作できるようになります。"
+    "upsell": "コネクタは有料プランに含まれています。アップグレードすると、アシスタントがあなたのツールで操作できるようになります。",
+    "locked": "有料プランに含まれます"
   },
   "calendar": {
     "title": "Google カレンダー",

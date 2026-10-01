@@ -206,13 +206,15 @@ export function ConnectorLoginRow({
   else if (needsReconnect) summary = copy("needsReconnect");
   else if (connected && status) summary = copy("connectedAs", accountSummary(status));
   // A free plan sees the connector dimmed, without Connect; the section's one upsell sits above.
+  // Only what describes the connector dims: notes about a login just removed stay readable.
   const locked = !isPaid && !connected;
+  const dimmed = locked ? "opacity-60" : "";
 
   return (
     <SettingsPanelRow>
-      <div className={`flex items-center gap-3 ${locked ? "opacity-60" : ""}`}>
+      <div className="flex items-center gap-3">
         <div
-          className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+          className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${dimmed} ${
             brandIcon
               ? "bg-white dark:bg-surface-raised shadow-[0_0_0_1px_rgba(0,0,0,0.04)] dark:shadow-none dark:border dark:border-white/10"
               : "bg-primary/5 dark:bg-primary/10"
@@ -221,13 +223,15 @@ export function ConnectorLoginRow({
           {icon}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <p className="text-xs font-semibold text-foreground">{copy("title")}</p>
-            <BetaBadge />
+          <div className={dimmed}>
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs font-semibold text-foreground">{copy("title")}</p>
+              <BetaBadge />
+            </div>
+            <p className="text-xs text-muted-foreground/70 mt-0.5 leading-relaxed" dir="auto">
+              {summary}
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground/70 mt-0.5 leading-relaxed" dir="auto">
-            {summary}
-          </p>
           {phase === "connecting" && ConnectingDetail && (
             <div ref={connectingDetail}>
               <ConnectingDetail connectorId={connectorId} />
@@ -271,7 +275,14 @@ export function ConnectorLoginRow({
               {copy("connect")}
             </Button>
           )}
-          {locked && <Lock size={14} className="text-muted-foreground" aria-hidden="true" />}
+          {locked && (
+            <Lock
+              size={14}
+              role="img"
+              aria-label={t("connectors.locked")}
+              className="text-muted-foreground opacity-60"
+            />
+          )}
         </div>
       </div>
       {connected && (

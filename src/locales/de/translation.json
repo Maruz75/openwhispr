@@ -4049,7 +4049,6 @@
       "connectFailedDescription": "Beim Verbinden mit Calendar.app ist ein Fehler aufgetreten. Starte OpenWhispr neu und versuche es erneut."
     },
     "api": {
-      "title": "API-Schlüssel",
       "description": "Verwalte API-Schlüssel für programmatischen Zugriff",
       "proRequired": "Upgrade auf einen kostenpflichtigen Plan, um die API zu nutzen",
       "viewPlans": "Pläne ansehen",
@@ -4062,7 +4061,9 @@
       "step3": "Füge den Schlüssel als Authorization-Header ein, um zu verbinden.",
       "learnMore": "Mehr erfahren",
       "proRequired": "Upgrade auf einen kostenpflichtigen Plan, um OpenWhispr mit Claude, ChatGPT und Cursor zu verbinden.",
-      "worksWith": "Funktioniert mit"
+      "worksWith": "Funktioniert mit",
+      "copyUrl": "MCP-URL kopieren",
+      "copied": "Kopiert"
     },
     "cli": {
       "description": "Gib deinem Assistenten über das Terminal Zugriff auf deine Notizen.",
@@ -4562,7 +4563,8 @@
       "cardLimit": "Pro Anfrage können nur {{max}} Karten vorbereitet werden."
     },
     "beta": "Beta",
-    "upsell": "Konnektoren sind in kostenpflichtigen Tarifen enthalten. Upgrade, damit der Assistent in deinen Tools arbeiten kann."
+    "upsell": "Konnektoren sind in kostenpflichtigen Tarifen enthalten. Upgrade, damit der Assistent in deinen Tools arbeiten kann.",
+    "locked": "In kostenpflichtigen Tarifen enthalten"
   },
   "notesView": {
     "searchPlaceholder": "Notizen durchsuchen…",

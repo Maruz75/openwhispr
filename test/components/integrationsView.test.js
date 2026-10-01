@@ -21,6 +21,11 @@ const MOCKS = {
       });
     }
   `,
+  "/hooks/useConnectorAccess": `
+    export function useConnectorAccess() {
+      return globalThis.__connectorAccess;
+    }
+  `,
   "/stores/connectorStatusStore": `
     export function useConnectorStatusStore(selector) {
       return selector({ statuses: globalThis.__connectorStatuses ?? {} });
@@ -32,11 +37,18 @@ const MOCKS = {
   `,
   "/ConnectorsSection": `
     import React from "react";
-    export function ConnectorsSection() { return React.createElement("div", null, "CONNECTORS SECTION"); }
+    export function ConnectorsSection() {
+      React.useEffect(() => {
+        globalThis.__connectorsMounts += 1;
+      }, []);
+      return React.createElement("div", null, "CONNECTORS SECTION");
+    }
   `,
   "/ApiKeysSection": `
     import React from "react";
-    export default function ApiKeysSection() { return React.createElement("div", null, "API KEYS SECTION"); }
+    export default function ApiKeysSection({ createRequest }) {
+      return React.createElement("div", null, "API KEYS SECTION create:" + createRequest);
+    }
   `,
   "/integrations/CalendarsPane": `
     import React from "react";
@@ -86,12 +98,27 @@ const navButton = (container, section) =>
   );
 // Icons render whitespace text nodes, so labels are compared trimmed.
 const label = (node) => node.textContent.trim();
+// Sections stay mounted once opened; only the open one is shown.
+const shownText = (node) => {
+  if (node.nodeType === 3) return node.textContent;
+  if (node.nodeType === 1 && node.getAttribute("hidden") !== null) return "";
+  return node.childNodes.map(shownText).join("");
+};
+// Focus checks compare as booleans: a failed assert would try to print the DOM.
+const heading = (container, text) =>
+  findElement(container, (node) => node.tagName === "H2" && label(node) === text);
 const buttonWithText = (container, text) =>
   findElement(container, (node) => node.tagName === "BUTTON" && label(node) === text);
 
 async function renderView(
   t,
-  { isPaid = true, section = "connectors", statuses = {}, gcalAccounts = [] } = {}
+  {
+    isPaid = true,
+    section = "connectors",
+    statuses = {},
+    gcalAccounts = [],
+    connectorAccess = { isPaid, blockedByOrg: false, connectorsAllowed: true },
+  } = {}
 ) {
   let root = null;
   t.after(async () => {
@@ -102,9 +129,13 @@ async function renderView(
   });
   globalThis.__connectorStatuses = statuses;
   globalThis.__gcalAccounts = gcalAccounts;
+  globalThis.__connectorAccess = connectorAccess;
+  globalThis.__connectorsMounts = 0;
   t.after(() => {
     delete globalThis.__connectorStatuses;
     delete globalThis.__gcalAccounts;
+    delete globalThis.__connectorAccess;
+    delete globalThis.__connectorsMounts;
   });
   const container = installInteractiveDom(t);
   const vite = await createRendererServer(t, {
@@ -137,9 +168,10 @@ test("sectionMeta shows counts on a paid plan and plan badges on a free one", as
   const { sectionMeta } = await vite.ssrLoadModule(
     "/components/integrations/integrationsSections.ts"
   );
-  const paid = { isPaid: true, connectedConnectors: 2, connectedCalendars: 1 };
-  const free = { isPaid: false, connectedConnectors: 0, connectedCalendars: 1 };
-  const empty = { isPaid: true, connectedConnectors: 0, connectedCalendars: 0 };
+  const connectors = (isPaid, ready, blockedByOrg = false) => ({ isPaid, blockedByOrg, ready });
+  const paid = { isPaid: true, connectors: connectors(true, 2), connectedCalendars: 1 };
+  const free = { isPaid: false, connectors: connectors(false, 0), connectedCalendars: 1 };
+  const empty = { isPaid: true, connectors: connectors(true, 0), connectedCalendars: 0 };
 
   assert.deepEqual(sectionMeta("connectors", paid), { kind: "count", value: 2 });
   assert.deepEqual(sectionMeta("calendars", paid), { kind: "count", value: 1 });
@@ -155,6 +187,12 @@ test("sectionMeta shows counts on a paid plan and plan badges on a free one", as
 
   assert.equal(sectionMeta("connectors", empty), null);
   assert.equal(sectionMeta("calendars", empty), null);
+
+  // The organization turned connectors off: no plan badge and no count, on any plan.
+  for (const isPaid of [true, false]) {
+    const blocked = { ...paid, isPaid, connectors: connectors(isPaid, 2, true) };
+    assert.equal(sectionMeta("connectors", blocked), null);
+  }
 });
 
 test("the nav lists every section and switches the pane it shows", async (t) => {
@@ -175,24 +213,46 @@ test("the nav lists every section and switches the pane it shows", async (t) => 
 
   assert.equal(navButton(container, "cli").getAttribute("aria-current"), "page");
   assert.equal(navButton(container, "connectors").getAttribute("aria-current"), null);
-  assert.doesNotMatch(container.textContent, /CONNECTORS SECTION/);
-  assert.match(container.textContent, /npm install -g @openwhispr\/cli/);
+  assert.doesNotMatch(shownText(container), /CONNECTORS SECTION/);
+  assert.match(shownText(container), /npm install -g @openwhispr\/cli/);
+});
+
+test("a section keeps its state while another one is open", async (t) => {
+  const { container } = await renderView(t);
+
+  await React.act(async () => click(navButton(container, "api")));
+  await React.act(async () => click(navButton(container, "connectors")));
+
+  // A connect running in a connector row (GitHub's device code) would stop on unmount.
+  assert.equal(globalThis.__connectorsMounts, 1);
+  assert.match(shownText(container), /CONNECTORS SECTION/);
+});
+
+test("Calendars stays mounted from any section, so its listeners keep the nav count fresh", async (t) => {
+  const { container } = await renderView(t, { section: "api" });
+
+  assert.match(container.textContent, /CALENDARS PANE/);
+  assert.doesNotMatch(shownText(container), /CALENDARS PANE/);
 });
 
 test("the section it's given opens first", async (t) => {
   const { container } = await renderView(t, { section: "calendars" });
 
   assert.equal(navButton(container, "calendars").getAttribute("aria-current"), "page");
-  assert.match(container.textContent, /CALENDARS PANE/);
+  assert.match(shownText(container), /CALENDARS PANE/);
 });
 
-test("MCP's Create API key step opens the API keys section", async (t) => {
+test("MCP's Create API key step opens the API keys section and asks it to create one", async (t) => {
   const { container } = await renderView(t, { section: "mcp" });
 
   await React.act(async () => click(buttonWithText(container, "apiKeysSection.createButton")));
 
   assert.equal(navButton(container, "api").getAttribute("aria-current"), "page");
-  assert.match(container.textContent, /API KEYS SECTION/);
+  assert.match(shownText(container), /API KEYS SECTION create:1/);
+  assert.equal(
+    container.ownerDocument.activeElement === heading(container, "integrations.nav.sections.api"),
+    true
+  );
 });
 
 test("the API keys section links on to MCP and the command line", async (t) => {
@@ -208,6 +268,21 @@ test("the API keys section links on to MCP and the command line", async (t) => {
   await React.act(async () => click(cliLink));
 
   assert.equal(navButton(container, "cli").getAttribute("aria-current"), "page");
+  // The link is hidden with its section, so focus moves to the opened one.
+  assert.equal(
+    container.ownerDocument.activeElement === heading(container, "integrations.nav.sections.cli"),
+    true
+  );
+});
+
+test("picking a section from the nav leaves focus on the nav", async (t) => {
+  const { container } = await renderView(t);
+  const cliButton = navButton(container, "cli");
+  cliButton.focus();
+
+  await React.act(async () => click(cliButton));
+
+  assert.equal(container.ownerDocument.activeElement === cliButton, true);
 });
 
 test("a paid plan sees how many connectors and calendars are connected", async (t) => {
@@ -216,12 +291,28 @@ test("a paid plan sees how many connectors and calendars are connected", async (
       gmail: { id: "gmail", connected: true },
       slack: { id: "slack", connected: true },
       linear: { id: "linear", connected: false },
+      github: { id: "github", connected: true, needsReconnect: true },
     },
     gcalAccounts: [{ email: "a@acme.com" }],
   });
 
   assert.equal(label(navButton(container, "connectors")), "integrations.nav.sections.connectors2");
   assert.equal(label(navButton(container, "calendars")), "integrations.nav.sections.calendars1");
+  assert.equal(label(navButton(container, "api")), "integrations.nav.sections.api");
+});
+
+test("the Connectors tag follows the plan check the Connectors pane uses", async (t) => {
+  // Usage still loading: the page counts as paid, while connectors fall back to
+  // the saved subscription flag, as the pane does.
+  const { container } = await renderView(t, {
+    isPaid: true,
+    connectorAccess: { isPaid: false, blockedByOrg: false, connectorsAllowed: false },
+  });
+
+  assert.equal(
+    label(navButton(container, "connectors")),
+    "integrations.nav.sections.connectorsintegrations.plan.pro"
+  );
   assert.equal(label(navButton(container, "api")), "integrations.nav.sections.api");
 });
 
@@ -240,7 +331,7 @@ test("a free plan sees plan badges, the API upsell, and no key list", async (t) 
     label(navButton(container, "cli")),
     "integrations.nav.sections.cliintegrations.cli.local.freeBadge"
   );
-  assert.match(container.textContent, /integrations\.api\.proRequired/);
+  assert.match(shownText(container), /integrations\.api\.proRequired/);
   assert.doesNotMatch(container.textContent, /API KEYS SECTION/);
 
   await React.act(async () => click(buttonWithText(container, "integrations.api.viewPlans")));

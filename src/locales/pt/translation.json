@@ -3878,7 +3878,6 @@
       "connectFailedDescription": "Ocorreu um erro ao conectar ao Calendar.app. Reinicie o OpenWhispr e tente novamente."
     },
     "api": {
-      "title": "Chaves de API",
       "description": "Gerencie chaves de API para acesso programático",
       "proRequired": "Atualize para um plano pago para acessar a API",
       "viewPlans": "Ver planos",
@@ -3891,7 +3890,9 @@
       "step3": "Cole a chave como cabeçalho Authorization para conectar.",
       "learnMore": "Saiba mais",
       "proRequired": "Atualize para um plano pago para conectar o OpenWhispr ao Claude, ChatGPT e Cursor.",
-      "worksWith": "Funciona com"
+      "worksWith": "Funciona com",
+      "copyUrl": "Copiar URL do MCP",
+      "copied": "Copiado"
     },
     "cli": {
       "description": "Dê ao seu assistente acesso às suas notas pelo terminal.",
@@ -4391,7 +4392,8 @@
       "cardLimit": "Só é possível preparar {{max}} cartões por solicitação."
     },
     "beta": "Beta",
-    "upsell": "Os conectores estão incluídos nos planos pagos. Faça upgrade para o assistente trabalhar nas suas ferramentas."
+    "upsell": "Os conectores estão incluídos nos planos pagos. Faça upgrade para o assistente trabalhar nas suas ferramentas.",
+    "locked": "Incluído nos planos pagos"
   },
   "calendar": {
     "title": "Google Agenda",

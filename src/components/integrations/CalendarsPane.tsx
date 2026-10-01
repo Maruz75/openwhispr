@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { CalendarDays, Loader2, Mail, Plus, Unlink } from "../icons";
 import { Button } from "../ui/button";
@@ -131,7 +131,11 @@ function CalendarAccountRows({
   );
 }
 
-export function CalendarsPane({ title }: { title: string }) {
+interface CalendarsPaneProps {
+  title: string;
+}
+
+export function CalendarsPane({ title }: CalendarsPaneProps): ReactElement {
   const { t } = useTranslation();
   const {
     gcalAccounts,

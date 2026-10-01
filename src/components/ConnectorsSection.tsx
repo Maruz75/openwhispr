@@ -1,4 +1,4 @@
-import { useSyncExternalStore, type ReactElement } from "react";
+import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Lock, Mail } from "./icons";
 import { SettingsPanel, SettingsPanelRow } from "./ui/SettingsSection";
@@ -10,11 +10,7 @@ import { CONNECTOR_ROWS } from "./connectors/connectorRows";
 import { UpsellBar } from "./integrations/IntegrationsPane";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useConnectorStatusStore } from "../stores/connectorStatusStore";
-import { usePolicyStore } from "../stores/policyStore";
-import { isConnectorsAllowed, isConnectorsBlockedByOrg } from "../stores/policyRules";
-import { getUsageState, subscribeUsage } from "../lib/usageStore";
-import { readIsSubscribed, subscribeIsSubscribed } from "../lib/subscriptionFlag";
-import { hasConnectorPlan } from "../utils/connectorEligibility";
+import { useConnectorAccess } from "../hooks/useConnectorAccess";
 import {
   EMAIL_DRAFT_TARGET_SETTINGS,
   gmailSendStatus,
@@ -28,21 +24,13 @@ interface ConnectorsSectionProps {
 
 export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactElement {
   const { t } = useTranslation();
-  const blockedByOrg = usePolicyStore(isConnectorsBlockedByOrg);
-  // False while the policy loads, after a failed fetch, or when the org requires
-  // a newer app: chat has no connector tools then, so the card mustn't offer them.
-  const connectorsAllowed = usePolicyStore(isConnectorsAllowed);
-  const isSignedIn = useSettingsStore((state) => state.isSignedIn);
+  const { isPaid, blockedByOrg, connectorsAllowed } = useConnectorAccess();
   const emailDraftTarget = useSettingsStore((state) => state.emailDraftTarget);
   const setEmailDraftTarget = useSettingsStore((state) => state.setEmailDraftTarget);
   const gcalConnected = useSettingsStore((state) => state.gcalConnected);
   const mcalAccounts = useSettingsStore((state) => state.mcalAccounts);
   const gmail = useConnectorStatusStore((state) => state.statuses.gmail);
   const gmailStatus = gmailSendStatus(gmail);
-  // The same plan check that decides whether the chat gets the connector tools.
-  const usage = useSyncExternalStore(subscribeUsage, getUsageState);
-  const isSubscribedFlag = useSyncExternalStore(subscribeIsSubscribed, readIsSubscribed);
-  const isPaid = isSignedIn && hasConnectorPlan(usage, isSubscribedFlag);
   const showActions = isPaid && connectorsAllowed;
 
   const automaticTarget = resolveEmailDraftTarget({
@@ -136,7 +124,12 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
               </Select>
             )}
             {locked && (
-              <Lock size={14} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+              <Lock
+                size={14}
+                role="img"
+                aria-label={t("connectors.locked")}
+                className="shrink-0 text-muted-foreground"
+              />
             )}
           </div>
 

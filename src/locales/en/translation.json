@@ -4049,7 +4049,6 @@
       "connectFailedDescription": "Something went wrong while connecting to Calendar.app. Please restart OpenWhispr and try again."
     },
     "api": {
-      "title": "API keys",
       "description": "Manage API keys for programmatic access",
       "proRequired": "Upgrade to a paid plan to access the API",
       "viewPlans": "View Plans",
@@ -4062,7 +4061,9 @@
       "step3": "Paste the key as the Authorization header to connect.",
       "learnMore": "Learn more",
       "proRequired": "Upgrade to a paid plan to connect OpenWhispr to Claude, ChatGPT, and Cursor.",
-      "worksWith": "Works with"
+      "worksWith": "Works with",
+      "copyUrl": "Copy MCP URL",
+      "copied": "Copied"
     },
     "cli": {
       "description": "Give your assistant access to your notes from the terminal.",
@@ -4562,7 +4563,8 @@
       "cardLimit": "Only {{max}} cards can be prepared per request."
     },
     "beta": "Beta",
-    "upsell": "Connectors are included with paid plans. Upgrade to let the assistant work in your tools."
+    "upsell": "Connectors are included with paid plans. Upgrade to let the assistant work in your tools.",
+    "locked": "Included with paid plans"
   },
   "notesView": {
     "searchPlaceholder": "Search notes…",
