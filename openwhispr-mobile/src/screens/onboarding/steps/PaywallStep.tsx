@@ -19,12 +19,58 @@ const HIGHLIGHTS: { icon: string; mdIcon: LucideIconName; label: string }[] = [
 // A cold launch that resumes on this step arrives before the SDK's configure
 // round trip has finished; registering then is answered immediately for a
 // non-transactional placement and would skip the paywall for good. Wait this
-// long for it, then present anyway so a broken SDK cannot hold the step.
+// long for it, then present anyway so a broken SDK cannot hold the step. The
+// account's plan gets the same window, but an unknown plan skips instead: a
+// paid user must never see the offer, and a free one still meets the usage
+// limit and feature paywalls later.
 export const PAYWALL_READY_GRACE_MS = 3_000;
 // How long Continue stays inert after registering: long enough for the SDK to
 // actually present (or report it can't), short enough that a paywall which
 // never resolves is still escapable.
 export const PAYWALL_ESCAPE_MS = 8_000;
+
+// `skip` covers both a subscriber and an account whose plan can't be confirmed.
+type AccountPlan = 'checking' | 'free' | 'skip';
+
+function untilUsageIdle(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted || !useUsageStore.getState().isLoading) {
+      resolve();
+      return;
+    }
+    const finish = (): void => {
+      unsubscribe();
+      signal.removeEventListener('abort', finish);
+      resolve();
+    };
+    const unsubscribe = useUsageStore.subscribe((state) => {
+      if (!state.isLoading) finish();
+    });
+    signal.addEventListener('abort', finish);
+  });
+}
+
+// Trusts `load()`'s answer rather than the store snapshot: it drops usage that
+// belongs to another owner and only reports `fresh` for the current one.
+async function loadAccountPlan(signal: AbortSignal): Promise<AccountPlan> {
+  while (!signal.aborted) {
+    const result = await useUsageStore.getState().load();
+    if (result.status === 'loaded' || (result.status === 'skipped' && result.reason === 'fresh')) {
+      if (!result.usage) return 'skip';
+      return result.usage.isSubscribed ? 'skip' : 'free';
+    }
+    // Another caller's load (the entitlement bridge forces one at sign-in) is
+    // in flight or superseded this one; its result lands in the store, so ask
+    // again once it settles. The grace period bounds the wait.
+    if (result.status === 'skipped' && result.reason === 'loading') {
+      await untilUsageIdle(signal);
+      continue;
+    }
+    if (result.status === 'stale') continue;
+    return 'skip';
+  }
+  return 'skip';
+}
 
 /**
  * Presents the Superwall paywall, then resumes setup whether or
@@ -34,13 +80,15 @@ export const PAYWALL_ESCAPE_MS = 8_000;
 export function PaywallStep() {
   const { goNext } = useOnboardingStep('paywall');
   const user = useAuthStore((s) => s.user);
+  const userId = user?.id ?? null;
   const isSubscribed = useUsageStore((s) => s.usage?.isSubscribed ?? false);
   const { register, state, isConfigured } = useSuperwallGate();
   const hasPresentedRef = useRef(false);
   const hasAdvancedRef = useRef(false);
   const unmountedRef = useRef(false);
   const registrationRef = useRef<AbortController | null>(null);
-  const [readyGraceElapsed, setReadyGraceElapsed] = useState(false);
+  const [graceElapsed, setGraceElapsed] = useState(false);
+  const [plan, setPlan] = useState<AccountPlan>('checking');
   const [presenting, setPresenting] = useState(false);
   const [escapeElapsed, setEscapeElapsed] = useState(false);
 
@@ -68,10 +116,19 @@ export function PaywallStep() {
   }, []);
 
   useEffect(() => {
-    if (isConfigured) return;
-    const timer = setTimeout(() => setReadyGraceElapsed(true), PAYWALL_READY_GRACE_MS);
+    const timer = setTimeout(() => setGraceElapsed(true), PAYWALL_READY_GRACE_MS);
     return () => clearTimeout(timer);
-  }, [isConfigured]);
+  }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    const controller = new AbortController();
+    setPlan('checking');
+    loadAccountPlan(controller.signal).then((next) => {
+      if (!controller.signal.aborted) setPlan(next);
+    });
+    return () => controller.abort();
+  }, [userId]);
 
   useEffect(() => {
     if (!presenting) return;
@@ -87,14 +144,17 @@ export function PaywallStep() {
 
     // No session means no billing identity, so a purchase made now could not
     // be attributed to anyone and would be lost; a subscriber has nothing to
-    // buy. Either way there is no paywall worth presenting.
-    if (!user || isSubscribed) {
+    // buy. Until usage answers, a paid account is indistinguishable from a
+    // free one, and showing it the offer is worse than a free user missing it.
+    const planUnconfirmed = plan === 'skip' || (plan === 'checking' && graceElapsed);
+    if (!user || isSubscribed || planUnconfirmed) {
       hasPresentedRef.current = true;
       void advance();
       return;
     }
 
-    if (!isConfigured && !readyGraceElapsed) return;
+    if (plan === 'checking') return;
+    if (!isConfigured && !graceElapsed) return;
     hasPresentedRef.current = true;
     setPresenting(true);
 
@@ -109,7 +169,7 @@ export function PaywallStep() {
       .finally(() => {
         if (!unmountedRef.current) void advance();
       });
-  }, [advance, isConfigured, isSubscribed, readyGraceElapsed, register, user]);
+  }, [advance, graceElapsed, isConfigured, isSubscribed, plan, register, user]);
 
   // Between registering and the SDK presenting, this backdrop looks like an
   // ordinary screen with a primary button; tapping it would mount the next

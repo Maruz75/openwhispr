@@ -28,11 +28,31 @@ jest.mock('@/store/useAuthStore', () => ({
   useAuthStore: (selector: (s: MockAuthState) => unknown) => selector(mockAuthState),
 }));
 
-type MockUsageState = { usage: { isSubscribed: boolean } | null };
-let mockUsageState: MockUsageState = { usage: null };
+type MockUsage = { isSubscribed: boolean };
+type MockUsageState = { usage: MockUsage | null; isLoading: boolean };
+let mockUsageState: MockUsageState = { usage: null, isLoading: false };
+const mockLoad = jest.fn();
+const mockUsageListeners = new Set<(state: MockUsageState) => void>();
 jest.mock('@/store/useUsageStore', () => ({
-  useUsageStore: (selector: (s: MockUsageState) => unknown) => selector(mockUsageState),
+  useUsageStore: Object.assign(
+    (selector: (s: MockUsageState) => unknown) => selector(mockUsageState),
+    {
+      getState: () => ({ ...mockUsageState, load: mockLoad }),
+      subscribe: (listener: (state: MockUsageState) => void) => {
+        mockUsageListeners.add(listener);
+        return () => mockUsageListeners.delete(listener);
+      },
+    },
+  ),
 }));
+
+function setMockUsageState(next: MockUsageState): void {
+  mockUsageState = next;
+  mockUsageListeners.forEach((listener) => listener(mockUsageState));
+}
+
+const FREE: MockUsage = { isSubscribed: false };
+const SUBSCRIBED: MockUsage = { isSubscribed: true };
 
 import { PAYWALL_ESCAPE_MS, PAYWALL_READY_GRACE_MS, PaywallStep } from '../PaywallStep';
 import { SUPERWALL_PLACEMENTS } from '@/lib/superwall';
@@ -42,7 +62,9 @@ beforeEach(() => {
   mockGoNext.mockResolvedValue(undefined);
   mockRegister.mockResolvedValue(true);
   mockAuthState = { user: { id: 'anon-user', isAnonymous: true } };
-  mockUsageState = { usage: null };
+  mockUsageState = { usage: null, isLoading: false };
+  mockUsageListeners.clear();
+  mockLoad.mockResolvedValue({ status: 'loaded', usage: FREE, loadedAt: 1 });
   mockGate = { isConfigured: true, state: { status: 'idle' } };
 });
 
@@ -79,6 +101,8 @@ describe('PaywallStep', () => {
     mockRegister.mockReturnValue(new Promise<boolean>(() => {}));
 
     const { getByText } = render(<PaywallStep />);
+    await act(async () => {});
+    expect(mockRegister).toHaveBeenCalledTimes(1);
     await act(async () => {
       jest.advanceTimersByTime(PAYWALL_ESCAPE_MS);
     });
@@ -97,6 +121,7 @@ describe('PaywallStep', () => {
     mockRegister.mockReturnValue(new Promise<boolean>(() => {}));
 
     const { getByText } = render(<PaywallStep />);
+    await waitFor(() => expect(mockRegister).toHaveBeenCalledTimes(1));
     await act(async () => {
       fireEvent.press(getByText('Continue'));
     });
@@ -107,6 +132,7 @@ describe('PaywallStep', () => {
   it('re-enables Continue once the SDK reports the paywall failed to present', async () => {
     mockRegister.mockReturnValue(new Promise<boolean>(() => {}));
     const { getByText, rerender } = render(<PaywallStep />);
+    await waitFor(() => expect(mockRegister).toHaveBeenCalledTimes(1));
 
     mockGate = { isConfigured: true, state: { status: 'error' } };
     rerender(<PaywallStep />);
@@ -152,7 +178,10 @@ describe('PaywallStep', () => {
       }),
     );
 
+    mockGate = { isConfigured: true, state: { status: 'error' } };
+
     const { getByText } = render(<PaywallStep />);
+    await waitFor(() => expect(mockRegister).toHaveBeenCalledTimes(1));
     await act(async () => {
       fireEvent.press(getByText('Continue'));
     });
@@ -174,12 +203,216 @@ describe('PaywallStep', () => {
   });
 
   it('skips the paywall for a user who is already subscribed', async () => {
-    mockUsageState = { usage: { isSubscribed: true } };
+    mockUsageState = { usage: SUBSCRIBED, isLoading: false };
+    mockLoad.mockResolvedValue({ status: 'skipped', reason: 'fresh', usage: SUBSCRIBED });
 
     render(<PaywallStep />);
 
     await waitFor(() => expect(mockGoNext).toHaveBeenCalledTimes(1));
     expect(mockRegister).not.toHaveBeenCalled();
+  });
+
+  // Until /api/usage answers, `usage` is null, which used to read as "not
+  // subscribed" and showed a paid user the offer on a cold resume.
+  describe('waiting for the account plan', () => {
+    it('does not present while usage is loading', async () => {
+      mockLoad.mockReturnValue(new Promise(() => {}));
+
+      render(<PaywallStep />);
+      await act(async () => {});
+
+      expect(mockLoad).toHaveBeenCalledTimes(1);
+      expect(mockRegister).not.toHaveBeenCalled();
+      expect(mockGoNext).not.toHaveBeenCalled();
+    });
+
+    it('skips the paywall when the load reports a subscription', async () => {
+      mockLoad.mockResolvedValue({ status: 'loaded', usage: SUBSCRIBED, loadedAt: 1 });
+
+      render(<PaywallStep />);
+
+      await waitFor(() => expect(mockGoNext).toHaveBeenCalledTimes(1));
+      expect(mockRegister).not.toHaveBeenCalled();
+    });
+
+    it('presents the paywall when the load reports a free account', async () => {
+      mockLoad.mockResolvedValue({ status: 'loaded', usage: FREE, loadedAt: 1 });
+
+      render(<PaywallStep />);
+
+      await waitFor(() => expect(mockRegister).toHaveBeenCalledTimes(1));
+    });
+
+    it('treats usage that is already fresh as known', async () => {
+      mockLoad.mockResolvedValue({ status: 'skipped', reason: 'fresh', usage: FREE });
+
+      render(<PaywallStep />);
+
+      await waitFor(() => expect(mockRegister).toHaveBeenCalledTimes(1));
+    });
+
+    // A free user on a bad network misses the onboarding offer; a paid user
+    // is never shown one. Later limit and feature paywalls still reach the
+    // free user.
+    it('skips the paywall when fresh usage is empty', async () => {
+      mockLoad.mockResolvedValue({ status: 'skipped', reason: 'fresh', usage: null });
+
+      render(<PaywallStep />);
+
+      await waitFor(() => expect(mockGoNext).toHaveBeenCalledTimes(1));
+      expect(mockRegister).not.toHaveBeenCalled();
+    });
+
+    it('ignores a plan that arrives for an account the user has since left', async () => {
+      let resolveFirstLoad: (value: unknown) => void = () => {};
+      mockLoad
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            resolveFirstLoad = resolve;
+          }),
+        )
+        .mockReturnValueOnce(new Promise(() => {}));
+
+      const { rerender } = render(<PaywallStep />);
+      mockAuthState = { user: { id: 'linked-user', isAnonymous: false } };
+      rerender(<PaywallStep />);
+      await act(async () => {
+        resolveFirstLoad({ status: 'loaded', usage: FREE, loadedAt: 1 });
+      });
+
+      expect(mockLoad).toHaveBeenCalledTimes(2);
+      expect(mockRegister).not.toHaveBeenCalled();
+    });
+
+    it('skips the paywall when the load fails', async () => {
+      mockLoad.mockResolvedValue({ status: 'failed', error: new Error('offline'), usage: null });
+
+      render(<PaywallStep />);
+
+      await waitFor(() => expect(mockGoNext).toHaveBeenCalledTimes(1));
+      expect(mockRegister).not.toHaveBeenCalled();
+    });
+
+    it('skips the paywall when the load hangs past the grace period', async () => {
+      jest.useFakeTimers();
+      mockLoad.mockReturnValue(new Promise(() => {}));
+
+      render(<PaywallStep />);
+      await act(async () => {
+        jest.advanceTimersByTime(PAYWALL_READY_GRACE_MS - 1);
+      });
+      expect(mockGoNext).not.toHaveBeenCalled();
+      await act(async () => {
+        jest.advanceTimersByTime(1);
+      });
+
+      expect(mockGoNext).toHaveBeenCalledTimes(1);
+      expect(mockRegister).not.toHaveBeenCalled();
+    });
+
+    it('ignores a load that resolves after the grace period skipped the paywall', async () => {
+      jest.useFakeTimers();
+      let resolveLoad: (value: unknown) => void = () => {};
+      mockLoad.mockReturnValue(
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+      );
+
+      render(<PaywallStep />);
+      await act(async () => {
+        jest.advanceTimersByTime(PAYWALL_READY_GRACE_MS);
+      });
+      await act(async () => {
+        resolveLoad({ status: 'loaded', usage: FREE, loadedAt: 1 });
+      });
+
+      expect(mockGoNext).toHaveBeenCalledTimes(1);
+      expect(mockRegister).not.toHaveBeenCalled();
+    });
+
+    // The entitlement bridge forces its own load at sign-in; a second,
+    // unforced load is answered "loading" and has to wait for that one.
+    it('waits for a load already in flight, then uses its result', async () => {
+      mockUsageState = { usage: null, isLoading: true };
+      mockLoad
+        .mockResolvedValueOnce({ status: 'skipped', reason: 'loading', usage: null })
+        .mockResolvedValueOnce({ status: 'skipped', reason: 'fresh', usage: SUBSCRIBED });
+
+      render(<PaywallStep />);
+      await act(async () => {});
+      expect(mockLoad).toHaveBeenCalledTimes(1);
+      expect(mockGoNext).not.toHaveBeenCalled();
+
+      await act(async () => {
+        setMockUsageState({ usage: SUBSCRIBED, isLoading: false });
+      });
+
+      await waitFor(() => expect(mockGoNext).toHaveBeenCalledTimes(1));
+      expect(mockLoad).toHaveBeenCalledTimes(2);
+      expect(mockRegister).not.toHaveBeenCalled();
+    });
+
+    it('loads again when its load was superseded by a newer one', async () => {
+      mockLoad
+        .mockResolvedValueOnce({ status: 'stale', usage: null })
+        .mockResolvedValueOnce({ status: 'loaded', usage: FREE, loadedAt: 1 });
+
+      render(<PaywallStep />);
+
+      await waitFor(() => expect(mockRegister).toHaveBeenCalledTimes(1));
+      expect(mockLoad).toHaveBeenCalledTimes(2);
+    });
+
+    it('skips the paywall when the store has no session to load usage for', async () => {
+      mockLoad.mockResolvedValue({ status: 'skipped', reason: 'unauthenticated', usage: null });
+
+      render(<PaywallStep />);
+
+      await waitFor(() => expect(mockGoNext).toHaveBeenCalledTimes(1));
+      expect(mockRegister).not.toHaveBeenCalled();
+    });
+
+    it('waits for both the plan and the SDK before presenting', async () => {
+      mockGate = { isConfigured: false, state: { status: 'idle' } };
+
+      const { rerender } = render(<PaywallStep />);
+      await act(async () => {});
+      expect(mockLoad).toHaveBeenCalledTimes(1);
+      expect(mockRegister).not.toHaveBeenCalled();
+
+      mockGate = { isConfigured: true, state: { status: 'idle' } };
+      rerender(<PaywallStep />);
+
+      await waitFor(() => expect(mockRegister).toHaveBeenCalledTimes(1));
+    });
+
+    it('does not load usage when there is no session', async () => {
+      mockAuthState = { user: null };
+
+      render(<PaywallStep />);
+
+      await waitFor(() => expect(mockGoNext).toHaveBeenCalledTimes(1));
+      expect(mockLoad).not.toHaveBeenCalled();
+    });
+
+    it('does not advance when unmounted while usage is loading', async () => {
+      let resolveLoad: (value: unknown) => void = () => {};
+      mockLoad.mockReturnValue(
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+      );
+
+      const { unmount } = render(<PaywallStep />);
+      unmount();
+      await act(async () => {
+        resolveLoad({ status: 'failed', error: new Error('offline'), usage: null });
+      });
+
+      expect(mockGoNext).not.toHaveBeenCalled();
+      expect(mockRegister).not.toHaveBeenCalled();
+    });
   });
 
   it('does not advance after unmounting mid-presentation', async () => {
