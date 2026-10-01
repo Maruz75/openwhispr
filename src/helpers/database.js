@@ -5177,7 +5177,7 @@ class DatabaseManager {
                AND ${accountScope.sql}
                AND (notes.cloud_id IS NULL OR notes.owner_user_id = ?
                  OR (notes.owner_user_id IS NULL AND spaces.kind = 'private'))
-             ORDER BY notes.created_at DESC, notes.id DESC
+             ORDER BY datetime(notes.created_at) DESC, notes.id DESC
              LIMIT 1`
           )
           .get(eventId, ...accountScope.params, this.activeAccountId) || null

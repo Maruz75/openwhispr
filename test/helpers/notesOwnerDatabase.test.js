@@ -273,13 +273,43 @@ test("getOwnNoteByCalendarEventId resumes notes the user owns, newest first", (t
   );
   // A team note whose owner the pull hasn't backfilled yet could be anyone's.
   insert.run("unknown", "c-3", space.id, "cloud-3", null, "event-unknown", "2026-07-01");
-  insert.run("older", "c-4", db.getPrivateSpaceId(), null, null, "event-many", "2026-07-01");
-  insert.run("newer", "c-5", db.getPrivateSpaceId(), null, null, "event-many", "2026-07-02");
-  insert.run("teammate newest", "c-6", space.id, "cloud-6", "teammate", "event-many", "2026-07-03");
+  insert.run("unsynced team", "c-4", space.id, null, null, "event-unsynced-team", "2026-07-01");
+  insert.run(
+    "teammate personal",
+    "c-5",
+    db.getPrivateSpaceId(),
+    "cloud-5",
+    "teammate",
+    "event-teammate-personal",
+    "2026-07-01"
+  );
+  // Local rows keep SQLite's "YYYY-MM-DD HH:MM:SS"; pulled rows keep the API's ISO
+  // string. The newer note has the lower id and would lose a plain text comparison.
+  insert.run(
+    "newer",
+    "c-6",
+    db.getPrivateSpaceId(),
+    null,
+    null,
+    "event-many",
+    "2026-07-01 10:05:00"
+  );
+  insert.run(
+    "older",
+    "c-7",
+    db.getPrivateSpaceId(),
+    "cloud-7",
+    "test-account",
+    "event-many",
+    "2026-07-01T10:00:00.000Z"
+  );
+  insert.run("teammate newest", "c-8", space.id, "cloud-8", "teammate", "event-many", "2026-07-03");
 
   assert.equal(lookup("event-team"), "own team");
   assert.equal(lookup("event-legacy"), "legacy");
   assert.equal(lookup("event-unknown"), null);
+  assert.equal(lookup("event-unsynced-team"), "unsynced team");
+  assert.equal(lookup("event-teammate-personal"), null);
   assert.equal(lookup("event-many"), "newer");
 
   db.db.close();
