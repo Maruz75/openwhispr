@@ -5,6 +5,20 @@ const { EventEmitter } = require("node:events");
 const childProcess = require("node:child_process");
 
 const selectionManagerPath = require.resolve("../../src/helpers/selectionManager");
+// selectionManager requires "./debugLogger" at load; the stub records every
+// line so tests can assert what a declined paste leaves in the debug log.
+const logged = [];
+const debugLoggerStub = {
+  debug: (message, meta, scope) => logged.push({ level: "debug", message, meta, scope }),
+  info: (message, meta, scope) => logged.push({ level: "info", message, meta, scope }),
+  warn: (message, meta, scope) => logged.push({ level: "warn", message, meta, scope }),
+  trace: () => {},
+  log: () => {},
+  error: () => {},
+};
+const declines = () =>
+  logged.filter((entry) => entry.message === "Assistant response paste declined");
+
 const originalLoad = Module._load;
 
 function loadSelectionManager({ spawn } = {}) {
@@ -12,6 +26,9 @@ function loadSelectionManager({ spawn } = {}) {
   Module._load = function loadWithElectronMock(request, parent, isMain) {
     if (request === "electron") {
       return { clipboard: { readText: () => "", writeText: () => {} } };
+    }
+    if (request === "./debugLogger") {
+      return debugLoggerStub;
     }
     if (request === "child_process" && spawn) {
       return { ...childProcess, spawn };
@@ -240,6 +257,65 @@ test("does not paste when the selection changed", async () => {
   const result = await manager.replaceSelectedText(capture.sessionId, "improved");
 
   assert.deepEqual(result, { success: false, code: "selection_changed" });
+  assert.equal(pastes.length, 0);
+});
+
+// Keys still held past the modifier wait (#2113) block the edit at two points.
+// Both must say so: "selection_unavailable" sends the user to permissions
+// settings and "paste_failed" hides that the edit is on the clipboard.
+test("a replacement blocked by held modifiers at revalidation reports modifiers_held", async () => {
+  const { manager, pastes } = makeHarness({ selections: ["original"] });
+  const capture = await manager.captureSelectedText();
+  manager._readCurrentSelection = async () => ({ status: "unavailable", code: "modifiers_held" });
+
+  assert.deepEqual(await manager.replaceSelectedText(capture.sessionId, "improved"), {
+    success: false,
+    code: "modifiers_held",
+  });
+  assert.equal(pastes.length, 0);
+});
+
+test("a replacement whose paste was held back for modifiers reports modifiers_held", async () => {
+  const { manager, pastes } = makeHarness({
+    selections: ["original", "original"],
+    pasteResult: { restoreComplete: Promise.resolve(), pasted: false, reason: "modifiers-held" },
+  });
+  const capture = await manager.captureSelectedText();
+
+  assert.deepEqual(await manager.replaceSelectedText(capture.sessionId, "improved"), {
+    success: false,
+    code: "modifiers_held",
+  });
+  assert.equal(pastes.length, 1);
+});
+
+// The assistant's caret paste is blocked the same two ways. The renderer only
+// reads `success`, so this code is for logs and support rather than UI.
+test("an assistant caret paste held back by modifier keys reports modifiers_held", async () => {
+  const { manager } = makeHarness({
+    selections: [
+      { state: "none", editable: true },
+      { state: "none", editable: true },
+    ],
+    pasteResult: { restoreComplete: Promise.resolve(), pasted: false, reason: "modifiers-held" },
+  });
+  const capture = await manager.captureSelectedText({ probeEditable: true });
+
+  assert.deepEqual(await manager.pasteAtCapturedTarget(capture.sessionId, "Agent response"), {
+    success: false,
+    code: "modifiers_held",
+  });
+});
+
+test("a caret re-read blocked by held modifier keys reports modifiers_held", async () => {
+  const { manager, pastes } = makeHarness({ selections: [{ state: "none", editable: true }] });
+  const capture = await manager.captureSelectedText({ probeEditable: true });
+  manager._readCurrentSelection = async () => ({ status: "unavailable", code: "modifiers_held" });
+
+  assert.deepEqual(await manager.pasteAtCapturedTarget(capture.sessionId, "Agent response"), {
+    success: false,
+    code: "modifiers_held",
+  });
   assert.equal(pastes.length, 0);
 });
 
@@ -574,6 +650,123 @@ test("a terminal target reads as no selection", async () => {
   assert.deepEqual(result.target, terminalTarget);
 });
 
+// Capture runs right after the voice assistant hotkey press, while its keys are
+// often still down. A Ctrl+C sent into them copies nothing, so capture waits for
+// the release and fails closed when the keys stay held.
+for (const [modifiers, expectCopy] of [
+  ["held", false],
+  ["released", true],
+  ["unknown", true],
+]) {
+  test(`Linux selection capture ${expectCopy ? "copies" : "sends no copy"} when modifiers are ${modifiers}`, async () => {
+    let copyAttempts = 0;
+    const manager = new SelectionManager({
+      clipboardManager: {
+        runClipboardOperation: (operation) => operation(),
+        isLinuxTerminalWindowClass: () => false,
+        resolveLinuxFastPasteBinary: () => "/tmp/linux-fast-paste",
+        _awaitModifierRelease: async () => ({ state: modifiers, waitedMs: 0 }),
+      },
+      textEditMonitor: {},
+      platform: "linux",
+      now: () => 1000,
+    });
+    const target = { kind: "x11-window", id: "7", windowClass: "org.gnome.texteditor" };
+    manager._getLinuxTarget = async () => target;
+    manager._captureViaClipboard = async () => {
+      copyAttempts += 1;
+      return { status: "none", target };
+    };
+
+    const result = await manager._readLinuxSelection(null);
+
+    assert.equal(copyAttempts, expectCopy ? 1 : 0);
+    assert.deepEqual(
+      result,
+      expectCopy ? { status: "none", target } : { status: "unavailable", code: "modifiers_held" }
+    );
+  });
+}
+
+// The target was classified before the wait. If focus moved while the keys were
+// held (say, to a terminal), a copy chord would reach a window nobody checked:
+// a plain Ctrl+C there interrupts whatever is running.
+for (const [waitedMs, focusMoved, expectCopy] of [
+  [400, true, false],
+  [400, false, true],
+  [0, true, true],
+]) {
+  test(`Linux selection capture ${expectCopy ? "copies" : "sends no copy"} after a ${waitedMs} ms wait when focus ${focusMoved ? "moved" : "stayed"}`, async () => {
+    let copyAttempts = 0;
+    let targetReads = 0;
+    const manager = new SelectionManager({
+      clipboardManager: {
+        runClipboardOperation: (operation) => operation(),
+        isLinuxTerminalWindowClass: (windowClass) => windowClass === "konsole",
+        resolveLinuxFastPasteBinary: () => "/tmp/linux-fast-paste",
+        _awaitModifierRelease: async () => ({ state: "released", waitedMs }),
+      },
+      textEditMonitor: {},
+      platform: "linux",
+      now: () => 1000,
+    });
+    const target = { kind: "kde-window", id: "7", windowClass: "kate" };
+    const terminal = { kind: "kde-window", id: "9", windowClass: "konsole" };
+    manager._getLinuxTarget = async () => {
+      targetReads += 1;
+      return targetReads > 1 && focusMoved ? terminal : target;
+    };
+    manager._captureViaClipboard = async () => {
+      copyAttempts += 1;
+      return { status: "none", target };
+    };
+
+    const result = await manager._readLinuxSelection(null);
+
+    assert.equal(copyAttempts, expectCopy ? 1 : 0);
+    assert.equal(targetReads, waitedMs > 0 ? 2 : 1, "only a real wait pays for a second lookup");
+    if (!expectCopy) assert.deepEqual(result, { status: "target_changed", code: "focus_moved" });
+  });
+}
+
+// A capture that saw focus move runs the command on its own (nothing was
+// checked), but a session being revalidated has a real target to protect: the
+// selection edit or caret delivery is declined as a changed target.
+test("a Linux session revalidation declines when focus moved during the modifier wait", async () => {
+  let targetReads = 0;
+  let pastes = 0;
+  const manager = new SelectionManager({
+    clipboardManager: {
+      runClipboardOperation: (operation) => operation(),
+      isLinuxTerminalWindowClass: () => false,
+      resolveLinuxFastPasteBinary: () => "/tmp/linux-fast-paste",
+      _awaitModifierRelease: async () => ({ state: "released", waitedMs: 400 }),
+      _pasteText: async () => {
+        pastes += 1;
+        return { pasted: true };
+      },
+    },
+    textEditMonitor: {},
+    platform: "linux",
+    now: () => 1000,
+  });
+  const target = { kind: "kde-window", id: "7", windowClass: "kate" };
+  const other = { kind: "kde-window", id: "9", windowClass: "konsole" };
+  manager._getLinuxTarget = async () => (++targetReads % 2 === 0 ? other : target);
+  manager.sessions.set("edit", { kind: "selection", text: "old", target, expiresAt: 2000 });
+  manager.sessions.set("caret", { kind: "caret", target, expiresAt: 2000 });
+
+  assert.deepEqual(await manager.replaceSelectedText("edit", "new"), {
+    success: false,
+    code: "target_changed",
+  });
+  assert.deepEqual(await manager.pasteAtCapturedTarget("caret", "answer"), {
+    success: false,
+    code: "target_changed",
+  });
+  assert.equal(pastes, 0);
+});
+
 // macOS accessibility never resolves a focused element in Chromium browsers, so
 // a synthetic ⌘C is the only way to tell a real selection from an empty field.
 function makeMacClipboardHarness({ copyOutput = "COPY_OK 42 Dia", copied = null } = {}) {
@@ -816,4 +1009,159 @@ test("empty replacement output is rejected without consuming a paste", async () 
     code: "invalid_replacement",
   });
   assert.equal(pastes.length, 0);
+});
+
+test("a caret in a markdown-native macOS app is reported as accepting markdown", async () => {
+  const { manager } = makeHarness({ selections: [{ state: "none", editable: true }] });
+  manager._readExecutablePath = async () => "/Applications/Obsidian.app/Contents/MacOS/Obsidian";
+
+  const result = await manager.captureSelectedText({ probeEditable: true });
+
+  assert.equal(result.status, "editable");
+  assert.equal(result.acceptsMarkdown, true);
+});
+
+test("a caret in a plain-text macOS app is reported as wanting plain text", async () => {
+  const { manager } = makeHarness({ selections: [{ state: "none", editable: true }] });
+  manager._readExecutablePath = async () =>
+    "/System/Applications/TextEdit.app/Contents/MacOS/TextEdit";
+
+  const result = await manager.captureSelectedText({ probeEditable: true });
+
+  assert.equal(result.status, "editable");
+  assert.equal(result.acceptsMarkdown, false);
+});
+
+test("an unreadable pid defaults the caret to plain text", async () => {
+  const { manager } = makeHarness({ selections: [{ state: "none", editable: true }] });
+  manager._readExecutablePath = async () => "";
+
+  const result = await manager.captureSelectedText({ probeEditable: true });
+
+  assert.equal(result.status, "editable");
+  assert.equal(result.acceptsMarkdown, false);
+});
+
+test("Windows and Linux caret targets are judged by the identity they already carry", async () => {
+  const { manager } = makeHarness();
+  manager._readExecutablePath = async () => {
+    throw new Error("must not spawn ps for a target that names its app");
+  };
+
+  assert.equal(
+    await manager._targetAcceptsMarkdown({
+      kind: "win-hwnd",
+      id: "00001A2B",
+      exeName: "Obsidian.exe",
+      windowClass: "Chrome_WidgetWin_1",
+    }),
+    true
+  );
+  assert.equal(
+    await manager._targetAcceptsMarkdown({
+      kind: "win-hwnd",
+      id: "00001A2B",
+      exeName: "WINWORD.EXE",
+    }),
+    false
+  );
+  assert.equal(
+    await manager._targetAcceptsMarkdown({
+      kind: "x11-window",
+      id: "0x1",
+      windowClass: "md.obsidian.obsidian",
+    }),
+    true
+  );
+  assert.equal(await manager._targetAcceptsMarkdown(null), false);
+});
+
+test("a Linux AT-SPI target resolves its executable like the terminal check does", async () => {
+  const { manager } = makeHarness();
+  manager._readExecutablePath = async (pid) => (pid === 77 ? "obsidian" : "");
+
+  assert.equal(await manager._targetAcceptsMarkdown({ kind: "atspi-pid", id: 77 }), true);
+  assert.equal(await manager._targetAcceptsMarkdown({ kind: "atspi-pid", id: 78 }), false);
+});
+
+test("a paste declined by a changed target logs the code and the probe verdict", async () => {
+  logged.length = 0;
+  const { manager } = makeHarness({
+    selections: [
+      { state: "none", editable: true },
+      { state: "selected", text: "new selection" },
+    ],
+  });
+  const capture = await manager.captureSelectedText({ probeEditable: true });
+  await manager.pasteAtCapturedTarget(capture.sessionId, "Agent response");
+
+  assert.equal(declines().length, 1);
+  const [entry] = declines();
+  assert.equal(entry.level, "info");
+  assert.equal(entry.scope, "clipboard");
+  assert.equal(entry.meta.code, "target_changed");
+  assert.equal(entry.meta.platform, "darwin");
+  assert.equal(entry.meta.sessionFound, true);
+  assert.equal(entry.meta.sessionKind, "caret");
+  assert.equal(entry.meta.probeStatus, "selected");
+});
+
+test("a paste against a missing or expired session logs session_expired", async () => {
+  logged.length = 0;
+  const { manager, pastes } = makeHarness();
+
+  assert.deepEqual(await manager.pasteAtCapturedTarget("missing-session", "Agent response"), {
+    success: false,
+    code: "session_expired",
+  });
+  assert.equal(pastes.length, 0);
+  const [entry] = declines();
+  assert.equal(entry.meta.code, "session_expired");
+  assert.equal(entry.meta.sessionFound, false);
+});
+
+test("a selection session offered as a caret target logs its kind", async () => {
+  logged.length = 0;
+  const { manager } = makeHarness({ selections: ["some selected text"] });
+  const capture = await manager.captureSelectedText();
+
+  assert.equal(
+    (await manager.pasteAtCapturedTarget(capture.sessionId, "x")).code,
+    "session_expired"
+  );
+  const [entry] = declines();
+  assert.equal(entry.meta.sessionFound, true);
+  assert.equal(entry.meta.sessionKind, "selection");
+});
+
+test("empty text logs invalid_replacement before any clipboard work", async () => {
+  logged.length = 0;
+  const { manager, pastes } = makeHarness();
+
+  assert.deepEqual(await manager.pasteAtCapturedTarget("any-session", ""), {
+    success: false,
+    code: "invalid_replacement",
+  });
+  assert.equal(pastes.length, 0);
+  assert.equal(declines()[0].meta.code, "invalid_replacement");
+});
+
+test("a paste the clipboard helper reports as not pasted logs paste_failed", async () => {
+  logged.length = 0;
+  const { manager } = makeHarness({
+    selections: [
+      { state: "none", editable: true },
+      { state: "none", editable: true },
+    ],
+    pasteResult: { pasted: false, restoreComplete: Promise.resolve() },
+  });
+  const capture = await manager.captureSelectedText({ probeEditable: true });
+
+  assert.deepEqual(await manager.pasteAtCapturedTarget(capture.sessionId, "Agent response"), {
+    success: false,
+    code: "paste_failed",
+  });
+  const [entry] = declines();
+  assert.equal(entry.meta.code, "paste_failed");
+  assert.equal(entry.meta.probeStatus, "editable");
 });
