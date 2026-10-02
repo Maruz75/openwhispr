@@ -17,8 +17,11 @@ export function PermissionGuideCard({ state, onAction, onDrag }: CardProps): Rea
     "system-audio": t("onboarding.permissionGuide.systemAudio"),
     "screen-context": t("onboarding.permissionGuide.screenContext"),
   };
+  // A failed check shows its recovery actions in place of the drag tile; either
+  // action clears the error and brings the tile back.
   const dragStep =
     !state.granted &&
+    !state.error &&
     (state.permission === "accessibility" || state.permission === "screen-context");
   const interactive = { WebkitAppRegion: "no-drag" } as CSSProperties;
   const button =
@@ -84,38 +87,38 @@ export function PermissionGuideCard({ state, onAction, onDrag }: CardProps): Rea
             </span>
           </div>
         )}
-        {(state.permission === "system-audio" || state.needsRelaunch || state.error) && (
-          <div className="mt-2 flex items-center justify-end gap-2" style={interactive}>
-            {state.error && (
-              <span role="alert" className="me-auto text-xs text-warning">
-                {t("onboarding.permissionGuide.failed")}
-              </span>
-            )}
-            {state.error && (
-              <button
-                type="button"
-                className={button}
-                disabled={state.busy}
-                onClick={() => onAction("settings")}
-              >
-                {t("onboarding.permissionGuide.settings")}
-              </button>
-            )}
-            <button
-              type="button"
-              className={`${button} bg-[var(--onboarding-accent)] text-white`}
-              disabled={state.busy}
-              onClick={() => onAction(state.needsRelaunch ? "restart" : "check")}
-            >
-              {state.busy
-                ? t("common.loading")
-                : state.needsRelaunch
-                  ? t("onboarding.permissionGuide.restart")
-                  : t("onboarding.permissionGuide.check")}
-            </button>
-          </div>
+        {state.error && (
+          <p role="alert" className="mt-1 text-xs text-warning">
+            {t("onboarding.permissionGuide.failed")}
+          </p>
         )}
       </div>
+      {(state.permission === "system-audio" || state.needsRelaunch || state.error) && (
+        <div className="flex shrink-0 items-center gap-2" style={interactive}>
+          {state.error && (
+            <button
+              type="button"
+              className={button}
+              disabled={state.busy}
+              onClick={() => onAction("settings")}
+            >
+              {t("onboarding.permissionGuide.settings")}
+            </button>
+          )}
+          <button
+            type="button"
+            className={`${button} bg-[var(--onboarding-accent)] text-white`}
+            disabled={state.busy}
+            onClick={() => onAction(state.needsRelaunch ? "restart" : "check")}
+          >
+            {state.busy
+              ? t("common.loading")
+              : state.needsRelaunch
+                ? t("onboarding.permissionGuide.restart")
+                : t("onboarding.permissionGuide.check")}
+          </button>
+        </div>
+      )}
     </section>
   );
 }
