@@ -79,6 +79,8 @@ class WindowManager {
     this._agentDictationPillScreenListener = null;
     this._allSpacesRecoveryListener = null;
     this._allSpacesRecoveryTimer = null;
+    // Windows a display change left to re-join every Space, each until done.
+    this._allSpacesRecoveryPending = new Set();
     this._notificationDismissTimer = new NotificationDismissTimer(() => {
       // Dismiss first: a prompt raised from the timeout handler must not be
       // closed by this dismissal. The engine is not told the card closed either —
@@ -2023,7 +2025,12 @@ class WindowManager {
 
     // Kept for the app's lifetime, like the companion's display listener.
     if (process.platform === "darwin" && !this._allSpacesRecoveryListener) {
-      this._allSpacesRecoveryListener = () => this._scheduleAllSpacesRecovery();
+      this._allSpacesRecoveryListener = () => {
+        for (const win of [this.mainWindow, this.agentDictationPillWindow]) {
+          if (win) this._allSpacesRecoveryPending.add(win);
+        }
+        this._scheduleAllSpacesRecovery();
+      };
       screen.on("display-metrics-changed", this._allSpacesRecoveryListener);
       screen.on("display-added", this._allSpacesRecoveryListener);
       screen.on("display-removed", this._allSpacesRecoveryListener);
@@ -2069,9 +2076,10 @@ class WindowManager {
     });
   }
 
-  // A display change can pin a visible pill too, and with auto-hide off no
-  // hidden → shown edge ever comes to repair it. Once the change settles, a
-  // visible pill goes through that edge itself.
+  // A display change can pin a visible window too, and nothing else repairs
+  // it while it stays on screen: the pill with auto-hide off, the companion for
+  // as long as the Agent panel is open. Once the change settles, each window
+  // it found goes through the hidden → shown edge itself.
   _scheduleAllSpacesRecovery() {
     clearTimeout(this._allSpacesRecoveryTimer);
     this._allSpacesRecoveryTimer = setTimeout(
@@ -2080,31 +2088,37 @@ class WindowManager {
     );
   }
 
+  // Each window leaves the queue once handled: one still waiting keeps the
+  // timer running without the other being cycled again.
   _recoverAllSpaces() {
-    const win = this.mainWindow;
-    // A hidden pill is re-joined by its next show: never resurrect it here.
-    if (
-      !win ||
-      win.isDestroyed() ||
-      this.isQuitting ||
-      this._onboardingActive ||
-      !win.isVisible()
-    ) {
-      return;
+    for (const win of this._allSpacesRecoveryPending) {
+      if (!this._recoverWindowOnAllSpaces(win)) this._allSpacesRecoveryPending.delete(win);
     }
-    // Hiding now would interrupt a dictation, a drag or the Agent panel, so
-    // keep checking until that is over.
+    if (this._allSpacesRecoveryPending.size > 0) this._scheduleAllSpacesRecovery();
+  }
+
+  // Returns whether `win` has to wait. A window since replaced, destroyed or
+  // hidden needs nothing: a hidden one is re-joined by its next show, so it is
+  // never resurrected here.
+  _recoverWindowOnAllSpaces(win) {
+    const isPill = win === this.mainWindow && !win.isDestroyed() && win.isVisible();
+    const isCompanion =
+      win === this.agentDictationPillWindow && this._isAgentDictationPillAvailable();
+    if (!(isPill || isCompanion) || this.isQuitting || this._onboardingActive) return false;
+    // Hiding now would interrupt a dictation or a drag. The pill also waits out
+    // the Agent panel, which holds its keyboard focus; the companion never
+    // takes focus, so it is recovered with the panel still open.
     if (
       this._dictationLifecycleState !== DICTATION_LIFECYCLE.IDLE ||
       this.dragManager.isDragActive() ||
-      this._assistantPanelOpen ||
-      this._assistantPanelBusy
+      (isPill && (this._assistantPanelOpen || this._assistantPanelBusy))
     ) {
-      this._scheduleAllSpacesRecovery();
-      return;
+      return true;
     }
     win.hide();
     this._showInactiveOnAllSpaces(win);
+    if (isCompanion) win.moveTop?.();
+    return false;
   }
 
   enforceMainWindowOnTop() {

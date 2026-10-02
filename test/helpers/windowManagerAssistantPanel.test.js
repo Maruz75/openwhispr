@@ -78,7 +78,9 @@ Module._load = function loadWindowManagerWithStubs(request, parent, isMain) {
           this.visible = false;
           this.calls.push("hide");
         }
-        moveTop() {}
+        moveTop() {
+          this.calls.push("moveTop");
+        }
       },
       Menu: {
         buildFromTemplate: (template) => {
@@ -1064,6 +1066,20 @@ test("a pill hidden while a display change settles is not shown again by it", (t
   assert.equal(countCalls(calls, "reassertAllSpaces"), 0, JSON.stringify(calls));
 });
 
+// A window created after the change is not pinned by it, and its first show
+// re-joins it to every Space anyway.
+test("a display change does nothing to a pill window recreated while it settles", (t) => {
+  const { manager, calls, emitDisplayChange } = registerMacMainWindowEvents(t, { visible: true });
+
+  emitDisplayChange("display-removed");
+  const recreated = fakeWindow({ visible: true });
+  manager.mainWindow = recreated.window;
+  t.mock.timers.tick(2_000);
+
+  assert.deepEqual(calls, []);
+  assert.deepEqual(recreated.calls, []);
+});
+
 for (const [label, interrupt] of [
   ["the window is destroyed", ({ manager }) => (manager.mainWindow.isDestroyed = () => true)],
   ["the window is gone", ({ manager }) => (manager.mainWindow = null)],
@@ -1126,6 +1142,121 @@ for (const [label, setBusy, clearBusy] of [
     clearBusy(manager);
     t.mock.timers.tick(2_000);
     assertRecoveredOnce(calls);
+  });
+}
+
+// The companion is on screen for exactly as long as the Agent panel is open,
+// which the pill waits out, so the companion is recovered on its own with the
+// panel left open. It never takes focus, so cycling it costs the panel nothing.
+function registerMacCompanion(t) {
+  const harness = registerMacMainWindowEvents(t, { visible: true });
+  // makeManager stubs the companion out; these tests need the real one.
+  delete harness.manager.showAgentDictationPill;
+  delete harness.manager.hideAgentDictationPill;
+  createdBrowserWindows.length = 0;
+  withPlatform("darwin", () => harness.manager.setAssistantPanelOpen(true));
+  const pill = createdBrowserWindows.at(-1);
+  pill.webContentsListeners.get("did-finish-load")();
+  harness.calls.length = 0;
+  pill.calls.length = 0;
+  return { ...harness, pill };
+}
+
+const COMPANION_RECOVERY = ["hide", "reassertAllSpaces", "showInactive", "moveTop"];
+
+test("a display change re-joins the visible companion once, with the Agent panel left open", (t) => {
+  const { calls, pill, emitDisplayChange } = registerMacCompanion(t);
+
+  emitDisplayChange("display-removed");
+  t.mock.timers.tick(700);
+  assert.deepEqual(pill.calls, [], "still settling");
+
+  t.mock.timers.tick(100);
+  assert.deepEqual(pill.calls, COMPANION_RECOVERY);
+
+  // The pill keeps waiting out the open panel; the companion is not cycled again.
+  t.mock.timers.tick(5_000);
+  assert.deepEqual(pill.calls, COMPANION_RECOVERY);
+  assert.deepEqual(calls, [], "the pill holds the panel's keyboard focus: untouched");
+});
+
+test("a burst of display changes re-joins the companion once, after it settles", (t) => {
+  const { pill, emitDisplayChange } = registerMacCompanion(t);
+
+  emitDisplayChange("display-removed");
+  t.mock.timers.tick(400);
+  emitDisplayChange("display-added");
+  t.mock.timers.tick(400);
+  emitDisplayChange("display-metrics-changed");
+  t.mock.timers.tick(400);
+  assert.deepEqual(pill.calls, [], "still settling");
+
+  t.mock.timers.tick(2_000);
+  assert.deepEqual(pill.calls, COMPANION_RECOVERY);
+});
+
+test("once the Agent panel closes the pill is recovered, and the companion stays hidden", (t) => {
+  const { manager, calls, pill, emitDisplayChange } = registerMacCompanion(t);
+
+  emitDisplayChange("display-removed");
+  t.mock.timers.tick(2_000);
+  withPlatform("darwin", () => manager.setAssistantPanelOpen(false));
+  t.mock.timers.tick(2_000);
+
+  assertRecoveredOnce(calls);
+  assert.deepEqual(pill.calls, [...COMPANION_RECOVERY, "hide"]);
+});
+
+test("a companion hidden while a display change settles is not shown again by it", (t) => {
+  const { manager, pill, emitDisplayChange } = registerMacCompanion(t);
+
+  emitDisplayChange("display-removed");
+  manager.hideAgentDictationPill();
+  t.mock.timers.tick(2_000);
+
+  assert.deepEqual(pill.calls, ["hide"]);
+  assert.equal(pill.isVisible(), false);
+});
+
+for (const [label, interrupt] of [
+  ["destroyed", (pill) => (pill.isDestroyed = () => true)],
+  ["closed", (pill) => pill.close()],
+]) {
+  test(`a display change does nothing to a companion ${label} while it settles`, (t) => {
+    const { pill, emitDisplayChange } = registerMacCompanion(t);
+
+    emitDisplayChange("display-removed");
+    interrupt(pill);
+    t.mock.timers.tick(2_000);
+
+    assert.deepEqual(pill.calls, []);
+  });
+}
+
+for (const [label, setBusy, clearBusy] of [
+  [
+    "a recording",
+    (manager) => manager.setDictationLifecycleState("recording"),
+    (manager) => manager.setDictationLifecycleState("idle"),
+  ],
+  [
+    "a pill drag",
+    (manager) => (manager.dragManager.isDragActive = () => true),
+    (manager) => (manager.dragManager.isDragActive = () => false),
+  ],
+]) {
+  test(`a display change during ${label} recovers the companion once that is over`, (t) => {
+    const { manager, calls, pill, emitDisplayChange } = registerMacCompanion(t);
+    setBusy(manager);
+
+    emitDisplayChange("display-removed");
+    t.mock.timers.tick(2_000);
+    assert.deepEqual(pill.calls, [], `cycled mid-${label}`);
+
+    clearBusy(manager);
+    t.mock.timers.tick(2_000);
+    assert.deepEqual(pill.calls, COMPANION_RECOVERY);
+    assert.deepEqual(calls, []);
   });
 }
 
