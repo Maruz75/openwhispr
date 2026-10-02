@@ -39,7 +39,7 @@ jobs:
         run: npx --yes --ignore-scripts --package=lockfile-lint@5.0.1 lockfile-lint --path openwhispr-mobile/package-lock.json --type npm --validate-https --allowed-hosts npm --validate-integrity
       - name: Reject high and critical dependency advisories
         working-directory: openwhispr-mobile
-        run: npm audit --package-lock-only --ignore-scripts --audit-level=high
+        run: npx --yes --ignore-scripts --package=audit-ci@7.1.0 audit-ci --config audit-ci.json
 
   checks:
     name: Mobile ${{ matrix.check }}
@@ -67,6 +67,8 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Apply reviewed dependency patches
         run: node_modules/.bin/patch-package --error-on-fail
+      - name: Verify patched signing dependency
+        run: npm run test:security
       - name: Check formatting
         if: matrix.check == 'static'
         run: npm run format

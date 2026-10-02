@@ -22,8 +22,9 @@
     "clean": "npm run format && npm run lint && npm run typecheck",
     "pretest": "npm rebuild better-sqlite3",
     "test": "jest",
+    "test:security": "node --test scripts/__tests__/node-forge.test.js",
     "test:watch": "jest --watch",
-    "postinstall": "patch-package && npm run download:brand-fonts",
+    "postinstall": "patch-package --error-on-fail && npm run test:security && npm run download:brand-fonts",
     "eas-build-pre-install": "bundle install"
   },
   "engines": {
