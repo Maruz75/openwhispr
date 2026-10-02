@@ -7,7 +7,7 @@ import {
   type NativeSyntheticEvent,
   type ViewProps,
 } from 'react-native';
-import { SpaceGrotesk } from '@/lib/fonts';
+import { AppFont } from '@/lib/fonts';
 
 type InputEvent = {
   text: string;
@@ -58,7 +58,7 @@ export function CreatorLinkInput({
         keyboardType="url"
         returnKeyType="go"
         maxLength={2048}
-        style={{ minHeight: 50, padding: 12, fontFamily: SpaceGrotesk.regular, fontSize: 16 }}
+        style={{ minHeight: 50, padding: 12, fontFamily: AppFont.regular, fontSize: 16 }}
       />
     );
   }

@@ -223,10 +223,9 @@ export function createAffiliatePaywallSession(
         Date.parse(held.expiresAt) <= Date.now()
       )
         return failure();
-      if (!billing) {
-        useUsageStore.getState().beginBillingSession();
-        billing = true;
-      }
+      // RootLayout consumes the resume guard after each Apple return.
+      useUsageStore.getState().beginBillingSession();
+      billing = true;
       handoffPending = true;
       try {
         await Linking.openURL(held.redemptionUrl);

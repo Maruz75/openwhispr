@@ -202,6 +202,24 @@ it('refuses changed displayed price and a changed catalog before opening Apple',
   expect((await session.handle(redeem(result.data!))).status).toBe('failure');
   expect(Linking.openURL).not.toHaveBeenCalled();
 });
+it('rearms the billing resume guard when retrying after a cancelled Apple handoff', async () => {
+  const session = start();
+  const applied = await session.handle(apply());
+  const request = redeem(applied.data!);
+  const onAppState = jest.mocked(AppState.addEventListener).mock.calls.at(-1)![1];
+
+  expect((await session.handle(request)).status).toBe('success');
+  expect(mockUsage.beginBillingSession).toHaveBeenCalledTimes(1);
+  onAppState('background');
+  // RootLayout consumes the shared guard on each return from external billing.
+  mockUsage.endBillingSession();
+  onAppState('active');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  expect((await session.handle(request)).status).toBe('success');
+  expect(Linking.openURL).toHaveBeenCalledTimes(2);
+  expect(mockUsage.beginBillingSession).toHaveBeenCalledTimes(2);
+});
 it('does not return success for a different monthly product', async () => {
   jest.mocked(loadAffiliateOffer).mockResolvedValue({ ...offer, productId: 'other' });
   expect((await start().handle(apply())).status).toBe('failure');

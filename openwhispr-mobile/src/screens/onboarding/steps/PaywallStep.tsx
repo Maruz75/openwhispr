@@ -138,6 +138,17 @@ export function PaywallStep() {
         // Optional referral storage must not skip ordinary purchasing.
       }
       if (!isCurrent()) return;
+      const latestUsage = useUsageStore.getState();
+      if (
+        !latestUsage.usage ||
+        !latestUsage.ownerKey ||
+        latestUsage.ownerKey !== getUsageOwnerKey() ||
+        latestUsage.usage.isSubscribed
+      ) {
+        setPresenting(false);
+        setSkipping(true);
+        return;
+      }
       await register({
         placement: SUPERWALL_PLACEMENTS.onboardingPaywall,
         signal: controller.signal,
@@ -199,11 +210,7 @@ export function PaywallStep() {
         onCta={advance}
       >
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-4 pt-2">
-          {advanceError ? (
-            <Text accessibilityRole="alert" className="text-systemRed">
-              {advanceError}
-            </Text>
-          ) : null}
+          {errorNotice}
           <PaywallHighlights />
         </ScrollView>
       </OnboardingShell>

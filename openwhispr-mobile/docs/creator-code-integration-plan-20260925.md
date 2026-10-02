@@ -18,7 +18,13 @@
 - Owned worktree/branch: `/Users/joshuadavidpadoa/dev/openwhispr-mobile-affiliate-port-20260924`, `feat/mobile-affiliate-port-20260924`; starting head `73614e017331de90fae6d063481bc066972f31f7`; existing [draft #2334](https://github.com/OpenWhispr/openwhispr/pull/2334).
 - Read root `CLAUDE.md` and mobile `CONTRIBUTING.md`. No `AGENTS.md` exists in this owned checkout. Run mobile commands inside `openwhispr-mobile/`; do not change dependencies or lockfiles for this work unless a concrete incompatibility requires it.
 
-## Current execution status (September 25)
+## Current continuation — October 1
+
+PR #2334 is synchronized with main `196937c4` for conflict resolution and independent review. API #211 and website #196 are merged. The accepted candidate established Apple handoff, genuine Sandbox Monthly purchase, automatic Pro at purchase time, retained creator and exactly one USD 1.75 pending/unpaid commission after an approved provider redelivery. Final existing-job settlement was attended with new sales disabled; fully unattended recovery remains unproved. See [current integration evidence and release limits](affiliate-integration.md#accepted-candidate-evidence--october-1-pacific).
+
+The September 25 plan/checkpoints below are historical; their pending device/catalog/payment statements are superseded by that accepted evidence. No new purchase, Restore, device reset or event replay is part of conflict resolution/review. Production configuration, retry execution, single-writer transition, controlled live desktop testing and activation remain separate release work.
+
+## Historical execution status (September 25)
 
 - Step 1: isolated native fixture callback/display/action/reset proof passed on the separate iPhone simulator app. Campaign 109201 is restricted to its unique bundle and placement. Final product/token/seed bindings are configured. Native seed/token display and action routing passed; explicit false/empty seed parameters repaired and passed cached reuse. The separate bundle omits native product identifiers because it has no StoreKit catalog. Final-revision retry/malformed guards, reachable recovery, pending input locking and X/late-callback isolation passed on the separate iPhone probe; full device/keyboard and iPad checks remain; real app/catalog acceptance is not established.
 - Step 2: source implementation prepared on the owned branch: exact short keys, per-presentation callbacks/private offers, direct Cloud paywall, explicit Account shortcut, one-shot inbound intent, consent/identity/currentness guards and tests. Final real-app acceptance remains dependent on Step 1’s native product/catalog and remaining device checks.

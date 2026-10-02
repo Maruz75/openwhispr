@@ -436,3 +436,36 @@ it('still presents ordinary purchasing if consuming an optional inbound intent f
   expect(mockRegister).toHaveBeenCalledWith(expect.objectContaining({ creatorOffer: undefined }));
   expect(loadAffiliateOffer).not.toHaveBeenCalled();
 });
+
+describe.each(['claim', 'offer'])('eligibility while waiting for %s', (phase) => {
+  it.each([
+    ['subscribed', { usage: SUBSCRIBED, ownerKey: OWNER }],
+    ['owned by another session', { usage: FREE, ownerKey: 'old-session' }],
+    ['unknown', { usage: null, ownerKey: null }],
+  ])('skips when usage becomes %s', async (_label, nextUsage) => {
+    mockAffiliateEnabled = true;
+    let finishPreparation!: () => void;
+    if (phase === 'claim') {
+      mockConsumeInbound.mockReturnValue(
+        new Promise<boolean>((resolve) => {
+          finishPreparation = () => resolve(false);
+        }),
+      );
+    } else {
+      mockConsumeInbound.mockResolvedValue(true);
+      jest.mocked(loadAffiliateOffer).mockReturnValue(
+        new Promise((resolve) => {
+          finishPreparation = () => resolve(null);
+        }),
+      );
+    }
+    const screen = render(<PaywallStep />);
+    await act(async () => fireEvent.press(screen.getByText('Existing tracking choice')));
+    mockUsageState = nextUsage;
+    screen.rerender(<PaywallStep />);
+    await act(async () => finishPreparation());
+    expect(mockRegister).not.toHaveBeenCalled();
+    expect(mockGoNext).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(PRO_TITLE)).toBeNull();
+  });
+});
