@@ -1,8 +1,16 @@
 import React from 'react';
-import { View, Pressable, StyleSheet, type AccessibilityState } from 'react-native';
+import {
+  View,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  type TextInputProps,
+  type AccessibilityState,
+} from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SystemIcon, type LucideIconName } from './SystemIcon';
-import { BRAND } from '@/config/colors';
+import { BRAND, iosColor } from '@/config/colors';
+import { AppFont } from '@/lib/fonts';
 
 type SettingsRowProps = {
   icon: string;
@@ -18,6 +26,8 @@ type SettingsRowProps = {
   showChevron?: boolean;
   selected?: boolean;
   accessibilityState?: AccessibilityState;
+  // Shown right after the description, such as a help button.
+  descriptionAccessory?: React.ReactNode;
 };
 
 export function SettingsRow({
@@ -34,14 +44,15 @@ export function SettingsRow({
   showChevron = true,
   selected = false,
   accessibilityState,
+  descriptionAccessory,
 }: SettingsRowProps) {
   const isLine = iconStyle === 'line';
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityState={accessibilityState}
       disabled={!onPress && !rightElement}
+      accessibilityState={{ selected, ...accessibilityState }}
       className={selected ? 'bg-brand/10 active:bg-brand/20' : 'active:bg-tertiarySystemFill'}
     >
       <View
@@ -76,7 +87,12 @@ export function SettingsRow({
           >
             {title}
           </Text>
-          {description ? (
+          {description && descriptionAccessory ? (
+            <View className="mt-0.5 flex-row items-center gap-1.5">
+              <Text className="flex-shrink text-[13px] text-secondaryLabel">{description}</Text>
+              {descriptionAccessory}
+            </View>
+          ) : description ? (
             <Text className="mt-0.5 text-[13px] text-secondaryLabel">{description}</Text>
           ) : null}
         </View>
@@ -94,6 +110,42 @@ export function SettingsRow({
         ) : null}
       </View>
     </Pressable>
+  );
+}
+
+type SettingsTextFieldRowProps = TextInputProps & {
+  icon: string;
+  mdIcon?: LucideIconName;
+  label?: string;
+  trailing?: React.ReactNode;
+};
+
+// A text field laid out like a SettingsRow, so it sits in the same card with aligned separators.
+export function SettingsTextFieldRow({
+  icon,
+  mdIcon,
+  label,
+  trailing,
+  editable = true,
+  style,
+  ...inputProps
+}: SettingsTextFieldRowProps) {
+  return (
+    <View className="min-h-[50px] flex-row items-center gap-4 px-4">
+      <View className="h-6 w-6 items-center justify-center">
+        <SystemIcon name={icon} mdName={mdIcon} size={22} color="label" />
+      </View>
+      {label ? <Text className="w-[84px] text-[17px] text-label">{label}</Text> : null}
+      <TextInput
+        placeholderTextColor={iosColor('tertiaryLabel')}
+        autoCorrect={false}
+        editable={editable}
+        className={`flex-1 py-3 text-[17px] text-label ${editable ? '' : 'opacity-40'}`}
+        style={[{ fontFamily: AppFont.regular }, style]}
+        {...inputProps}
+      />
+      {trailing}
+    </View>
   );
 }
 

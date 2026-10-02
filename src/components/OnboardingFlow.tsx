@@ -207,6 +207,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const {
     supportsPushToTalk,
     pushToTalkUnavailableReason,
+    linuxInputAccessDenied,
     loaded: hotkeyModeLoaded,
   } = useHotkeyModeInfo("onboarding", dictationHotkey);
   const { activationMode, setActivationMode } = settings;
@@ -511,10 +512,10 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
   const confirmAssistantHotkey = useCallback(
     async (value: string) => {
-      const registered = await settings.setVoiceAgentKey(
+      const result = await settings.setVoiceAgentKey(
         serializeHotkeyList([value, ...parseHotkeyList(settings.voiceAgentKey).slice(1)])
       );
-      return registered ? null : t("onboarding.rehaul.hotkey.inUse");
+      return result.success ? null : result.message || t("onboarding.rehaul.hotkey.inUse");
     },
     [settings, t]
   );
@@ -535,7 +536,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   ]);
 
   const finalizeOnboarding = useCallback(
-    async (mode: OnboardingCompletionMode, options: { localPending?: boolean } = {}) => {
+    async (mode: OnboardingCompletionMode) => {
       if (isFinishing) return;
       setIsFinishing(true);
       setFatalError(null);
@@ -558,16 +559,16 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         await window.electronAPI?.markBundleMigrated?.();
         await window.electronAPI?.setOnboardingWindowMode?.("restore");
 
-        // hasPendingLocalModels() covers proceeding past a still-running download
-        // rather than skipping: the model was remembered when the download
-        // started, and BackgroundModelDownloadTray only applies it (and then
-        // clears this flag) while the flag is set.
+        // hasPendingLocalModels() covers leaving a still-running download, by
+        // Proceed or Skip: the model was remembered when the download started,
+        // and BackgroundModelDownloadTray only applies it (and then clears this
+        // flag) while the flag is set.
         //
         // Only preserve a pending download when the completed route still uses
         // local models. A user who walks Back and finishes on Cloud/BYOK must not
         // be switched back to a stale local selection when it completes later.
         const routeKeepsLocalModels = mode === "local";
-        if (routeKeepsLocalModels && (options.localPending || hasPendingLocalModels())) {
+        if (routeKeepsLocalModels && hasPendingLocalModels()) {
           localStorage.setItem("localSetupPending", "true");
         } else {
           localStorage.removeItem("localSetupPending");
@@ -708,14 +709,14 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
       setDictationHotkeyConfirmed(true);
     } else if (currentStepId === "assistant-hotkey") {
       if (parseHotkeyList(settings.voiceAgentKey)[0] !== assistantHotkey) {
-        const registered = await settings.setVoiceAgentKey(
+        const result = await settings.setVoiceAgentKey(
           serializeHotkeyList([
             assistantHotkey,
             ...parseHotkeyList(settings.voiceAgentKey).slice(1),
           ])
         );
-        if (!registered) {
-          setFatalError(t("onboarding.rehaul.hotkey.inUse"));
+        if (!result.success) {
+          setFatalError(result.message || t("onboarding.rehaul.hotkey.inUse"));
           return;
         }
       }
@@ -782,8 +783,11 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
       await continueFromCurrentStep();
       return;
     }
-    await finalizeOnboarding("local", { localPending: true });
-  }, [continueFromCurrentStep, currentStepId, finalizeOnboarding]);
+    // The local assistant is optional. If the user skips it, prevent
+    // dictation from falling back to an unconfigured cleanup provider.
+    settingsStore.updateCleanupSettings({ useCleanupModel: false });
+    await finalizeOnboarding("local");
+  }, [continueFromCurrentStep, currentStepId, finalizeOnboarding, settingsStore]);
 
   const canContinue = (() => {
     switch (currentStepId) {
@@ -1011,8 +1015,8 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                     }
                   />
                 </div>
-                {platform === "linux" && activationMode === "push" && (
-                  <LinuxPttSetupInfo isAvailable={supportsPushToTalk} />
+                {platform === "linux" && (activationMode === "push" || linuxInputAccessDenied) && (
+                  <LinuxPttSetupInfo isAvailable={!linuxInputAccessDenied && supportsPushToTalk} />
                 )}
               </div>
             )}

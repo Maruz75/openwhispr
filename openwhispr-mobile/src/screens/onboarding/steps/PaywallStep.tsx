@@ -1,13 +1,13 @@
 import { PaywallHighlights } from '@/components/onboarding/PaywallHighlights';
 import { useOnboardingStep } from '@/hooks/useOnboardingStep';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { OnboardingShell } from '@/components/onboarding/OnboardingShell';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useAffiliateStore } from '@/store/useAffiliateStore';
 import { loadAffiliateOffer, type AffiliateOffer } from '@/lib/affiliateOffer';
-import { useUsageStore } from '@/store/useUsageStore';
+import { getUsageOwnerKey, useUsageStore } from '@/store/useUsageStore';
 import { useSuperwallGate } from '@/hooks/useSuperwallGate';
 import { SUPERWALL_PLACEMENTS } from '@/lib/superwall';
 import { describeOnboardingError } from '@/lib/onboardingErrors';
@@ -17,7 +17,8 @@ import { TrackingPermissionStep } from './TrackingPermissionStep';
 // A cold launch that resumes on this step arrives before the SDK's configure
 // round trip has finished; registering then is answered immediately for a
 // non-transactional placement and would skip the paywall for good. Wait this
-// long for it, then present anyway so a broken SDK cannot hold the step.
+// long for it, then present anyway so a broken SDK cannot hold the step. Only a
+// confirmed free account ever waits here.
 export const PAYWALL_READY_GRACE_MS = 3_000;
 // How long Continue stays inert after registering: long enough for the SDK to
 // actually present (or report it can't), short enough that a paywall which
@@ -33,7 +34,15 @@ export function PaywallStep() {
   const { goNext } = useOnboardingStep('paywall');
   const user = useAuthStore((s) => s.user);
   const sessionCookie = useAuthStore((s) => s.sessionCookie);
-  const isSubscribed = useUsageStore((s) => s.usage?.isSubscribed ?? false);
+  const usage = useUsageStore((s) => s.usage);
+  const usageOwnerKey = useUsageStore((s) => s.ownerKey);
+  // Usage is only this account's when the store loaded it for the current
+  // session; an older account's usage, or none yet, says nothing about the plan.
+  const isConfirmedFree =
+    usage !== null &&
+    usageOwnerKey !== null &&
+    usageOwnerKey === getUsageOwnerKey() &&
+    !usage.isSubscribed;
   const { register, state, isConfigured } = useSuperwallGate();
   const hasPresentedRef = useRef(false);
   const hasAdvancedRef = useRef(false);
@@ -41,6 +50,7 @@ export function PaywallStep() {
   const registrationRef = useRef<AbortController | null>(null);
   const [readyGraceElapsed, setReadyGraceElapsed] = useState(false);
   const [presenting, setPresenting] = useState(false);
+  const [skipping, setSkipping] = useState(false);
   const [escapeElapsed, setEscapeElapsed] = useState(false);
   const affiliateEnabled = Boolean(getAffiliateClientConfig());
   const [consentChecked, setConsentChecked] = useState(!affiliateEnabled);
@@ -89,9 +99,12 @@ export function PaywallStep() {
 
     // No session means no billing identity, so a purchase made now could not
     // be attributed to anyone and would be lost; a subscriber has nothing to
-    // buy. Either way there is no paywall worth presenting.
-    if (!user || isSubscribed) {
+    // buy. A plan that hasn't loaded skips too rather than holding the user for
+    // a usage round trip: a paid account must never see the offer, and a free
+    // one still meets the usage limit and feature paywalls later.
+    if (!user || !isConfirmedFree) {
       hasPresentedRef.current = true;
+      setSkipping(true);
       void advance();
       return;
     }
@@ -140,7 +153,7 @@ export function PaywallStep() {
     affiliateEnabled,
     consentChecked,
     isConfigured,
-    isSubscribed,
+    isConfirmedFree,
     readyGraceElapsed,
     register,
     user,
@@ -152,7 +165,24 @@ export function PaywallStep() {
   // step underneath a paywall that then presents on top of it.
   const ctaDisabled = !advanceError && presenting && state.status === 'idle' && !escapeElapsed;
 
-  if (affiliateEnabled && !consentChecked && user && !isSubscribed)
+  const errorNotice = advanceError ? (
+    <Text accessibilityRole="alert" className="text-systemRed">
+      {advanceError}
+    </Text>
+  ) : null;
+
+  // Decided in render, not after the effect, so the Pro pitch never flashes for
+  // a paid or unconfirmed account. Continue stays so a failed save can retry.
+  const showsOffer = presenting || (!skipping && user !== null && isConfirmedFree);
+  if (!showsOffer) {
+    return (
+      <OnboardingShell title="" titleNode={<View />} ctaLabel="Continue" onCta={advance}>
+        {errorNotice}
+      </OnboardingShell>
+    );
+  }
+
+  if (affiliateEnabled && !consentChecked && user && isConfirmedFree)
     return <TrackingPermissionStep onComplete={completeConsent} />;
 
   return (
