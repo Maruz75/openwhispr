@@ -128,6 +128,7 @@ import {
   TRANSCRIPTION_ENTERPRISE_POLICY_PROVIDER_IDS,
   TRANSCRIPTION_POLICY_PROVIDER_IDS,
   useSettingsStore,
+  type HotkeyRegistrationResult,
 } from "../stores/settingsStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { highestPlan } from "../lib/usageStore";
@@ -144,6 +145,7 @@ import {
 } from "../stores/policyRules";
 import { usePolicyModeOptions, usePolicySnapshot } from "../hooks/usePolicy";
 import { usePolicyStore } from "../stores/policyStore";
+import { stopRecording } from "../stores/meetingRecordingStore";
 import { requestSignIn } from "../utils/requestSignIn";
 import { canManageSystemAudioInApp } from "../utils/systemAudioAccess";
 import WorkspaceSection from "./settings/WorkspaceSection";
@@ -1289,6 +1291,7 @@ export default function SettingsPage({
     setWhisperVadSamplesOverlap,
   } = useSettings();
 
+  const meetingProcessDetection = useSettingsStore((state) => state.meetingProcessDetection);
   const voiceAgentKey = useSettingsStore((s) => s.voiceAgentKey);
   const setVoiceAgentKey = useSettingsStore((s) => s.setVoiceAgentKey);
   const translationKey = useSettingsStore((s) => s.translationKey);
@@ -1500,17 +1503,17 @@ export default function SettingsPage({
   // surface it and return the result so HotkeyListInput rolls the row back.
   const [isAgentHotkeyCommitting, setIsAgentHotkeyCommitting] = useState(false);
   const commitAgentHotkey = useCallback(
-    async (setter: (key: string) => Promise<boolean>, key: string) => {
+    async (setter: (key: string) => Promise<HotkeyRegistrationResult>, key: string) => {
       setIsAgentHotkeyCommitting(true);
       try {
-        const ok = await setter(key);
-        if (!ok) {
+        const result = await setter(key);
+        if (!result.success) {
           showAlertDialog({
             title: t("hooks.hotkeyRegistration.titles.notRegistered"),
-            description: t("hooks.hotkeyRegistration.errors.failedToRegister"),
+            description: result.message || t("hooks.hotkeyRegistration.errors.failedToRegister"),
           });
         }
-        return ok;
+        return result.success;
       } finally {
         setIsAgentHotkeyCommitting(false);
       }
@@ -1580,6 +1583,7 @@ export default function SettingsPage({
     hyprlandConfigStatus,
     supportsPushToTalk,
     pushToTalkUnavailableReason,
+    linuxInputAccessDenied,
   } = useHotkeyModeInfo("settings", dictationKey);
   const [effectiveDefaultHotkey, setEffectiveDefaultHotkey] = useState<string | null>(null);
   const [linuxPttAvailable, setLinuxPttAvailable] = useState(true);
@@ -1610,8 +1614,14 @@ export default function SettingsPage({
       notificationsEnabled,
       notifyMeetingDetection,
       notifyCalendarReminders,
+      meetingProcessDetection,
     });
-  }, [notificationsEnabled, notifyMeetingDetection, notifyCalendarReminders]);
+  }, [
+    notificationsEnabled,
+    notifyMeetingDetection,
+    notifyCalendarReminders,
+    meetingProcessDetection,
+  ]);
 
   const handleAutoStartChange = async (enabled: boolean) => {
     if (!window.electronAPI?.setAutoStartEnabled) return;
@@ -1957,6 +1967,9 @@ export default function SettingsPage({
   const handleSignOut = useCallback(async () => {
     setIsSigningOut(true);
     try {
+      // End a live meeting while its note is still in scope: signing out clears
+      // the account scope, and anything said after that could not be saved.
+      await stopRecording();
       // Clear account-scoped renderer/session state before ending the session.
       // Workspace-owned rows remain cached behind their membership boundary.
       await syncService.purgeTeamSpacesForSignOut();
@@ -1998,7 +2011,8 @@ export default function SettingsPage({
           deleteLocalAccountData: async () => {
             const cleanup = await window.electronAPI?.deleteAccountData?.(
               accountId,
-              authGeneration
+              authGeneration,
+              { erasingDevice: eraseDeviceData }
             );
             if (!cleanup?.success) {
               throw new Error(cleanup?.error ?? "Could not remove local account data");
@@ -4030,9 +4044,12 @@ EOF`,
                         }
                       />
                     </div>
-                    {getCachedPlatform() === "linux" && activationMode === "push" && (
-                      <LinuxPttSetupInfo isAvailable={linuxPttAvailable} />
-                    )}
+                    {getCachedPlatform() === "linux" &&
+                      (activationMode === "push" || linuxInputAccessDenied) && (
+                        <LinuxPttSetupInfo
+                          isAvailable={!linuxInputAccessDenied && linuxPttAvailable}
+                        />
+                      )}
                   </SettingsPanelRow>
                 )}
               </SettingsPanel>
