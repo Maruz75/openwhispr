@@ -1,5 +1,9 @@
 import { resolvePrompt } from "./prompts/index";
-import { describeUnavailable, type UnavailableCapability } from "./agentCapabilities";
+import {
+  CONNECTOR_NAMES,
+  describeUnavailable,
+  type UnavailableCapability,
+} from "./agentCapabilities";
 
 export {
   resolvePrompt,
@@ -38,7 +42,7 @@ const TOOL_INSTRUCTIONS: Record<string, string> = {
   list_folders:
     "Use list_folders before create_note or update_note whenever a note is going into a folder, so you can reuse an existing folder whose name fits the note's topic instead of creating a near-duplicate.",
   web_search:
-    "Use web_search whenever the answer depends on information that may have changed or that you can't verify from memory: news, prices, weather, scores, releases, people, companies, product documentation, or anything the user calls latest, current or today. Also use it whenever the user asks you to look something up. If you're unsure whether what you know is current, search rather than decline.",
+    "Use web_search whenever the answer depends on public information that may have changed or that you can't verify from memory: news, prices, weather, scores, releases, public figures, companies and products, product documentation, or anything the user calls latest, current or today. Also use it whenever the user asks you to look something up. If you're unsure whether what you know is current, search rather than decline. Don't search for people the user knows personally (colleagues, contacts, meeting attendees), nor for anything the conversation, the user's notes or the context provided here already answers.",
   copy_to_clipboard:
     "Use copy_to_clipboard when the user asks you to copy something to their clipboard.",
   get_snippet:
@@ -94,15 +98,8 @@ const TOOL_GROUPS: Record<string, string> = {
   copy_to_clipboard: "Clipboard",
 };
 
-const CONNECTOR_GROUPS: Record<string, string> = {
-  email: "Email",
-  slack: "Slack",
-  linear: "Linear",
-  github: "GitHub",
-};
-
 const CAPABILITY_RULE =
-  "Use these tools instead of answering from memory whenever they can help. Never tell the user you can't do something one of these tools covers (for example, never say you can't browse the web when web search is listed). If a tool call fails, say that it failed rather than claiming you lack the ability.";
+  "Use a tool when the request needs what it provides, rather than guessing from memory; don't call one when the conversation or the context provided here already has the answer. Never tell the user you can't do something one of these tools covers (for example, never say you can't browse the web when web search is listed). If a tool call fails, say that it failed rather than claiming you lack the ability.";
 
 const TOOL_TRACE_RULE =
   "Earlier assistant messages may begin with a [Tools used: …] note that the app added to record the tools you called in that turn. Never write such a note yourself.";
@@ -122,7 +119,7 @@ export interface AgentSystemPromptOptions {
 }
 
 function toolGroup(tool: PromptTool): string {
-  if (tool.connectorId) return CONNECTOR_GROUPS[tool.connectorId] ?? tool.connectorId;
+  if (tool.connectorId) return CONNECTOR_NAMES[tool.connectorId] ?? tool.connectorId;
   return TOOL_GROUPS[tool.name] ?? "Other";
 }
 

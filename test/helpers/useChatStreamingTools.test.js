@@ -758,17 +758,20 @@ test("signed out, the model is told to point the user at signing in", async (t) 
   );
   assert.match(
     prompt,
-    /- Integrations \(email, Slack, Linear, GitHub\): needs the user to sign in/
+    /- Integrations \(Email, Slack, Linear, GitHub\): needs the user to sign in/
   );
 });
 
-test("on a free plan, the model is told connectors need a paid plan", async (t) => {
+test("on a free plan, the model still writes the email and then says a paid plan can send it", async (t) => {
   const { captured, sentMessages } = await renderChatStreaming(t, CONNECTOR_SURFACE, {
     subscribed: false,
   });
   await captured.sendToAI("Email Josh", []);
   const prompt = systemPromptOf(sentMessages[0]);
-  assert.match(prompt, /needs a paid OpenWhispr plan in Settings → Plans & Billing/);
+  assert.match(
+    prompt,
+    /still write it in full in your reply, then end with one short sentence on how they can have you send it for them[^\n]*\n- Integrations \(Email, Slack, Linear, GitHub\): needs a paid OpenWhispr plan in Settings → Plans & Billing\./
+  );
   assert.doesNotMatch(prompt, /- Web search: (needs|turned|not)/);
 });
 
@@ -817,7 +820,7 @@ test("a surface without connectors (container chat) never names them", async (t)
   const { captured, sentMessages } = await renderChatStreaming(t, {}, { subscribed: false });
   await captured.sendToAI("Summarize this folder", []);
   const prompt = systemPromptOf(sentMessages[0]);
-  assert.doesNotMatch(prompt, /Integrations \(email|Slack:|paid OpenWhispr plan/);
+  assert.doesNotMatch(prompt, /Integrations \(Email|Slack:|paid OpenWhispr plan/);
   assert.match(
     prompt,
     /- Calendar: not connected; the user can connect it in Integrations → Calendars\./
@@ -856,7 +859,7 @@ test("a local model too small for tools is told so, with no tool notes in its hi
   const [system, ...history] = sentMessages[0];
   assert.match(
     system.content,
-    /- Tools \(web search, notes, calendar, integrations\): the selected model runs without tools .* in Settings → Language Models\./
+    /- Tools \(web search, calendar, searching or changing notes, integrations\): the selected model runs without tools .* in Settings → Language Models\. You can still use anything already in this prompt, such as note text/
   );
   assert.doesNotMatch(system.content, /Tools used/);
   assert.equal(history[1].content, "Sunny.");
@@ -882,6 +885,28 @@ test("a reply that imitates the tool notes is shown, saved and delivered without
   assert.equal(getMessages().find((m) => m.role === "assistant").content, "Done.");
   assert.deepEqual(completed, ["Done."]);
   assert.equal(delivered, "Done.");
+});
+
+test("a reply that is only a tool note settles as an empty response, announced once", async (t) => {
+  let announced = 0;
+  const { captured, reasoningService, getMessages } = await renderChatStreaming(t, {
+    onResponseContent: () => announced++,
+  });
+  reasoningService.processTextStreamingCloud.mock.mockImplementation(() =>
+    (async function* () {
+      yield { type: "content", text: "[Tools used: web_" };
+      yield { type: "content", text: "search]" };
+      yield { type: "done", finishReason: "stop" };
+    })()
+  );
+
+  await captured.sendToAI("Weather?", []);
+
+  assert.equal(
+    getMessages().find((m) => m.role === "assistant").content,
+    "The model returned no response."
+  );
+  assert.equal(announced, 1);
 });
 
 test("the onboarding demo isn't told to send the user off to enable anything", async (t) => {

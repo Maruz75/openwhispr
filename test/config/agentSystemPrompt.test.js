@@ -47,10 +47,33 @@ test("web search is for anything that may have changed, and when in doubt the mo
   const prompt = getAgentSystemPrompt(["web_search"]);
   assert.match(
     prompt,
-    /Use web_search whenever the answer depends on information that may have changed/
+    /Use web_search whenever the answer depends on public information that may have changed/
   );
   assert.match(prompt, /whenever the user asks you to look something up/);
   assert.match(prompt, /search rather than decline/);
+});
+
+test("web search stays on public information the context doesn't already answer", async () => {
+  const { getAgentSystemPrompt } = await load();
+  const prompt = getAgentSystemPrompt(["web_search", "search_notes"]);
+  assert.doesNotMatch(prompt, /releases, people,/);
+  assert.match(prompt, /Don't search for people the user knows personally/);
+  assert.match(prompt, /nor for anything the conversation, the user's notes or the context/);
+  assert.match(prompt, /don't call one when the conversation or the context provided here/);
+});
+
+test("connector tools group under the same names the unavailable list uses", async () => {
+  const { getAgentSystemPrompt } = await load();
+  const { CONNECTOR_NAMES } = await import("../../src/config/agentCapabilities.ts");
+  const prompt = getAgentSystemPrompt(
+    Object.keys(CONNECTOR_NAMES).map((connectorId) => ({
+      name: `${connectorId}_tool`,
+      connectorId,
+    }))
+  );
+  for (const [connectorId, name] of Object.entries(CONNECTOR_NAMES)) {
+    assert.match(prompt, new RegExp(`^- ${name}: ${connectorId}_tool$`, "m"));
+  }
 });
 
 test("the tool-trace rule rides only with traced history", async () => {
