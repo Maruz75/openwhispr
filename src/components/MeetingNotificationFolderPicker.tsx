@@ -83,8 +83,8 @@ export function MeetingNotificationFolderPicker({
       createRequest.current = null;
     }
     priorMode.current = mode;
-    if (focusReady) (mode === "form" ? nameRef : searchRef).current?.focus();
-  }, [mode, focusReady, context?.spaces, folders, query, t]);
+    if (focusReady && !busy) (mode === "form" ? nameRef : searchRef).current?.focus();
+  }, [mode, focusReady, busy, context?.spaces, folders, query, t]);
   useEffect(() => {
     document
       .getElementById(`meeting-folder-option-${active}`)
@@ -184,6 +184,7 @@ export function MeetingNotificationFolderPicker({
           <label className="meeting-folder-field">
             <span>{t(key("name"))}</span>
             <input
+              dir="auto"
               ref={nameRef}
               aria-label={t(key("name"))}
               autoComplete="off"
@@ -261,6 +262,7 @@ export function MeetingNotificationFolderPicker({
           <div className="meeting-folder-search">
             <Search className="size-3.5" />
             <input
+              dir="auto"
               ref={searchRef}
               role="combobox"
               aria-label={t(key("search"))}

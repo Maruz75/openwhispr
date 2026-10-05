@@ -347,3 +347,32 @@ test("pointer Create works after accepting an IME candidate without keyup", asyn
   await c.click(c.button("Create & select"));
   assert.equal(c.calls.filter((x) => x[0] === "create").length, 1);
 });
+
+test("captured card swipe keeps pointer interactivity until release", async (t) => {
+  const interactivity = [];
+  const c = await mount(t, {
+    setNotificationInteractivity: async (value) => interactivity.push(value),
+  });
+  await React.act(async () => new Promise((r) => setTimeout(r, 60)));
+  const surface = c.container.querySelector(".meeting-notification-window");
+  surface.setPointerCapture = () => {};
+  surface.hasPointerCapture = () => true;
+  surface.releasePointerCapture = () => {};
+  const event = (type, x) =>
+    new globalThis.window.PointerEvent(type, {
+      bubbles: true,
+      isPrimary: true,
+      button: 0,
+      pointerId: 1,
+      clientX: x,
+    });
+  await React.act(async () => surface.dispatchEvent(event("pointerdown", 30)));
+  await React.act(async () =>
+    surface.dispatchEvent(
+      new globalThis.window.MouseEvent("mousemove", { bubbles: true, clientX: 50 })
+    )
+  );
+  assert.equal(interactivity.at(-1), true);
+  await React.act(async () => surface.dispatchEvent(event("pointerup", 150)));
+  assert.equal(c.calls.filter((x) => x[0] === "start" && x[2] === "dismiss").length, 1);
+});

@@ -711,15 +711,17 @@ class MeetingDetectionEngine {
       "meeting"
     );
 
-    const best = this._notificationQueue[0];
-    const detectionId = `${best.source}:${best.key}`;
-
-    const detection = this.activeDetections.get(detectionId);
-    if (detection) {
-      this._showPrompt(detectionId, best.source, best.key, best.data);
-    }
-
+    const [best, ...discarded] = this._notificationQueue;
     this._notificationQueue = [];
+    // This flush coalesces the batch into one prompt. Entries it discards must
+    // not keep suppressing future microphone detections after that prompt ends.
+    for (const { source, key, data } of discarded) {
+      const id = `${source}:${key}`;
+      if (this.activeDetections.get(id)?.data === data) this.activeDetections.delete(id);
+    }
+    const detectionId = `${best.source}:${best.key}`;
+    const detection = this.activeDetections.get(detectionId);
+    if (detection) this._showPrompt(detectionId, best.source, best.key, best.data);
   }
 
   _dismiss() {

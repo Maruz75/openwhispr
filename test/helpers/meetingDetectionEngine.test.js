@@ -415,3 +415,19 @@ test("navigation failure retains committed note and retries without duplicate wr
   assert.equal(c.db.getNotes().length, 1);
   assert.equal(calls, 2);
 });
+
+test("coalesced audio detections cannot suppress the next meeting after a queued calendar prompt", () => {
+  const { engine, shown } = createEngine();
+  engine.setPreferences({ audioDetection: true, processDetection: true });
+  engine._userRecording = true;
+  engine._handleDetection("calendar", "event", { event: { summary: "Queued calendar" } });
+  engine._handleDetection("audio", "sustained-audio", {});
+  assert.equal(engine.activeDetections.size, 2);
+  engine._userRecording = false;
+  engine._flushNotificationQueue();
+  assert.equal(shown.length, 1);
+  assert.equal(engine.activeDetections.has("audio:sustained-audio"), false);
+  engine.handleDetectionNotificationClosed("calendar:event");
+  engine._handleDetection("audio", "sustained-audio", {});
+  assert.equal(shown.length, 2);
+});

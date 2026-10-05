@@ -441,7 +441,9 @@ export default function MeetingNotificationOverlay(): ReactElement {
       className="meeting-notification-window w-full bg-transparent p-3 select-none"
       onMouseMove={(event) => {
         const interactive =
-          event.target instanceof Element && Boolean(event.target.closest("[data-meeting-region]"));
+          Boolean(pointerSwipeRef.current) ||
+          (event.target instanceof Element &&
+            Boolean(event.target.closest("[data-meeting-region]")));
         void window.electronAPI?.setNotificationInteractivity?.(interactive);
       }}
       style={
