@@ -2,6 +2,7 @@ const { net } = require("electron");
 const crypto = require("crypto");
 const debugLogger = require("./debugLogger");
 const { getCortiToken } = require("./cortiAuth");
+const { providerHttpError } = require("./providerHttpErrors");
 
 async function request(token, tenant, url, options = {}) {
   const response = await net.fetch(url, {
@@ -14,7 +15,13 @@ async function request(token, tenant, url, options = {}) {
   });
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    throw new Error(`Corti API Error: ${response.status} ${errorText}`.trim());
+    throw providerHttpError({
+      provider: "Corti",
+      status: response.status,
+      body: errorText,
+      headers: response.headers,
+      surface: "transcription",
+    });
   }
   return response;
 }

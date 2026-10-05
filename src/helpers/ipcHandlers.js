@@ -34,7 +34,12 @@ const {
 const { classifyAndLog } = require("./networkErrors");
 const { resolveSystemDefaultMicrophone } = require("./systemDefaultMicrophone");
 const { ipcErrorFields } = require("./ipcErrorFields");
-const { settingsSectionFromIpc } = require("./providerHttpErrors");
+const {
+  settingsSectionFromIpc,
+  providerHttpError,
+  providerError,
+  redactProviderBody,
+} = require("./providerHttpErrors");
 const {
   registerConnectorIpc,
   createConnectorPolicyResolver,
@@ -45,6 +50,10 @@ const { createNoteAttendeesLookup, searchContacts } = require("./connectors/cont
 // packaged, and the route resolver only needs {id, baseUrl} per provider.
 const transcriptionProviderBaseUrls = () =>
   require("../models/modelRegistryData.json").transcriptionProviders;
+// Classified errors show the provider's display name; routes only carry its id.
+const transcriptionProviderName = (id) =>
+  require("../models/modelRegistryData.json").transcriptionProviders.find((p) => p.id === id)
+    ?.name || id;
 // ipcMain.handle keeps only the message when a promise rejects, dropping custom
 // props — proxy handlers return the classified fields so the renderer can
 // rebuild the error.
@@ -4593,7 +4602,7 @@ class IPCHandlers {
       serializeIpcError(async (event, { audioBuffer, language, keyterms }) => {
         const apiKey = this.environmentManager.getXaiKey();
         if (!apiKey) {
-          throw new Error("xAI API key not configured");
+          throw providerError("API_KEY_MISSING", { provider: "xAI", surface: "transcription" });
         }
 
         const formData = new FormData();
@@ -4618,7 +4627,17 @@ class IPCHandlers {
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(`xAI API Error: ${response.status} ${errorText}`);
+          debugLogger.warn("xAI transcription failed", {
+            status: response.status,
+            body: redactProviderBody(errorText),
+          });
+          throw providerHttpError({
+            provider: "xAI",
+            status: response.status,
+            body: errorText,
+            headers: response.headers,
+            surface: "transcription",
+          });
         }
 
         return await response.json();
@@ -4630,7 +4649,7 @@ class IPCHandlers {
       serializeIpcError(async (event, { audioBuffer, model, language, contextBias }) => {
         const apiKey = this.environmentManager.getMistralKey();
         if (!apiKey) {
-          throw new Error("Mistral API key not configured");
+          throw providerError("API_KEY_MISSING", { provider: "Mistral", surface: "transcription" });
         }
 
         const formData = new FormData();
@@ -4656,7 +4675,18 @@ class IPCHandlers {
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(`Mistral API Error: ${response.status} ${errorText}`);
+          debugLogger.warn("Mistral transcription failed", {
+            status: response.status,
+            body: redactProviderBody(errorText),
+          });
+          throw providerHttpError({
+            provider: "Mistral",
+            model: model || "voxtral-mini-latest",
+            status: response.status,
+            body: errorText,
+            headers: response.headers,
+            surface: "transcription",
+          });
         }
 
         return await response.json();
@@ -6497,7 +6527,19 @@ class IPCHandlers {
           });
           if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Self-hosted API Error: ${response.status} ${errorText}`);
+            debugLogger.warn("Self-hosted retry failed", {
+              status: response.status,
+              body: redactProviderBody(errorText),
+            });
+            throw providerHttpError({
+              provider: "self-hosted",
+              selfHosted: true,
+              model: route.model,
+              status: response.status,
+              body: errorText,
+              headers: response.headers,
+              surface: "transcription",
+            });
           }
           const data = await response.json();
           if (data?.text) {
@@ -6693,7 +6735,20 @@ class IPCHandlers {
           const response = await proxyFetch(endpoint, { method: "POST", headers, body: formData });
           if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`${provider} API Error: ${response.status} ${errorText}`);
+            debugLogger.warn("Retry transcription provider failed", {
+              provider,
+              status: response.status,
+              body: redactProviderBody(errorText),
+            });
+            throw providerHttpError({
+              provider: transcriptionProviderName(provider),
+              selfHosted: provider === "custom",
+              model: route.model,
+              status: response.status,
+              body: errorText,
+              headers: response.headers,
+              surface: "transcription",
+            });
           }
           const data = await response.json();
           if (data?.text) {
@@ -10176,11 +10231,14 @@ class IPCHandlers {
             );
             const data = await postMultipart(new URL(route.endpoint), body, boundary);
             if (data.statusCode !== 200) {
-              throw new Error(
-                data.data?.error?.message ||
-                  data.data?.error ||
-                  `Self-hosted API Error: ${data.statusCode}`
-              );
+              throw providerHttpError({
+                provider: "self-hosted",
+                selfHosted: true,
+                model: route.model,
+                status: data.statusCode,
+                body: data.data,
+                surface: "transcription",
+              });
             }
             return { success: true, text: data.data.text };
           }
@@ -10304,16 +10362,15 @@ class IPCHandlers {
             : undefined;
           const data = await postMultipart(url, body, boundary, headers);
 
-          if (data.statusCode === 401) {
-            return { success: false, error: "Invalid API key. Check your key in Settings." };
-          }
-          if (data.statusCode === 429) {
-            return { success: false, error: "Rate limit exceeded. Please try again later." };
-          }
           if (data.statusCode !== 200) {
-            throw new Error(
-              data.data?.error?.message || data.data?.error || `API error: ${data.statusCode}`
-            );
+            throw providerHttpError({
+              provider: transcriptionProviderName(route.provider),
+              selfHosted: route.provider === "custom",
+              model: route.model,
+              status: data.statusCode,
+              body: data.data,
+              surface: "transcription",
+            });
           }
 
           if (diarize && data.data?.speakers) {
@@ -10355,12 +10412,7 @@ class IPCHandlers {
           return { success: true, text: data.data.text, ...(segments ? { segments } : {}) };
         } catch (error) {
           debugLogger.error("BYOK audio file transcription error", { error: error.message });
-          return {
-            success: false,
-            error: error.message,
-            code: error.code,
-            messageKey: error.messageKey,
-          };
+          return { success: false, ...ipcErrorFields(error) };
         } finally {
           cleanupUpload?.();
         }

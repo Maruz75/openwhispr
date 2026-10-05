@@ -101,7 +101,7 @@ test("401 surfaces as INVALID_KEY", async () => {
     text: async () => "unauthorized",
   }));
 
-  await assert.rejects(() => transcribeWithTinfoil(AUDIO), { code: "INVALID_KEY" });
+  await assert.rejects(() => transcribeWithTinfoil(AUDIO), { code: "PROVIDER_AUTH_FAILED" });
 });
 
 test("other failures carry the status and body", async () => {
@@ -112,11 +112,11 @@ test("other failures carry the status and body", async () => {
   }));
 
   await assert.rejects(() => transcribeWithTinfoil(AUDIO), {
-    message: "Tinfoil API Error: 404 The model does not exist.",
+    code: "PROVIDER_MODEL_NOT_FOUND",
   });
 });
 
-test("429 surfaces as PROVIDER_RATE_LIMITED, 5xx as SERVER_ERROR", async () => {
+test("429 surfaces as PROVIDER_RATE_LIMITED, 5xx as PROVIDER_UNAVAILABLE", async () => {
   const rateLimited = loadTranscription(async () => ({
     ok: false,
     status: 429,
@@ -131,7 +131,9 @@ test("429 surfaces as PROVIDER_RATE_LIMITED, 5xx as SERVER_ERROR", async () => {
     status: 503,
     text: async () => "unavailable",
   }));
-  await assert.rejects(() => serverError.transcribeWithTinfoil(AUDIO), { code: "SERVER_ERROR" });
+  await assert.rejects(() => serverError.transcribeWithTinfoil(AUDIO), {
+    code: "PROVIDER_UNAVAILABLE",
+  });
 });
 
 test("forwards the dictionary prompt, and omits it when blank", async () => {
