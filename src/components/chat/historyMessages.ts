@@ -7,6 +7,8 @@ export interface HistoryMessage {
 
 const HISTORY_LIMIT = 20;
 const TRACE_ARG_MAX_CHARS = 80;
+const TRACE_OPENING = "[Tools used:";
+const ECHOED_TRACE = /^\s*\[Tools used:[^\]\n]*\]\s*/;
 
 // The one argument a trace may show per tool: a search query, a name or a
 // title. Anything else (email and message bodies, issue text, note content,
@@ -36,7 +38,11 @@ function traceArgument(call: ToolCallInfo): string | null {
     .replace(/\s+/g, " ")
     .trim();
   if (!clean) return null;
-  return clean.length > TRACE_ARG_MAX_CHARS ? `${clean.slice(0, TRACE_ARG_MAX_CHARS)}…` : clean;
+  // By code point, so a cut never leaves half a surrogate pair in every later request.
+  const chars = Array.from(clean);
+  return chars.length > TRACE_ARG_MAX_CHARS
+    ? `${chars.slice(0, TRACE_ARG_MAX_CHARS).join("")}…`
+    : clean;
 }
 
 /**
@@ -48,10 +54,25 @@ export function toolTrace(toolCalls: ReadonlyArray<ToolCallInfo> | undefined): s
   if (!toolCalls?.length) return "";
   const entries = toolCalls.map((call) => {
     const arg = traceArgument(call);
-    const interrupted = call.status === "executing" ? " (interrupted)" : "";
-    return `${call.name}${arg ? ` ("${arg}")` : ""}${interrupted}`;
+    // A call still executing was cut off before its result arrived, but its side
+    // effect may have happened (a send commits in main after Esc).
+    const unrecorded = call.status === "executing" ? " (outcome not recorded)" : "";
+    return `${call.name}${arg ? ` ("${arg}")` : ""}${unrecorded}`;
   });
-  return `[Tools used: ${entries.join(", ")}]`;
+  return `${TRACE_OPENING} ${entries.join(", ")}]`;
+}
+
+/**
+ * A reply as the user sees it: a model imitating the notes in its history must
+ * not show, save or paste one. While streaming, a reply that is still only the
+ * start of a note stays hidden until it can tell.
+ */
+export function withoutEchoedToolTrace(content: string): string {
+  const opening = content.trimStart();
+  if (!opening) return content;
+  if (TRACE_OPENING.startsWith(opening)) return "";
+  if (opening.startsWith(TRACE_OPENING) && !/[\]\n]/.test(opening)) return "";
+  return content.replace(ECHOED_TRACE, "");
 }
 
 /** The last messages as the model sees them, with earlier tool use noted on assistant turns. */

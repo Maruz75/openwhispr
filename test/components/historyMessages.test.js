@@ -105,18 +105,44 @@ test("a long or multi-line query is flattened and cut, and odd arguments drop to
   assert.match(trace, /, web_search, search_notes\]$/);
 });
 
-test("a call that never finished is marked interrupted", async () => {
+test("a call cut off before its result says its outcome wasn't recorded, not that it failed", async () => {
   const { toolTrace } = await load();
+  // A send can still commit in main after Esc, so "interrupted" would invite a resend.
   assert.equal(
-    toolTrace([call("web_search", { query: "f1" }, { status: "executing" })]),
-    '[Tools used: web_search ("f1") (interrupted)]'
+    toolTrace([call("slack_send_message", { text: "hi" }, { status: "executing" })]),
+    "[Tools used: slack_send_message (outcome not recorded)]"
   );
+});
+
+test("a query cut at the limit never splits a surrogate pair", async () => {
+  const { toolTrace } = await load();
+  const trace = toolTrace([call("web_search", { query: `${"a".repeat(79)}😀😀` })]);
+  assert.equal(trace.isWellFormed(), true);
+  assert.equal(trace, `[Tools used: web_search ("${"a".repeat(79)}😀…")]`);
+});
+
+test("a reply that imitates the trace is shown without it", async () => {
+  const { withoutEchoedToolTrace } = await load();
+  assert.equal(withoutEchoedToolTrace('[Tools used: web_search ("x")]\n\nSunny.'), "Sunny.");
+  assert.equal(withoutEchoedToolTrace("  [Tools used: slack_send_message] Done."), "Done.");
+  // Mid-stream, the start of a note stays hidden until it can tell.
+  assert.equal(withoutEchoedToolTrace("[Too"), "");
+  assert.equal(withoutEchoedToolTrace("[Tools used: web_search"), "");
+  // Anything else, including a link or a later mention, is left alone.
+  assert.equal(withoutEchoedToolTrace("[Docs](https://x.dev)"), "[Docs](https://x.dev)");
+  assert.equal(withoutEchoedToolTrace("[Tools](https://x.dev)"), "[Tools](https://x.dev)");
+  assert.equal(
+    withoutEchoedToolTrace("I noted [Tools used: x] earlier."),
+    "I noted [Tools used: x] earlier."
+  );
+  assert.equal(withoutEchoedToolTrace("\n"), "\n");
+  assert.equal(withoutEchoedToolTrace(""), "");
 });
 
 test("user messages and turns without tools are untouched, and the trace can be turned off", async () => {
   const { toHistoryMessages } = await load();
   const messages = [
-    user("hi"),
+    { ...user("hi"), toolCalls: [call("web_search", { query: "x" })] },
     assistant("Hello!", []),
     assistant("Found it.", [call("web_search", { query: "x" })]),
   ];

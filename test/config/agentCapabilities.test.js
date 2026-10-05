@@ -72,7 +72,7 @@ test("web search off by the org reads as policy, while a loading policy is tempo
   assert.equal(loading[0].reason, "policyLoading");
 });
 
-test("connectors name the plan, then the org, then a loading policy, as one line", async () => {
+test("connectors name the org, then the plan, then a loading policy, as one line", async () => {
   const { resolveUnavailableCapabilities } = await load();
   const connectors = input().connectors;
   const reasonFor = (overrides) =>
@@ -80,9 +80,11 @@ test("connectors name the plan, then the org, then a loading policy, as one line
       (item) => item.reason
     );
 
+  // A free member of an org that turned connectors off isn't told to buy a plan.
   assert.deepEqual(reasonFor({ hasPlan: false, allowed: false, blockedByOrg: true }), [
-    "planRequired",
+    "policyOff",
   ]);
+  assert.deepEqual(reasonFor({ hasPlan: false }), ["planRequired"]);
   assert.deepEqual(reasonFor({ allowed: false, blockedByOrg: true }), ["policyOff"]);
   assert.deepEqual(reasonFor({ allowed: false }), ["policyLoading"]);
 });

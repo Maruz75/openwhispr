@@ -43,7 +43,7 @@ import { createToolExecutionScope, type ToolExecutionScope } from "./toolExecuti
 import { isQueryResultData } from "../../services/tools/connectors/runQueryAction";
 import { getAgentToolActivityRemainingMs } from "../../helpers/agentToolPresentation";
 import type { Message, AgentState, ChatImageAttachment, ToolCallInfo } from "./types";
-import { toHistoryMessages, type HistoryMessage } from "./historyMessages";
+import { toHistoryMessages, withoutEchoedToolTrace, type HistoryMessage } from "./historyMessages";
 import type { ContainerScope } from "../../types/chat";
 import type { NoteAttendeesRequest } from "../../types/connectors";
 import {
@@ -127,6 +127,12 @@ interface UseChatStreamingOptions {
    */
   allowConnectors?: boolean;
   /**
+   * Name capabilities that exist but aren't usable here, and how to turn them
+   * on. Off only where the request already says what to do without them (the
+   * onboarding demo answers with suggested times instead).
+   */
+  nameUnavailableCapabilities?: boolean;
+  /**
    * The note's meeting (note chat). Its attendees are listed for the model
    * only in a send that offers connector tools, so recipients come from them.
    */
@@ -191,6 +197,7 @@ export function useChatStreaming({
   noteContext: externalNoteContext,
   searchScope,
   allowConnectors = false,
+  nameUnavailableCapabilities = true,
   noteMeeting,
   onStreamComplete,
   onResponseContent,
@@ -471,7 +478,7 @@ export function useChatStreaming({
         // jargon — same suffix the dictation prompts carry.
         let systemPrompt = appendDictionarySuffix(
           getAgentSystemPrompt(registry?.getAll(), combinedContext || undefined, {
-            unavailable,
+            unavailable: nameUnavailableCapabilities ? unavailable : [],
             toolTrace: registry !== null,
           }),
           getDictionaryHintWords(settings),
@@ -537,6 +544,7 @@ export function useChatStreaming({
         // Chat re-parses the whole answer through react-markdown on every
         // content write, so one write per streamed token made parse cost scale
         // with token count. Buffer and flush at most once per interval.
+        let rawContent = "";
         let fullContent = "";
         let contentFlushTimer: ReturnType<typeof setTimeout> | null = null;
         const cancelContentFlush = () => {
@@ -644,8 +652,9 @@ export function useChatStreaming({
               break;
             }
             if (chunk.type === "content") {
-              if (chunk.text) announceResponse();
-              fullContent += chunk.text;
+              rawContent += chunk.text;
+              fullContent = withoutEchoedToolTrace(rawContent);
+              if (fullContent) announceResponse();
               scheduleContentFlush();
             } else if (chunk.type === "tool_calls") {
               // Text that arrived before a tool step must be on screen before the
@@ -795,6 +804,7 @@ export function useChatStreaming({
     [
       inferenceScope,
       allowConnectors,
+      nameUnavailableCapabilities,
       t,
       setMessages,
       onStreamComplete,

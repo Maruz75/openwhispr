@@ -95,10 +95,11 @@ export function resolveUnavailableCapabilities(
 
   if (!input.isSignedIn) {
     unavailable.push({ name: CONNECTORS_NAME, reason: "signedOut", where: locations.account });
+  } else if (connectors.blockedByOrg) {
+    // Before the plan: paying wouldn't help while the organization keeps them off.
+    unavailable.push({ name: CONNECTORS_NAME, reason: "policyOff" });
   } else if (!connectors.hasPlan) {
     unavailable.push({ name: CONNECTORS_NAME, reason: "planRequired", where: locations.plans });
-  } else if (connectors.blockedByOrg) {
-    unavailable.push({ name: CONNECTORS_NAME, reason: "policyOff" });
   } else if (!connectors.allowed) {
     unavailable.push({ name: CONNECTORS_NAME, reason: "policyLoading" });
   } else {

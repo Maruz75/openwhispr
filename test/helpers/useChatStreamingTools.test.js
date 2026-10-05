@@ -823,3 +823,73 @@ test("a surface without connectors (container chat) never names them", async (t)
     /- Calendar: not connected; the user can connect it in Integrations → Calendars\./
   );
 });
+
+test("a local model too small for tools is told so, with no tool notes in its history", async (t) => {
+  const { captured, sentMessages, offeredTools } = await renderChatStreaming(t, CONNECTOR_SURFACE, {
+    settings: {
+      chatAgentMode: "local",
+      chatAgentProvider: "qwen",
+      chatAgentModel: "qwen3-1.7b-q4_k_m",
+    },
+  });
+  const earlier = [
+    { id: "u1", role: "user", content: "Weather in Lisbon?" },
+    {
+      id: "a1",
+      role: "assistant",
+      content: "Sunny.",
+      toolCalls: [
+        {
+          id: "c1",
+          name: "web_search",
+          arguments: JSON.stringify({ query: "Lisbon weather" }),
+          status: "completed",
+        },
+      ],
+    },
+    { id: "u2", role: "user", content: "And tomorrow?" },
+  ];
+
+  await captured.sendToAI("And tomorrow?", earlier);
+
+  assert.deepEqual(offeredTools[0], []);
+  const [system, ...history] = sentMessages[0];
+  assert.match(
+    system.content,
+    /- Tools \(web search, notes, calendar, integrations\): the selected model runs without tools .* in Settings → Language Models\./
+  );
+  assert.doesNotMatch(system.content, /Tools used/);
+  assert.equal(history[1].content, "Sunny.");
+});
+
+test("a reply that imitates the tool notes is shown, saved and delivered without one", async (t) => {
+  const completed = [];
+  const { captured, reasoningService, getMessages } = await renderChatStreaming(t, {
+    onStreamComplete: (_id, content) => completed.push(content),
+  });
+  reasoningService.processTextStreamingCloud.mock.mockImplementation(() =>
+    (async function* () {
+      yield { type: "content", text: "[Tools used: slack_send" };
+      yield { type: "content", text: "_message]" };
+      yield { type: "content", text: "\n\nDone." };
+      yield { type: "done", finishReason: "stop" };
+    })()
+  );
+
+  let delivered = null;
+  await captured.sendToAI("Post it", [], { onComplete: ({ content }) => (delivered = content) });
+
+  assert.equal(getMessages().find((m) => m.role === "assistant").content, "Done.");
+  assert.deepEqual(completed, ["Done."]);
+  assert.equal(delivered, "Done.");
+});
+
+test("the onboarding demo isn't told to send the user off to enable anything", async (t) => {
+  const { captured, sentMessages } = await renderChatStreaming(
+    t,
+    { inferenceScope: "dictationAgent", nameUnavailableCapabilities: false },
+    { settings: { isSignedIn: false } }
+  );
+  await captured.sendToAI("Reply with times I'm free", []);
+  assert.doesNotMatch(systemPromptOf(sentMessages[0]), /Not available in this conversation/);
+});
