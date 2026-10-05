@@ -1,5 +1,8 @@
 const { app, screen, BrowserWindow, dialog, ipcMain, Menu } = require("electron");
 const debugLogger = require("./debugLogger");
+const { randomUUID } = require("node:crypto");
+const tokenStore = require("./tokenStore");
+const accountScopeBinding = require("./accountScopeBinding");
 const { createLinuxWindowInputRegion } = require("./linuxWindowInputRegion");
 // Aliased: this class has an openExternalUrl method wrapping the helper.
 const { openExternalUrl: openUrlInExternalBrowser } = require("./externalUrlOpener");
@@ -35,6 +38,7 @@ const {
   CONTROL_PANEL_CONFIG,
   ONBOARDING_WINDOW_SIZES,
   NOTIFICATION_WINDOW_CONFIG,
+  fitMeetingNotificationWindow,
   fitAssistantContentWindowToWorkArea,
   fitAssistantWindowToWorkArea,
   fitDictationErrorContentWindowToWorkArea,
@@ -67,6 +71,9 @@ class WindowManager {
     // Set by main.js so the tray's listen item rebuilds with dictation state.
     this.onDictationStateChanged = null;
     this.notificationWindow = null;
+    this._meetingNotificationOwner = null;
+    this._meetingAccountEpoch = 0;
+    this.meetingRecentDestinations = [];
     this.agentDictationPillWindow = null;
     this._agentDictationPillReady = false;
     this._agentDictationPillSize = AGENT_DICTATION_PILL_SIZE;
@@ -274,27 +281,166 @@ class WindowManager {
     }
   }
 
-  // Only the meeting prompt owns this: another overlay reporting its own hover
-  // must not pause a countdown it cannot resume — it may be destroyed before
-  // its pointer ever leaves.
+  getMeetingNotificationScope() {
+    const database = this.meetingDetectionEngine?.databaseManager;
+    if (!database) return null;
+    const state = tokenStore.getState();
+    const accountId = database.activeAccountId;
+    if (state.token) {
+      const bound = accountScopeBinding.resolveActiveAccountScope({
+        ...state,
+        binding: accountScopeBinding.read(),
+      });
+      if (!bound || bound.accountId !== accountId) return null;
+    } else if (accountId !== null) return null;
+    return { accountId, authGeneration: state.generation, epoch: this._meetingAccountEpoch };
+  }
+
+  isMeetingNotificationScope(scope) {
+    const current = this.getMeetingNotificationScope();
+    return Boolean(
+      scope &&
+      current &&
+      scope.accountId === current.accountId &&
+      scope.authGeneration === current.authGeneration &&
+      scope.epoch === current.epoch
+    );
+  }
+
+  captureMeetingNotificationOwner(sender, sessionId) {
+    const owner = this._meetingNotificationOwner;
+    return owner &&
+      owner.window.webContents === sender &&
+      (sessionId === undefined || sessionId === owner.sessionId) &&
+      this.isMeetingNotificationOwner(owner)
+      ? owner
+      : null;
+  }
+
+  isMeetingNotificationOwner(owner) {
+    return Boolean(
+      owner &&
+      owner === this._meetingNotificationOwner &&
+      owner.window === this.notificationWindow &&
+      !owner.window.isDestroyed() &&
+      owner.prompt === this._pendingNotificationData &&
+      !this._onboardingActive &&
+      owner.detection &&
+      this.meetingDetectionEngine?.activeDetections?.get(owner.prompt.detectionId) ===
+        owner.detection &&
+      this.isMeetingNotificationScope(owner.scope)
+    );
+  }
+
+  retireMeetingNotificationScope() {
+    this._meetingAccountEpoch += 1;
+    this.meetingRecentDestinations = [];
+    this._pendingMeetingNoteNavigation = null;
+    this._cancelMeetingNavigation?.("ACCOUNT_CHANGED");
+    if (this.meetingDetectionEngine) {
+      this.meetingDetectionEngine._notificationQueue = [];
+      this.meetingDetectionEngine.activeDetections.clear();
+    }
+    this.dismissMeetingNotification({ notifyEngine: false });
+  }
+
+  updateMeetingNotificationPause(owner) {
+    if (owner !== this._meetingNotificationOwner) return;
+    if (
+      owner.pointerInside ||
+      owner.mode !== "closed" ||
+      owner.createInFlight ||
+      owner.responseInFlight
+    ) {
+      this._notificationDismissTimer.pause();
+    } else this._notificationDismissTimer.resume();
+  }
+
   setNotificationInteractivity(sender, interactive) {
     const win = this.notificationWindow;
-    if (!win || win.isDestroyed() || sender !== win.webContents) {
+    if (!win || win.isDestroyed() || sender !== win.webContents || typeof interactive !== "boolean")
       return;
+    if (process.platform !== "linux") win.setIgnoreMouseEvents(!interactive, { forward: true });
+    const owner = this._meetingNotificationOwner;
+    if (owner) {
+      owner.pointerInside = interactive;
+      this.updateMeetingNotificationPause(owner);
+    } else if (interactive) this._notificationDismissTimer.pause();
+    else this._notificationDismissTimer.resume();
+  }
+
+  setMeetingNotificationSurface(owner, state) {
+    if (!this.isMeetingNotificationOwner(owner))
+      return { success: false, code: "STALE_NOTIFICATION" };
+    if (
+      !state ||
+      !Number.isSafeInteger(state.revision) ||
+      state.revision <= owner.layoutRevision ||
+      !["closed", "list", "form"].includes(state.mode) ||
+      !["request", "release", "keep"].includes(state.focus) ||
+      !Number.isFinite(state.contentHeight) ||
+      state.contentHeight <= 0 ||
+      state.contentHeight > 4096 ||
+      !Array.isArray(state.regions) ||
+      !state.regions.length ||
+      state.regions.length > 16 ||
+      state.regions.some(
+        (r) =>
+          !r ||
+          ![r.x, r.y, r.width, r.height].every(Number.isFinite) ||
+          r.x < 0 ||
+          r.y < 0 ||
+          r.width <= 0 ||
+          r.height <= 0 ||
+          r.x + r.width > 416 ||
+          r.y + r.height > 4096
+      )
+    ) {
+      return { success: false, code: "INVALID_REQUEST" };
     }
-    // Linux ignores the `forward` option, so a card returned to click-through
-    // there never sees another mouseenter and Start/Dismiss stay unreachable
-    // for the rest of its life (#1456). It is only click-through on macOS to
-    // begin with, so on Linux leave the hit-testing alone and move the
-    // countdown alone.
-    const togglesClickThrough = process.platform !== "linux";
-    if (interactive) {
-      if (togglesClickThrough) win.setIgnoreMouseEvents(false);
-      this._notificationDismissTimer.pause();
-    } else {
-      if (togglesClickThrough) win.setIgnoreMouseEvents(true, { forward: true });
-      this._notificationDismissTimer.resume();
+    owner.layoutRevision = state.revision;
+    owner.mode = state.mode;
+    owner.surface = state;
+    const win = owner.window;
+    const display = screen.getDisplayMatching(win.getBounds());
+    const bounds = fitMeetingNotificationWindow(
+      state.contentHeight,
+      display.workArea || display.bounds
+    );
+    const regions = state.regions
+      .map((r) => ({
+        x: Math.min(Math.round(r.x), bounds.width),
+        y: Math.min(Math.round(r.y), bounds.height),
+        width: Math.max(0, Math.min(Math.ceil(r.width), bounds.width - Math.round(r.x))),
+        height: Math.max(0, Math.min(Math.ceil(r.height), bounds.height - Math.round(r.y))),
+      }))
+      .filter((r) => r.width > 0 && r.height > 0);
+    if (!regions.length) return { success: false, code: "INVALID_REQUEST" };
+    owner.regions = regions;
+    win.setBounds(bounds);
+    if (process.platform === "linux") win.setShape(regions);
+    if (state.focus === "request" && state.mode !== "closed") {
+      if (process.platform !== "linux") win.setFocusable(true);
+      // macOS panels need show() to activate after becoming focusable. Only an
+      // explicit chooser action reaches here; measurement never raises them.
+      win.show();
+      win.focus();
+    } else if (state.focus === "release") {
+      win.blur();
+      if (process.platform !== "linux") win.setFocusable(false);
     }
+    const cursor = screen.getCursorScreenPoint();
+    owner.pointerInside = regions.some(
+      (r) =>
+        cursor.x >= bounds.x + r.x &&
+        cursor.x < bounds.x + r.x + r.width &&
+        cursor.y >= bounds.y + r.y &&
+        cursor.y < bounds.y + r.y + r.height
+    );
+    if (process.platform !== "linux")
+      win.setIgnoreMouseEvents(!owner.pointerInside, { forward: true });
+    this.updateMeetingNotificationPause(owner);
+    return { success: true, value: { width: bounds.width, height: bounds.height } };
   }
 
   resizeMainWindow(sizeKey) {
@@ -2048,6 +2194,7 @@ class WindowManager {
 
   async showMeetingNotification(promptData, { autoDismiss = true } = {}) {
     if (this._onboardingActive) return false;
+    this._meetingNotificationOwner = null;
     if (this.notificationWindow && !this.notificationWindow.isDestroyed()) {
       const previousWindow = this.notificationWindow;
       this.notificationWindow = null;
@@ -2075,6 +2222,7 @@ class WindowManager {
       if (this.notificationWindow !== win) return;
       const closedDetectionId = this._pendingNotificationData?.detectionId ?? null;
       this.notificationWindow = null;
+      this._meetingNotificationOwner = null;
       this._pendingNotificationData = null;
       this._notificationDismissTimer.cancel();
       if (this._notificationReadyFallback) {
@@ -2096,7 +2244,55 @@ class WindowManager {
     // dictation panel and assistant pill.
     WindowPositionUtil.setupAlwaysOnTop(win, { level: "screen-saver" });
 
+    promptData = { ...promptData, sessionId: randomUUID() };
     this._pendingNotificationData = promptData;
+    const owner = {
+      sessionId: promptData.sessionId,
+      prompt: promptData,
+      window: win,
+      detection: this.meetingDetectionEngine?.activeDetections?.get(promptData.detectionId),
+      scope: this.getMeetingNotificationScope(),
+      selectedDestination: null,
+      createRequests: new Map(),
+      layoutRevision: 0,
+      mode: "closed",
+      pointerInside: false,
+      regions: [{ x: 4, y: 4, width: 408, height: 76 }],
+    };
+    this._meetingNotificationOwner = owner;
+    if (process.platform === "linux") win.setShape(owner.regions);
+    win.on("blur", () => {
+      if (!this.isMeetingNotificationOwner(owner) || owner.mode === "closed") return;
+      this.setMeetingNotificationSurface(owner, {
+        revision: owner.layoutRevision + 1,
+        mode: "closed",
+        contentHeight: 84,
+        regions: [{ x: 4, y: 4, width: 408, height: 76 }],
+        focus: "release",
+      });
+      win.webContents.send("meeting-notification-surface-closed", {
+        sessionId: owner.sessionId,
+        revision: owner.layoutRevision,
+      });
+    });
+    const refit = () => {
+      if (!this.isMeetingNotificationOwner(owner) || !owner.surface) return;
+      this.setMeetingNotificationSurface(owner, {
+        ...owner.surface,
+        revision: owner.layoutRevision + 1,
+        focus: "keep",
+      });
+      win.webContents.send("meeting-notification-surface-resized", {
+        sessionId: owner.sessionId,
+        revision: owner.layoutRevision,
+      });
+    };
+    for (const event of ["display-metrics-changed", "display-removed", "display-added"])
+      screen.on(event, refit);
+    win.on("closed", () => {
+      for (const event of ["display-metrics-changed", "display-removed", "display-added"])
+        screen.removeListener(event, refit);
+    });
 
     // Everything past the load addresses `win` directly: a replacement taking
     // over mid-load must not have this prompt's data, countdown or force-show
@@ -2162,6 +2358,7 @@ class WindowManager {
 
   dismissMeetingNotification({ notifyEngine = true, flushQueued = true } = {}) {
     const notification = this._pendingNotificationData;
+    this._meetingNotificationOwner = null;
     this._pendingNotificationData = null;
     if (this._notificationReadyFallback) {
       clearTimeout(this._notificationReadyFallback);

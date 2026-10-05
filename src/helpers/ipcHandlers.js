@@ -707,6 +707,10 @@ class IPCHandlers {
   }
 
   _handleAuthTokenChange({ generation, token }) {
+    if (this._meetingTokenGeneration !== generation) {
+      this.windowManager?.retireMeetingNotificationScope?.();
+      this._meetingTokenGeneration = generation;
+    }
     this.enterpriseIdentityManager?.clear();
     if (!token) {
       this.databaseManager.setActiveAccountId(null);
@@ -2232,6 +2236,16 @@ class IPCHandlers {
               ? "Invalid account scope"
               : "Authentication context changed before account scoping",
         };
+      }
+      const previousScope = accountScopeBinding.resolveActiveAccountScope({
+        ...state,
+        binding: accountScopeBinding.read(),
+      });
+      if (
+        this.databaseManager.activeAccountId !== accountId ||
+        (accountId !== null && previousScope?.accountId !== accountId)
+      ) {
+        this.windowManager?.retireMeetingNotificationScope?.();
       }
       this.databaseManager.setActiveAccountId(accountId);
       if (accountId !== null) accountScopeBinding.persist(accountId, state.token);
@@ -11764,6 +11778,11 @@ class IPCHandlers {
       }
     });
 
+    ipcMain.handle("set-meeting-notification-surface", (event, sessionId, state) => {
+      const owner = this.windowManager.captureMeetingNotificationOwner(event.sender, sessionId);
+      return this.windowManager.setMeetingNotificationSurface(owner, state);
+    });
+
     ipcMain.handle("meeting-notification-respond", async (_event, detectionId, action) => {
       try {
         await this.meetingDetectionEngine.handleNotificationResponse(detectionId, action);
@@ -11784,7 +11803,8 @@ class IPCHandlers {
 
     ipcMain.handle("start-manual-meeting", () => this.windowManager.startManualMeeting());
 
-    ipcMain.handle("get-meeting-notification-data", async () => {
+    ipcMain.handle("get-meeting-notification-data", async (event) => {
+      if (this.windowManager?.notificationWindow?.webContents !== event.sender) return null;
       return this.windowManager?._pendingNotificationData ?? null;
     });
 

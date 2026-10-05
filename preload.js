@@ -1372,6 +1372,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     "meeting-auto-end-requested",
     (callback) => (_event, data) => callback(data)
   ),
+  setMeetingNotificationSurface: (sessionId, state) =>
+    ipcRenderer.invoke("set-meeting-notification-surface", sessionId, state),
+  onMeetingNotificationSurfaceClosed: registerListener(
+    "meeting-notification-surface-closed",
+    (callback) => (_event, data) => callback(data)
+  ),
+  onMeetingNotificationSurfaceResized: registerListener(
+    "meeting-notification-surface-resized",
+    (callback) => (_event, data) => callback(data)
+  ),
   getMeetingNotificationData: () => ipcRenderer.invoke("get-meeting-notification-data"),
   meetingNotificationReady: () => ipcRenderer.invoke("meeting-notification-ready"),
   meetingNotificationRespond: (detectionId, action) =>

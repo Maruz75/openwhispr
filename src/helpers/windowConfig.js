@@ -264,14 +264,14 @@ const CONTROL_PANEL_CONFIG = {
 };
 
 const NOTIFICATION_WINDOW_CONFIG = {
-  width: 392,
-  height: 92,
+  width: 416,
+  height: 84,
   frame: false,
   transparent: true,
   alwaysOnTop: true,
   skipTaskbar: true,
   resizable: false,
-  focusable: false,
+  focusable: process.platform === "linux",
   hasShadow: false,
   show: false,
   acceptFirstMouse: true,
@@ -282,8 +282,21 @@ const NOTIFICATION_WINDOW_CONFIG = {
     sandbox: true,
   },
   visibleOnAllWorkspaces: process.platform !== "win32",
-  type: OVERLAY_WINDOW_TYPES.notification,
+  type: process.platform === "linux" ? "normal" : OVERLAY_WINDOW_TYPES.notification,
 };
+
+function fitMeetingNotificationWindow(contentHeight, workArea) {
+  const width = Math.max(1, Math.min(416, workArea.width));
+  const height = Math.max(1, Math.min(Math.ceil(contentHeight), 512, workArea.height));
+  const marginX = Math.min(16, Math.max(0, workArea.width - width));
+  const marginY = Math.min(16, Math.max(0, workArea.height - height));
+  return {
+    x: workArea.x + workArea.width - width - marginX,
+    y: workArea.y + marginY,
+    width,
+    height,
+  };
+}
 
 class WindowPositionUtil {
   static getMainWindowPosition(display, customSize = null, position = "bottom-right") {
@@ -326,18 +339,7 @@ class WindowPositionUtil {
   }
 
   static getNotificationPosition(display) {
-    const { width, height } = NOTIFICATION_WINDOW_CONFIG;
-    const MARGIN = 16;
-    const workArea = display.workArea || display.bounds;
-    // Same negative-origin trap as getMainWindowPosition: clamp to the display,
-    // not to zero, or a monitor above the primary one puts the prompt nowhere.
-    const bounds = {
-      x: workArea.x + workArea.width - width - MARGIN,
-      y: workArea.y + MARGIN,
-      width,
-      height,
-    };
-    return { ...WindowPositionUtil.clampToWorkArea(bounds, display), width, height };
+    return fitMeetingNotificationWindow(84, display.workArea || display.bounds);
   }
 
   // `level` only applies on macOS; Windows and Linux already use the strongest
@@ -377,6 +379,7 @@ class WindowPositionUtil {
 }
 
 module.exports = {
+  fitMeetingNotificationWindow,
   MAIN_WINDOW_CONFIG,
   CONTROL_PANEL_CONFIG,
   ONBOARDING_WINDOW_SIZES,

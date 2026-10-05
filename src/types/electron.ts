@@ -134,6 +134,7 @@ export type TranscriptionErrorCode =
 export type MeetingPromptVariant = "detected" | "starting" | "underway";
 
 export interface MeetingNotificationData {
+  sessionId?: string;
   detectionId: string;
   source: string;
   key: string;
@@ -141,6 +142,30 @@ export interface MeetingNotificationData {
   variant: MeetingPromptVariant;
   joinUrl: string | null;
 }
+
+export interface MeetingSurfaceState {
+  revision: number;
+  mode: "closed" | "list" | "form";
+  contentHeight: number;
+  regions: { x: number; y: number; width: number; height: number }[];
+  focus: "request" | "release" | "keep";
+}
+
+export type MeetingError =
+  | "STALE_NOTIFICATION"
+  | "ACCOUNT_CHANGED"
+  | "INVALID_REQUEST"
+  | "FOLDERS_UNAVAILABLE"
+  | "FOLDER_UNAVAILABLE"
+  | "SPACE_UNAVAILABLE"
+  | "FOLDER_NAME_REQUIRED"
+  | "FOLDER_NAME_TAKEN"
+  | "CREATE_FAILED"
+  | "LINKED_NOTE_CHANGED"
+  | "NOTE_UNAVAILABLE"
+  | "START_FAILED";
+
+export type MeetingResult<T> = { success: true; value: T } | { success: false; code: MeetingError };
 
 /** Why auto-end concluded the meeting is over. */
 export type MeetingAutoEndReason = "mic-released" | "silence" | "process-exit";
@@ -3307,6 +3332,16 @@ declare global {
       onMeetingNotificationData?: (callback: (data: MeetingNotificationData) => void) => () => void;
       onMeetingAutoEndRequested?: (
         callback: (request: MeetingAutoEndRequest) => void
+      ) => () => void;
+      setMeetingNotificationSurface: (
+        sessionId: string,
+        state: MeetingSurfaceState
+      ) => Promise<MeetingResult<{ width: number; height: number }>>;
+      onMeetingNotificationSurfaceClosed: (
+        callback: (data: { sessionId: string; revision: number }) => void
+      ) => () => void;
+      onMeetingNotificationSurfaceResized: (
+        callback: (data: { sessionId: string; revision: number }) => void
       ) => () => void;
       getMeetingNotificationData?: () => Promise<MeetingNotificationData | null>;
       meetingNotificationReady?: () => Promise<void>;

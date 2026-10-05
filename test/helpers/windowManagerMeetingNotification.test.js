@@ -15,6 +15,9 @@ function createDeferred() {
 
 const createdWindows = [];
 let devServerWaitPromise = Promise.resolve();
+let tokenState = { token: null, generation: 0 };
+let bindingScope = null;
+let workArea = { x: 0, y: 0, width: 1200, height: 900 };
 
 class FakeBrowserWindow extends EventEmitter {
   constructor(options) {
@@ -32,7 +35,30 @@ class FakeBrowserWindow extends EventEmitter {
     createdWindows.push(this);
   }
 
-  setContentProtection() {}
+  setContentProtection(value) {
+    this.protected = value;
+  }
+  getBounds() {
+    return this.bounds || { x: 608, y: 16, width: 416, height: 84 };
+  }
+  setBounds(bounds) {
+    this.bounds = bounds;
+  }
+  setFocusable(value) {
+    (this.focusEvents ||= []).push(value ? "focusable" : "passive");
+  }
+  focus() {
+    (this.focusEvents ||= []).push("focus");
+  }
+  show() {
+    (this.focusEvents ||= []).push("show");
+  }
+  blur() {
+    (this.focusEvents ||= []).push("blur");
+  }
+  setShape(regions) {
+    this.shape = regions;
+  }
 
   setIgnoreMouseEvents(ignore, options) {
     this.ignoreMouseEvents.push({ ignore, options });
@@ -77,10 +103,22 @@ class FakeDragManager {
 
 const originalLoad = Module._load;
 Module._load = function loadWindowManagerWithStubs(request, parent, isMain) {
+  if (request === "./tokenStore") return { getState: () => tokenState };
+  if (request === "./accountScopeBinding")
+    return {
+      read: () => ({}),
+      resolveActiveAccountScope: () => bindingScope,
+    };
   if (request === "electron") {
     return {
       app: { on: () => undefined },
-      screen: { getPrimaryDisplay: () => ({}), on: () => undefined },
+      screen: {
+        getPrimaryDisplay: () => ({ workArea }),
+        getDisplayMatching: () => ({ workArea }),
+        getCursorScreenPoint: () => ({ x: -10000, y: -10000 }),
+        on: () => undefined,
+        removeListener: () => undefined,
+      },
       BrowserWindow: FakeBrowserWindow,
       shell: {},
       dialog: {},
@@ -110,6 +148,7 @@ Module._load = function loadWindowManagerWithStubs(request, parent, isMain) {
   if (request === "./windowConfig") {
     const notificationSize = { width: 392, height: 92 };
     return {
+      ...originalLoad.call(this, request, parent, isMain),
       MAIN_WINDOW_CONFIG: {},
       CONTROL_PANEL_CONFIG: {},
       NOTIFICATION_WINDOW_CONFIG: { ...notificationSize, acceptFirstMouse: true },
@@ -177,6 +216,9 @@ function installFakeTimers() {
 
 test.beforeEach(() => {
   createdWindows.length = 0;
+  tokenState = { token: null, generation: 0 };
+  bindingScope = null;
+  workArea = { x: 0, y: 0, width: 1200, height: 900 };
 });
 
 test("native push-to-talk force-stops after the safety timeout", () => {
@@ -392,8 +434,10 @@ test("window creation uses the notification dimensions and position", async () =
       },
       { acceptFirstMouse: true, width: 392, height: 92, x: 608, y: 16 }
     );
-    // The payload the overlay fetches is stored verbatim.
-    assert.deepEqual(manager._pendingNotificationData, notification);
+    // Each live prompt receives an opaque lifetime ID in addition to its data.
+    const { sessionId, ...pending } = manager._pendingNotificationData;
+    assert.equal(typeof sessionId, "string");
+    assert.deepEqual(pending, notification);
 
     notificationWindow.loadDeferred.resolve();
     await showPromise;
@@ -679,4 +723,137 @@ test("the tray's Ask assistant asks the renderer without showing or focusing the
   capturing.hotkeyManager.isInListeningMode = () => true;
   capturing.sendOpenAssistantPanel();
   assert.deepEqual(capturingEvents, []);
+});
+
+async function showOwned(manager, id = "calendar:editing") {
+  manager.meetingDetectionEngine ||= {
+    databaseManager: { activeAccountId: null },
+    activeDetections: new Map(),
+    handleNotificationTimeout() {},
+  };
+  manager.meetingDetectionEngine.activeDetections.set(id, { source: "calendar", key: id });
+  const showing = manager.showMeetingNotification({ detectionId: id, source: "calendar" });
+  const win = manager.notificationWindow;
+  win.loadDeferred.resolve();
+  await showing;
+  manager.showNotificationWindow(win.webContents);
+  return {
+    win,
+    owner: manager.captureMeetingNotificationOwner(
+      win.webContents,
+      manager._pendingNotificationData.sessionId
+    ),
+  };
+}
+const surface = (revision, mode = "form", focus = "keep") => ({
+  revision,
+  mode,
+  focus,
+  contentHeight: mode === "closed" ? 84 : 260,
+  regions: [
+    { x: 12, y: 12, width: 392, height: 60 },
+    ...(mode === "closed" ? [] : [{ x: 116, y: 84, width: 288, height: 164 }]),
+  ],
+});
+
+test("leaving the card cannot resume an open form countdown", async () => {
+  const timers = installFakeTimers();
+  const manager = createNormalWindowManager();
+  try {
+    const { win, owner } = await showOwned(manager);
+    assert.ok(owner);
+    manager.setNotificationInteractivity(win.webContents, true);
+    manager.setMeetingNotificationSurface(owner, surface(1, "form", "request"));
+    manager.setNotificationInteractivity(win.webContents, false);
+    assert.equal(owner.pointerInside, false);
+    timers.runAll();
+    assert.equal(win.isDestroyed(), false);
+    manager.setMeetingNotificationSurface(owner, surface(2, "closed", "release"));
+    timers.runAll();
+    assert.equal(win.isDestroyed(), true);
+  } finally {
+    manager.dismissMeetingNotification();
+    timers.restore();
+  }
+});
+
+test("only deliberate open activates; measurement stays passive and close blurs before disabling", async () => {
+  const manager = createNormalWindowManager();
+  try {
+    const { win, owner } = await showOwned(manager);
+    assert.equal(win.protected, true);
+    assert.deepEqual(win.focusEvents || [], []);
+    manager.setMeetingNotificationSurface(owner, surface(1, "list"));
+    assert.deepEqual(win.focusEvents || [], []);
+    manager.setMeetingNotificationSurface(owner, surface(2, "form", "request"));
+    assert.deepEqual(win.focusEvents, ["focusable", "show", "focus"]);
+    manager.setMeetingNotificationSurface(owner, surface(3, "closed", "release"));
+    assert.deepEqual(win.focusEvents.slice(-2), ["blur", "passive"]);
+    assert.equal(win.getBounds().height, 84);
+  } finally {
+    manager.dismissMeetingNotification();
+  }
+});
+
+test("reused detection strings and stale layout cannot mutate the current prompt", async () => {
+  const manager = createNormalWindowManager();
+  try {
+    const first = await showOwned(manager);
+    const second = await showOwned(manager);
+    assert.notEqual(first.owner.sessionId, second.owner.sessionId);
+    assert.equal(
+      manager.captureMeetingNotificationOwner(first.win.webContents, second.owner.sessionId),
+      null
+    );
+    assert.equal(
+      manager.setMeetingNotificationSurface(first.owner, surface(20)).code,
+      "STALE_NOTIFICATION"
+    );
+    assert.equal(manager.setMeetingNotificationSurface(second.owner, surface(2)).success, true);
+    assert.equal(manager.setMeetingNotificationSurface(second.owner, surface(1)).success, false);
+    for (const invalid of [NaN, Infinity, -1]) {
+      assert.equal(
+        manager.setMeetingNotificationSurface(second.owner, {
+          ...surface(3),
+          contentHeight: invalid,
+        }).success,
+        false
+      );
+    }
+    assert.equal(second.win.getBounds().height, 260);
+  } finally {
+    manager.dismissMeetingNotification();
+  }
+});
+
+test("small negative-origin displays bound the full surface and its input regions", async () => {
+  const manager = createNormalWindowManager();
+  try {
+    const { win, owner } = await showOwned(manager);
+    workArea = { x: -320, y: -240, width: 320, height: 240 };
+    const result = manager.setMeetingNotificationSurface(owner, surface(1));
+    assert.deepEqual(result.value, { width: 320, height: 240 });
+    assert.deepEqual(win.getBounds(), { x: -320, y: -240, width: 320, height: 240 });
+    assert.ok(
+      owner.regions.every(
+        (r) => r.x >= 0 && r.y >= 0 && r.x + r.width <= 320 && r.y + r.height <= 240
+      )
+    );
+  } finally {
+    manager.dismissMeetingNotification();
+  }
+});
+
+test("credential replacement fences ownership before database account reconciliation", async () => {
+  const manager = createNormalWindowManager();
+  try {
+    const { owner } = await showOwned(manager);
+    tokenState = { token: "new-token", generation: 1 };
+    assert.equal(manager.isMeetingNotificationOwner(owner), false);
+    manager.retireMeetingNotificationScope();
+    assert.equal(manager.notificationWindow, null);
+    assert.deepEqual(manager.meetingRecentDestinations, []);
+  } finally {
+    manager.dismissMeetingNotification();
+  }
 });
