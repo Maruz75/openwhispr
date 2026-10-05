@@ -428,7 +428,8 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   }, []);
 
   useEffect(() => {
-    const cleanup = window.electronAPI?.onShowSettings?.(() => {
+    const cleanup = window.electronAPI?.onShowSettings?.((section) => {
+      setSettingsSection(section);
       setShowSettings(true);
     });
     return () => cleanup?.();
@@ -912,6 +913,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       {showSettings && (
         <Suspense fallback={null}>
           <SettingsModal
+            key={settingsSection ?? "default"}
             open={showSettings}
             onOpenChange={(open) => {
               setShowSettings(open);

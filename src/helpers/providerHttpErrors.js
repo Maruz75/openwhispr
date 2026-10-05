@@ -23,6 +23,10 @@ export const PROVIDER_SETTINGS_TARGETS = Object.freeze(["speechToText", "llms"])
 
 export const isProviderSettingsTarget = (value) => PROVIDER_SETTINGS_TARGETS.includes(value);
 
+// IPC input is untrusted: only a known section string reaches the control panel.
+export const settingsSectionFromIpc = (value) =>
+  typeof value === "string" && isProviderSettingsTarget(value) ? value : undefined;
+
 const SETTINGS_TARGET_BY_SURFACE = { transcription: "speechToText", llm: "llms" };
 
 // Only failures the user fixes in Settings get the deep link.

@@ -2256,10 +2256,10 @@ class WindowManager {
     }
   }
 
-  async openSettings() {
+  async openSettings(section) {
     await this.createControlPanelWindow();
     if (this.controlPanelWindow && !this.controlPanelWindow.isDestroyed()) {
-      this.controlPanelWindow.webContents.send("show-settings");
+      this.controlPanelWindow.webContents.send("show-settings", section);
     }
   }
 

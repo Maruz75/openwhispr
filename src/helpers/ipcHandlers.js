@@ -34,6 +34,7 @@ const {
 const { classifyAndLog } = require("./networkErrors");
 const { resolveSystemDefaultMicrophone } = require("./systemDefaultMicrophone");
 const { ipcErrorFields } = require("./ipcErrorFields");
+const { settingsSectionFromIpc } = require("./providerHttpErrors");
 const {
   registerConnectorIpc,
   createConnectorPolicyResolver,
@@ -1518,6 +1519,13 @@ class IPCHandlers {
 
     ipcMain.handle("show-dictation-panel", () => {
       this.windowManager.showDictationPanel({ reposition: true });
+    });
+
+    ipcMain.handle("open-settings-section", async (_event, section) => {
+      const target = settingsSectionFromIpc(section);
+      if (!target) return { success: false };
+      await this.windowManager.openSettings(target);
+      return { success: true };
     });
 
     ipcMain.handle("capture-dictation-target", async () => {
