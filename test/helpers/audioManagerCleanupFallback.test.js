@@ -50,6 +50,13 @@ test("cleanup failure details ride the raw result instead of notifying before pa
         export const recordCleanupFailure = (failure) => {
           globalThis.__cleanupFallbackImmediateNotifications.push(failure);
         };
+        export const cleanupFailureFromError = (error) => {
+          const failure = { message: error?.message || String(error) };
+          for (const key of ["code", "messageKey", "messageParams", "surface", "settingsTarget", "action", "actionKey", "copyCommand", "technicalDetails"]) {
+            if (error?.[key]) failure[key] = error[key];
+          }
+          return failure;
+        };
       `,
     },
   });

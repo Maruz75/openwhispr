@@ -1,18 +1,41 @@
 import { create } from "zustand";
+import type { TechnicalErrorDetailsData } from "../components/ui/useToast";
 
 export interface CleanupFailure {
   message: string;
+  code?: string;
   messageKey?: string;
-  messageParams?: Record<string, string | number>;
+  messageParams?: Record<string, string | number | boolean>;
+  surface?: "transcription" | "llm";
+  settingsTarget?: string;
   action?: string;
   actionKey?: string;
   copyCommand?: string;
-  technicalDetails?: {
-    status?: number;
-    exceptionType?: string;
-    requestId?: string;
-    underlyingError?: string;
+  technicalDetails?: TechnicalErrorDetailsData;
+}
+
+const CLEANUP_FAILURE_FIELDS = [
+  "code",
+  "messageKey",
+  "messageParams",
+  "surface",
+  "settingsTarget",
+  "action",
+  "actionKey",
+  "copyCommand",
+  "technicalDetails",
+] as const;
+
+/** Keeps everything a cleanup toast needs from a thrown error, nothing else. */
+export function cleanupFailureFromError(error: unknown): CleanupFailure {
+  const source = (error ?? {}) as Partial<CleanupFailure> & { message?: string };
+  const failure: CleanupFailure = {
+    message: source.message || String(error),
   };
+  for (const key of CLEANUP_FAILURE_FIELDS) {
+    if (source[key]) (failure as unknown as Record<string, unknown>)[key] = source[key];
+  }
+  return failure;
 }
 
 interface CleanupFailureState {

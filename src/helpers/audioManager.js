@@ -89,6 +89,8 @@ import {
   resolveStreamingStartFallback,
 } from "./transcriptionFallback";
 import { transcriptionFailureOutcome } from "./transcriptionFailureOutcome";
+import { errorFromIpcResult } from "./ipcErrorFields";
+import { cleanupFailureFromError } from "../stores/cleanupFailureStore";
 import {
   executeTranslationChain,
   hasTextContent,
@@ -153,16 +155,6 @@ const PREVIEW_FLUSH_WATCHDOG_MS = 1000;
 const neverCancelled = () => false;
 const MIN_SPARSE_RECORDING_DURATION_SECONDS = 3;
 const MIN_UNIQUE_WORD_GAIN = 2;
-
-const cleanupFailureFromError = (error) => ({
-  message: error?.message || String(error),
-  ...(error?.messageKey ? { messageKey: error.messageKey } : {}),
-  ...(error?.messageParams ? { messageParams: error.messageParams } : {}),
-  ...(error?.action ? { action: error.action } : {}),
-  ...(error?.actionKey ? { actionKey: error.actionKey } : {}),
-  ...(error?.copyCommand ? { copyCommand: error.copyCommand } : {}),
-  ...(error?.technicalDetails ? { technicalDetails: error.technicalDetails } : {}),
-});
 
 const cloudSignInRequiredError = () => {
   const err = new Error(
@@ -3640,10 +3632,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         });
         const result = await call(proxyPayload);
         if (result?.error) {
-          const err = new Error(result.error);
-          if (result.code) err.code = result.code;
-          if (result.messageKey) err.messageKey = result.messageKey;
-          throw err;
+          throw errorFromIpcResult(result);
         }
         const proxyText = result?.text;
         if (!proxyText?.trim()) {

@@ -121,3 +121,14 @@ test("withRetry makes exactly one attempt for a client-side deadline", async () 
   );
   assert.equal(attempts, 1, "each retry of an expired deadline is another billed request");
 });
+
+test("an exhausted quota does not retry, but a plain rate limit still does", async () => {
+  const { createApiRetryStrategy } = await load();
+  const { shouldRetry } = createApiRetryStrategy();
+
+  assert.equal(
+    shouldRetry(Object.assign(new Error("out of credit"), { status: 429, code: "PROVIDER_QUOTA_EXHAUSTED" })),
+    false
+  );
+  assert.equal(shouldRetry(Object.assign(new Error("slow down"), { status: 429 })), true);
+});

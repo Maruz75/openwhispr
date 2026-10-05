@@ -33,6 +33,7 @@ const {
 } = require("./policyResponseError");
 const { classifyAndLog } = require("./networkErrors");
 const { resolveSystemDefaultMicrophone } = require("./systemDefaultMicrophone");
+const { ipcErrorFields } = require("./ipcErrorFields");
 const {
   registerConnectorIpc,
   createConnectorPolicyResolver,
@@ -44,7 +45,7 @@ const { createNoteAttendeesLookup, searchContacts } = require("./connectors/cont
 const transcriptionProviderBaseUrls = () =>
   require("../models/modelRegistryData.json").transcriptionProviders;
 // ipcMain.handle keeps only the message when a promise rejects, dropping custom
-// props — proxy handlers return {error, code, messageKey} so the renderer can
+// props — proxy handlers return the classified fields so the renderer can
 // rebuild the error.
 const serializeIpcError =
   (fn) =>
@@ -52,7 +53,7 @@ const serializeIpcError =
     try {
       return await fn(...args);
     } catch (error) {
-      return { error: error.message, code: error.code, messageKey: error.messageKey };
+      return ipcErrorFields(error);
     }
   };
 

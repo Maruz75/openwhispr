@@ -53,6 +53,9 @@ export function createApiRetryStrategy() {
       // the same deadline expires again, and the provider bills every attempt.
       if (error?.code === LLM_REQUEST_TIMEOUT_CODE) return false;
 
+      // An empty account stays empty: retrying only delays the message.
+      if (error?.code === "PROVIDER_QUOTA_EXHAUSTED") return false;
+
       // No HTTP status means the request never got an answer (network drop).
       const status = error?.status ?? error?.response?.status;
       if (typeof status !== "number") return true;
