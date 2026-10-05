@@ -4715,7 +4715,7 @@ class IPCHandlers {
         const clientId = this.environmentManager.getCortiClientId();
         const clientSecret = this.environmentManager.getCortiClientSecret();
         if (!clientId || !clientSecret) {
-          throw new Error("Corti credentials not configured");
+          throw providerError("API_KEY_MISSING", { provider: "Corti", surface: "transcription" });
         }
 
         const { transcribeAudio } = require("./cortiTranscription");

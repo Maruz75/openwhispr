@@ -424,6 +424,27 @@ test("retry: missing Corti credentials are a classified error", async () => {
   }
 });
 
+test("proxy-corti-transcription: missing credentials are a classified error", async () => {
+  const fn = handlers.get("proxy-corti-transcription");
+  assert.ok(fn, "proxy-corti-transcription must be registered");
+  const cortiCallsBefore = cortiCalls.length;
+  const originalGetCortiClientId = fakeThis.environmentManager.getCortiClientId;
+  fakeThis.environmentManager.getCortiClientId = () => "";
+  try {
+    const result = await fn({ sender: {} }, { audioBuffer: new ArrayBuffer(4) });
+    assert.equal(result.code, "API_KEY_MISSING");
+    assert.equal(result.messageKey, "hooks.audioRecording.errorDescriptions.providerKeyMissing");
+    assert.deepEqual(result.messageParams, { provider: "Corti" });
+    assert.equal(
+      cortiCalls.length,
+      cortiCallsBefore,
+      "a missing credential must fail before calling Corti"
+    );
+  } finally {
+    fakeThis.environmentManager.getCortiClientId = originalGetCortiClientId;
+  }
+});
+
 test("proxy transcription handlers resolve to structured errors instead of rejecting", async () => {
   fetchResponse = () => ({
     ok: false,
