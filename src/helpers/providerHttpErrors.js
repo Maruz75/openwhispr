@@ -95,6 +95,16 @@ const NETWORK_CODES = new Set([
   "DEPTH_ZERO_SELF_SIGNED_CERT",
 ]);
 
+// Electron's net.fetch rejects with a plain Error whose message is the
+// Chromium net error (no code). ERR_ABORTED is a cancellation, never a failure.
+const ELECTRON_NET_ERROR = /net::ERR_[A-Z_]+/;
+const ELECTRON_NET_TIMEOUTS = new Set(["net::ERR_TIMED_OUT", "net::ERR_CONNECTION_TIMED_OUT"]);
+
+function electronNetError(err) {
+  const match = typeof err.message === "string" ? err.message.match(ELECTRON_NET_ERROR) : null;
+  return match && match[0] !== "net::ERR_ABORTED" ? match[0] : null;
+}
+
 const MAX_DETAIL_CHARS = 500;
 
 const SECRET_PATTERNS = [
@@ -173,6 +183,9 @@ function buildClassification(code, { provider, model, surface, selfHosted, techn
         ? "hooks.audioRecording.errorDescriptions.providerKeyMissing"
         : "providerErrors.keyMissing";
   }
+  // The transcription key is the dictation pill's established copy; LLM
+  // surfaces name the provider instead of "your transcription provider".
+  if (code === C.RATE_LIMITED && surface === "llm") messageKey = "providerErrors.rateLimited";
   if (selfHosted) messageParams.selfHosted = true;
   // "Your {{provider}} account" reads as "Your Your server account" once
   // provider is substituted with the self-hosted label — give self-hosted
@@ -247,6 +260,7 @@ export function providerError(code, ctx) {
 export function asProviderError(err, ctx) {
   if (!err || typeof err !== "object" || err.messageKey || err.name === "AbortError") return err;
   const inner = err.name === "AI_RetryError" && err.lastError ? err.lastError : err;
+  const netError = electronNetError(inner);
   let classified = null;
   if (typeof inner.statusCode === "number") {
     classified = providerHttpError({
@@ -257,6 +271,8 @@ export function asProviderError(err, ctx) {
     });
   } else if (inner.code === "LLM_REQUEST_TIMEOUT" || inner.name === "TimeoutError") {
     classified = providerError(C.TIMEOUT, ctx);
+  } else if (netError) {
+    classified = providerError(ELECTRON_NET_TIMEOUTS.has(netError) ? C.TIMEOUT : C.UNREACHABLE, ctx);
   } else if (
     NETWORK_CODES.has(inner.code) ||
     NETWORK_CODES.has(inner.cause?.code) ||

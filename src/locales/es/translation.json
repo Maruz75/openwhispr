@@ -4764,6 +4764,7 @@
     "accessDenied": "{{provider}} denegó el acceso. Es posible que tu clave no incluya este modelo.",
     "quotaExhausted": "Tu cuenta de {{provider}} se ha quedado sin crédito.",
     "quotaExhaustedSelfHosted": "Tu servidor indica que la cuenta se ha quedado sin crédito.",
+    "rateLimited": "{{provider}} limitó la solicitud. Espera un momento e inténtalo de nuevo.",
     "modelNotFound": "{{provider}} no reconoce el modelo «{{model}}».",
     "modelNotFoundNoModel": "{{provider}} no reconoce el modelo seleccionado.",
     "payloadTooLarge": "Esta grabación es demasiado grande para {{provider}}.",

@@ -213,6 +213,40 @@ test("asProviderError classifies timeouts and network failures", async () => {
   assert.equal(asProviderError(new TypeError("Failed to fetch"), ctx).code, "PROVIDER_UNREACHABLE");
 });
 
+test("rate limits name the provider on the LLM surface and keep the dictation copy on transcription", async () => {
+  const en = require("../../src/locales/en/translation.json");
+  const llm = await classify({ provider: "Anthropic", status: 429, body: "", surface: "llm" });
+  assert.equal(llm.code, "PROVIDER_RATE_LIMITED");
+  assert.equal(llm.messageKey, "providerErrors.rateLimited");
+  assert.deepEqual(llm.messageParams, { provider: "Anthropic" });
+  const transcription = await classify({ status: 429, body: "", surface: "transcription" });
+  assert.equal(transcription.messageKey, "hooks.audioRecording.errorDescriptions.providerRateLimited");
+  const { providerHttpError } = await load();
+  const error = providerHttpError({ provider: "Anthropic", status: 429, body: "", surface: "llm" });
+  assert.equal(error.message, en.providerErrors.rateLimited.replace("{{provider}}", "Anthropic"));
+});
+
+test("asProviderError classifies Electron net::ERR_* rejections and leaves net::ERR_ABORTED alone", async () => {
+  const { asProviderError } = await load();
+  const ctx = { provider: "OpenAI", surface: "transcription" };
+  for (const message of [
+    "net::ERR_INTERNET_DISCONNECTED",
+    "net::ERR_NAME_NOT_RESOLVED",
+    "net::ERR_CONNECTION_REFUSED",
+  ]) {
+    const raw = new Error(message);
+    const classified = asProviderError(raw, ctx);
+    assert.equal(classified.code, "PROVIDER_UNREACHABLE", message);
+    assert.equal(classified.messageKey, "providerErrors.unreachable");
+    assert.equal(classified.cause, raw);
+  }
+  for (const message of ["net::ERR_TIMED_OUT", "net::ERR_CONNECTION_TIMED_OUT"]) {
+    assert.equal(asProviderError(new Error(message), ctx).code, "PROVIDER_TIMEOUT", message);
+  }
+  const aborted = new Error("net::ERR_ABORTED");
+  assert.equal(asProviderError(aborted, ctx), aborted);
+});
+
 test("asProviderError leaves classified, cancelled and unrelated errors untouched", async () => {
   const { asProviderError } = await load();
   const ctx = { provider: "OpenAI", surface: "llm" };

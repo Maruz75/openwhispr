@@ -4764,6 +4764,7 @@
     "accessDenied": "{{provider}} denied access. Your key may not include this model.",
     "quotaExhausted": "Your {{provider}} account is out of credit.",
     "quotaExhaustedSelfHosted": "Your server says the account is out of credit.",
+    "rateLimited": "{{provider}} rate-limited the request. Wait a moment and try again.",
     "modelNotFound": "{{provider}} doesn't recognize the model “{{model}}”.",
     "modelNotFoundNoModel": "{{provider}} doesn't recognize the selected model.",
     "payloadTooLarge": "This recording is too large for {{provider}}.",

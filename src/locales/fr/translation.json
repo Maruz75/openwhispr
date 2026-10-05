@@ -4764,6 +4764,7 @@
     "accessDenied": "{{provider}} a refusé l’accès. Votre clé ne couvre peut-être pas ce modèle.",
     "quotaExhausted": "Votre compte {{provider}} n’a plus de crédit.",
     "quotaExhaustedSelfHosted": "Votre serveur indique que le compte n’a plus de crédit.",
+    "rateLimited": "{{provider}} a limité la requête. Patientez un instant et réessayez.",
     "modelNotFound": "{{provider}} ne reconnaît pas le modèle « {{model}} ».",
     "modelNotFoundNoModel": "{{provider}} ne reconnaît pas le modèle sélectionné.",
     "payloadTooLarge": "Cet enregistrement est trop volumineux pour {{provider}}.",

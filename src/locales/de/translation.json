@@ -4764,6 +4764,7 @@
     "accessDenied": "{{provider}} hat den Zugriff verweigert. Ihr Schlüssel deckt dieses Modell möglicherweise nicht ab.",
     "quotaExhausted": "Ihr {{provider}}-Konto hat kein Guthaben mehr.",
     "quotaExhaustedSelfHosted": "Ihr Server meldet, dass das Konto kein Guthaben mehr hat.",
+    "rateLimited": "{{provider}} hat die Anfrage begrenzt. Warten Sie einen Moment und versuchen Sie es erneut.",
     "modelNotFound": "{{provider}} kennt das Modell „{{model}}“ nicht.",
     "modelNotFoundNoModel": "{{provider}} kennt das ausgewählte Modell nicht.",
     "payloadTooLarge": "Diese Aufnahme ist für {{provider}} zu groß.",

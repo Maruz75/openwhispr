@@ -4764,6 +4764,7 @@
     "accessDenied": "{{provider}} 拒絕存取。你的金鑰可能不包含此模型。",
     "quotaExhausted": "你的 {{provider}} 帳戶額度已用盡。",
     "quotaExhaustedSelfHosted": "你的伺服器回報該帳戶額度已用盡。",
+    "rateLimited": "{{provider}} 限制了請求頻率。請稍候再試。",
     "modelNotFound": "{{provider}} 無法識別模型「{{model}}」。",
     "modelNotFoundNoModel": "{{provider}} 無法識別所選的模型。",
     "payloadTooLarge": "這段錄音對 {{provider}} 來說太大了。",
