@@ -160,11 +160,13 @@ function buildFakeThis() {
 }
 
 let retryHandler;
+let fakeThis;
 test.before(() => {
   delete require.cache[handlersModulePath];
   const IPCHandlers = require(handlersModulePath);
   const Ctor = IPCHandlers.default || IPCHandlers;
-  Ctor.prototype.setupHandlers.call(buildFakeThis());
+  fakeThis = buildFakeThis();
+  Ctor.prototype.setupHandlers.call(fakeThis);
   retryHandler = handlers.get("retry-transcription");
   assert.ok(retryHandler, "retry-transcription must be registered");
 });
@@ -373,6 +375,53 @@ test("retry: mistral goes to Mistral with x-api-key", async () => {
   assert.equal(result.success, true);
   assert.match(fetches[0].url, /api\.mistral\.ai/);
   assert.equal(fetches[0].init.headers["x-api-key"], "mk-mistral");
+});
+
+test("retry: a missing BYOK key on the generic provider branch is a classified error", async () => {
+  fetches.length = 0;
+  const originalGetMistralKey = fakeThis.environmentManager.getMistralKey;
+  fakeThis.environmentManager.getMistralKey = () => "";
+  try {
+    const result = await invoke({
+      cloudTranscriptionProvider: "mistral",
+      cloudTranscriptionMode: "byok",
+      transcriptionMode: "providers",
+    });
+    assert.equal(result.success, false);
+    assert.equal(result.code, "API_KEY_MISSING");
+    assert.equal(result.messageKey, "hooks.audioRecording.errorDescriptions.providerKeyMissing");
+    assert.deepEqual(result.messageParams, { provider: "Mistral" });
+    assert.equal(fetches.length, 0, "a missing key must fail before any request is sent");
+  } finally {
+    fakeThis.environmentManager.getMistralKey = originalGetMistralKey;
+  }
+});
+
+test("retry: missing Corti credentials are a classified error", async () => {
+  fetches.length = 0;
+  const cortiCallsBefore = cortiCalls.length;
+  const originalGetCortiClientId = fakeThis.environmentManager.getCortiClientId;
+  fakeThis.environmentManager.getCortiClientId = () => "";
+  try {
+    const result = await invoke({
+      cloudTranscriptionProvider: "corti",
+      cloudTranscriptionMode: "byok",
+      transcriptionMode: "providers",
+      cortiEnvironment: "eu",
+      cortiTenant: "acme",
+    });
+    assert.equal(result.success, false);
+    assert.equal(result.code, "API_KEY_MISSING");
+    assert.equal(result.messageKey, "hooks.audioRecording.errorDescriptions.providerKeyMissing");
+    assert.deepEqual(result.messageParams, { provider: "Corti" });
+    assert.equal(
+      cortiCalls.length,
+      cortiCallsBefore,
+      "a missing credential must fail before calling Corti"
+    );
+  } finally {
+    fakeThis.environmentManager.getCortiClientId = originalGetCortiClientId;
+  }
 });
 
 test("proxy transcription handlers resolve to structured errors instead of rejecting", async () => {

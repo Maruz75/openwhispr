@@ -6634,7 +6634,7 @@ class IPCHandlers {
           const clientId = this.environmentManager.getCortiClientId();
           const clientSecret = this.environmentManager.getCortiClientSecret();
           if (!clientId || !clientSecret) {
-            throw new Error("Corti credentials not configured. Add them in Settings.");
+            throw providerError("API_KEY_MISSING", { provider: "Corti", surface: "transcription" });
           }
           const { transcribeAudio } = require("./cortiTranscription");
           const { text } = await transcribeAudio({
@@ -6679,7 +6679,10 @@ class IPCHandlers {
                     ? this.environmentManager.getGroqKey()
                     : this.environmentManager.getOpenAIKey();
           if (!apiKey && provider !== "custom") {
-            throw new Error(`${provider} API key not configured`);
+            throw providerError("API_KEY_MISSING", {
+              provider: transcriptionProviderName(provider),
+              surface: "transcription",
+            });
           }
 
           // The renderer re-encodes WebM before uploading to a Custom endpoint
@@ -10252,7 +10255,10 @@ class IPCHandlers {
             const clientId = this.environmentManager.getCortiClientId();
             const clientSecret = this.environmentManager.getCortiClientSecret();
             if (!clientId || !clientSecret) {
-              throw new Error("Corti credentials not configured. Add them in Settings.");
+              throw providerError("API_KEY_MISSING", {
+                provider: "Corti",
+                surface: "transcription",
+              });
             }
             const { transcribeAudio } = require("./cortiTranscription");
             const { text } = await transcribeAudio({
@@ -10290,7 +10296,10 @@ class IPCHandlers {
           }
 
           if (!apiKey && route.provider !== "custom") {
-            throw new Error("No API key configured. Add your key in Settings.");
+            throw providerError("API_KEY_MISSING", {
+              provider: transcriptionProviderName(route.provider),
+              surface: "transcription",
+            });
           }
 
           const audioBuffer = fs.readFileSync(realByok);
