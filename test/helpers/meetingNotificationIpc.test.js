@@ -1,0 +1,269 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const Module = require("node:module");
+
+const handlersModulePath = require.resolve("../../src/helpers/ipcHandlers");
+const originalLoad = Module._load;
+
+// Registers the real handler closures against a fake `this` (the scaffolding
+// from agentDictationPillIpc.test.js) with the bearer state under test control
+// and the binding file in a temporary userData directory, so the scope
+// handlers run against the real accountScopeBinding.
+const handlers = new Map();
+const broadcasts = [];
+const userDataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "account-scope-ipc-"));
+let tokenState = { token: null, generation: 0 };
+
+const electronStub = {
+  app: {
+    getPath: () => userDataDirectory,
+    getName: () => "test",
+    getVersion: () => "0.0.0",
+    isPackaged: false,
+    on: () => {},
+    requestSingleInstanceLock: () => true,
+  },
+  ipcMain: {
+    handle: (channel, fn) => handlers.set(channel, fn),
+    on: () => {},
+    removeHandler: () => {},
+  },
+  net: {
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+      text: async () => "{}",
+    }),
+  },
+  BrowserWindow: class BrowserWindow {
+    static getAllWindows() {
+      return [];
+    }
+    static fromWebContents() {
+      return null;
+    }
+  },
+  shell: {},
+  dialog: {},
+  screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 0, height: 0 } }) },
+  systemPreferences: { getMediaAccessStatus: () => "granted" },
+  session: { fromPartition: () => ({}) },
+  clipboard: {},
+  nativeImage: {},
+  globalShortcut: {},
+  utilityProcess: {},
+  MessageChannelMain: class {},
+};
+
+Module._load = function loadWithMocks(request, parent, isMain) {
+  if (request === "electron") return electronStub;
+  if (parent?.filename === handlersModulePath) {
+    if (request === "./tokenStore") {
+      return {
+        get: () => tokenState.token,
+        getState: () => ({ ...tokenState }),
+        subscribe: () => () => {},
+      };
+    }
+    if (request === "./windowBroadcast") {
+      return { broadcastToWindows: (channel, data) => broadcasts.push([channel, data]) };
+    }
+  }
+  return originalLoad.call(this, request, parent, isMain);
+};
+
+function anything() {
+  return new Proxy(function () {}, {
+    get: (target, property) => {
+      if (property === Symbol.toPrimitive || property === "toString") return () => "";
+      if (property === "then") return undefined;
+      return anything();
+    },
+    apply: () => anything(),
+  });
+}
+
+// Each call with the binding file as it stood then: a connect must be stopped
+// only once the scope it ran under is gone.
+const connectorCalls = [];
+const connectorManager = {
+  accountChanged: () => connectorCalls.push(["accountChanged", readBinding()?.accountId ?? null]),
+  notifyStatusChanged: async () => connectorCalls.push(["notifyStatusChanged"]),
+};
+
+function readBinding() {
+  return require("../../src/helpers/accountScopeBinding").read();
+}
+
+const databaseScopes = [];
+const databaseManager = new Proxy(
+  { setActiveAccountId: (accountId) => databaseScopes.push(accountId) },
+  { get: (value, property) => (property in value ? value[property] : anything()) }
+);
+
+function buildFakeThis() {
+  const target = { sessionId: "test-session", connectorManager, databaseManager };
+  return new Proxy(target, {
+    get: (value, property) => (property in value ? value[property] : anything()),
+  });
+}
+
+let fakeThis;
+let handleAuthTokenChange;
+let IPCHandlersClass;
+
+test.before(() => {
+  delete require.cache[handlersModulePath];
+  const IPCHandlers = require(handlersModulePath);
+  IPCHandlersClass = IPCHandlers;
+  const Ctor = IPCHandlers.default || IPCHandlers;
+  fakeThis = buildFakeThis();
+  Ctor.prototype.setupHandlers.call(fakeThis);
+  handleAuthTokenChange = (state) => Ctor.prototype._handleAuthTokenChange.call(fakeThis, state);
+});
+
+test.after(() => {
+  Module._load = originalLoad;
+  fs.rmSync(userDataDirectory, { recursive: true, force: true });
+});
+
+const getScope = () => handlers.get("get-active-account-scope")();
+const setScope = (accountId, generation) =>
+  handlers.get("set-active-account-scope")({}, accountId, generation);
+
+function setupMeeting(t) {
+  const { createDb } = require("./harness/db");
+  const db = createDb(t);
+  if (!db) return null;
+  const sender = {};
+  const owner = {
+    sessionId: "session-one",
+    scope: { accountId: null, authGeneration: 0, epoch: 0 },
+    detection: {},
+    selectedDestination: null,
+    createRequests: new Map(),
+  };
+  let current = true;
+  const manager = {
+    meetingRecentDestinations: [],
+    captureMeetingNotificationOwner: (s, id) =>
+      current && s === sender && id === owner.sessionId ? owner : null,
+    isMeetingNotificationOwner: (o) => current && o === owner,
+    isMeetingNotificationScope: (scope) => scope === owner.scope,
+    getMeetingNotificationScope: () => owner.scope,
+    updateMeetingNotificationPause() {},
+    sendToControlPanel: (...args) => broadcasts.push(args),
+  };
+  const service = Object.create(IPCHandlersClass.prototype);
+  Object.assign(service, { databaseManager: db, windowManager: manager, _noteFilesEnabled: false });
+  Object.assign(fakeThis, {
+    databaseManager: db,
+    windowManager: manager,
+    getMeetingNotificationDestination: service.getMeetingNotificationDestination.bind(service),
+    selectMeetingNotificationFolder: service.selectMeetingNotificationFolder.bind(service),
+    createMeetingNotificationFolder: service.createMeetingNotificationFolder.bind(service),
+  });
+  return {
+    db,
+    owner,
+    sender,
+    service,
+    manager,
+    retire: () => {
+      current = false;
+    },
+  };
+}
+
+test("only the current notification sender and session can read/select/create", (t) => {
+  const ctx = setupMeeting(t);
+  if (!ctx) return;
+  for (const [sender, id] of [
+    [{}, "session-one"],
+    [ctx.sender, "old-session"],
+  ]) {
+    const result = handlers.get("get-meeting-notification-destination")({ sender }, id);
+    assert.equal(result.code, "STALE_NOTIFICATION");
+  }
+  const result = handlers.get("get-meeting-notification-destination")(
+    { sender: ctx.sender },
+    "session-one"
+  );
+  assert.equal(result.success, true);
+  assert.equal(result.value.recentDestinations.length, 0);
+});
+
+test("selection rejects a moved row without discarding the accepted choice", (t) => {
+  const ctx = setupMeeting(t);
+  if (!ctx) return;
+  const folder = ctx.db.createFolder("Calls").folder;
+  const ref = { folderId: folder.id, spaceId: folder.space_id };
+  assert.equal(ctx.service.selectMeetingNotificationFolder(ctx.owner, ref).success, true);
+  const rejected = ctx.service.selectMeetingNotificationFolder(ctx.owner, { ...ref, spaceId: 999 });
+  assert.equal(rejected.code, "FOLDER_UNAVAILABLE");
+  assert.deepEqual(ctx.owner.selectedDestination, ref);
+  assert.deepEqual(ctx.manager.meetingRecentDestinations, [ref]);
+});
+
+test("create retry returns one committed row without selecting or promoting it", async (t) => {
+  const ctx = setupMeeting(t);
+  if (!ctx) return;
+  const request = { requestId: "one", name: " New folder ", spaceId: ctx.db.getPrivateSpaceId() };
+  const first = ctx.service.createMeetingNotificationFolder(ctx.owner, request);
+  assert.equal(first.success, true);
+  const second = ctx.service.createMeetingNotificationFolder(ctx.owner, request);
+  assert.deepEqual(second.value.createdFolder, first.value.createdFolder);
+  assert.equal(ctx.db.getFolders().filter((f) => f.name === "New folder").length, 1);
+  assert.equal(ctx.owner.selectedDestination, null);
+  assert.deepEqual(ctx.manager.meetingRecentDestinations, []);
+  assert.equal(
+    ctx.service.createMeetingNotificationFolder(ctx.owner, { ...request, name: "Different" }).code,
+    "INVALID_REQUEST"
+  );
+  ctx.db.deleteFolder(first.value.createdFolder.folderId);
+  assert.equal(
+    ctx.service.createMeetingNotificationFolder(ctx.owner, request).code,
+    "FOLDER_UNAVAILABLE"
+  );
+  assert.equal(ctx.db.getFolders().filter((f) => f.name === "New folder").length, 0);
+  await new Promise(setImmediate);
+});
+
+test("folder errors preserve request and destination; context lookup failure is retryable", (t) => {
+  const ctx = setupMeeting(t);
+  if (!ctx) return;
+  const spaceId = ctx.db.getPrivateSpaceId();
+  assert.equal(
+    ctx.service.createMeetingNotificationFolder(ctx.owner, {
+      requestId: "blank",
+      name: " ",
+      spaceId,
+    }).code,
+    "FOLDER_NAME_REQUIRED"
+  );
+  ctx.db.createFolder("Exact");
+  assert.equal(
+    ctx.service.createMeetingNotificationFolder(ctx.owner, {
+      requestId: "dup",
+      name: "Exact",
+      spaceId,
+    }).code,
+    "FOLDER_NAME_TAKEN"
+  );
+  assert.equal(
+    ctx.service.createMeetingNotificationFolder(ctx.owner, { requestId: "bad", name: 42, spaceId })
+      .code,
+    "INVALID_REQUEST"
+  );
+  ctx.db.getSpaces = () => {
+    throw Error("database busy");
+  };
+  assert.equal(
+    ctx.service.getMeetingNotificationDestination(ctx.owner).code,
+    "FOLDERS_UNAVAILABLE"
+  );
+});

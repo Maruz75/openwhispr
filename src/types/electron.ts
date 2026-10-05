@@ -143,6 +143,27 @@ export interface MeetingNotificationData {
   joinUrl: string | null;
 }
 
+export interface MeetingFolderRef {
+  folderId: number;
+  spaceId: number;
+}
+export interface MeetingExistingNote {
+  noteId: number;
+  spaceId: number;
+  folderId: number | null;
+  spaceName: string;
+  folderName: string | null;
+  shared: boolean;
+}
+export interface MeetingDestinationContext {
+  folders: FolderItem[];
+  spaces: SpaceItem[];
+  defaultDestination: MeetingFolderRef | null;
+  selectedDestination: MeetingFolderRef | null;
+  recentDestinations: MeetingFolderRef[];
+  existingNote: MeetingExistingNote | null;
+}
+
 export interface MeetingSurfaceState {
   revision: number;
   mode: "closed" | "list" | "form";
@@ -165,7 +186,9 @@ export type MeetingError =
   | "NOTE_UNAVAILABLE"
   | "START_FAILED";
 
-export type MeetingResult<T> = { success: true; value: T } | { success: false; code: MeetingError };
+export type MeetingResult<T> =
+  | { success: true; value: T }
+  | { success: false; code: MeetingError; context?: MeetingDestinationContext };
 
 /** Why auto-end concluded the meeting is over. */
 export type MeetingAutoEndReason = "mic-released" | "silence" | "process-exit";
@@ -3332,6 +3355,24 @@ declare global {
       onMeetingNotificationData?: (callback: (data: MeetingNotificationData) => void) => () => void;
       onMeetingAutoEndRequested?: (
         callback: (request: MeetingAutoEndRequest) => void
+      ) => () => void;
+      getMeetingNotificationDestination: (
+        sessionId: string
+      ) => Promise<MeetingResult<MeetingDestinationContext>>;
+      selectMeetingNotificationFolder: (
+        sessionId: string,
+        folder: MeetingFolderRef
+      ) => Promise<MeetingResult<MeetingDestinationContext>>;
+      createMeetingNotificationFolder: (
+        sessionId: string,
+        request: { requestId: string; name: string; spaceId: number }
+      ) => Promise<MeetingResult<MeetingDestinationContext & { createdFolder: MeetingFolderRef }>>;
+      onMeetingNotificationFolderCreated: (
+        callback: (hint: {
+          folderId: number;
+          accountId: string | null;
+          authGeneration: number;
+        }) => void
       ) => () => void;
       setMeetingNotificationSurface: (
         sessionId: string,
