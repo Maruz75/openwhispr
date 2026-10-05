@@ -3,6 +3,7 @@ import * as React from "react";
 export type ToastPresentation = "standard" | "dictation-error";
 
 export interface TechnicalErrorDetailsData {
+  provider?: string;
   status?: number;
   exceptionType?: string;
   requestId?: string;

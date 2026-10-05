@@ -4758,5 +4758,30 @@
     },
     "start": "Tomar notas",
     "join": "Unirse y transcribir"
+  },
+  "providerErrors": {
+    "authFailed": "{{provider}} rechazó tu clave de API.",
+    "accessDenied": "{{provider}} denegó el acceso. Es posible que tu clave no incluya este modelo.",
+    "quotaExhausted": "Tu cuenta de {{provider}} se ha quedado sin crédito.",
+    "modelNotFound": "{{provider}} no reconoce el modelo «{{model}}».",
+    "modelNotFoundNoModel": "{{provider}} no reconoce el modelo seleccionado.",
+    "payloadTooLarge": "Esta grabación es demasiado grande para {{provider}}.",
+    "badRequest": "{{provider}} no pudo procesar esta solicitud.",
+    "unavailable": "{{provider}} está teniendo problemas en este momento. Inténtalo de nuevo en breve.",
+    "timeout": "{{provider}} tardó demasiado en responder.",
+    "unreachable": "No se pudo conectar con {{provider}}. Comprueba tu conexión.",
+    "unknown": "{{provider}} devolvió un error inesperado.",
+    "keyMissing": "No hay ninguna clave de API configurada para {{provider}}. Añádela en Ajustes → Modelos de lenguaje.",
+    "selfHostedName": "Tu servidor",
+    "openSettings": "Abrir Ajustes",
+    "copyDetails": "Copiar detalles",
+    "titles": {
+      "transcription": "Error de transcripción",
+      "llm": "Error en la solicitud de IA"
+    },
+    "details": {
+      "provider": "Proveedor",
+      "requestId": "ID de solicitud"
+    }
   }
 }

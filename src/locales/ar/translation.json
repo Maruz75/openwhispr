@@ -4880,5 +4880,30 @@
     },
     "start": "تدوين الملاحظات",
     "join": "انضمام وتفريغ صوتي"
+  },
+  "providerErrors": {
+    "authFailed": "رفض {{provider}} مفتاح API الخاص بك.",
+    "accessDenied": "رفض {{provider}} الوصول. قد لا يشمل مفتاحك هذا النموذج.",
+    "quotaExhausted": "نفذ الرصيد في حساب {{provider}} الخاص بك.",
+    "modelNotFound": "لا يتعرّف {{provider}} على النموذج “{{model}}”.",
+    "modelNotFoundNoModel": "لا يتعرّف {{provider}} على النموذج المحدد.",
+    "payloadTooLarge": "هذا التسجيل أكبر من أن يقبله {{provider}}.",
+    "badRequest": "تعذّر على {{provider}} معالجة هذا الطلب.",
+    "unavailable": "يواجه {{provider}} مشكلات الآن. حاول مرة أخرى بعد قليل.",
+    "timeout": "استغرق {{provider}} وقتًا طويلاً للاستجابة.",
+    "unreachable": "تعذّر الوصول إلى {{provider}}. تحقق من اتصالك.",
+    "unknown": "أعاد {{provider}} خطأ غير متوقع.",
+    "keyMissing": "لا يوجد مفتاح API مضبوط لـ {{provider}}. أضفه في الإعدادات ← النماذج اللغوية.",
+    "selfHostedName": "خادمك",
+    "openSettings": "فتح الإعدادات",
+    "copyDetails": "نسخ التفاصيل",
+    "titles": {
+      "transcription": "فشل التفريغ الصوتي",
+      "llm": "فشل طلب الذكاء الاصطناعي"
+    },
+    "details": {
+      "provider": "المزوّد",
+      "requestId": "معرّف الطلب"
+    }
   }
 }

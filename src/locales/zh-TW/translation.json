@@ -4758,5 +4758,30 @@
     },
     "start": "開始記錄",
     "join": "加入並轉錄"
+  },
+  "providerErrors": {
+    "authFailed": "{{provider}} 拒絕了你的 API 金鑰。",
+    "accessDenied": "{{provider}} 拒絕存取。你的金鑰可能不包含此模型。",
+    "quotaExhausted": "你的 {{provider}} 帳戶額度已用盡。",
+    "modelNotFound": "{{provider}} 無法識別模型「{{model}}」。",
+    "modelNotFoundNoModel": "{{provider}} 無法識別所選的模型。",
+    "payloadTooLarge": "這段錄音對 {{provider}} 來說太大了。",
+    "badRequest": "{{provider}} 無法處理此請求。",
+    "unavailable": "{{provider}} 目前發生問題。請稍後再試。",
+    "timeout": "{{provider}} 回應逾時。",
+    "unreachable": "無法連線到 {{provider}}。請檢查你的網路連線。",
+    "unknown": "{{provider}} 回傳了意外的錯誤。",
+    "keyMissing": "尚未為 {{provider}} 設定 API 金鑰。請在「設定 → 語言模型」中新增。",
+    "selfHostedName": "你的伺服器",
+    "openSettings": "開啟設定",
+    "copyDetails": "複製詳細資訊",
+    "titles": {
+      "transcription": "轉錄失敗",
+      "llm": "AI 請求失敗"
+    },
+    "details": {
+      "provider": "服務商",
+      "requestId": "請求 ID"
+    }
   }
 }

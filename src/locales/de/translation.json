@@ -4758,5 +4758,30 @@
     },
     "start": "Notizen aufnehmen",
     "join": "Beitreten & transkribieren"
+  },
+  "providerErrors": {
+    "authFailed": "{{provider}} hat Ihren API-Schlüssel abgelehnt.",
+    "accessDenied": "{{provider}} hat den Zugriff verweigert. Ihr Schlüssel deckt dieses Modell möglicherweise nicht ab.",
+    "quotaExhausted": "Ihr {{provider}}-Konto hat kein Guthaben mehr.",
+    "modelNotFound": "{{provider}} kennt das Modell „{{model}}“ nicht.",
+    "modelNotFoundNoModel": "{{provider}} kennt das ausgewählte Modell nicht.",
+    "payloadTooLarge": "Diese Aufnahme ist für {{provider}} zu groß.",
+    "badRequest": "{{provider}} konnte diese Anfrage nicht verarbeiten.",
+    "unavailable": "{{provider}} hat derzeit Probleme. Versuchen Sie es in Kürze erneut.",
+    "timeout": "{{provider}} hat zu lange zum Antworten gebraucht.",
+    "unreachable": "{{provider}} konnte nicht erreicht werden. Überprüfen Sie Ihre Verbindung.",
+    "unknown": "{{provider}} hat einen unerwarteten Fehler zurückgegeben.",
+    "keyMissing": "Für {{provider}} ist kein API-Schlüssel hinterlegt. Fügen Sie ihn unter Einstellungen → Sprachmodelle hinzu.",
+    "selfHostedName": "Ihr Server",
+    "openSettings": "Einstellungen öffnen",
+    "copyDetails": "Details kopieren",
+    "titles": {
+      "transcription": "Transkription fehlgeschlagen",
+      "llm": "KI-Anfrage fehlgeschlagen"
+    },
+    "details": {
+      "provider": "Anbieter",
+      "requestId": "Anfrage-ID"
+    }
   }
 }

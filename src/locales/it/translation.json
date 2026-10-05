@@ -4758,5 +4758,30 @@
     },
     "start": "Prendi appunti",
     "join": "Partecipa e trascrivi"
+  },
+  "providerErrors": {
+    "authFailed": "{{provider}} ha rifiutato la tua chiave API.",
+    "accessDenied": "{{provider}} ha negato l’accesso. La tua chiave potrebbe non includere questo modello.",
+    "quotaExhausted": "Il tuo account {{provider}} ha esaurito il credito.",
+    "modelNotFound": "{{provider}} non riconosce il modello “{{model}}”.",
+    "modelNotFoundNoModel": "{{provider}} non riconosce il modello selezionato.",
+    "payloadTooLarge": "Questa registrazione è troppo grande per {{provider}}.",
+    "badRequest": "{{provider}} non è riuscito a elaborare questa richiesta.",
+    "unavailable": "{{provider}} sta avendo problemi in questo momento. Riprova a breve.",
+    "timeout": "{{provider}} ha impiegato troppo tempo a rispondere.",
+    "unreachable": "Impossibile contattare {{provider}}. Controlla la tua connessione.",
+    "unknown": "{{provider}} ha restituito un errore imprevisto.",
+    "keyMissing": "Nessuna chiave API impostata per {{provider}}. Aggiungila in Impostazioni → Modelli linguistici.",
+    "selfHostedName": "Il tuo server",
+    "openSettings": "Apri Impostazioni",
+    "copyDetails": "Copia dettagli",
+    "titles": {
+      "transcription": "Trascrizione non riuscita",
+      "llm": "Richiesta IA non riuscita"
+    },
+    "details": {
+      "provider": "Provider",
+      "requestId": "ID richiesta"
+    }
   }
 }

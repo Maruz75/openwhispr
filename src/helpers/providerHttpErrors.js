@@ -55,7 +55,7 @@ const ENGLISH = {
   [C.ACCESS_DENIED]: "{{provider}} denied access. Your key may not include this model.",
   [C.QUOTA_EXHAUSTED]: "Your {{provider}} account is out of credit.",
   [C.RATE_LIMITED]: "{{provider}} rate-limited the request. Wait a moment and try again.",
-  [C.MODEL_NOT_FOUND]: '{{provider}} doesn\'t recognize the model "{{model}}".',
+  [C.MODEL_NOT_FOUND]: "{{provider}} doesn't recognize the model “{{model}}”.",
   modelNotFoundNoModel: "{{provider}} doesn't recognize the selected model.",
   [C.PAYLOAD_TOO_LARGE]: "This recording is too large for {{provider}}.",
   [C.BAD_REQUEST]: "{{provider}} couldn't process this request.",
