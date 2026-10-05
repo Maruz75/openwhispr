@@ -336,6 +336,13 @@ class ReasoningService extends BaseReasoningService {
     // Minted before the retry loop so every attempt of this call is one conversation.
     const openCodeHeaders = openCodeSessionHeaders(endpoint);
 
+    const errorContext = {
+      provider: providerName === "LAN" ? "self-hosted" : providerName,
+      selfHosted: providerName === "LAN",
+      model,
+      surface: "llm",
+    };
+
     const requestGeneration = this.requestCancellationGeneration;
     const response = await withRetry(async () => {
       if (requestGeneration !== this.requestCancellationGeneration) {
@@ -393,13 +400,10 @@ class ReasoningService extends BaseReasoningService {
             fullResponse: errorText.substring(0, 500),
           });
           throw providerHttpError({
-            provider: providerName === "LAN" ? "self-hosted" : providerName,
-            selfHosted: providerName === "LAN",
-            model,
+            ...errorContext,
             status: res.status,
             body: errorText,
             headers: res.headers,
-            surface: "llm",
           });
         }
 
@@ -421,12 +425,18 @@ class ReasoningService extends BaseReasoningService {
           }
           throw llmRequestTimeoutError(timeoutSeconds);
         }
-        throw error;
+        // A network failure (stopped LAN server, DNS) has no status, so the
+        // classified error still retries.
+        throw asProviderError(error, errorContext);
       } finally {
         clearTimeout(timeoutId);
         this.activeRequestControllers.delete(controller);
       }
-    }, createApiRetryStrategy());
+    }, createApiRetryStrategy()).catch((error) => {
+      // The deadline is classified only once it has left withRetry, so it is
+      // still attempted exactly once.
+      throw asProviderError(error, errorContext);
+    });
 
     if (!response.choices || !response.choices[0]) {
       logger.logReasoning(`${providerName.toUpperCase()}_RESPONSE_ERROR`, {

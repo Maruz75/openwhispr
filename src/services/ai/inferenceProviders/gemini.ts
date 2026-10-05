@@ -160,7 +160,11 @@ export const geminiProvider: InferenceProvider = {
       } finally {
         clearTimeout(timeoutId);
       }
-    }, createApiRetryStrategy());
+    }, createApiRetryStrategy()).catch((error) => {
+      // The deadline is classified only once it has left withRetry, so it is
+      // still attempted exactly once.
+      throw asProviderError(error, { provider: "Gemini", model, surface: "llm" });
+    });
 
     const candidate = response.candidates?.[0];
     // Outside withRetry: don't repeat cutoffs/blocks; cleanup falls back to the original.

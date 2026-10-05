@@ -377,7 +377,11 @@ export const openaiProvider: InferenceProvider = {
       const finalError = lastRetryableError || lastError;
       if (!finalError) throw new Error("No OpenAI endpoint responded");
       throw classifyFinalError(finalError);
-    }, retryStrategy);
+    }, retryStrategy).catch((error) => {
+      // The deadline is classified only once it has left withRetry, so it is
+      // still attempted exactly once.
+      throw classifyFinalError(error as Error);
+    });
 
     const isResponsesApi = Array.isArray(response?.output);
     const isChatCompletions = Array.isArray(response?.choices);
