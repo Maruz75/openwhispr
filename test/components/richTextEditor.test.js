@@ -815,6 +815,23 @@ test("the formatting toolbar shows on selected text and empty lines only", async
   assert.deepEqual(notes.errors, []);
 });
 
+test("the empty-line toolbar sits above the caret, not beside it", async (t) => {
+  const notes = await mountNotes(t, "Intro text");
+  // happy-dom has no layout: give the page a size and the caret a spot on it.
+  const page = happyWindow.document.documentElement;
+  for (const [key, value] of [["clientWidth", 1024], ["clientHeight", 768]]) {
+    Object.defineProperty(page, key, { value, configurable: true });
+  }
+  t.after(() => ["clientWidth", "clientHeight"].forEach((key) => delete page[key]));
+  const caret = { left: 120, right: 120, top: 300, bottom: 320 };
+  notes.editor().view.coordsAtPos = () => caret;
+  await notes.act(() => addEmptyLastLine(notes.editor()));
+  const menu = happyWindow.document.querySelector(".rich-text-editor-line-menu");
+  assert.equal(parseFloat(menu.style.left), caret.left, "lined up with the caret");
+  assert.ok(parseFloat(menu.style.top) < caret.top, `above the line (top ${menu.style.top})`);
+  assert.deepEqual(notes.errors, []);
+});
+
 test("the formatting toolbar stays away from code blocks, list items and nodes", async (t) => {
   const notes = await mountNotes(t, "```js\nconst a = 1;\n```\n\n- item\n\n---\n\nAfter");
   const editor = () => notes.editor();
