@@ -10274,6 +10274,10 @@ class IPCHandlers {
             );
             const data = await postMultipart(new URL(route.endpoint), body, boundary);
             if (data.statusCode !== 200) {
+              debugLogger.warn("Self-hosted file transcription failed", {
+                status: data.statusCode,
+                body: redactProviderBody(data.data),
+              });
               throw providerHttpError({
                 provider: "self-hosted",
                 selfHosted: true,
@@ -10412,6 +10416,11 @@ class IPCHandlers {
           const data = await postMultipart(url, body, boundary, headers);
 
           if (data.statusCode !== 200) {
+            debugLogger.warn("BYOK file transcription failed", {
+              provider: route.provider,
+              status: data.statusCode,
+              body: redactProviderBody(data.data),
+            });
             throw providerHttpError({
               provider: transcriptionProviderName(route.provider),
               selfHosted: route.provider === "custom",

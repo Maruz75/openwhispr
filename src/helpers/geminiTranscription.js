@@ -1,6 +1,6 @@
 const { net } = require("electron");
 const debugLogger = require("./debugLogger");
-const { providerHttpError, providerError } = require("./providerHttpErrors");
+const { providerHttpError, providerError, redactProviderBody } = require("./providerHttpErrors");
 
 // gemini-3.5-transcribe is only served by the Interactions API; there is no
 // generateContent or OpenAI-compatible endpoint for it.
@@ -74,6 +74,10 @@ async function transcribeWithGemini(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
+    debugLogger.warn("Gemini transcription failed", {
+      status: response.status,
+      body: redactProviderBody(errorText),
+    });
     // Google rejects a bad key with 400 + API_KEY_INVALID; the classifier reads that signal.
     throw providerHttpError({
       provider: "Gemini",

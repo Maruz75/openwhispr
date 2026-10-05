@@ -179,6 +179,25 @@ test("any non-completed status rejects instead of returning empty text", async (
   );
 });
 
+test("an HTTP failure logs its status and a redacted body", async (t) => {
+  const debugLogger = require("../../src/helpers/debugLogger");
+  const warnings = [];
+  t.mock.method(debugLogger, "warn", (message, meta) => warnings.push({ message, meta }));
+  const fetchImpl = async () => ({
+    ok: false,
+    status: 400,
+    text: async () => '{"error":{"message":"API key not valid: AIzaSyLeakedKey123"}}',
+  });
+
+  await assert.rejects(transcribeWithGemini({ audioBuffer: AUDIO, apiKey: "k" }, fetchImpl));
+
+  const failure = warnings.find(({ message }) => message === "Gemini transcription failed");
+  assert.ok(failure, "the failure must be logged");
+  assert.equal(failure.meta.status, 400);
+  assert.match(failure.meta.body, /API key not valid/);
+  assert.equal(failure.meta.body.includes("AIzaSyLeakedKey123"), false);
+});
+
 test("canonical mime types map onto Gemini's documented ones", async () => {
   const { fetchImpl, calls } = makeFetch({ status: "completed", output_text: "ok" });
 

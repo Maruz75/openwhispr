@@ -4,6 +4,7 @@ const Module = require("node:module");
 
 const transcriptionModulePath = require.resolve("../../src/helpers/tinfoilTranscription.js");
 const originalLoad = Module._load;
+const warnings = [];
 
 function loadTranscription(fetchImpl) {
   delete require.cache[transcriptionModulePath];
@@ -13,7 +14,12 @@ function loadTranscription(fetchImpl) {
       return { tinfoilSecureFetch: fetchImpl };
     }
     if (request === "./debugLogger") {
-      return { debug() {} };
+      return {
+        debug() {},
+        warn(message, meta) {
+          warnings.push({ message, meta });
+        },
+      };
     }
     return originalLoad.call(this, request, parent, isMain);
   };
@@ -148,4 +154,21 @@ test("forwards the dictionary prompt, and omits it when blank", async () => {
 
   await transcribeWithTinfoil({ ...AUDIO, prompt: "   " });
   assert.equal(form.get("prompt"), null);
+});
+
+test("an HTTP failure logs its status and a redacted body", async () => {
+  warnings.length = 0;
+  const { transcribeWithTinfoil } = loadTranscription(async () => ({
+    ok: false,
+    status: 401,
+    text: async () => '{"error":"Invalid API key: sk-leakedkey1234"}',
+  }));
+
+  await assert.rejects(() => transcribeWithTinfoil(AUDIO));
+
+  const failure = warnings.find(({ message }) => message === "Tinfoil transcription failed");
+  assert.ok(failure, "the failure must be logged");
+  assert.equal(failure.meta.status, 401);
+  assert.match(failure.meta.body, /Invalid API key/);
+  assert.equal(failure.meta.body.includes("sk-leakedkey1234"), false);
 });

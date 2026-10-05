@@ -9,7 +9,11 @@ import { extractGeminiText } from "../../../helpers/geminiResponse.js";
 import { wrapCleanupTranscript } from "../../../config/prompts";
 import { emptyOutputError, truncatedOutputError } from "../chatRequestBody";
 import logger from "../../../utils/logger";
-import { asProviderError, providerHttpError } from "../../../helpers/providerHttpErrors.js";
+import {
+  asProviderError,
+  providerHttpError,
+  redactProviderBody,
+} from "../../../helpers/providerHttpErrors.js";
 
 interface GeminiResponse {
   candidates?: Array<{
@@ -127,8 +131,8 @@ export const geminiProvider: InferenceProvider = {
           logger.logReasoning("GEMINI_API_ERROR_DETAIL", {
             status: res.status,
             statusText: res.statusText,
-            error: errorData,
-            fullResponse: errorText.substring(0, 500),
+            error: redactProviderBody(errorData),
+            fullResponse: redactProviderBody(errorText),
           });
 
           throw providerHttpError({

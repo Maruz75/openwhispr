@@ -386,18 +386,20 @@ class ReasoningService extends BaseReasoningService {
           // errorData.error is often a string, but some providers (and most
           // self-hosted servers) nest a code/type object with no .message —
           // stringifying that object directly prints "[object Object]".
-          const loggedErrorMessage =
+          // Providers echo the rejected key back, so every logged field is redacted.
+          const loggedErrorMessage = redactProviderBody(
             typeof errorData?.error?.message === "string"
               ? errorData.error.message
               : typeof errorData?.error === "string"
                 ? errorData.error
-                : redactProviderBody(errorData);
+                : errorData
+          );
           logger.logReasoning(`${providerName.toUpperCase()}_API_ERROR_DETAIL`, {
             status: res.status,
             statusText: res.statusText,
-            error: errorData,
+            error: redactProviderBody(errorData),
             errorMessage: loggedErrorMessage,
-            fullResponse: errorText.substring(0, 500),
+            fullResponse: redactProviderBody(errorText),
           });
           throw providerHttpError({
             ...errorContext,
@@ -719,7 +721,7 @@ class ReasoningService extends BaseReasoningService {
       const errorText = await response.text();
       logger.logReasoning("AGENT_STREAM_ERROR", {
         status: response.status,
-        body: errorText.slice(0, 500),
+        body: redactProviderBody(errorText),
       });
       if (route.kind === "self-hosted") {
         throw providerHttpError({
@@ -1035,6 +1037,23 @@ class ReasoningService extends BaseReasoningService {
         // alongside LAN (config.lanUrl) — both are the user's own server.
         // OpenRouter is a cloud provider and keeps its own display name.
         const isSelfHosted = mode === "self-hosted" || provider === "custom";
+        const sdkError = error as {
+          name?: string;
+          lastError?: { statusCode?: number; responseBody?: string };
+          statusCode?: number;
+          responseBody?: string;
+        };
+        const failure =
+          sdkError.name === "AI_RetryError" && sdkError.lastError ? sdkError.lastError : sdkError;
+        logger.warn(
+          "BYOK chat stream failed",
+          {
+            provider,
+            status: failure.statusCode,
+            body: redactProviderBody(failure.responseBody),
+          },
+          "reasoning"
+        );
         throw asProviderError(error, {
           provider: isSelfHosted ? "self-hosted" : getProviderDisplayName(provider),
           selfHosted: isSelfHosted,

@@ -1,7 +1,7 @@
 const debugLogger = require("./debugLogger");
 const modelRegistryData = require("../models/modelRegistryData.json");
 const { tinfoilSecureFetch } = require("./tinfoilSecureClient");
-const { providerHttpError, providerError } = require("./providerHttpErrors");
+const { providerHttpError, providerError, redactProviderBody } = require("./providerHttpErrors");
 
 const TINFOIL_TRANSCRIPTION_PATH = "/v1/audio/transcriptions";
 
@@ -51,6 +51,10 @@ async function transcribeWithTinfoil({
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
+    debugLogger.warn("Tinfoil transcription failed", {
+      status: response.status,
+      body: redactProviderBody(errorText),
+    });
     throw providerHttpError({
       provider: "Tinfoil",
       model,

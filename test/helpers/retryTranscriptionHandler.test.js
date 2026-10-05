@@ -745,3 +745,37 @@ test("upload: a net::ERR_* failure from a BYOK provider is classified as unreach
   assert.equal(result.surface, "transcription");
   assert.equal(result.error, "Couldn't reach OpenAI. Check your connection.");
 });
+
+test("upload: an HTTP failure logs its status and a redacted body", async (t) => {
+  const debugLogger = require("../../src/helpers/debugLogger");
+  const warnings = [];
+  t.mock.method(debugLogger, "warn", (message, meta) => warnings.push({ message, meta }));
+  const originalFetchResponse = fetchResponse;
+  t.after(() => {
+    fetchResponse = originalFetchResponse;
+  });
+  const body = '{"error":{"message":"Incorrect API key provided: sk-proj-leakedKey12345"}}';
+  fetchResponse = () => ({
+    ok: false,
+    status: 401,
+    headers: new Headers(),
+    text: async () => body,
+    json: async () => JSON.parse(body),
+  });
+
+  const result = await invokeUpload({
+    apiKey: "sk-openai",
+    baseUrl: "https://api.openai.com/v1",
+    model: "gpt-4o-mini-transcribe",
+    provider: "openai",
+    language: "",
+    transcriptionMode: "providers",
+  });
+
+  assert.equal(result.code, "PROVIDER_AUTH_FAILED");
+  const failure = warnings.find(({ message }) => message === "BYOK file transcription failed");
+  assert.ok(failure, "the failure must be logged");
+  assert.equal(failure.meta.status, 401);
+  assert.match(failure.meta.body, /Incorrect API key provided/);
+  assert.equal(failure.meta.body.includes("sk-proj-leakedKey12345"), false);
+});
