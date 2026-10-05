@@ -786,9 +786,14 @@ test("only deliberate open activates; measurement stays passive and close blurs 
     manager.setMeetingNotificationSurface(owner, surface(1, "list"));
     assert.deepEqual(win.focusEvents || [], []);
     manager.setMeetingNotificationSurface(owner, surface(2, "form", "request"));
-    assert.deepEqual(win.focusEvents, ["focusable", "show", "focus"]);
+    // Linux stays focusable from construction; setFocusable is only supported
+    // by the macOS/Windows path. Both paths must activate only on request.
+    const activation =
+      process.platform === "linux" ? ["show", "focus"] : ["focusable", "show", "focus"];
+    assert.deepEqual(win.focusEvents, activation);
     manager.setMeetingNotificationSurface(owner, surface(3, "closed", "release"));
-    assert.deepEqual(win.focusEvents.slice(-2), ["blur", "passive"]);
+    const release = process.platform === "linux" ? ["blur"] : ["blur", "passive"];
+    assert.deepEqual(win.focusEvents, [...activation, ...release]);
     assert.equal(win.getBounds().height, 84);
   } finally {
     manager.dismissMeetingNotification();
