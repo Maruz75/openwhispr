@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Check, Copy, Plus, X } from "../icons";
 import { BrandMarkIcon } from "./BrandMarkIcon";
 import { MarkdownRenderer } from "../ui/MarkdownRenderer";
+import { TechnicalErrorDetails } from "../ui/TechnicalErrorDetails";
+import { describeProviderError, openProviderSettings } from "../../utils/describeProviderError";
 import { Button } from "../ui/button";
 import { useChatPersistence } from "../chat/useChatPersistence";
 import { useChatStreaming } from "../chat/useChatStreaming";
@@ -222,20 +224,26 @@ export function AssistantPanel({
         consumedCommandIdRef.current = null;
       })
       .catch((error: unknown) => {
-        const errorMessage =
-          error instanceof Error && error.message
-            ? error.message
-            : error == null
-              ? t("common.unknownError")
-              : String(error);
+        const failure = describeProviderError(
+          error instanceof Error || typeof error === "string" ? error : String(error ?? ""),
+          t
+        );
         onCommandDiscarded(commandId);
         setMessages((prev) => [
           ...prev,
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: `${t("agentMode.chat.errorPrefix")}: ${errorMessage}`,
+            content: `${t("agentMode.chat.errorPrefix")}: ${failure.description || t("common.unknownError")}`,
             isStreaming: false,
+            ...(failure.technicalDetails || failure.settingsTarget
+              ? {
+                  error: {
+                    technicalDetails: failure.technicalDetails,
+                    settingsTarget: failure.settingsTarget,
+                  },
+                }
+              : {}),
           },
         ]);
       })
@@ -521,6 +529,18 @@ export function AssistantPanel({
                     className="ms-0.5 inline-block h-4 w-0.5 align-middle bg-foreground/70"
                     style={{ animation: "agent-cursor-blink 1s ease-in-out infinite" }}
                   />
+                )}
+                {latestAssistantMessage?.error?.settingsTarget && (
+                  <button
+                    type="button"
+                    onClick={() => openProviderSettings(latestAssistantMessage.error!.settingsTarget!)}
+                    className="mt-2 text-[13px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm"
+                  >
+                    {t("providerErrors.openSettings")}
+                  </button>
+                )}
+                {latestAssistantMessage?.error?.technicalDetails && (
+                  <TechnicalErrorDetails details={latestAssistantMessage.error.technicalDetails} />
                 )}
               </div>
             ) : null}
