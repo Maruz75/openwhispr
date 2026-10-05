@@ -4885,6 +4885,7 @@
     "authFailed": "رفض {{provider}} مفتاح API الخاص بك.",
     "accessDenied": "رفض {{provider}} الوصول. قد لا يشمل مفتاحك هذا النموذج.",
     "quotaExhausted": "نفذ الرصيد في حساب {{provider}} الخاص بك.",
+    "quotaExhaustedSelfHosted": "يفيد خادمك بأن الحساب قد نفذ رصيده.",
     "modelNotFound": "لا يتعرّف {{provider}} على النموذج “{{model}}”.",
     "modelNotFoundNoModel": "لا يتعرّف {{provider}} على النموذج المحدد.",
     "payloadTooLarge": "هذا التسجيل أكبر من أن يقبله {{provider}}.",

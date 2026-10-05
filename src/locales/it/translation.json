@@ -4763,6 +4763,7 @@
     "authFailed": "{{provider}} ha rifiutato la tua chiave API.",
     "accessDenied": "{{provider}} ha negato l’accesso. La tua chiave potrebbe non includere questo modello.",
     "quotaExhausted": "Il tuo account {{provider}} ha esaurito il credito.",
+    "quotaExhaustedSelfHosted": "Il tuo server segnala che l'account ha esaurito il credito.",
     "modelNotFound": "{{provider}} non riconosce il modello “{{model}}”.",
     "modelNotFoundNoModel": "{{provider}} non riconosce il modello selezionato.",
     "payloadTooLarge": "Questa registrazione è troppo grande per {{provider}}.",

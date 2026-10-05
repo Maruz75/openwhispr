@@ -38,6 +38,7 @@ const {
   settingsSectionFromIpc,
   providerHttpError,
   providerError,
+  asProviderError,
   redactProviderBody,
 } = require("./providerHttpErrors");
 const { anthropicFailure } = require("./anthropicBridgeErrors");
@@ -5460,7 +5461,17 @@ class IPCHandlers {
           return { success: true, text: outputText };
         } catch (error) {
           debugLogger.error("Anthropic reasoning error:", error);
-          return { success: false, ...ipcErrorFields(error) };
+          // Already-classified errors (the API_KEY_MISSING throw above, the
+          // truncated/empty-reply messageKey throws below) pass through
+          // unchanged; a network failure (proxyFetch rejecting before any
+          // response, e.g. DNS/TLS) gets classified here. anthropicFailure's
+          // !response.ok branch returns directly and never reaches this catch.
+          return {
+            success: false,
+            ...ipcErrorFields(
+              asProviderError(error, { provider: "Anthropic", model: modelId, surface: "llm" })
+            ),
+          };
         }
       }
     );

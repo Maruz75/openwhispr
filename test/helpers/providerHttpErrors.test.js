@@ -65,6 +65,21 @@ test("402 and billing-flavoured 400/429 are quota exhaustion", async () => {
   assert.equal(anthropic.code, "PROVIDER_QUOTA_EXHAUSTED");
 });
 
+test("self-hosted quota exhaustion gets its own sentence instead of \"Your Your server account\"", async () => {
+  const { providerHttpError } = await load();
+  const err = providerHttpError({
+    provider: "self-hosted",
+    selfHosted: true,
+    status: 402,
+    body: "",
+    surface: "llm",
+  });
+  assert.equal(err.code, "PROVIDER_QUOTA_EXHAUSTED");
+  assert.equal(err.messageKey, "providerErrors.quotaExhaustedSelfHosted");
+  assert.equal(err.message, "Your server says the account is out of credit.");
+  assert.equal(err.message.includes("Your Your server"), false);
+});
+
 test("a Gemini per-minute quota 429 stays a rate limit", async () => {
   const c = await classify({
     provider: "Gemini",

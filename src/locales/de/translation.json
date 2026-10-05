@@ -4763,6 +4763,7 @@
     "authFailed": "{{provider}} hat Ihren API-Schlüssel abgelehnt.",
     "accessDenied": "{{provider}} hat den Zugriff verweigert. Ihr Schlüssel deckt dieses Modell möglicherweise nicht ab.",
     "quotaExhausted": "Ihr {{provider}}-Konto hat kein Guthaben mehr.",
+    "quotaExhaustedSelfHosted": "Ihr Server meldet, dass das Konto kein Guthaben mehr hat.",
     "modelNotFound": "{{provider}} kennt das Modell „{{model}}“ nicht.",
     "modelNotFoundNoModel": "{{provider}} kennt das ausgewählte Modell nicht.",
     "payloadTooLarge": "Diese Aufnahme ist für {{provider}} zu groß.",

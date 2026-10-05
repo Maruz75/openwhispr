@@ -4763,6 +4763,7 @@
     "authFailed": "{{provider}} 拒绝了你的 API 密钥。",
     "accessDenied": "{{provider}} 拒绝了访问。你的密钥可能不包含此模型。",
     "quotaExhausted": "你的 {{provider}} 账户额度已用尽。",
+    "quotaExhaustedSelfHosted": "你的服务器报告该账户额度已用尽。",
     "modelNotFound": "{{provider}} 不识别模型“{{model}}”。",
     "modelNotFoundNoModel": "{{provider}} 不识别所选的模型。",
     "payloadTooLarge": "此录音对 {{provider}} 来说太大了。",

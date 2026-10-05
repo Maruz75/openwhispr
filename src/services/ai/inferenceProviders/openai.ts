@@ -20,7 +20,7 @@ import {
 import { extractApiErrorMessage } from "../apiErrorMessage";
 import { wrapCleanupTranscript } from "../../../config/prompts";
 import { openCodeSessionHeaders } from "../openCodeSession";
-import { providerHttpError } from "../../../helpers/providerHttpErrors.js";
+import { asProviderError, providerHttpError } from "../../../helpers/providerHttpErrors.js";
 
 const OPENAI_ENDPOINT_PREF_STORAGE_KEY = "openAiEndpointPreference";
 const PROBE_TIMEOUT_MS = 2_000;
@@ -203,6 +203,12 @@ export const openaiProvider: InferenceProvider = {
       endpointCandidates = getEndpointCandidates(openAiBase);
     }
     const isCustomEndpoint = openAiBase !== API_ENDPOINTS.OPENAI_BASE;
+    // Error classification only, independent of isCustomEndpoint above: a
+    // user's own custom endpoint is the only one that counts as self-hosted.
+    // OpenRouter is a cloud provider with its own catalog and display name,
+    // even though it also routes through OPENROUTER_BASE (!== OPENAI_BASE).
+    const errorProvider = isCustomProvider ? "self-hosted" : isOpenRouter ? "OpenRouter" : "OpenAI";
+    const errorProviderSelfHosted = isCustomProvider;
     // One cleanup call is one conversation: every attempt below (endpoint
     // fallback, parameter fallback, retry) reuses the same session id.
     const openCodeHeaders = openCodeSessionHeaders(openAiBase);
@@ -225,6 +231,30 @@ export const openaiProvider: InferenceProvider = {
     }
 
     const retryStrategy = createApiRetryStrategy();
+    // A caught error is one of: already classified (thrown straight from the
+    // !res.ok branch above — leave it alone, rebuilding from its own English
+    // message would drop its requestId and could reclassify it, e.g. a 429
+    // insufficient_quota turning into a generic rate limit); a raw httpError
+    // from the responses->chat 404/405 fallback (has .status, never
+    // classified); or an unclassified network failure (no status at all).
+    const classifyFinalError = (err: Error): Error =>
+      (err as { messageKey?: string }).messageKey
+        ? err
+        : (err as Error & { status?: number }).status
+          ? providerHttpError({
+              provider: errorProvider,
+              selfHosted: errorProviderSelfHosted,
+              model,
+              status: (err as Error & { status: number }).status,
+              body: err.message,
+              surface: "llm",
+            })
+          : asProviderError(err, {
+              provider: errorProvider,
+              selfHosted: errorProviderSelfHosted,
+              model,
+              surface: "llm",
+            });
     const response = await withRetry(async () => {
       let lastError: Error | null = null;
       let lastRetryableError: Error | null = null;
@@ -311,8 +341,8 @@ export const openaiProvider: InferenceProvider = {
             }
 
             throw providerHttpError({
-              provider: isCustomEndpoint ? "self-hosted" : "OpenAI",
-              selfHosted: isCustomEndpoint,
+              provider: errorProvider,
+              selfHosted: errorProviderSelfHosted,
               model,
               status: res.status,
               body: errorData,
@@ -338,7 +368,7 @@ export const openaiProvider: InferenceProvider = {
             });
             continue;
           }
-          throw lastRetryableError || error;
+          throw classifyFinalError((lastRetryableError || error) as Error);
         } finally {
           clearTimeout(timeoutId);
         }
@@ -346,17 +376,7 @@ export const openaiProvider: InferenceProvider = {
 
       const finalError = lastRetryableError || lastError;
       if (!finalError) throw new Error("No OpenAI endpoint responded");
-      const finalStatus = (finalError as Error & { status?: number }).status;
-      throw finalStatus
-        ? providerHttpError({
-            provider: isCustomEndpoint ? "self-hosted" : "OpenAI",
-            selfHosted: isCustomEndpoint,
-            model,
-            status: finalStatus,
-            body: finalError.message,
-            surface: "llm",
-          })
-        : finalError;
+      throw classifyFinalError(finalError);
     }, retryStrategy);
 
     const isResponsesApi = Array.isArray(response?.output);

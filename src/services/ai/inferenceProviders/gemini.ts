@@ -9,7 +9,7 @@ import { extractGeminiText } from "../../../helpers/geminiResponse.js";
 import { wrapCleanupTranscript } from "../../../config/prompts";
 import { emptyOutputError, truncatedOutputError } from "../chatRequestBody";
 import logger from "../../../utils/logger";
-import { providerHttpError } from "../../../helpers/providerHttpErrors.js";
+import { asProviderError, providerHttpError } from "../../../helpers/providerHttpErrors.js";
 
 interface GeminiResponse {
   candidates?: Array<{
@@ -154,7 +154,9 @@ export const geminiProvider: InferenceProvider = {
         if ((error as Error).name === "AbortError") {
           throw llmRequestTimeoutError(timeoutSeconds);
         }
-        throw error;
+        // The throw above is already classified and passes through asProviderError
+        // unchanged; an unclassified network failure (no statusCode) gets one here.
+        throw asProviderError(error, { provider: "Gemini", model, surface: "llm" });
       } finally {
         clearTimeout(timeoutId);
       }

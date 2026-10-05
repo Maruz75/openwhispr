@@ -4763,6 +4763,7 @@
     "authFailed": "{{provider}} がAPIキーを拒否しました。",
     "accessDenied": "{{provider}} がアクセスを拒否しました。お使いのキーがこのモデルに対応していない可能性があります。",
     "quotaExhausted": "{{provider}} アカウントのクレジットが不足しています。",
+    "quotaExhaustedSelfHosted": "サーバーがアカウントのクレジット不足を報告しています。",
     "modelNotFound": "{{provider}} はモデル「{{model}}」を認識できません。",
     "modelNotFoundNoModel": "{{provider}} は選択されたモデルを認識できません。",
     "payloadTooLarge": "この録音は {{provider}} には大きすぎます。",

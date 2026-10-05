@@ -68,6 +68,7 @@ const ENGLISH = {
   [C.UNREACHABLE]: "Couldn't reach {{provider}}. Check your connection.",
   [C.ERROR]: "{{provider}} returned an unexpected error.",
   [C.KEY_MISSING]: "No API key is set for {{provider}}.",
+  quotaExhaustedSelfHosted: "Your server says the account is out of credit.",
 };
 
 const SELF_HOSTED_NAME = "Your server";
@@ -173,6 +174,12 @@ function buildClassification(code, { provider, model, surface, selfHosted, techn
         : "providerErrors.keyMissing";
   }
   if (selfHosted) messageParams.selfHosted = true;
+  // "Your {{provider}} account" reads as "Your Your server account" once
+  // provider is substituted with the self-hosted label — give self-hosted
+  // quota its own sentence instead.
+  if (selfHosted && code === C.QUOTA_EXHAUSTED) {
+    messageKey = "providerErrors.quotaExhaustedSelfHosted";
+  }
   const settingsTarget = FIXABLE.has(code) ? SETTINGS_TARGET_BY_SURFACE[surface] : undefined;
   return {
     code,
@@ -187,7 +194,11 @@ function buildClassification(code, { provider, model, surface, selfHosted, techn
 function englishMessage(classification) {
   const { code, messageParams } = classification;
   const template =
-    code === C.MODEL_NOT_FOUND && !messageParams.model ? ENGLISH.modelNotFoundNoModel : ENGLISH[code];
+    code === C.MODEL_NOT_FOUND && !messageParams.model
+      ? ENGLISH.modelNotFoundNoModel
+      : code === C.QUOTA_EXHAUSTED && messageParams.selfHosted
+        ? ENGLISH.quotaExhaustedSelfHosted
+        : ENGLISH[code];
   return template
     .replace("{{provider}}", messageParams.provider)
     .replace("{{model}}", messageParams.model ?? "");

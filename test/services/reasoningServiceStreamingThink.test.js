@@ -835,3 +835,45 @@ test("a provider error part rejects the agent stream instead of ending it silent
     return true;
   });
 });
+
+// A "custom" BYOK endpoint (config.baseUrl) is a user's own server just like
+// LAN (config.lanUrl), but it takes a different route.kind ("provider", not
+// "self-hosted"), so the mode check alone would miss it and report "OpenAI"
+// (getProviderDisplayName("custom") has no registry entry to fall back on).
+test("a custom BYOK endpoint's provider error part is classified self-hosted, not OpenAI", async (t) => {
+  const { reasoningService } = await loadReasoningService(
+    t,
+    "openwhispr-stream-custom-selfhosted-test-"
+  );
+
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({ error: { message: "Incorrect API key provided", type: "invalid_request_error" } }),
+      { status: 401, headers: { "content-type": "application/json" } }
+    );
+
+  const stream = reasoningService.processTextStreamingAI(
+    [{ role: "user", content: "hello" }],
+    "cleanup-model",
+    "custom",
+    {
+      systemPrompt: "Answer the user.",
+      baseUrl: "http://127.0.0.1:11434/v1",
+      customApiKey: "test-key",
+      disableThinking: true,
+    },
+    undefined
+  );
+
+  await assert.rejects(collectAgentText(stream), (err) => {
+    assert.equal(err.code, "PROVIDER_AUTH_FAILED");
+    assert.equal(err.messageParams.selfHosted, true);
+    assert.equal(err.technicalDetails.provider, "Your server");
+    assert.match(err.message, /^Your server /);
+    return true;
+  });
+});

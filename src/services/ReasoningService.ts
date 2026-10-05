@@ -42,7 +42,12 @@ import { detectEndpointDialect } from "./ai/thinkingSuppressionDialects";
 import { openCodeSessionHeaders } from "./ai/openCodeSession";
 import { createStreamingThinkFilter } from "./ai/streamingThinkFilter";
 import { extractApiErrorMessage } from "./ai/apiErrorMessage";
-import { asProviderError, providerError, providerHttpError } from "../helpers/providerHttpErrors.js";
+import {
+  asProviderError,
+  providerError,
+  providerHttpError,
+  redactProviderBody,
+} from "../helpers/providerHttpErrors.js";
 import { clearTinfoilClientCache } from "./ai/tinfoilClient";
 import { resolveChatRoute } from "../helpers/chatRouting";
 import { assertAgentAllowedByPolicy, assertReasoningAllowedByPolicy } from "./reasoningPolicy";
@@ -371,11 +376,20 @@ class ReasoningService extends BaseReasoningService {
             errorData = { error: errorText || res.statusText };
           }
 
+          // errorData.error is often a string, but some providers (and most
+          // self-hosted servers) nest a code/type object with no .message —
+          // stringifying that object directly prints "[object Object]".
+          const loggedErrorMessage =
+            typeof errorData?.error?.message === "string"
+              ? errorData.error.message
+              : typeof errorData?.error === "string"
+                ? errorData.error
+                : redactProviderBody(errorData);
           logger.logReasoning(`${providerName.toUpperCase()}_API_ERROR_DETAIL`, {
             status: res.status,
             statusText: res.statusText,
             error: errorData,
-            errorMessage: String(errorData?.error?.message ?? errorData?.error ?? ""),
+            errorMessage: loggedErrorMessage,
             fullResponse: errorText.substring(0, 500),
           });
           throw providerHttpError({
@@ -1004,9 +1018,13 @@ class ReasoningService extends BaseReasoningService {
       // BYOK and LAN-with-tools failures arrive as AI SDK errors; enterprise
       // providers have their own mappers and local errors their own keys.
       if (mode === "providers" || mode === "self-hosted") {
+        // A "custom" BYOK provider (config.baseUrl) counts as self-hosted
+        // alongside LAN (config.lanUrl) — both are the user's own server.
+        // OpenRouter is a cloud provider and keeps its own display name.
+        const isSelfHosted = mode === "self-hosted" || provider === "custom";
         throw asProviderError(error, {
-          provider: mode === "self-hosted" ? "self-hosted" : getProviderDisplayName(provider),
-          selfHosted: mode === "self-hosted",
+          provider: isSelfHosted ? "self-hosted" : getProviderDisplayName(provider),
+          selfHosted: isSelfHosted,
           model,
           surface: "llm",
         });
