@@ -6484,6 +6484,7 @@ class IPCHandlers {
     ipcMain.handle("retry-transcription", async (event, id, settings) => {
       const buffer = this.audioStorageManager.getAudioBuffer(id);
       if (!buffer) return { success: false, error: "Audio file not found" };
+      let providerErrorContext = null;
       try {
         let result;
         const preferredLanguage = settings?.preferredLanguage;
@@ -6513,6 +6514,22 @@ class IPCHandlers {
           if (route.code) err.code = route.code;
           if (route.messageKey) err.messageKey = route.messageKey;
           throw err;
+        }
+
+        // Mirrors the branch order below: self-hosted wins over OpenWhispr
+        // cloud, which wins over the BYOK providers. Managed, local and cloud
+        // failures keep their own shape.
+        if (
+          (route.transport === "http-batch" && route.provider === "self-hosted") ||
+          ((route.transport === "http-batch" || route.transport === "proxied") &&
+            settings?.cloudTranscriptionMode !== "openwhispr")
+        ) {
+          providerErrorContext = {
+            provider: transcriptionProviderName(route.provider),
+            selfHosted: route.provider === "self-hosted" || route.provider === "custom",
+            model: route.model,
+            surface: "transcription",
+          };
         }
 
         if (route.transport === "managed") {
@@ -6794,14 +6811,17 @@ class IPCHandlers {
           });
         }
         return { success: true, transcription: updated };
-      } catch (error) {
+      } catch (rawError) {
+        const error = providerErrorContext
+          ? asProviderError(rawError, providerErrorContext)
+          : rawError;
         debugLogger.error(
           "Retry transcription failed",
           { id, error: error.message, code: error.code },
           "audio-storage"
         );
         if (error.code) {
-          return { success: false, error: error.message, code: error.code, ...error };
+          return { success: false, ...ipcErrorFields(error) };
         }
         return { success: false, error: error.message };
       }
@@ -10185,6 +10205,7 @@ class IPCHandlers {
       ) => {
         const fs = require("fs");
         let cleanupUpload = null;
+        let providerErrorContext = null;
         try {
           if (typeof filePath !== "string") {
             return { success: false, error: "Invalid file path" };
@@ -10234,6 +10255,14 @@ class IPCHandlers {
             });
             return { success: true, text };
           }
+
+          // Every branch below calls a BYOK provider or the user's own server.
+          providerErrorContext = {
+            provider: transcriptionProviderName(route.provider),
+            selfHosted: route.provider === "self-hosted" || route.provider === "custom",
+            model: route.model,
+            surface: "transcription",
+          };
 
           if (route.transport === "http-batch" && route.provider === "self-hosted") {
             // User's own server, so the 25 MB third-party cap does not apply.
@@ -10430,7 +10459,10 @@ class IPCHandlers {
           }
           const segments = timestamps ? mapVerboseSegments(data.data) : null;
           return { success: true, text: data.data.text, ...(segments ? { segments } : {}) };
-        } catch (error) {
+        } catch (rawError) {
+          const error = providerErrorContext
+            ? asProviderError(rawError, providerErrorContext)
+            : rawError;
           debugLogger.error("BYOK audio file transcription error", { error: error.message });
           return { success: false, ...ipcErrorFields(error) };
         } finally {

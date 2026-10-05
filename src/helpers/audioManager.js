@@ -90,7 +90,7 @@ import {
 } from "./transcriptionFallback";
 import { transcriptionFailureOutcome } from "./transcriptionFailureOutcome";
 import { errorFromIpcResult } from "./ipcErrorFields";
-import { providerHttpError, redactProviderBody } from "./providerHttpErrors";
+import { asProviderError, providerHttpError, redactProviderBody } from "./providerHttpErrors";
 import { cleanupFailureFromError } from "../stores/cleanupFailureStore";
 import {
   executeTranslationChain,
@@ -3631,9 +3631,21 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
             .filter(Boolean)
             .slice(0, 100),
         });
-        const result = await call(proxyPayload);
+        // Managed Azure is enterprise: its failures keep their own shape.
+        const classifyProxyFailure = (err) =>
+          managedResolution
+            ? err
+            : asProviderError(err, { provider: proxySpec.displayName, surface: "transcription" });
+        let result;
+        try {
+          result = await call(proxyPayload);
+        } catch (err) {
+          throw classifyProxyFailure(err);
+        }
         if (result?.error) {
-          throw errorFromIpcResult(result);
+          // Main serialises an unclassified network failure as its bare
+          // message (net::ERR_*), so classify the rebuilt error here.
+          throw classifyProxyFailure(errorFromIpcResult(result));
         }
         const proxyText = result?.text;
         if (!proxyText?.trim()) {
@@ -3795,14 +3807,29 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         "transcription"
       );
 
+      // Name the resolved route, not cloudTranscriptionProvider: self-hosted
+      // dictation keeps that setting (usually "openai") while posting to the
+      // user's own server.
+      const providerErrorContext = {
+        provider: route.provider === "groq" ? "Groq" : "OpenAI",
+        selfHosted: route.provider === "self-hosted" || route.provider === "custom",
+        model: route.model ?? model,
+        surface: "transcription",
+      };
+
       requestController = new AbortController();
       this._activeTranscriptionAbortController = requestController;
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers,
-        body: formData,
-        signal: requestController.signal,
-      });
+      let response;
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers,
+          body: formData,
+          signal: requestController.signal,
+        });
+      } catch (err) {
+        throw asProviderError(err, providerErrorContext);
+      }
 
       const responseContentType = response.headers.get("content-type") || "";
 
@@ -3828,13 +3855,10 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           "transcription"
         );
         throw providerHttpError({
-          provider: provider === "groq" ? "Groq" : "OpenAI",
-          selfHosted: provider === "custom",
-          model,
+          ...providerErrorContext,
           status: response.status,
           body: errorText,
           headers: response.headers,
-          surface: "transcription",
         });
       }
 

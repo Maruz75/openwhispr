@@ -272,7 +272,10 @@ export function asProviderError(err, ctx) {
   } else if (inner.code === "LLM_REQUEST_TIMEOUT" || inner.name === "TimeoutError") {
     classified = providerError(C.TIMEOUT, ctx);
   } else if (netError) {
-    classified = providerError(ELECTRON_NET_TIMEOUTS.has(netError) ? C.TIMEOUT : C.UNREACHABLE, ctx);
+    classified = providerError(
+      ELECTRON_NET_TIMEOUTS.has(netError) ? C.TIMEOUT : C.UNREACHABLE,
+      ctx
+    );
   } else if (
     NETWORK_CODES.has(inner.code) ||
     NETWORK_CODES.has(inner.cause?.code) ||

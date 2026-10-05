@@ -672,3 +672,76 @@ test("upload: a self-hosted Azure endpoint keeps its deployment URL", async () =
     "https://myorg.openai.azure.com/openai/deployments/my-deployment/audio/transcriptions?api-version=2025-03-01-preview"
   );
 });
+
+// Electron's net.fetch rejects with a plain Error whose message is the Chromium
+// net error and no code; both BYOK handlers must classify it before replying.
+async function withFetchRejecting(message, run) {
+  const originalFetchResponse = fetchResponse;
+  fetchResponse = () => {
+    throw new Error(message);
+  };
+  try {
+    return await run();
+  } finally {
+    fetchResponse = originalFetchResponse;
+  }
+}
+
+test("retry: a net::ERR_* failure from a BYOK provider is classified as unreachable", async () => {
+  const result = await withFetchRejecting("net::ERR_INTERNET_DISCONNECTED", () =>
+    invoke({
+      cloudTranscriptionProvider: "mistral",
+      cloudTranscriptionMode: "byok",
+      transcriptionMode: "providers",
+    })
+  );
+  assert.equal(result.success, false);
+  assert.equal(result.code, "PROVIDER_UNREACHABLE");
+  assert.equal(result.messageKey, "providerErrors.unreachable");
+  assert.equal(result.messageParams.provider, "Mistral");
+  assert.equal(result.surface, "transcription");
+});
+
+test("retry: a self-hosted timeout names the user's server", async () => {
+  const result = await withFetchRejecting("net::ERR_CONNECTION_TIMED_OUT", () =>
+    invoke({
+      transcriptionMode: "self-hosted",
+      remoteTranscriptionUrl: "https://stt.example.com/v1",
+      cloudTranscriptionProvider: "openai",
+      cloudTranscriptionMode: "byok",
+    })
+  );
+  assert.equal(result.code, "PROVIDER_TIMEOUT");
+  assert.equal(result.messageParams.selfHosted, true);
+});
+
+test("retry: a cancelled request (net::ERR_ABORTED) is not classified", async () => {
+  const result = await withFetchRejecting("net::ERR_ABORTED", () =>
+    invoke({
+      cloudTranscriptionProvider: "mistral",
+      cloudTranscriptionMode: "byok",
+      transcriptionMode: "providers",
+    })
+  );
+  assert.equal(result.success, false);
+  assert.equal(result.messageKey, undefined);
+  assert.equal(result.error, "net::ERR_ABORTED");
+});
+
+test("upload: a net::ERR_* failure from a BYOK provider is classified as unreachable", async () => {
+  const result = await withFetchRejecting("net::ERR_NAME_NOT_RESOLVED", () =>
+    invokeUpload({
+      apiKey: "sk-openai",
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-4o-mini-transcribe",
+      provider: "openai",
+      language: "",
+      transcriptionMode: "providers",
+    })
+  );
+  assert.equal(result.success, false);
+  assert.equal(result.code, "PROVIDER_UNREACHABLE");
+  assert.equal(result.messageParams.provider, "OpenAI");
+  assert.equal(result.surface, "transcription");
+  assert.equal(result.error, "Couldn't reach OpenAI. Check your connection.");
+});
