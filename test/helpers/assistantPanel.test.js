@@ -10,7 +10,10 @@ const noop = () => {};
 
 const { installInteractiveDom, findElement } = require("../lib/interactiveDom");
 
-async function renderAssistantPanel(
+// Shared setup for both the markup-only render (renderAssistantPanel) and the
+// interactive mount (mountAssistantPanel): loads the real AssistantPanel with its
+// heavier dependencies mocked, and real i18n so translated text (not keys) renders.
+async function setupAssistantPanel(
   t,
   messages,
   {
@@ -123,26 +126,42 @@ async function renderAssistantPanel(
     interpolation: { escapeValue: false },
   });
   const { AssistantPanel } = await vite.ssrLoadModule("/components/dictation/AssistantPanel.tsx");
-  return renderToStaticMarkup(
-    React.createElement(AssistantPanel, {
-      pendingCommand: null,
-      onCommandConsumed: noop,
-      onCommandDiscarded: noop,
-      initialConversationId,
-      onConversationIdChange: noop,
-      voiceState: "idle",
-      thinking: false,
-      open: true,
-      footerPhase: "pill",
-      horizontalDirection: "right",
-      onClose: noop,
-      onBusyChange: noop,
-      onResponseReadyChange: noop,
-      onResponseContent: noop,
-      onConversationReset: noop,
-      onSelectionContextChange: noop,
-    })
-  );
+  const props = {
+    pendingCommand: null,
+    onCommandConsumed: noop,
+    onCommandDiscarded: noop,
+    initialConversationId,
+    onConversationIdChange: noop,
+    voiceState: "idle",
+    thinking: false,
+    open: true,
+    footerPhase: "pill",
+    horizontalDirection: "right",
+    onClose: noop,
+    onBusyChange: noop,
+    onResponseReadyChange: noop,
+    onResponseContent: noop,
+    onConversationReset: noop,
+    onSelectionContextChange: noop,
+  };
+  return { AssistantPanel, props };
+}
+
+async function renderAssistantPanel(t, messages, options) {
+  const { AssistantPanel, props } = await setupAssistantPanel(t, messages, options);
+  return renderToStaticMarkup(React.createElement(AssistantPanel, props));
+}
+
+// For tests that need to inspect the live DOM tree (e.g. ref'd elements), rather
+// than just the markup string. The caller registers its own `t.after` unmount
+// (before installing the DOM globals, matching this file's other createRoot
+// tests) so cleanup runs while the fake document still exists.
+async function mountAssistantPanel(t, container, messages, options) {
+  const { AssistantPanel, props } = await setupAssistantPanel(t, messages, options);
+  const { createRoot } = require("react-dom/client");
+  const root = createRoot(container);
+  await React.act(async () => root.render(React.createElement(AssistantPanel, props)));
+  return root;
 }
 
 test("an empty idle Assistant shows typed input and generic suggestions", async (t) => {
@@ -546,6 +565,51 @@ test("Assistant selection must stay entirely inside the response root", async (t
     toString: () => "mixed selection",
   });
   assert.equal(getSelectionInside(responseRoot), null);
+});
+
+// The Open Settings link and technical details must never ride along in a
+// drag-select + copy over the response (responseSelectionRootRef), or the
+// clipboard would pick up UI chrome instead of just the answer.
+test("a classified error's Open Settings link and details render outside the response selection root", async (t) => {
+  let root = null;
+  t.after(async () => {
+    if (root) await React.act(async () => root.unmount());
+  });
+  installBrowserGlobals(t);
+  const container = installInteractiveDom(t);
+
+  root = await mountAssistantPanel(t, container, [
+    {
+      id: "assistant-1",
+      role: "assistant",
+      content: "Error: OpenAI rejected your API key.",
+      isStreaming: false,
+      error: { settingsTarget: "llms", technicalDetails: { provider: "OpenAI", status: 401 } },
+    },
+  ]);
+
+  const responseRoot = findElement(
+    container,
+    (element) => element.getAttribute("data-assistant-response-root") != null
+  );
+  assert.ok(responseRoot, "fixture setup: the response selection root renders");
+
+  const settingsButton = findElement(
+    container,
+    (element) => element.tagName === "BUTTON" && element.textContent.includes("Open Settings")
+  );
+  assert.ok(settingsButton, "shows the Open Settings affordance");
+  assert.ok(
+    !responseRoot.contains(settingsButton),
+    "Open Settings must not be a descendant of the selection root"
+  );
+
+  const details = findElement(container, (element) => element.tagName === "DETAILS");
+  assert.ok(details, "shows the technical details disclosure");
+  assert.ok(
+    !responseRoot.contains(details),
+    "technical details must not be a descendant of the selection root"
+  );
 });
 
 test("a failed Assistant resize releases its open claim so opening can retry", async (t) => {

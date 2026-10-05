@@ -516,20 +516,25 @@ export function AssistantPanel({
             }`}
           >
             {displayedResponse ? (
-              <div
-                ref={responseSelectionRootRef}
-                style={{ animation: "agent-message-in 160ms ease-out both" }}
-              >
-                <StableAssistantMarkdown
-                  content={displayedResponse}
-                  className="text-[15px] leading-relaxed text-foreground selection:bg-agent-brand/35 selection:text-foreground [&_p]:text-[15px] [&_li]:text-[15px]"
-                />
-                {latestAssistantMessage?.isStreaming && (
-                  <span
-                    className="ms-0.5 inline-block h-4 w-0.5 align-middle bg-foreground/70"
-                    style={{ animation: "agent-cursor-blink 1s ease-in-out infinite" }}
+              <>
+                <div
+                  ref={responseSelectionRootRef}
+                  data-assistant-response-root
+                  style={{ animation: "agent-message-in 160ms ease-out both" }}
+                >
+                  <StableAssistantMarkdown
+                    content={displayedResponse}
+                    className="text-[15px] leading-relaxed text-foreground selection:bg-agent-brand/35 selection:text-foreground [&_p]:text-[15px] [&_li]:text-[15px]"
                   />
-                )}
+                  {latestAssistantMessage?.isStreaming && (
+                    <span
+                      className="ms-0.5 inline-block h-4 w-0.5 align-middle bg-foreground/70"
+                      style={{ animation: "agent-cursor-blink 1s ease-in-out infinite" }}
+                    />
+                  )}
+                </div>
+                {/* Outside responseSelectionRootRef: a drag-select + copy over the
+                    response must never pick up these affordances. */}
                 {latestAssistantMessage?.error?.settingsTarget && (
                   <button
                     type="button"
@@ -542,7 +547,7 @@ export function AssistantPanel({
                 {latestAssistantMessage?.error?.technicalDetails && (
                   <TechnicalErrorDetails details={latestAssistantMessage.error.technicalDetails} />
                 )}
-              </div>
+              </>
             ) : null}
             {panelApprovals.map((entry) => (
               <ApprovalCard key={entry.key} entry={entry} />
