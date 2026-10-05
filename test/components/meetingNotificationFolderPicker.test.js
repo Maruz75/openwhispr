@@ -376,3 +376,25 @@ test("captured card swipe keeps pointer interactivity until release", async (t) 
   await React.act(async () => surface.dispatchEvent(event("pointerup", 150)));
   assert.equal(c.calls.filter((x) => x[0] === "start" && x[2] === "dismiss").length, 1);
 });
+
+test("selection feedback uses 200/600/400 milliseconds and repeats from a fresh start", async (t) => {
+  const c = await mount(t);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  await c.click(c.byLabel("Choose meeting folder"));
+  await c.click(c.byLabel("Private / Calls 1"));
+  const trigger = () => c.byLabel("Choose meeting folder");
+  assert.ok(trigger().classList.contains("feedback-enter"));
+  await React.act(async () => t.mock.timers.tick(200));
+  assert.ok(trigger().classList.contains("feedback-hold"));
+  await React.act(async () => t.mock.timers.tick(600));
+  assert.ok(trigger().classList.contains("feedback-exit"));
+  await React.act(async () => t.mock.timers.tick(399));
+  assert.ok(trigger().classList.contains("feedback-exit"));
+  await c.click(trigger());
+  await c.click(c.byLabel("Private / Calls 2"));
+  await React.act(async () => t.mock.timers.tick(1));
+  assert.ok(trigger().classList.contains("feedback-enter"));
+  await React.act(async () => t.mock.timers.tick(1199));
+  assert.ok(trigger().classList.contains("feedback-idle"));
+  t.mock.timers.reset();
+});
