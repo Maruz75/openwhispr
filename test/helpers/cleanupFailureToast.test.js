@@ -102,3 +102,58 @@ test("technical AWS details use the selected UI language", async (t) => {
   assert.match(markup, /Error subyacente: Bedrock overloaded/);
   assert.match(markup, /aria-label="Copiar detalles técnicos"/);
 });
+
+test("cleanup toast for a classified LLM failure shows the provider description and an Open Settings action", async (t) => {
+  let root = null;
+  t.after(async () => {
+    if (root) await React.act(async () => root.unmount());
+    delete globalThis.__cleanupFailureToasts;
+  });
+  globalThis.__cleanupFailureToasts = [];
+  installBrowserGlobals(t);
+  const container = installHookDom(t);
+  const vite = await createRendererServer(t, {
+    cachePrefix: "openwhispr-cleanup-failure-toast-llm-",
+    mockModules: {
+      "/ui/useToast": `
+        export const useToast = () => ({
+          toast: (props) => globalThis.__cleanupFailureToasts.push(props)
+        });
+      `,
+      "/utils/windowContext": `
+        export const isDictationPanelWindow = () => false;
+      `,
+    },
+  });
+  const { default: CleanupFailureToastListener } = await vite.ssrLoadModule(
+    "/components/CleanupFailureToastListener.tsx"
+  );
+  const { default: i18n } = await vite.ssrLoadModule("/i18n.ts");
+  await i18n.changeLanguage("en");
+  const { recordCleanupFailure, useCleanupFailureStore } = await vite.ssrLoadModule(
+    "/stores/cleanupFailureStore.ts"
+  );
+  useCleanupFailureStore.setState({ pending: 0, lastMessage: "", lastFailure: null });
+
+  root = createRoot(container);
+  await React.act(async () => root.render(React.createElement(CleanupFailureToastListener)));
+
+  await React.act(async () =>
+    recordCleanupFailure({
+      message: "OpenAI rejected your API key.",
+      code: "PROVIDER_AUTH_FAILED",
+      surface: "llm",
+      messageKey: "providerErrors.authFailed",
+      messageParams: { provider: "OpenAI" },
+      settingsTarget: "llms",
+      technicalDetails: { provider: "OpenAI", status: 401 },
+    })
+  );
+
+  const toastProps = globalThis.__cleanupFailureToasts.at(-1);
+  assert.equal(toastProps.title, "Cleanup failed");
+  assert.equal(toastProps.description, "OpenAI rejected your API key.");
+  assert.deepEqual(toastProps.technicalDetails, { provider: "OpenAI", status: 401 });
+  assert.ok(toastProps.action, "expected an Open Settings action");
+  assert.match(renderToStaticMarkup(toastProps.action), /Open Settings/);
+});

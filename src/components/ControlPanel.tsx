@@ -83,6 +83,7 @@ import { applyChineseScript, resolveChineseScriptTarget } from "../utils/chinese
 import { getAgentName } from "../utils/agentName";
 import HistoryView from "./HistoryView";
 import BackgroundActionToastListener from "./notes/BackgroundActionToastListener";
+import { providerErrorToastProps } from "./providerErrorToast";
 import SpaceSyncToastListener from "./notes/SpaceSyncToastListener";
 import { syncService } from "../services/SyncService.js";
 import logger from "../utils/logger";
@@ -649,19 +650,17 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                     settings.translationSourceLanguage,
                     settings.translationTargetLanguage
                   ),
-                  onCleanupError: (cleanupError: Error & { messageKey?: string }) => {
+                  onCleanupError: (cleanupError: unknown) => {
                     logger.warn(
                       "Cleanup step failed in translation chain, translating raw transcript",
-                      { error: cleanupError.message },
+                      { error: (cleanupError as Error).message },
                       "transcription"
                     );
                     // The chain still translates the raw transcript, so say why cleanup
                     // was dropped rather than reporting a clean success (#2091).
                     toast({
                       title: t("app.toasts.cleanupFailed.title"),
-                      description: cleanupError.messageKey
-                        ? t(cleanupError.messageKey)
-                        : cleanupError.message,
+                      ...providerErrorToastProps(cleanupError, t),
                       variant: "destructive",
                     });
                   },
@@ -730,10 +729,9 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
             } catch (cleanupError) {
               // The row keeps its raw transcript, so the retry must not look like it
               // cleaned anything — report why, the way dictation does (#2091).
-              const failure = cleanupError as Error & { messageKey?: string };
               toast({
                 title: t("app.toasts.cleanupFailed.title"),
-                description: failure.messageKey ? t(failure.messageKey) : failure.message,
+                ...providerErrorToastProps(cleanupError, t),
                 variant: "destructive",
               });
             }
@@ -784,7 +782,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         } else {
           toast({
             title: t("controlPanel.history.retryError"),
-            description: result.messageKey ? t(result.messageKey) : result.error,
+            ...providerErrorToastProps({ ...result, message: result.error }, t),
             variant: "destructive",
           });
         }

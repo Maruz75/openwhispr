@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useToast } from "./ui/useToast";
 import { consumeCleanupFailures, useCleanupFailureStore } from "../stores/cleanupFailureStore";
 import { isDictationPanelWindow } from "../utils/windowContext";
+import { providerErrorToastProps } from "./providerErrorToast";
 
 /** Tells the user their dictation was pasted raw because AI cleanup failed. */
 export default function CleanupFailureToastListener() {
@@ -20,6 +21,17 @@ export default function CleanupFailureToastListener() {
     // The panel may already be hidden after dictation; surface it so the toast is seen.
     if (isDictationPanelWindow()) {
       window.electronAPI?.showDictationPanel?.();
+    }
+    if (failure.surface === "llm") {
+      // A classified provider failure: the toast says what failed, the line says why.
+      toast({
+        title: t("app.toasts.cleanupFailed.title"),
+        ...providerErrorToastProps(failure, t),
+        secondaryDescription: t("app.toasts.cleanupFailed.description"),
+        variant: "destructive",
+        duration: 10000,
+      });
+      return;
     }
     const title = failure.messageKey
       ? t(failure.messageKey, failure.messageParams)
