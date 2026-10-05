@@ -122,10 +122,10 @@ const shouldShowOnSelection: BubbleMenuProps["shouldShow"] = ({ editor, state })
 const shouldShowOnEmptyLine: FloatingMenuProps["shouldShow"] = ({ editor, state }) =>
   canFormat(editor, state) && isOnEmptyLine(state.selection);
 
-// Above the caret, like the selection toolbar, so it stays clear of the line
-// being typed on. Tiptap's default puts it beside the caret, on that line. It
-// flips below when there's no room above.
-const LINE_MENU_OPTIONS: FloatingMenuProps["options"] = { placement: "top-start" };
+// Below the caret, so it covers neither the line being typed on (Tiptap's
+// default puts it beside the caret) nor the text written above it. It flips
+// above only when there's no room below.
+const LINE_MENU_OPTIONS: FloatingMenuProps["options"] = { placement: "bottom-start" };
 
 /** A toggle when `active` is set, a plain button otherwise. */
 function ToolbarButton({
