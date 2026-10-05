@@ -113,7 +113,6 @@ function buildFakeThis() {
 }
 
 let fakeThis;
-let handleAuthTokenChange;
 let IPCHandlersClass;
 
 test.before(() => {
@@ -123,17 +122,12 @@ test.before(() => {
   const Ctor = IPCHandlers.default || IPCHandlers;
   fakeThis = buildFakeThis();
   Ctor.prototype.setupHandlers.call(fakeThis);
-  handleAuthTokenChange = (state) => Ctor.prototype._handleAuthTokenChange.call(fakeThis, state);
 });
 
 test.after(() => {
   Module._load = originalLoad;
   fs.rmSync(userDataDirectory, { recursive: true, force: true });
 });
-
-const getScope = () => handlers.get("get-active-account-scope")();
-const setScope = (accountId, generation) =>
-  handlers.get("set-active-account-scope")({}, accountId, generation);
 
 function setupMeeting(t) {
   const { createDb } = require("./harness/db");

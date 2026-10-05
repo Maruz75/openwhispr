@@ -20,7 +20,7 @@ async function setup(t) {
   globalThis.__meetingFolderPush = pushed;
   let token = { token: null, generation: 1 },
     scope = null;
-  Object.assign(window.electronAPI, {
+  Object.assign(globalThis.window.electronAPI, {
     authGetTokenState: async () => token,
     getActiveAccountScope: async () => scope,
     onAuthTokenStateChanged: (cb) => ((listeners.auth = cb), () => delete listeners.auth),
@@ -69,7 +69,7 @@ test("mounted local folder hint refreshes without a cloud lease and schedules ex
 test("an account change during folder loading prevents row application and sync", async (t) => {
   const { store, listeners, pushed, change } = await setup(t);
   let resolve;
-  window.electronAPI.getFolders = () => new Promise((r) => (resolve = r));
+  globalThis.window.electronAPI.getFolders = () => new Promise((r) => (resolve = r));
   const pending = listeners.folder({ folderId: 4, accountId: null, authGeneration: 1 });
   while (!resolve) await new Promise(setImmediate);
   change();

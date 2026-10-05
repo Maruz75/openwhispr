@@ -46,6 +46,7 @@ import {
 } from "../stores/policyRules";
 import { getManagedTranscriptionResolution } from "../services/managedTranscription";
 import {
+  startRecording,
   useIsMeetingMode,
   useIsNarrowWindow,
   useMeetingRecordingStore,
@@ -57,6 +58,10 @@ import {
   DEFAULT_INTEGRATIONS_SECTION,
   type IntegrationsSection,
 } from "./integrations/integrationsSections";
+import { navigateMeetingNotification } from "./meetingNotificationNavigation";
+import { parseTranscriptSegments } from "../utils/parseTranscriptSegments";
+import { isExplicitSpeakerCount, resolveExpectedSpeakerCount } from "../utils/participants";
+import { isMeetingAutoEndEligible } from "../helpers/meetingRecordingSession";
 import MeetingRecordingMount from "./MeetingRecordingMount";
 import MeetingRecordingPill from "./notes/MeetingRecordingPill";
 import NewNoteMenu from "./notes/NewNoteMenu";
@@ -389,9 +394,63 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   }, [authLoaded, isSignedIn]);
 
   useEffect(() => {
+    let mounted = true;
+    let generation = 0;
+    const pending = new Set<string>();
+    const invalidate = () => {
+      generation++;
+      for (const id of pending) {
+        void window.electronAPI.confirmMeetingNoteNavigation(id, "cancel").catch(() => {});
+      }
+      pending.clear();
+    };
     const drain = async () => {
+      const epoch = generation;
+      const isCurrent = () => mounted && epoch === generation;
       const data = await window.electronAPI?.getPendingMeetingNoteNavigation?.();
       if (!data) return;
+      if (data.navigationId) {
+        if (!isCurrent() || data.spaceId == null) {
+          await window.electronAPI.confirmMeetingNoteNavigation(data.navigationId, "cancel");
+          return;
+        }
+        pending.add(data.navigationId);
+        setActiveView("personal-notes");
+        try {
+          await navigateMeetingNotification(
+            { ...data, navigationId: data.navigationId, spaceId: data.spaceId },
+            isCurrent,
+            () => import("./notes/PersonalNotesView"),
+            (note) => {
+              void startRecording({
+                noteId: note.id,
+                noteTitle: note.title,
+                folderId: note.folder_id,
+                seedSegments: note.transcript ? parseTranscriptSegments(note.transcript) : [],
+                diarizationEnabled:
+                  note.diarization_enabled == null ? null : note.diarization_enabled === 1,
+                expectedCount: resolveExpectedSpeakerCount(note),
+                expectedCountIsExplicit: isExplicitSpeakerCount(note.expected_speaker_count),
+                autoEndEligible: isMeetingAutoEndEligible(note),
+              })
+                .then((accepted) => {
+                  if (!accepted) void window.electronAPI?.restoreFromMeetingMode?.();
+                })
+                .catch((error) =>
+                  logger.warn(
+                    "Failed to start notification recording",
+                    { error: String(error) },
+                    "meeting"
+                  )
+                );
+            }
+          );
+        } finally {
+          pending.delete(data.navigationId);
+        }
+        return;
+      }
+      if (!isCurrent()) return;
       setActiveFolderId(data.folderId);
       setActiveNoteId(data.noteId);
       setActiveView("personal-notes");
@@ -400,7 +459,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         folderId: data.folderId,
         event: data.event,
       });
-      initializeNotes(null, 50, data.folderId);
+      void initializeNotes(null, 50, data.folderId);
       if (
         data.trigger === "hotkey" &&
         useSettingsStore.getState().meetingHotkeyLayoutMode === "side-panel"
@@ -408,9 +467,22 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         window.electronAPI?.snapToMeetingMode?.();
       }
     };
-    drain();
-    const cleanup = window.electronAPI?.onMeetingNoteNavigationPending?.(drain);
-    return () => cleanup?.();
+    const safeDrain = () => {
+      void drain().catch((error) =>
+        logger.warn("Failed to open meeting note", { error: String(error) }, "meeting")
+      );
+    };
+    safeDrain();
+    const cleanup = window.electronAPI?.onMeetingNoteNavigationPending?.(safeDrain);
+    const offToken = window.electronAPI.onAuthTokenStateChanged?.(invalidate);
+    const offScope = window.electronAPI.onActiveAccountScopeChanged?.(invalidate);
+    return () => {
+      mounted = false;
+      invalidate();
+      cleanup?.();
+      offToken?.();
+      offScope?.();
+    };
   }, []);
 
   useEffect(() => {

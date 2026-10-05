@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -8,8 +9,18 @@ import {
   type ReactElement,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { MeetingNotificationData } from "../types/electron";
+import type {
+  MeetingNotificationData,
+  MeetingDestinationContext,
+  MeetingError,
+  MeetingFolderRef,
+  MeetingSurfaceState,
+} from "../types/electron";
 import { MeetingNotificationCard } from "./MeetingNotificationCard";
+import { MeetingNotificationFolderPicker } from "./MeetingNotificationFolderPicker";
+import { meetingFolderLabel } from "./meetingFolderLabel";
+import { Check, ChevronDown } from "./icons";
+import "./meetingNotification.css";
 import {
   getMeetingNotificationPresentation,
   initializeMeetingNotificationOverlay,
@@ -36,29 +47,296 @@ export default function MeetingNotificationOverlay(): ReactElement {
   const [exitDirection, setExitDirection] = useState<1 | -1>(1);
   const pointerSwipeRef = useRef<PointerSwipe | null>(null);
 
-  useEffect(() => {
-    return initializeMeetingNotificationOverlay({
-      subscribe: (callback) => window.electronAPI?.onMeetingNotificationData?.(callback),
-      getPendingData: () =>
-        window.electronAPI?.getMeetingNotificationData?.() ?? Promise.resolve(null),
-      onData: setData,
-      onVisible: () => setIsVisible(true),
-      onReady: () => {
-        void window.electronAPI?.meetingNotificationReady?.();
-      },
-    });
+  const [context, setContext] = useState<MeetingDestinationContext | null>(null);
+  const [mode, setMode] = useState<MeetingSurfaceState["mode"]>("closed");
+  const [error, setError] = useState<MeetingError | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [focusReady, setFocusReady] = useState(false);
+  const [feedback, setFeedback] = useState<"idle" | "enter" | "hold" | "exit">("idle");
+  const [announcement, setAnnouncement] = useState("");
+  const [maxHeight, setMaxHeight] = useState(512);
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const dataRef = useRef<MeetingNotificationData | null>(null);
+  const modeRef = useRef<MeetingSurfaceState["mode"]>("closed");
+  const editorGeneration = useRef(0);
+  const loadGeneration = useRef(0);
+  const layoutRevision = useRef(0);
+  const focusGeneration = useRef(0);
+  const focusIntent = useRef<MeetingSurfaceState["focus"]>("keep");
+  const operation = useRef<object | null>(null);
+  const feedbackTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const createdFolders = useRef(new Map<string, MeetingFolderRef>());
+
+  const clearFeedback = useCallback(() => {
+    feedbackTimers.current.forEach(clearTimeout);
+    feedbackTimers.current = [];
+    setFeedback("idle");
   }, []);
+  const changeMode = useCallback((next: MeetingSurfaceState["mode"], requestFocus = true) => {
+    editorGeneration.current++;
+    if (next === "closed") {
+      focusGeneration.current++;
+      focusIntent.current = "release";
+      setFocusReady(false);
+    } else if (modeRef.current === "closed" && requestFocus) {
+      focusGeneration.current++;
+      focusIntent.current = "request";
+      setFocusReady(false);
+    }
+    modeRef.current = next;
+    setMode(next);
+    setError(null);
+  }, []);
+  const loadContext = useCallback(async () => {
+    const current = dataRef.current;
+    if (!current?.sessionId) return;
+    const generation = ++loadGeneration.current;
+    try {
+      const result = await window.electronAPI.getMeetingNotificationDestination(current.sessionId);
+      if (dataRef.current !== current || generation !== loadGeneration.current) return;
+      if (result.success === true) {
+        setContext(result.value);
+        setError(null);
+      } else setError(result.code);
+    } catch {
+      if (dataRef.current === current && generation === loadGeneration.current)
+        setError("FOLDERS_UNAVAILABLE");
+    }
+  }, []);
+  useEffect(
+    () =>
+      initializeMeetingNotificationOverlay({
+        subscribe: (callback) => window.electronAPI?.onMeetingNotificationData?.(callback),
+        getPendingData: () =>
+          window.electronAPI?.getMeetingNotificationData?.() ?? Promise.resolve(null),
+        onData: (incoming) => {
+          dataRef.current = incoming;
+          editorGeneration.current++;
+          loadGeneration.current++;
+          operation.current = null;
+          createdFolders.current.clear();
+          layoutRevision.current = 0;
+          modeRef.current = "closed";
+          focusIntent.current = "keep";
+          setData(incoming);
+          setContext(null);
+          setMode("closed");
+          setBusy(false);
+          setError(null);
+          setFocusReady(false);
+          clearFeedback();
+          setAnnouncement("");
+          void loadContext();
+        },
+        onVisible: () => setIsVisible(true),
+        onReady: () => {
+          void window.electronAPI?.meetingNotificationReady?.();
+        },
+      }),
+    [clearFeedback, loadContext]
+  );
+  useEffect(
+    () => () => {
+      dataRef.current = null;
+      feedbackTimers.current.forEach(clearTimeout);
+    },
+    []
+  );
+  useEffect(() => {
+    const offClose = window.electronAPI.onMeetingNotificationSurfaceClosed?.((state) => {
+      if (state.sessionId !== dataRef.current?.sessionId) return;
+      layoutRevision.current = Math.max(layoutRevision.current, state.revision);
+      changeMode("closed", false);
+    });
+    const offResize = window.electronAPI.onMeetingNotificationSurfaceResized?.((state) => {
+      if (state.sessionId === dataRef.current?.sessionId)
+        layoutRevision.current = Math.max(layoutRevision.current, state.revision);
+    });
+    return () => {
+      offClose?.();
+      offResize?.();
+    };
+  }, [changeMode]);
+
+  useLayoutEffect(() => {
+    if (!data?.sessionId || !surfaceRef.current) return;
+    let active = true;
+    const report = () => {
+      if (!active || dataRef.current !== data) return;
+      const elements = [
+        ...surfaceRef.current!.querySelectorAll<HTMLElement>("[data-meeting-region]"),
+      ];
+      const regions = elements
+        .map((element) => {
+          const r = element.getBoundingClientRect();
+          const x = Math.max(0, Math.floor(r.x - 8)),
+            y = Math.max(0, Math.floor(r.y - 8));
+          return {
+            x,
+            y,
+            width: Math.max(1, Math.min(416 - x, Math.ceil(r.width + 16))),
+            height: Math.max(1, Math.ceil(r.height + 16)),
+          };
+        })
+        .filter((r) => r.width > 1 && r.height > 1);
+      if (!regions.length) regions.push({ x: 4, y: 4, width: 408, height: 76 });
+      const height = Math.max(84, ...regions.map((r) => r.y + r.height + 4));
+      const focus = focusIntent.current;
+      focusIntent.current = "keep";
+      const focusEpoch = focusGeneration.current;
+      void window.electronAPI
+        .setMeetingNotificationSurface(data.sessionId!, {
+          revision: ++layoutRevision.current,
+          mode: modeRef.current,
+          contentHeight: height,
+          regions,
+          focus,
+        })
+        .then((result) => {
+          if (dataRef.current !== data || result.success !== true) return;
+          if (result.value.maxHeight) setMaxHeight(result.value.maxHeight);
+          if (
+            focus === "request" &&
+            focusGeneration.current === focusEpoch &&
+            modeRef.current !== "closed"
+          )
+            setFocusReady(true);
+        })
+        .catch(() => {});
+    };
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(surfaceRef.current);
+    surfaceRef.current
+      .querySelectorAll("[data-meeting-region]")
+      .forEach((element) => observer.observe(element));
+    window.addEventListener("resize", report);
+    return () => {
+      active = false;
+      observer.disconnect();
+      window.removeEventListener("resize", report);
+    };
+  }, [data, mode, context, error]);
+
+  const confirmSelection = useCallback(
+    (next: MeetingDestinationContext, ref: MeetingFolderRef) => {
+      setContext(next);
+      changeMode("closed");
+      clearFeedback();
+      setFeedback("enter");
+      feedbackTimers.current = [
+        setTimeout(() => setFeedback("hold"), 200),
+        setTimeout(() => setFeedback("exit"), 800),
+        setTimeout(() => setFeedback("idle"), 1200),
+      ];
+      const folder = next.folders.find((f) => f.id === ref.folderId && f.space_id === ref.spaceId);
+      if (folder)
+        setAnnouncement(
+          t("meetingNotification.folders.selected", {
+            destination: meetingFolderLabel(next, folder, t),
+          })
+        );
+    },
+    [changeMode, clearFeedback, t]
+  );
+  const choose = useCallback(
+    async (
+      ref: MeetingFolderRef,
+      createRequest?: { requestId: string; name: string; spaceId: number }
+    ) => {
+      const current = dataRef.current;
+      if (!current?.sessionId || operation.current) return;
+      const op = {};
+      operation.current = op;
+      setBusy(true);
+      setError(null);
+      loadGeneration.current++;
+      const generation = editorGeneration.current;
+      const isCurrent = () =>
+        dataRef.current === current && generation === editorGeneration.current;
+      try {
+        if (createRequest) {
+          const cached = createdFolders.current.get(createRequest.requestId);
+          if (cached) ref = cached;
+          else {
+            const created = await window.electronAPI.createMeetingNotificationFolder(
+              current.sessionId,
+              createRequest
+            );
+            if (!isCurrent()) return;
+            if (created.success === false) {
+              if (created.context) setContext(created.context);
+              setError(created.code);
+              return;
+            }
+            ref = created.value.createdFolder;
+            createdFolders.current.set(createRequest.requestId, ref);
+            setContext(created.value);
+          }
+        }
+        if (!isCurrent()) return;
+        const selected = await window.electronAPI.selectMeetingNotificationFolder(
+          current.sessionId,
+          ref
+        );
+        if (!isCurrent()) return;
+        if (selected.success === true) confirmSelection(selected.value, ref);
+        else {
+          if (selected.context) setContext(selected.context);
+          setError(selected.code);
+        }
+      } catch {
+        if (isCurrent()) setError(createRequest ? "CREATE_FAILED" : "FOLDER_UNAVAILABLE");
+      } finally {
+        if (operation.current === op) {
+          operation.current = null;
+          setBusy(false);
+        }
+      }
+    },
+    [confirmSelection]
+  );
 
   const presentation = getMeetingNotificationPresentation(data);
-
   const respond = useCallback(
     async (action: string): Promise<void> => {
-      if (!data) return;
-      setIsVisible(false);
-      await new Promise<void>((resolve) => setTimeout(resolve, 200));
-      window.electronAPI?.meetingNotificationRespond?.(data.detectionId, action);
+      const current = dataRef.current;
+      if (!current || operation.current) return;
+      const op = {};
+      operation.current = op;
+      setBusy(true);
+      loadGeneration.current++;
+      try {
+        const result = await window.electronAPI?.meetingNotificationRespond?.(
+          current.detectionId,
+          action,
+          current.sessionId
+            ? {
+                sessionId: current.sessionId,
+                ...(context?.existingNote ? { existingNote: context.existingNote } : {}),
+              }
+            : undefined
+        );
+        if (dataRef.current !== current) return;
+        if (result?.success === true) setIsVisible(false);
+        else {
+          if (result?.context) setContext(result.context);
+          changeMode("list");
+          setError(result?.code ?? "START_FAILED");
+        }
+      } catch {
+        if (dataRef.current === current) {
+          changeMode("list");
+          setError("START_FAILED");
+        }
+      } finally {
+        if (operation.current === op) {
+          operation.current = null;
+          setBusy(false);
+        }
+      }
     },
-    [data]
+    [context, changeMode]
   );
 
   const dismiss = useCallback((): void => {
@@ -83,9 +361,11 @@ export default function MeetingNotificationOverlay(): ReactElement {
       if (
         !presentation.dismissible ||
         !isVisible ||
+        modeRef.current !== "closed" ||
+        operation.current !== null ||
         !event.isPrimary ||
         event.button !== 0 ||
-        (event.target instanceof Element && event.target.closest("button"))
+        (event.target instanceof Element && event.target.closest("button,input,form,[role=dialog]"))
       ) {
         return;
       }
@@ -157,8 +437,19 @@ export default function MeetingNotificationOverlay(): ReactElement {
 
   return (
     <div
-      className="meeting-notification-window w-full h-full bg-transparent p-3 select-none"
-      style={{ touchAction: presentation.dismissible ? "pan-y" : "auto" }}
+      ref={surfaceRef}
+      className="meeting-notification-window w-full bg-transparent p-3 select-none"
+      onMouseMove={(event) => {
+        const interactive =
+          event.target instanceof Element && Boolean(event.target.closest("[data-meeting-region]"));
+        void window.electronAPI?.setNotificationInteractivity?.(interactive);
+      }}
+      style={
+        {
+          touchAction: presentation.dismissible ? "pan-y" : "auto",
+          "--meeting-surface-height": `${maxHeight}px`,
+        } as CSSProperties
+      }
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -171,16 +462,57 @@ export default function MeetingNotificationOverlay(): ReactElement {
         ].join(" ")}
         style={motionStyle}
       >
-        <MeetingNotificationCard
-          title={title}
-          body={body}
-          startLabel={t(presentation.actionKey)}
-          onStart={() => respond(presentation.action)}
-          onDismiss={presentation.dismissible ? dismiss : undefined}
-          closeVisible={isHovered}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-        />
+        <div data-meeting-region="card">
+          <MeetingNotificationCard
+            title={title}
+            body={body}
+            startLabel={t(presentation.actionKey)}
+            onStart={() => void respond(presentation.action)}
+            busy={busy}
+            dismissLabel={t("meetingNotification.folders.dismiss")}
+            picker={
+              data?.sessionId ? (
+                <button
+                  type="button"
+                  className={`meeting-folder-trigger feedback-${feedback}`}
+                  aria-label={t("meetingNotification.folders.choose")}
+                  aria-haspopup="dialog"
+                  aria-expanded={mode !== "closed"}
+                  disabled={busy}
+                  onClick={() => {
+                    if (modeRef.current === "closed") {
+                      changeMode("list");
+                      void loadContext();
+                    } else changeMode("closed");
+                  }}
+                >
+                  <ChevronDown className="meeting-folder-chevron size-3" />
+                  <Check className="meeting-folder-confirmation size-3" />
+                </button>
+              ) : undefined
+            }
+            onDismiss={presentation.dismissible ? dismiss : undefined}
+            closeVisible={isHovered}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+          />
+        </div>
+        {mode !== "closed" && (
+          <MeetingNotificationFolderPicker
+            context={context}
+            mode={mode}
+            busy={busy}
+            focusReady={focusReady}
+            error={error}
+            onMode={changeMode}
+            onSelect={(ref) => void choose(ref)}
+            onCreate={(request) => void choose({ folderId: 0, spaceId: request.spaceId }, request)}
+            onRetry={() => void loadContext()}
+          />
+        )}
+        <span className="sr-only" aria-live="polite">
+          {announcement}
+        </span>
       </div>
     </div>
   );

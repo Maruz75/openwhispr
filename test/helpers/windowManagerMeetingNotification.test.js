@@ -29,9 +29,9 @@ class FakeBrowserWindow extends EventEmitter {
     this.loadUrlCount = 0;
     this.showCount = 0;
     this.ignoreMouseEvents = [];
-    this.webContents = {
+    this.webContents = Object.assign(new EventEmitter(), {
       send: (channel, payload) => this.messages.push({ channel, payload }),
-    };
+    });
     createdWindows.push(this);
   }
 
@@ -832,7 +832,7 @@ test("small negative-origin displays bound the full surface and its input region
     const { win, owner } = await showOwned(manager);
     workArea = { x: -320, y: -240, width: 320, height: 240 };
     const result = manager.setMeetingNotificationSurface(owner, surface(1));
-    assert.deepEqual(result.value, { width: 320, height: 240 });
+    assert.deepEqual(result.value, { width: 320, height: 240, maxHeight: 240 });
     assert.deepEqual(win.getBounds(), { x: -320, y: -240, width: 320, height: 240 });
     assert.ok(
       owner.regions.every(
@@ -985,4 +985,29 @@ test("panel destruction and prompt/account retirement cancel pending navigation"
       f.manager.dismissMeetingNotification();
     }
   }
+});
+
+test("replacing an audio prompt retires only its captured detection", async () => {
+  const manager = createNormalWindowManager();
+  try {
+    await showOwned(manager, "audio:sustained-audio");
+    manager.meetingDetectionEngine.activeDetections.set("queued", { source: "calendar" });
+    await showOwned(manager, "calendar:replacement");
+    assert.equal(
+      manager.meetingDetectionEngine.activeDetections.has("audio:sustained-audio"),
+      false
+    );
+    assert.equal(manager.meetingDetectionEngine.activeDetections.has("calendar:replacement"), true);
+    assert.equal(manager.meetingDetectionEngine.activeDetections.has("queued"), true);
+  } finally {
+    manager.dismissMeetingNotification();
+  }
+});
+
+test("notification renderer crash retires its owner even while the window survives", async () => {
+  const manager = createNormalWindowManager();
+  const { win, owner } = await showOwned(manager);
+  win.webContents.emit("render-process-gone", {}, { reason: "crashed" });
+  assert.equal(manager.isMeetingNotificationOwner(owner), false);
+  assert.equal(manager.notificationWindow, null);
 });

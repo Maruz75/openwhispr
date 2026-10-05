@@ -3377,7 +3377,7 @@ declare global {
       setMeetingNotificationSurface: (
         sessionId: string,
         state: MeetingSurfaceState
-      ) => Promise<MeetingResult<{ width: number; height: number }>>;
+      ) => Promise<MeetingResult<{ width: number; height: number; maxHeight: number }>>;
       onMeetingNotificationSurfaceClosed: (
         callback: (data: { sessionId: string; revision: number }) => void
       ) => () => void;
