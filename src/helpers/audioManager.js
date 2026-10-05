@@ -89,7 +89,7 @@ import {
   resolveStreamingStartFallback,
 } from "./transcriptionFallback";
 import { transcriptionFailureOutcome } from "./transcriptionFailureOutcome";
-import { errorFromIpcResult } from "./ipcErrorFields";
+import { IPC_ERROR_FIELDS, errorFromIpcResult } from "./ipcErrorFields";
 import { asProviderError, providerHttpError, redactProviderBody } from "./providerHttpErrors";
 import { cleanupFailureFromError } from "../stores/cleanupFailureStore";
 import {
@@ -4012,8 +4012,11 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           const wrapped = new Error(
             `OpenAI API failed: ${error.message}. Local fallback also failed: ${fallbackError.message}`
           );
-          if (error.code) wrapped.code = error.code;
-          if (error.messageKey) wrapped.messageKey = error.messageKey;
+          // The toast renders the cloud failure, so its message params and details
+          // must survive the wrap, or the copy shows a bare "{{provider}}".
+          for (const key of IPC_ERROR_FIELDS) {
+            if (error[key] !== undefined) wrapped[key] = error[key];
+          }
           throw wrapped;
         }
       }

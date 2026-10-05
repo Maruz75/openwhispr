@@ -142,6 +142,30 @@ test("cloud->local fallback under org policy", async (t) => {
     assert.equal(result.source, "local-fallback");
     assert.equal(localWhisperCalls, 1);
   });
+
+  await t.test("a failed fallback keeps the cloud failure's classified fields", async () => {
+    setManagedPolicy(["providers", "local"]);
+    captureFetch(t, () => {
+      throw new TypeError("Failed to fetch");
+    });
+    window.electronAPI.transcribeLocalWhisper = async () => ({
+      success: false,
+      error: "model missing",
+    });
+
+    // A real Blob: the direct fetch builds FormData, which rejects the stub above.
+    const recording = new Blob(["recording"], { type: "audio/webm" });
+    await assert.rejects(createManager().processWithOpenAIAPI(recording, {}), (error) => {
+      assert.equal(error.code, "PROVIDER_UNREACHABLE");
+      assert.equal(error.messageKey, "providerErrors.unreachable");
+      // Without params the toast would render the literal "{{provider}}".
+      assert.deepEqual(error.messageParams, { provider: "OpenAI" });
+      assert.equal(error.surface, "transcription");
+      assert.equal(error.technicalDetails?.provider, "OpenAI");
+      assert.match(error.message, /Local fallback also failed/);
+      return true;
+    });
+  });
 });
 
 test("managed custom transcription never falls through to OpenAI", async (t) => {
