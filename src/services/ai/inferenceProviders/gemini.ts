@@ -1,5 +1,5 @@
 import type { InferenceProvider } from "./types";
-import { withRetry, createApiRetryStrategy, httpError } from "../../../utils/retry";
+import { withRetry, createApiRetryStrategy } from "../../../utils/retry";
 import { API_ENDPOINTS } from "../../../config/constants";
 import {
   getLlmRequestTimeoutSeconds,
@@ -7,9 +7,9 @@ import {
 } from "../../../helpers/llmRequestTimeout.js";
 import { extractGeminiText } from "../../../helpers/geminiResponse.js";
 import { wrapCleanupTranscript } from "../../../config/prompts";
-import { extractApiErrorMessage } from "../apiErrorMessage";
 import { emptyOutputError, truncatedOutputError } from "../chatRequestBody";
 import logger from "../../../utils/logger";
+import { providerHttpError } from "../../../helpers/providerHttpErrors.js";
 
 interface GeminiResponse {
   candidates?: Array<{
@@ -131,8 +131,14 @@ export const geminiProvider: InferenceProvider = {
             fullResponse: errorText.substring(0, 500),
           });
 
-          const errMsg = extractApiErrorMessage(errorData, `Gemini API error: ${res.status}`);
-          throw httpError(errMsg, res.status);
+          throw providerHttpError({
+            provider: "Gemini",
+            model,
+            status: res.status,
+            body: errorText,
+            headers: res.headers,
+            surface: "llm",
+          });
         }
 
         const jsonResponse = (await res.json()) as GeminiResponse;

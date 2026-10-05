@@ -470,7 +470,12 @@ test("a timeout-owned abort during raw response reading remains a timeout error"
     undefined
   );
 
-  await assert.rejects(collectAgentText(stream), /Streaming request timed out/);
+  // A LAN/self-hosted timeout is now classified instead of the generic message.
+  await assert.rejects(collectAgentText(stream), (err) => {
+    assert.equal(err.code, "PROVIDER_TIMEOUT");
+    assert.equal(err.messageKey, "providerErrors.timeout");
+    return true;
+  });
 });
 
 // Was "does not flush buffered text after error" and asserted the stream
@@ -822,5 +827,11 @@ test("a provider error part rejects the agent stream instead of ending it silent
     registry.toAISDKFormat()
   );
 
-  await assert.rejects(collectAgentText(stream), /Incorrect API key/);
+  // The AI SDK error part is now classified; the provider's original message
+  // survives on the preserved cause rather than as the top-level message.
+  await assert.rejects(collectAgentText(stream), (err) => {
+    assert.equal(err.code, "PROVIDER_AUTH_FAILED");
+    assert.match(err.cause?.message ?? "", /Incorrect API key/);
+    return true;
+  });
 });

@@ -20,6 +20,7 @@ import {
 import { extractApiErrorMessage } from "../apiErrorMessage";
 import { wrapCleanupTranscript } from "../../../config/prompts";
 import { openCodeSessionHeaders } from "../openCodeSession";
+import { providerHttpError } from "../../../helpers/providerHttpErrors.js";
 
 const OPENAI_ENDPOINT_PREF_STORAGE_KEY = "openAiEndpointPreference";
 const PROBE_TIMEOUT_MS = 2_000;
@@ -309,7 +310,15 @@ export const openaiProvider: InferenceProvider = {
               continue;
             }
 
-            throw httpError(errorMessage, res.status);
+            throw providerHttpError({
+              provider: isCustomEndpoint ? "self-hosted" : "OpenAI",
+              selfHosted: isCustomEndpoint,
+              model,
+              status: res.status,
+              body: errorData,
+              headers: res.headers,
+              surface: "llm",
+            });
           }
 
           rememberPreference(openAiBase, type);
@@ -335,7 +344,19 @@ export const openaiProvider: InferenceProvider = {
         }
       }
 
-      throw lastRetryableError || lastError || new Error("No OpenAI endpoint responded");
+      const finalError = lastRetryableError || lastError;
+      if (!finalError) throw new Error("No OpenAI endpoint responded");
+      const finalStatus = (finalError as Error & { status?: number }).status;
+      throw finalStatus
+        ? providerHttpError({
+            provider: isCustomEndpoint ? "self-hosted" : "OpenAI",
+            selfHosted: isCustomEndpoint,
+            model,
+            status: finalStatus,
+            body: finalError.message,
+            surface: "llm",
+          })
+        : finalError;
     }, retryStrategy);
 
     const isResponsesApi = Array.isArray(response?.output);

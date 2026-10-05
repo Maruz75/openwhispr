@@ -40,6 +40,7 @@ const {
   providerError,
   redactProviderBody,
 } = require("./providerHttpErrors");
+const { anthropicFailure } = require("./anthropicBridgeErrors");
 const {
   registerConnectorIpc,
   createConnectorPolicyResolver,
@@ -5384,7 +5385,7 @@ class IPCHandlers {
           const apiKey = this.environmentManager.getAnthropicKey();
 
           if (!apiKey) {
-            throw new Error("Anthropic API key not configured");
+            throw providerError("API_KEY_MISSING", { provider: "Anthropic", surface: "llm" });
           }
 
           const systemPrompt = config?.systemPrompt || "";
@@ -5432,17 +5433,16 @@ class IPCHandlers {
 
           if (!response.ok) {
             const errorText = await response.text();
-            let errorData = { error: response.statusText };
-            try {
-              errorData = JSON.parse(errorText);
-            } catch {
-              errorData = { error: errorText || response.statusText };
-            }
-            throw new Error(
-              errorData.error?.message ||
-                errorData.error ||
-                `Anthropic API error: ${response.status}`
-            );
+            debugLogger.warn("Anthropic API error", {
+              status: response.status,
+              body: redactProviderBody(errorText),
+            });
+            return anthropicFailure({
+              status: response.status,
+              body: errorText,
+              headers: response.headers,
+              model: modelId,
+            });
           }
 
           const data = await response.json();
@@ -5460,7 +5460,7 @@ class IPCHandlers {
           return { success: true, text: outputText };
         } catch (error) {
           debugLogger.error("Anthropic reasoning error:", error);
-          return { success: false, error: error.message, messageKey: error.messageKey };
+          return { success: false, ...ipcErrorFields(error) };
         }
       }
     );

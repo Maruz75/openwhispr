@@ -42,6 +42,7 @@ import { detectEndpointDialect } from "./ai/thinkingSuppressionDialects";
 import { openCodeSessionHeaders } from "./ai/openCodeSession";
 import { createStreamingThinkFilter } from "./ai/streamingThinkFilter";
 import { extractApiErrorMessage } from "./ai/apiErrorMessage";
+import { asProviderError, providerError, providerHttpError } from "../helpers/providerHttpErrors.js";
 import { clearTinfoilClientCache } from "./ai/tinfoilClient";
 import { resolveChatRoute } from "../helpers/chatRouting";
 import { assertAgentAllowedByPolicy, assertReasoningAllowedByPolicy } from "./reasoningPolicy";
@@ -250,9 +251,10 @@ class ReasoningService extends BaseReasoningService {
         provider,
         error: errorMsg,
       });
-      const error = new Error(errorMsg) as Error & { code: string; provider: string };
-      error.code = "API_KEY_MISSING";
-      error.provider = displayName;
+      const error = providerError("API_KEY_MISSING", {
+        provider: displayName,
+        surface: "llm",
+      }) as Error & { code: string; provider: string };
       throw error;
     }
 
@@ -369,19 +371,22 @@ class ReasoningService extends BaseReasoningService {
             errorData = { error: errorText || res.statusText };
           }
 
-          const errorMessage = extractApiErrorMessage(
-            errorData,
-            `${providerName} API error: ${res.status}`
-          );
-
           logger.logReasoning(`${providerName.toUpperCase()}_API_ERROR_DETAIL`, {
             status: res.status,
             statusText: res.statusText,
             error: errorData,
-            errorMessage,
+            errorMessage: String(errorData?.error?.message ?? errorData?.error ?? ""),
             fullResponse: errorText.substring(0, 500),
           });
-          throw httpError(errorMessage, res.status);
+          throw providerHttpError({
+            provider: providerName === "LAN" ? "self-hosted" : providerName,
+            selfHosted: providerName === "LAN",
+            model,
+            status: res.status,
+            body: errorText,
+            headers: res.headers,
+            surface: "llm",
+          });
         }
 
         const jsonResponse = await res.json();
@@ -673,7 +678,14 @@ class ReasoningService extends BaseReasoningService {
       clearTimeout(timeoutId);
       if ((error as Error).name === "AbortError" && abortController.signal.aborted) {
         if (!timeoutTriggered) return;
-        throw new Error("Streaming request timed out");
+        throw route.kind === "self-hosted"
+          ? providerError("PROVIDER_TIMEOUT", {
+              provider: "self-hosted",
+              selfHosted: true,
+              model,
+              surface: "llm",
+            })
+          : new Error("Streaming request timed out");
       }
       throw error;
     }
@@ -681,14 +693,27 @@ class ReasoningService extends BaseReasoningService {
     if (!response.ok) {
       clearTimeout(timeoutId);
       const errorText = await response.text();
+      logger.logReasoning("AGENT_STREAM_ERROR", {
+        status: response.status,
+        body: errorText.slice(0, 500),
+      });
+      if (route.kind === "self-hosted") {
+        throw providerHttpError({
+          provider: "self-hosted",
+          selfHosted: true,
+          model,
+          status: response.status,
+          body: errorText,
+          headers: response.headers,
+          surface: "llm",
+        });
+      }
       let errorMessage: string;
       try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = extractApiErrorMessage(errorData, `API error: ${response.status}`);
+        errorMessage = extractApiErrorMessage(JSON.parse(errorText), `API error: ${response.status}`);
       } catch {
         errorMessage = errorText || `API error: ${response.status}`;
       }
-      logger.logReasoning("AGENT_STREAM_ERROR", { status: response.status, errorMessage });
       throw new Error(errorMessage);
     }
 
@@ -745,7 +770,14 @@ class ReasoningService extends BaseReasoningService {
     } catch (error) {
       if ((error as Error).name === "AbortError" && abortController.signal.aborted) {
         if (!timeoutTriggered) return;
-        throw new Error("Streaming request timed out");
+        throw route.kind === "self-hosted"
+          ? providerError("PROVIDER_TIMEOUT", {
+              provider: "self-hosted",
+              selfHosted: true,
+              model,
+              surface: "llm",
+            })
+          : new Error("Streaming request timed out");
       }
       throw error;
     } finally {
@@ -968,6 +1000,16 @@ class ReasoningService extends BaseReasoningService {
       if (abortController.signal.aborted) {
         yield { type: "done", finishReason: "stop" };
         return;
+      }
+      // BYOK and LAN-with-tools failures arrive as AI SDK errors; enterprise
+      // providers have their own mappers and local errors their own keys.
+      if (mode === "providers" || mode === "self-hosted") {
+        throw asProviderError(error, {
+          provider: mode === "self-hosted" ? "self-hosted" : getProviderDisplayName(provider),
+          selfHosted: mode === "self-hosted",
+          model,
+          surface: "llm",
+        });
       }
       throw error;
     } finally {
