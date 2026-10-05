@@ -3388,13 +3388,23 @@ declare global {
       meetingNotificationReady?: () => Promise<void>;
       meetingNotificationRespond?: (
         detectionId: string,
-        action: string
-      ) => Promise<{ success: boolean }>;
+        action: string,
+        options?: {
+          sessionId: string;
+          existingNote?: Pick<MeetingExistingNote, "noteId" | "spaceId" | "folderId">;
+        }
+      ) => Promise<MeetingResult<null>>;
+      confirmMeetingNoteNavigation: (
+        navigationId: string,
+        status?: "ready" | "cancel"
+      ) => Promise<MeetingResult<NoteItem>>;
       joinCalendarMeeting?: (eventId: string) => Promise<{ success: boolean }>;
       startManualMeeting?: () => Promise<void>;
       getPendingMeetingNoteNavigation?: () => Promise<{
+        navigationId?: string;
+        spaceId?: number;
         noteId: number;
-        folderId: number;
+        folderId: number | null;
         event: any;
         trigger?: "hotkey" | "manual" | "calendar-join";
       } | null>;

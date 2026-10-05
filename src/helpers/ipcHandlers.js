@@ -11938,14 +11938,23 @@ class IPCHandlers {
       return this.windowManager.setMeetingNotificationSurface(owner, state);
     });
 
-    ipcMain.handle("meeting-notification-respond", async (_event, detectionId, action) => {
-      try {
-        await this.meetingDetectionEngine.handleNotificationResponse(detectionId, action);
-        return { success: true };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
+    ipcMain.handle("meeting-notification-respond", (event, detectionId, action, options) => {
+      const owner = this.windowManager.captureMeetingNotificationOwner(
+        event.sender,
+        options?.sessionId
+      );
+      if (!owner || owner.prompt.detectionId !== detectionId)
+        return { success: false, code: "STALE_NOTIFICATION" };
+      return this.meetingDetectionEngine.handleNotificationResponse(
+        detectionId,
+        action,
+        options,
+        owner
+      );
     });
+    ipcMain.handle("confirm-meeting-note-navigation", (event, navigationId, status) =>
+      this.windowManager.confirmMeetingNoteNavigation(event.sender, navigationId, status)
+    );
 
     ipcMain.handle("join-calendar-meeting", async (_event, eventId) => {
       try {
@@ -11963,8 +11972,8 @@ class IPCHandlers {
       return this.windowManager?._pendingNotificationData ?? null;
     });
 
-    ipcMain.handle("get-pending-meeting-note-navigation", async () => {
-      return this.windowManager?.consumePendingMeetingNoteNavigation() ?? null;
+    ipcMain.handle("get-pending-meeting-note-navigation", async (event) => {
+      return this.windowManager?.consumePendingMeetingNoteNavigation(event.sender) ?? null;
     });
 
     ipcMain.handle("get-pending-note-navigation", async () => {

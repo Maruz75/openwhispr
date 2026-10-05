@@ -1,4 +1,11 @@
 const debugLogger = require("./debugLogger");
+const { randomUUID } = require("node:crypto");
+const {
+  meetingDestinationContext,
+  notificationCalendarEventId,
+  resolveMeetingDestination,
+  describeMeetingNote,
+} = require("./meetingNotificationDestination");
 const { openExternalUrl } = require("./externalUrlOpener");
 const { getMeetingJoinUrl } = require("./meetingJoinUrl");
 const createMeetingAutoEndController = require("./meetingAutoEndController");
@@ -429,95 +436,121 @@ class MeetingDetectionEngine {
     });
   }
 
-  async handleNotificationResponse(detectionId, action) {
-    debugLogger.info("Notification response", { detectionId, action }, "meeting");
-    try {
-      const detection = this.activeDetections.get(detectionId);
-
-      if ((action === "start" || action === "join") && detection) {
-        if (action === "join") {
-          const joinUrl = getMeetingJoinUrl(detection.event);
-          if (joinUrl) {
-            openExternalUrl(joinUrl).catch((error) =>
-              debugLogger.error(
-                "Failed to open meeting link",
-                { error: error.message, joinUrl },
-                "meeting"
-              )
-            );
-          }
-        }
-
-        const eventSummary = detection.event?.summary || "New note";
-
-        const isRealEvent =
-          detection.event?.calendar_id &&
-          detection.event.calendar_id !== "__detected__" &&
-          detection.event.calendar_id !== "__manual__";
-
-        if (
-          isRealEvent &&
-          (await this._resumeExistingEventNote(detection.event, "calendar-join"))
-        ) {
-          this._meetingModeActive = true;
-          this.audioActivityDetector.resetPrompt();
-          return;
-        }
-
-        const noteResult = this.databaseManager.saveNote(eventSummary, "", "meeting");
-        const meetingsFolder = this.databaseManager.getMeetingsFolder();
-
-        if (!noteResult?.note?.id || !meetingsFolder?.id) {
-          debugLogger.error(
-            "Meeting note creation failed",
-            { noteId: noteResult?.note?.id, folderId: meetingsFolder?.id },
-            "meeting"
-          );
-          return;
-        }
-
-        this._meetingModeActive = true;
-
-        broadcastToWindows("note-added", noteResult.note);
-
-        if (isRealEvent) {
-          const calEvent = this.databaseManager.getCalendarEventById(detection.event.id);
-          const updates = { calendar_event_id: detection.event.id };
-          if (calEvent?.attendees) {
-            updates.participants = calEvent.attendees;
-          }
-          const updateResult = this.databaseManager.updateNote(noteResult.note.id, updates);
-          if (updateResult?.success && updateResult?.note) {
-            broadcastToWindows("note-updated", updateResult.note);
-          }
-        }
-
-        await this.windowManager.queueMeetingNoteNavigation({
-          noteId: noteResult.note.id,
-          folderId: meetingsFolder.id,
-          event: detection.event,
-          trigger: "calendar-join",
-        });
-
-        this.audioActivityDetector.resetPrompt();
-      } else if (action === "dismiss") {
-        if (detection) {
-          this._dismiss();
-        }
-      }
-    } catch (error) {
-      this._meetingModeActive = false;
-      debugLogger.error(
-        "Error handling notification response",
-        { error: error?.message, detectionId, action },
-        "meeting"
-      );
-    } finally {
-      // One overlay at a time — a response settles every pending detection,
-      // including any the responded prompt replaced.
-      this.activeDetections.clear();
-      this.windowManager.dismissMeetingNotification();
+  handleNotificationResponse(detectionId, action, options = {}, owner) {
+    owner ??= this.windowManager.captureMeetingNotificationOwner?.(
+      this.windowManager.notificationWindow?.webContents
+    );
+    if (
+      !owner ||
+      owner.prompt.detectionId !== detectionId ||
+      !this.windowManager.isMeetingNotificationOwner(owner)
+    ) {
+      return Promise.resolve({ success: false, code: "STALE_NOTIFICATION" });
     }
+    if (!["start", "join", "dismiss"].includes(action))
+      return Promise.resolve({ success: false, code: "INVALID_REQUEST" });
+    if (owner.responsePromise) return owner.responsePromise;
+    if (action === "dismiss") {
+      this._dismiss();
+      if (this.activeDetections.get(detectionId) === owner.detection)
+        this.activeDetections.delete(detectionId);
+      this.windowManager.dismissMeetingNotification({ notifyEngine: false });
+      return Promise.resolve({ success: true, value: null });
+    }
+    owner.responseInFlight = true;
+    this.windowManager.updateMeetingNotificationPause(owner);
+    owner.responsePromise = Promise.resolve()
+      .then(() => this._startNotification(owner, action, options))
+      .catch((error) => {
+        debugLogger.error("Meeting notification start failed", { error: error.message }, "meeting");
+        return {
+          success: false,
+          code: error.code === "NOTE_UNAVAILABLE" ? error.code : "START_FAILED",
+        };
+      })
+      .finally(() => {
+        owner.responseInFlight = false;
+        owner.responsePromise = null;
+        this.windowManager.updateMeetingNotificationPause(owner);
+      });
+    return owner.responsePromise;
+  }
+
+  async _startNotification(owner, action, options) {
+    if (!this.windowManager.isMeetingNotificationOwner(owner))
+      return { success: false, code: "STALE_NOTIFICATION" };
+    const db = this.databaseManager;
+    const context = () =>
+      meetingDestinationContext(db, owner, this.windowManager.meetingRecentDestinations);
+    const eventId = notificationCalendarEventId(owner);
+    let note = owner.committedNoteId
+      ? db.getNote(owner.committedNoteId)
+      : eventId
+        ? db.getOwnNoteByCalendarEventId(eventId, { throwOnError: true })
+        : null;
+    const matches = (ref, row) =>
+      ref &&
+      ref.noteId === row.id &&
+      ref.spaceId === row.space_id &&
+      ref.folderId === row.folder_id;
+    if (note) {
+      if (!describeMeetingNote(db, note)) return { success: false, code: "NOTE_UNAVAILABLE" };
+      if (!matches(options.existingNote, note) && !matches(owner.authorizedNote, note)) {
+        return { success: false, code: "LINKED_NOTE_CHANGED", context: context() };
+      }
+    } else {
+      if (owner.committedNoteId || options.existingNote || owner.authorizedNote)
+        return { success: false, code: "NOTE_UNAVAILABLE" };
+      const available = context();
+      const ref = owner.selectedDestination ?? available.defaultDestination;
+      const folder = resolveMeetingDestination(db, ref);
+      if (!folder) return { success: false, code: "FOLDER_UNAVAILABLE" };
+      const calendarEvent = eventId ? db.getCalendarEventById(eventId) : null;
+      const result = db.createMeetingNoteForNotification({
+        title: owner.detection.event?.summary || "New note",
+        folderId: folder.id,
+        spaceId: folder.space_id,
+        eventId,
+        participants: calendarEvent?.attendees,
+      });
+      note = result.note;
+      owner.committedNoteId = note.id;
+      if (!result.created)
+        return { success: false, code: "LINKED_NOTE_CHANGED", context: context() };
+      broadcastToWindows("note-added", note);
+    }
+    owner.authorizedNote = { noteId: note.id, spaceId: note.space_id, folderId: note.folder_id };
+    const navigation = await this.windowManager.queueMeetingNoteNavigation(
+      {
+        ...owner.authorizedNote,
+        event: owner.detection.event,
+        trigger: "calendar-join",
+        navigationId: randomUUID(),
+      },
+      { owner, isCurrent: () => this.windowManager.isMeetingNotificationOwner(owner) }
+    );
+    if (!navigation?.success) return navigation ?? { success: false, code: "START_FAILED" };
+    if (!this.windowManager.isMeetingNotificationScope(owner.scope))
+      return { success: false, code: "ACCOUNT_CHANGED" };
+    this._meetingModeActive = true;
+    if (action === "join" && !owner.joinDispatched) {
+      owner.joinDispatched = true;
+      const joinUrl = getMeetingJoinUrl(owner.detection.event);
+      if (joinUrl)
+        void openExternalUrl(joinUrl).catch((error) =>
+          debugLogger.error("Failed to open meeting link", { error: error.message }, "meeting")
+        );
+    }
+    this.audioActivityDetector.resetPrompt();
+    if (this.activeDetections.get(owner.prompt.detectionId) === owner.detection)
+      this.activeDetections.delete(owner.prompt.detectionId);
+    if (
+      this.windowManager._meetingNotificationOwner === owner ||
+      this.windowManager.isMeetingNotificationOwner(owner)
+    ) {
+      this.windowManager.dismissMeetingNotification({ notifyEngine: false });
+    }
+    return { success: true, value: null };
   }
 
   async startManualMeeting() {

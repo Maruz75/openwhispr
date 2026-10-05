@@ -162,7 +162,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   const recordingFolderId = useMeetingRecordingStore((s) => s.recordingFolderId);
   const [meetingRecordingRequest, setMeetingRecordingRequest] = useState<{
     noteId: number;
-    folderId: number;
+    folderId: number | null;
     event: any;
   } | null>(null);
   const [gpuBannerDismissed, setGpuBannerDismissed] = useState(

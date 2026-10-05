@@ -857,3 +857,132 @@ test("credential replacement fences ownership before database account reconcilia
     manager.dismissMeetingNotification();
   }
 });
+
+async function navigationFixture() {
+  const manager = createNormalWindowManager();
+  const { owner } = await showOwned(manager);
+  let row = { id: 9, space_id: 1, folder_id: 3, deleted_at: null, left_team: 0 };
+  manager.meetingDetectionEngine.databaseManager = {
+    activeAccountId: null,
+    getNote: () => row,
+    getSpace: (id) => (id === 1 ? { id: 1, name: "Private", kind: "private" } : null),
+    getFolders: () => [
+      { id: 3, space_id: 1, name: "Meetings" },
+      { id: 4, space_id: 1, name: "Moved" },
+    ],
+    getSpaces: () => [{ id: 1, name: "Private", kind: "private" }],
+    getMeetingsFolder: () => ({ id: 3 }),
+  };
+  owner.committedNoteId = 9;
+  const panel = new EventEmitter();
+  panel.isDestroyed = () => false;
+  panel.webContents = new EventEmitter();
+  panel.webContents.isLoading = () => false;
+  panel.webContents.send = () => {};
+  manager.controlPanelWindow = panel;
+  manager.createControlPanelWindow = async () => {};
+  const payload = { navigationId: "navigate-one", noteId: 9, spaceId: 1, folderId: 3 };
+  return {
+    manager,
+    owner,
+    panel,
+    payload,
+    setRow: (next) => {
+      row = next;
+    },
+    row,
+    start: () =>
+      manager.queueMeetingNoteNavigation(payload, {
+        owner,
+        isCurrent: () => manager.isMeetingNotificationOwner(owner),
+      }),
+  };
+}
+
+test("only the consuming current panel can confirm a navigation once", async () => {
+  const f = await navigationFixture();
+  try {
+    const pending = f.start();
+    await new Promise(setImmediate);
+    assert.equal(f.manager.consumePendingMeetingNoteNavigation({}), null);
+    assert.deepEqual(f.manager.consumePendingMeetingNoteNavigation(f.panel.webContents), f.payload);
+    assert.equal(
+      f.manager.confirmMeetingNoteNavigation({}, "navigate-one").code,
+      "STALE_NOTIFICATION"
+    );
+    assert.equal(
+      f.manager.confirmMeetingNoteNavigation(f.panel.webContents, "navigate-one").success,
+      true
+    );
+    assert.equal((await pending).success, true);
+    assert.equal(
+      f.manager.confirmMeetingNoteNavigation(f.panel.webContents, "navigate-one").success,
+      false
+    );
+  } finally {
+    f.manager.dismissMeetingNotification();
+  }
+});
+
+test("deleted, retracted, and moved notes fail final confirmation after delayed editor load", async () => {
+  for (const change of [
+    { deleted_at: "now" },
+    { left_team: 1 },
+    { folder_id: 4 },
+    { folder_id: null },
+  ]) {
+    const f = await navigationFixture();
+    try {
+      const pending = f.start();
+      await new Promise(setImmediate);
+      f.manager.consumePendingMeetingNoteNavigation(f.panel.webContents);
+      f.setRow({ ...f.row, ...change });
+      const result = f.manager.confirmMeetingNoteNavigation(f.panel.webContents, "navigate-one");
+      assert.equal(result.code, "folder_id" in change ? "LINKED_NOTE_CHANGED" : "NOTE_UNAVAILABLE");
+      if ("folder_id" in change)
+        assert.equal(result.context.existingNote.folderId, change.folder_id);
+      assert.equal((await pending).success, false);
+      assert.equal(f.manager.notificationWindow.isDestroyed(), false);
+    } finally {
+      f.manager.dismissMeetingNotification();
+    }
+  }
+});
+
+test("an absent editor times out and late confirmation cannot authorize recording", async () => {
+  const timers = installFakeTimers();
+  const f = await navigationFixture();
+  try {
+    const pending = f.start();
+    await new Promise(setImmediate);
+    timers.runDelay(15000);
+    assert.equal((await pending).code, "START_FAILED");
+    assert.equal(
+      f.manager.confirmMeetingNoteNavigation(f.panel.webContents, "navigate-one").success,
+      false
+    );
+  } finally {
+    f.manager.dismissMeetingNotification();
+    timers.restore();
+  }
+});
+
+test("panel destruction and prompt/account retirement cancel pending navigation", async () => {
+  for (const cause of ["panel", "prompt", "account"]) {
+    const f = await navigationFixture();
+    try {
+      const pending = f.start();
+      await new Promise(setImmediate);
+      if (cause === "panel") f.panel.emit("closed");
+      if (cause === "prompt") f.manager.dismissMeetingNotification();
+      if (cause === "account") f.manager.retireMeetingNotificationScope();
+      assert.equal((await pending).success, false);
+      assert.equal(
+        f.manager.confirmMeetingNoteNavigation(f.panel.webContents, "navigate-one").success,
+        false
+      );
+    } finally {
+      f.manager.dismissMeetingNotification();
+    }
+  }
+});

@@ -3,6 +3,10 @@ const debugLogger = require("./debugLogger");
 const { randomUUID } = require("node:crypto");
 const tokenStore = require("./tokenStore");
 const accountScopeBinding = require("./accountScopeBinding");
+const {
+  describeMeetingNote,
+  meetingDestinationContext,
+} = require("./meetingNotificationDestination");
 const { createLinuxWindowInputRegion } = require("./linuxWindowInputRegion");
 // Aliased: this class has an openExternalUrl method wrapping the helper.
 const { openExternalUrl: openUrlInExternalBrowser } = require("./externalUrlOpener");
@@ -2194,6 +2198,7 @@ class WindowManager {
 
   async showMeetingNotification(promptData, { autoDismiss = true } = {}) {
     if (this._onboardingActive) return false;
+    this._cancelMeetingNavigation("STALE_NOTIFICATION");
     this._meetingNotificationOwner = null;
     if (this.notificationWindow && !this.notificationWindow.isDestroyed()) {
       const previousWindow = this.notificationWindow;
@@ -2220,6 +2225,7 @@ class WindowManager {
     // after the replacement already took over the reference and the countdown.
     win.on("closed", () => {
       if (this.notificationWindow !== win) return;
+      this._cancelMeetingNavigation("STALE_NOTIFICATION");
       const closedDetectionId = this._pendingNotificationData?.detectionId ?? null;
       this.notificationWindow = null;
       this._meetingNotificationOwner = null;
@@ -2358,6 +2364,7 @@ class WindowManager {
 
   dismissMeetingNotification({ notifyEngine = true, flushQueued = true } = {}) {
     const notification = this._pendingNotificationData;
+    this._cancelMeetingNavigation("STALE_NOTIFICATION");
     this._meetingNotificationOwner = null;
     this._pendingNotificationData = null;
     if (this._notificationReadyFallback) {
@@ -2387,16 +2394,147 @@ class WindowManager {
     }
   }
 
-  async queueMeetingNoteNavigation(payload) {
-    this._pendingMeetingNoteNavigation = payload;
-    await this.createControlPanelWindow();
-    this.sendToControlPanel("meeting-note-navigation-pending");
+  async queueMeetingNoteNavigation(payload, options) {
+    if (!payload.navigationId) {
+      this._pendingMeetingNoteNavigation = payload;
+      await this.createControlPanelWindow();
+      this.sendToControlPanel("meeting-note-navigation-pending");
+      return;
+    }
+    if (!options?.isCurrent()) return { success: false, code: "STALE_NOTIFICATION" };
+    this._cancelMeetingNavigation("STALE_NOTIFICATION");
+    let resolve;
+    const result = new Promise((done) => {
+      resolve = done;
+    });
+    const operation = {
+      payload,
+      owner: options.owner,
+      isCurrent: options.isCurrent,
+      resolve,
+      consumed: false,
+      panel: null,
+    };
+    this._meetingNavigationOperation = operation;
+    // Bound panel creation as well as the renderer handshake; reset at delivery.
+    operation.timer = setTimeout(
+      () => this._settleMeetingNavigation(operation, { success: false, code: "START_FAILED" }),
+      15000
+    );
+    void (async () => {
+      try {
+        await this.createControlPanelWindow();
+        if (this._meetingNavigationOperation !== operation) return;
+        if (!operation.isCurrent()) {
+          this._settleMeetingNavigation(operation, { success: false, code: "STALE_NOTIFICATION" });
+          return;
+        }
+        const panel = this.controlPanelWindow;
+        if (!panel || panel.isDestroyed()) throw new Error("Panel unavailable");
+        operation.panel = panel;
+        operation.onClose = () =>
+          this._settleMeetingNavigation(operation, { success: false, code: "START_FAILED" });
+        panel.once("closed", operation.onClose);
+        const deliver = () => {
+          if (this._meetingNavigationOperation !== operation) return;
+          if (!operation.isCurrent() || this.controlPanelWindow !== panel || panel.isDestroyed()) {
+            this._settleMeetingNavigation(operation, {
+              success: false,
+              code: "STALE_NOTIFICATION",
+            });
+            return;
+          }
+          clearTimeout(operation.timer);
+          operation.timer = setTimeout(
+            () =>
+              this._settleMeetingNavigation(operation, { success: false, code: "START_FAILED" }),
+            15000
+          );
+          operation.delivered = true;
+          this._pendingMeetingNoteNavigation = payload;
+          panel.webContents.send("meeting-note-navigation-pending");
+        };
+        operation.deliver = deliver;
+        if (panel.webContents.isLoading()) panel.webContents.once("did-finish-load", deliver);
+        else deliver();
+      } catch {
+        this._settleMeetingNavigation(operation, { success: false, code: "START_FAILED" });
+      }
+    })();
+    return result;
   }
 
-  consumePendingMeetingNoteNavigation() {
+  _settleMeetingNavigation(operation, result) {
+    if (this._meetingNavigationOperation !== operation) return;
+    this._meetingNavigationOperation = null;
+    clearTimeout(operation.timer);
+    operation.panel?.removeListener("closed", operation.onClose);
+    if (operation.deliver)
+      operation.panel?.webContents.removeListener("did-finish-load", operation.deliver);
+    if (this._pendingMeetingNoteNavigation === operation.payload)
+      this._pendingMeetingNoteNavigation = null;
+    operation.resolve(result);
+  }
+
+  _cancelMeetingNavigation(code) {
+    const operation = this._meetingNavigationOperation;
+    if (operation) this._settleMeetingNavigation(operation, { success: false, code });
+  }
+
+  consumePendingMeetingNoteNavigation(sender) {
     const payload = this._pendingMeetingNoteNavigation;
+    if (payload?.navigationId) {
+      const operation = this._meetingNavigationOperation;
+      if (
+        !operation ||
+        operation.payload !== payload ||
+        operation.panel !== this.controlPanelWindow ||
+        operation.panel.webContents !== sender ||
+        !operation.isCurrent()
+      )
+        return null;
+      operation.consumed = true;
+    }
     this._pendingMeetingNoteNavigation = null;
     return payload;
+  }
+
+  confirmMeetingNoteNavigation(sender, navigationId, status = "ready") {
+    const operation = this._meetingNavigationOperation;
+    if (
+      !operation ||
+      operation.payload.navigationId !== navigationId ||
+      !operation.consumed ||
+      operation.panel !== this.controlPanelWindow ||
+      operation.panel.webContents !== sender
+    ) {
+      return { success: false, code: "STALE_NOTIFICATION" };
+    }
+    let result;
+    if (!operation.isCurrent()) result = { success: false, code: "ACCOUNT_CHANGED" };
+    else if (status === "cancel") result = { success: false, code: "START_FAILED" };
+    else if (status !== "ready") return { success: false, code: "INVALID_REQUEST" };
+    else {
+      try {
+        const db = this.meetingDetectionEngine.databaseManager;
+        const note = db.getNote(operation.payload.noteId);
+        if (!describeMeetingNote(db, note)) result = { success: false, code: "NOTE_UNAVAILABLE" };
+        else if (
+          note.space_id !== operation.payload.spaceId ||
+          note.folder_id !== operation.payload.folderId
+        ) {
+          result = {
+            success: false,
+            code: "LINKED_NOTE_CHANGED",
+            context: meetingDestinationContext(db, operation.owner, this.meetingRecentDestinations),
+          };
+        } else result = { success: true, value: note };
+      } catch {
+        result = { success: false, code: "NOTE_UNAVAILABLE" };
+      }
+    }
+    this._settleMeetingNavigation(operation, result);
+    return result;
   }
 
   async queueNoteNavigation(payload) {

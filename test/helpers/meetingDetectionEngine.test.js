@@ -113,7 +113,9 @@ test("explicitly dismissing an audio prompt still starts the mic cooldown", asyn
 
   engine.setPreferences({ audioDetection: true, processDetection: true });
   audioDetector.emit("sustained-audio-detected", { durationMs: 2000, detectedAt: 0 });
-  await engine.handleNotificationResponse(shown[0].detectionId, "dismiss");
+  const owner = { prompt: shown[0], detection: engine.activeDetections.get(shown[0].detectionId) };
+  engine.windowManager.isMeetingNotificationOwner = () => true;
+  await engine.handleNotificationResponse(shown[0].detectionId, "dismiss", {}, owner);
 
   assert.equal(audioDetector.dismissals, 1, "an explicit decline must keep its cooldown");
 });
@@ -282,4 +284,134 @@ test("disabling notifications preserves active auto-end and releases both detect
   assert.equal(engine.endRecordingSession("active-meeting"), true);
   assert.equal(audioDetector.running, false);
   assert.equal(processDetector.running, false);
+});
+
+function ownedNotification(t) {
+  const ctx = createEngine();
+  const { createDb } = require("./harness/db");
+  const db = createDb(t);
+  if (!db) return null;
+  ctx.engine.databaseManager = db;
+  const detection = {
+    source: "calendar",
+    key: "event",
+    event: { id: "event", calendar_id: "test-calendar", summary: "Weekly" },
+  };
+  ctx.engine.activeDetections.set("calendar:event", detection);
+  const owner = {
+    sessionId: "one",
+    prompt: { detectionId: "calendar:event" },
+    detection,
+    scope: {},
+    selectedDestination: null,
+  };
+  let current = true;
+  Object.assign(ctx.windowManager, {
+    meetingRecentDestinations: [],
+    captureMeetingNotificationOwner: () => (current ? owner : null),
+    isMeetingNotificationOwner: (o) => current && o === owner,
+    isMeetingNotificationScope: () => current,
+    updateMeetingNotificationPause() {},
+    dismissMeetingNotification() {
+      current = false;
+    },
+    queueMeetingNoteNavigation: async (payload) => {
+      ctx.meetingNavigations.push(payload);
+      return { success: true, value: db.getNote(payload.noteId) };
+    },
+  });
+  return {
+    ...ctx,
+    db,
+    owner,
+    respond: (options) =>
+      ctx.engine.handleNotificationResponse("calendar:event", "start", options, owner),
+    retire: () => {
+      current = false;
+    },
+  };
+}
+
+test("notification Start saves directly in selected folder and duplicate clicks share navigation", async (t) => {
+  const c = ownedNotification(t);
+  if (!c) return;
+  const folder = c.db.createFolder("Chosen").folder;
+  c.owner.selectedDestination = { folderId: folder.id, spaceId: folder.space_id };
+  let finish;
+  c.windowManager.queueMeetingNoteNavigation = (payload) => {
+    c.meetingNavigations.push(payload);
+    return new Promise((r) => (finish = r));
+  };
+  const one = c.respond();
+  const two = c.respond();
+  await new Promise(setImmediate);
+  assert.equal(c.meetingNavigations.length, 1);
+  const note = c.db.getNote(c.meetingNavigations[0].noteId);
+  assert.equal(note.folder_id, folder.id);
+  assert.equal(note.space_id, folder.space_id);
+  finish({ success: true, value: note });
+  assert.equal((await one).success, true);
+  assert.equal((await two).success, true);
+  assert.equal(c.db.getNotes().length, 1);
+});
+
+test("a linked root note requires current acknowledgment and is never moved or copied", async (t) => {
+  const c = ownedNotification(t);
+  if (!c) return;
+  const note = c.db.saveNote("Linked", "", "meeting").note;
+  c.db.updateNote(note.id, { calendar_event_id: "event", folder_id: null });
+  const first = await c.respond();
+  assert.equal(first.code, "LINKED_NOTE_CHANGED");
+  assert.equal(first.context.existingNote.folderId, null);
+  assert.equal(c.meetingNavigations.length, 0);
+  assert.equal(c.db.getNotes().length, 1);
+  const second = await c.respond({
+    existingNote: { noteId: note.id, spaceId: note.space_id, folderId: null },
+  });
+  assert.equal(second.success, true);
+  assert.equal(c.meetingNavigations[0].folderId, null);
+  assert.equal(c.db.getNotes().length, 1);
+});
+
+test("unavailable explicit destination never falls back to Meetings", async (t) => {
+  const c = ownedNotification(t);
+  if (!c) return;
+  c.owner.selectedDestination = { folderId: 999, spaceId: c.db.getPrivateSpaceId() };
+  assert.equal((await c.respond()).code, "FOLDER_UNAVAILABLE");
+  assert.equal(c.db.getNotes().length, 0);
+  assert.equal(c.meetingNavigations.length, 0);
+});
+
+test("strict lookup failure and vanished acknowledged note never create a replacement", async (t) => {
+  const c = ownedNotification(t);
+  if (!c) return;
+  const lookup = c.db.getOwnNoteByCalendarEventId;
+  c.db.getOwnNoteByCalendarEventId = () => {
+    throw Error("database busy");
+  };
+  assert.equal((await c.respond()).success, false);
+  assert.equal(c.db.getNotes().length, 0);
+  c.db.getOwnNoteByCalendarEventId = lookup;
+  assert.equal(
+    (await c.respond({ existingNote: { noteId: 999, spaceId: 1, folderId: null } })).code,
+    "NOTE_UNAVAILABLE"
+  );
+  assert.equal(c.db.getNotes().length, 0);
+});
+
+test("navigation failure retains committed note and retries without duplicate writes", async (t) => {
+  const c = ownedNotification(t);
+  if (!c) return;
+  let calls = 0;
+  c.windowManager.queueMeetingNoteNavigation = async (payload) => {
+    calls++;
+    return calls === 1
+      ? { success: false, code: "START_FAILED" }
+      : { success: true, value: c.db.getNote(payload.noteId) };
+  };
+  assert.equal((await c.respond()).code, "START_FAILED");
+  assert.equal(c.db.getNotes().length, 1);
+  assert.equal((await c.respond()).success, true);
+  assert.equal(c.db.getNotes().length, 1);
+  assert.equal(calls, 2);
 });
