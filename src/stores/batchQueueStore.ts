@@ -221,8 +221,10 @@ export function processBatchQueue(
           error:
             transcriptionErrorKey(transcriptionResult) ||
             (transcriptionResult.messageKey
-              ? describeProviderError({ ...transcriptionResult, message: transcriptionResult.error }, i18n.t)
-                  .description
+              ? describeProviderError(
+                  { ...transcriptionResult, message: transcriptionResult.error },
+                  i18n.t
+                ).description
               : undefined) ||
             transcriptionResult.error ||
             "batchTranscriptionFailed",

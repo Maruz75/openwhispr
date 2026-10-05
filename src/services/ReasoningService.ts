@@ -724,7 +724,10 @@ class ReasoningService extends BaseReasoningService {
       }
       let errorMessage: string;
       try {
-        errorMessage = extractApiErrorMessage(JSON.parse(errorText), `API error: ${response.status}`);
+        errorMessage = extractApiErrorMessage(
+          JSON.parse(errorText),
+          `API error: ${response.status}`
+        );
       } catch {
         errorMessage = errorText || `API error: ${response.status}`;
       }

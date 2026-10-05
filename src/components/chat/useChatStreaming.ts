@@ -750,7 +750,10 @@ export function useChatStreaming({
             const failure = describeProviderError(error, t);
             const messageError =
               failure.technicalDetails || failure.settingsTarget
-                ? { technicalDetails: failure.technicalDetails, settingsTarget: failure.settingsTarget }
+                ? {
+                    technicalDetails: failure.technicalDetails,
+                    settingsTarget: failure.settingsTarget,
+                  }
                 : undefined;
             setMessages((prev) =>
               prev.map((m) =>

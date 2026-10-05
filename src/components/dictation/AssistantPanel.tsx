@@ -538,7 +538,9 @@ export function AssistantPanel({
                 {latestAssistantMessage?.error?.settingsTarget && (
                   <button
                     type="button"
-                    onClick={() => openProviderSettings(latestAssistantMessage.error!.settingsTarget!)}
+                    onClick={() =>
+                      openProviderSettings(latestAssistantMessage.error!.settingsTarget!)
+                    }
                     className="mt-2 text-[13px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm"
                   >
                     {t("providerErrors.openSettings")}

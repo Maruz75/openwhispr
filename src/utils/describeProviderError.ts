@@ -49,11 +49,16 @@ export function providerErrorTitle(
   // The rate-limit pill keeps its dedicated "Provider Rate Limited" title.
   if (!code?.startsWith("PROVIDER_") || code === "PROVIDER_RATE_LIMITED") return undefined;
   return String(
-    t(error?.surface === "llm" ? "providerErrors.titles.llm" : "providerErrors.titles.transcription")
+    t(
+      error?.surface === "llm" ? "providerErrors.titles.llm" : "providerErrors.titles.transcription"
+    )
   );
 }
 
-export function formatProviderErrorDetails(details: TechnicalErrorDetailsData, t: TFunction): string {
+export function formatProviderErrorDetails(
+  details: TechnicalErrorDetailsData,
+  t: TFunction
+): string {
   const isProvider = Boolean(details.provider);
   return [
     details.provider ? `${t("providerErrors.details.provider")}: ${details.provider}` : "",

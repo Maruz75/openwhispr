@@ -183,8 +183,7 @@ export interface IpcErrorFields {
  * rejection, so these handlers resolve with a serialized error instead of throwing.
  */
 export type ProxyTranscriptionResult =
-  | { text: string; model?: string; error?: undefined }
-  | (IpcErrorFields & { text?: undefined });
+  { text: string; model?: string; error?: undefined } | (IpcErrorFields & { text?: undefined });
 
 export interface AuthTokenState {
   token: string | null;
@@ -1277,9 +1276,7 @@ declare global {
       }>;
       hideWindow: () => Promise<void>;
       showDictationPanel: () => Promise<void>;
-      openSettingsSection?: (
-        section: "speechToText" | "llms"
-      ) => Promise<{ success: boolean }>;
+      openSettingsSection?: (section: "speechToText" | "llms") => Promise<{ success: boolean }>;
       captureDictationTarget?: () => Promise<{ success: boolean; pid: number | null }>;
       onToggleDictation: (callback: () => void) => () => void;
       onToggleVoiceAgent?: (callback: () => void) => () => void;
