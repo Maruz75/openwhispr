@@ -18,7 +18,7 @@ const contexts = () => ({
   recentDestinations: [],
   existingNote: null,
 });
-async function mount(t, overrides = {}) {
+async function mount(t, overrides = {}, setupDom = () => {}) {
   let root;
   const original = {};
   let dom;
@@ -62,6 +62,7 @@ async function mount(t, overrides = {}) {
     "IS_REACT_ACT_ENVIRONMENT"
   );
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  setupDom(dom);
   const data = {
     sessionId: "one",
     detectionId: "event",
@@ -397,4 +398,68 @@ test("selection feedback uses 200/600/400 milliseconds and repeats from a fresh 
   await React.act(async () => t.mock.timers.tick(1199));
   assert.ok(trigger().classList.contains("feedback-idle"));
   t.mock.timers.reset();
+});
+
+test("linked root explanation receives focus and Escape closes it", async (t) => {
+  const c = await mount(t, {
+    getMeetingNotificationDestination: async () => ({
+      success: true,
+      value: {
+        ...contexts(),
+        existingNote: {
+          noteId: 4,
+          spaceId: 1,
+          folderId: null,
+          spaceName: "Private",
+          folderName: null,
+          shared: false,
+        },
+      },
+    }),
+  });
+  await c.click(c.byLabel("Choose meeting folder"));
+  const dialog = c.container.querySelector('[role="dialog"]');
+  assert.equal(globalThis.document.activeElement, dialog);
+  await React.act(async () =>
+    globalThis.document.activeElement.dispatchEvent(
+      new globalThis.window.KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      })
+    )
+  );
+  assert.equal(c.container.querySelector('[role="dialog"]'), null);
+});
+
+test("initial surface includes tall localized card layout before entrance animation", async (t) => {
+  const reports = [];
+  await mount(
+    t,
+    {
+      setMeetingNotificationSurface: async (_id, state) => {
+        reports.push(state);
+        return { success: true, value: { width: 416, height: state.contentHeight } };
+      },
+    },
+    (dom) => {
+      const p = dom.HTMLElement.prototype;
+      for (const [key, value] of Object.entries({
+        offsetWidth: 392,
+        offsetHeight: 106,
+        offsetLeft: 12,
+        offsetTop: 12,
+      })) {
+        Object.defineProperty(p, key, {
+          configurable: true,
+          get() {
+            return this.getAttribute("data-meeting-region") === "card" ? value : 0;
+          },
+        });
+      }
+      p.getBoundingClientRect = () => ({ x: 500, y: 12, width: 392, height: 106 });
+    }
+  );
+  assert.ok(reports.length);
+  assert.ok(reports.every((report) => report.contentHeight >= 130));
 });

@@ -111,3 +111,15 @@ session: `/Users/joshuadavidpadoa/dev/ow-meeting-folder-20261005`. The final Tit
 handover records whether it was retired or kept. The shared app checkout and
 other sessions' worktrees were not changed. Native probes were stopped after
 checking; fixture profiles and raw logs are local scratch, not product files.
+
+### Final browser repairs
+
+The selected review's repair recheck exposed animated measurement and linked-panel
+keyboard gaps. Regions now use untransformed layout offsets; the linked-note
+explanation has a focusable dialog. Fourteen picker tests pass after these fixes.
+A real browser fixture verified that a Russian underway card with bottom at
+106px reports 118px from its first measurement, and that a root-linked panel
+receives dialog focus and emits `focus: release` when Escape closes it.
+The full local 7,022-pass run preceded these two renderer repairs; the focused
+renderer tests, typecheck and rebuilt renderer cover the repaired commit, with
+final-head GitHub CI recorded in the handover.

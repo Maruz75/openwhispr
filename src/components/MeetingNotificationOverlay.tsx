@@ -168,14 +168,23 @@ export default function MeetingNotificationOverlay(): ReactElement {
       ];
       const regions = elements
         .map((element) => {
-          const r = element.getBoundingClientRect();
-          const x = Math.max(0, Math.floor(r.x - 8)),
-            y = Math.max(0, Math.floor(r.y - 8));
+          // Layout offsets ignore the entrance/swipe transform, which can put
+          // the entire card outside the window before its first visible frame.
+          let left = 0;
+          let top = 0;
+          let parent: HTMLElement | null = element;
+          while (parent && parent !== surfaceRef.current) {
+            left += parent.offsetLeft;
+            top += parent.offsetTop;
+            parent = parent.offsetParent as HTMLElement | null;
+          }
+          const x = Math.max(0, Math.floor(left - 8));
+          const y = Math.max(0, Math.floor(top - 8));
           return {
             x,
             y,
-            width: Math.max(1, Math.min(416 - x, Math.ceil(r.width + 16))),
-            height: Math.max(1, Math.ceil(r.height + 16)),
+            width: Math.max(1, Math.min(416 - x, element.offsetWidth + 16)),
+            height: Math.max(1, element.offsetHeight + 16),
           };
         })
         .filter((r) => r.width > 1 && r.height > 1);
@@ -438,7 +447,7 @@ export default function MeetingNotificationOverlay(): ReactElement {
   return (
     <div
       ref={surfaceRef}
-      className="meeting-notification-window w-full bg-transparent p-3 select-none"
+      className="meeting-notification-window relative w-full bg-transparent p-3 select-none"
       onMouseMove={(event) => {
         const interactive =
           Boolean(pointerSwipeRef.current) ||

@@ -36,6 +36,7 @@ export function MeetingNotificationFolderPicker({
   const [spaceId, setSpaceId] = useState<number | null>(null);
   const [locationOpen, setLocationOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const composing = useRef(false);
@@ -83,8 +84,10 @@ export function MeetingNotificationFolderPicker({
       createRequest.current = null;
     }
     priorMode.current = mode;
-    if (focusReady && !busy) (mode === "form" ? nameRef : searchRef).current?.focus();
-  }, [mode, focusReady, busy, context?.spaces, folders, query, t]);
+    if (focusReady && !busy) {
+      (context?.existingNote ? dialogRef : mode === "form" ? nameRef : searchRef).current?.focus();
+    }
+  }, [mode, focusReady, busy, context?.spaces, context?.existingNote, folders, query, t]);
   useEffect(() => {
     document
       .getElementById(`meeting-folder-option-${active}`)
@@ -148,6 +151,8 @@ export function MeetingNotificationFolderPicker({
   );
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       data-meeting-region="picker"
       className="meeting-folder-picker"
       role="dialog"
@@ -215,7 +220,6 @@ export function MeetingNotificationFolderPicker({
               </button>
               {locationOpen && (
                 <div
-                  data-meeting-region="locations"
                   className="meeting-folder-locations"
                   role="listbox"
                   aria-label={t(key("location"))}
