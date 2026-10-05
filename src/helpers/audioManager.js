@@ -90,6 +90,7 @@ import {
 } from "./transcriptionFallback";
 import { transcriptionFailureOutcome } from "./transcriptionFailureOutcome";
 import { errorFromIpcResult } from "./ipcErrorFields";
+import { providerHttpError, redactProviderBody } from "./providerHttpErrors";
 import { cleanupFailureFromError } from "../stores/cleanupFailureStore";
 import {
   executeTranslationChain,
@@ -3822,18 +3823,19 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           "Transcription API error response",
           {
             status: response.status,
-            errorText,
+            errorText: redactProviderBody(errorText),
           },
           "transcription"
         );
-        const err = new Error(`API Error: ${response.status} ${errorText}`);
-        if (response.status === 401) err.code = "INVALID_KEY";
-        else if (response.status === 429) {
-          // The user's own provider rate-limited the request — not an OpenWhispr plan limit
-          err.code = "PROVIDER_RATE_LIMITED";
-          err.messageKey = "hooks.audioRecording.errorDescriptions.providerRateLimited";
-        } else if (response.status >= 500) err.code = "SERVER_ERROR";
-        throw err;
+        throw providerHttpError({
+          provider: provider === "groq" ? "Groq" : "OpenAI",
+          selfHosted: provider === "custom",
+          model,
+          status: response.status,
+          body: errorText,
+          headers: response.headers,
+          surface: "transcription",
+        });
       }
 
       let result;

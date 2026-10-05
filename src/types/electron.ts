@@ -129,6 +129,16 @@ export type TranscriptionErrorCode =
   | "INVALID_KEY"
   | "MODEL_NOT_AVAILABLE"
   | "CUSTOM_ENDPOINT_INVALID"
+  | "PROVIDER_AUTH_FAILED"
+  | "PROVIDER_ACCESS_DENIED"
+  | "PROVIDER_QUOTA_EXHAUSTED"
+  | "PROVIDER_MODEL_NOT_FOUND"
+  | "PROVIDER_PAYLOAD_TOO_LARGE"
+  | "PROVIDER_BAD_REQUEST"
+  | "PROVIDER_UNAVAILABLE"
+  | "PROVIDER_TIMEOUT"
+  | "PROVIDER_UNREACHABLE"
+  | "PROVIDER_ERROR"
   | null;
 
 export type MeetingPromptVariant = "detected" | "starting" | "underway";

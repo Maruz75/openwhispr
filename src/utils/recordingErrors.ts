@@ -1,10 +1,15 @@
 import { TFunction } from "i18next";
+import { describeProviderError, providerErrorTitle } from "./describeProviderError";
 
 type RecordingError = {
   code?: string;
   title: string;
   description?: string;
   messageKey?: string;
+  messageParams?: Record<string, string | number | boolean>;
+  surface?: string;
+  settingsTarget?: string;
+  technicalDetails?: import("../components/ui/useToast").TechnicalErrorDetailsData;
   /** Toast variant; defaults to destructive for genuine failures. */
   variant?: "default" | "destructive";
 };
@@ -32,6 +37,8 @@ export function getRecordingErrorTitle(error: RecordingError, t: TFunction): str
     return t("hooks.audioRecording.errorTitles.dailyLimitReached");
   if (error.code === "PROVIDER_RATE_LIMITED")
     return t("hooks.audioRecording.errorTitles.providerRateLimited");
+  const providerTitle = providerErrorTitle(error, t);
+  if (providerTitle) return providerTitle;
   return error.title;
 }
 
@@ -39,6 +46,6 @@ export function getRecordingErrorDescription(error: RecordingError, t: TFunction
   if (error.code === "ACCESSIBILITY_PERMISSION_REQUIRED") {
     return t("hooks.audioRecording.pastePermission.description");
   }
-  if (error.messageKey) return t(error.messageKey);
+  if (error.messageKey) return describeProviderError(error, t).description;
   return error.description ?? "";
 }

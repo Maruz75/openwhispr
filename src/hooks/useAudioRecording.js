@@ -6,6 +6,7 @@ import { playStartCue, playStopCue } from "../utils/dictationCues";
 import { getSettings } from "../stores/settingsStore";
 import { expandSnippets } from "../utils/snippets";
 import { getRecordingErrorTitle, getRecordingErrorDescription } from "../utils/recordingErrors";
+import { formatProviderErrorDetails, openProviderSettings } from "../utils/describeProviderError";
 import { isAccessibilitySkipped } from "../utils/permissions";
 import { needsSttConfigBeforeStart } from "../helpers/sttConfigPolicy";
 import {
@@ -361,6 +362,8 @@ export const useAudioRecording = (toast, options = {}) => {
       code,
       settingsLaunchFailed = false,
       onRetry,
+      settingsTarget,
+      technicalDetails,
     }) => {
       const errorGeneration = ++dictationErrorGenerationRef.current;
       const isCurrent = () => errorGeneration === dictationErrorGenerationRef.current;
@@ -468,6 +471,37 @@ export const useAudioRecording = (toast, options = {}) => {
         },
       ];
 
+      if (settingsTarget) {
+        actions.push({
+          label: t("providerErrors.openSettings"),
+          icon: "settings",
+          onClick: () => openProviderSettings(settingsTarget),
+        });
+      }
+
+      if (technicalDetails) {
+        actions.push({
+          label: t("providerErrors.copyDetails"),
+          icon: "copy",
+          dismissOnClick: false,
+          feedback: {
+            successLabel: t("common.copied"),
+            failureLabel: t("hooks.audioRecording.pastePermission.copyFailed"),
+          },
+          onClick: async () => {
+            if (!isCurrent()) return;
+            try {
+              const result = await window.electronAPI?.writeClipboard?.(
+                formatProviderErrorDetails(technicalDetails, t)
+              );
+              return result?.success === true;
+            } catch {
+              return false;
+            }
+          },
+        });
+      }
+
       if (recoverableTranscript) {
         actions.push({
           label: t("hooks.audioRecording.errorActions.viewTranscript"),
@@ -563,6 +597,8 @@ export const useAudioRecording = (toast, options = {}) => {
             duration: error?.code === "AUTH_EXPIRED" ? 8000 : undefined,
             code: error?.code,
             transcript: error?.transcript,
+            settingsTarget: error?.settingsTarget,
+            technicalDetails: error?.technicalDetails,
           });
         }
         if (getSettings().pauseMediaOnDictation) {

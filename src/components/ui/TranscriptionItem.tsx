@@ -100,6 +100,10 @@ export default function TranscriptionItem({
   const isConfigError =
     errorCode === "API_KEY_MISSING" ||
     errorCode === "INVALID_KEY" ||
+    errorCode === "PROVIDER_AUTH_FAILED" ||
+    errorCode === "PROVIDER_ACCESS_DENIED" ||
+    errorCode === "PROVIDER_QUOTA_EXHAUSTED" ||
+    errorCode === "PROVIDER_MODEL_NOT_FOUND" ||
     errorCode === "MODEL_NOT_AVAILABLE" ||
     errorCode === "CUSTOM_ENDPOINT_INVALID";
   const isLimitError = errorCode === "LIMIT_REACHED";
