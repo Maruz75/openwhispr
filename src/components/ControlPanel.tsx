@@ -430,7 +430,9 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
 
   useEffect(() => {
     const cleanup = window.electronAPI?.onShowSettings?.((section) => {
-      setSettingsSection(section);
+      // A bare request (app-menu Cmd+,) keeps an open modal on its current
+      // section; only a named section moves it.
+      if (section) setSettingsSection(section);
       setShowSettings(true);
     });
     return () => cleanup?.();
@@ -911,6 +913,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       {showSettings && (
         <Suspense fallback={null}>
           <SettingsModal
+            // SettingsModal reads initialSection only on open, so a new section remounts it.
             key={settingsSection ?? "default"}
             open={showSettings}
             onOpenChange={(open) => {
