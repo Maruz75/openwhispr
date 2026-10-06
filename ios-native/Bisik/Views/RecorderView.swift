@@ -13,6 +13,29 @@ struct RecorderView: View {
     private var recording: Bool { model.phase == .recording }
 
     var body: some View {
+        monitoredLayout
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active && (holding || model.phase == .recording || model.phase == .preparing) {
+                    holding = false
+                    model.cancelRecording()
+                }
+            }
+            .onDisappear {
+                if holding || model.phase == .recording || model.phase == .preparing {
+                    holding = false
+                    model.cancelRecording()
+                }
+                model.commitEdits()
+            }
+            .alert(L10n.text("Hapus rekaman ini?"), isPresented: $discardPendingAlert) {
+                Button(L10n.text("Batal"), role: .cancel) { }
+                Button(L10n.text("Hapus rekaman"), role: .destructive) { model.cancelRecording() }
+            } message: {
+                Text(L10n.text("Rekaman yang belum berhasil diproses akan dihapus."))
+            }
+    }
+
+    private var layout: some View {
         VStack(spacing: 16) {
             transcriptCard
             if let message = model.errorMessage {
@@ -37,20 +60,10 @@ struct RecorderView: View {
                     .background(Color.white)
             }
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button {
-                    editing = false
-                } label: {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 18, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                }
-                .accessibilityLabel(L10n.text("Selesai mengedit"))
-                .accessibilityIdentifier("transcript.done")
-            }
-        }
+    }
+
+    private var monitoredLayout: some View {
+        layout.toolbar { keyboardToolbar }
         .onChange(of: editing) { wasEditing, isEditing in
             if wasEditing && !isEditing { model.commitEdits() }
         }
@@ -63,26 +76,19 @@ struct RecorderView: View {
         .onChange(of: model.errorMessage) { _, message in
             if message != nil && idle { holding = false }
         }
-        .onChange(of: scenePhase) { _, phase in
-            if phase != .active && (holding || model.phase == .recording || model.phase == .preparing) {
-                holding = false
-                model.cancelRecording()
+    }
+
+    @ToolbarContentBuilder
+    private var keyboardToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+            Button { editing = false } label: {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: 44, height: 44)
             }
-        }
-        .onDisappear {
-            if holding || model.phase == .recording || model.phase == .preparing {
-                holding = false
-                model.cancelRecording()
-            }
-            model.commitEdits()
-        }
-        .alert(L10n.text("Hapus rekaman ini?"), isPresented: $discardPendingAlert) {
-            Button(L10n.text("Batal"), role: .cancel) { }
-            Button(L10n.text("Hapus rekaman"), role: .destructive) {
-                model.cancelRecording()
-            }
-        } message: {
-            Text(L10n.text("Rekaman yang belum berhasil diproses akan dihapus."))
+            .accessibilityLabel(L10n.text("Selesai mengedit"))
+            .accessibilityIdentifier("transcript.done")
         }
     }
 
