@@ -42,8 +42,16 @@ jobs:
           echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
           xcrun simctl boot "$DEVICE_ID" || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
+          xcrun simctl status_bar "$DEVICE_ID" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100
       - name: Compile and test on simulator
-        run: xcodebuild test -project Bisik.xcodeproj -scheme Bisik -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath DerivedData -resultBundlePath TestResults.xcresult CODE_SIGNING_ALLOWED=NO
+        run: xcodebuild test -project Bisik.xcodeproj -scheme Bisik -destination "platform=iOS Simulator,id=$DEVICE_ID" -parallel-testing-enabled NO -derivedDataPath DerivedData -resultBundlePath TestResults.xcresult CODE_SIGNING_ALLOWED=NO
+      - name: Export UI test screenshots
+        if: always()
+        run: |
+          if [ -d TestResults.xcresult ]; then
+            xcrun xcresulttool export attachments --path TestResults.xcresult --output-path UIEvidence
+          fi
       - name: Capture actual native UI
         run: |
           xcrun simctl install "$DEVICE_ID" DerivedData/Build/Products/Debug-iphonesimulator/Bisik.app
@@ -58,4 +66,5 @@ jobs:
           path: |
             ios-native/TestResults.xcresult
             ios-native/bisik-simulator.png
+            ios-native/UIEvidence
           retention-days: 7

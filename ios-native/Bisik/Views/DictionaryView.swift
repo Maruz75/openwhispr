@@ -14,91 +14,88 @@ struct DictionaryView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top, spacing: 16) {
-                    PageTitle(title: "Kamus", subtitle: "Nama dan kata, sesuai caramu.")
-                    IconControl(symbol: "plus", label: "Tambah kata ke kamus", highlighted: true) {
-                        editingEntry = nil
-                        showEditor = true
-                    }
-                }.padding(24)
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Belajar dari koreksimu", systemImage: "sparkle")
-                        .font(BisikTheme.font(13, semibold: true))
-                        .foregroundStyle(BisikTheme.ink)
-                    Text(model.settings.learnCorrections ? "Koreksi kata di tulisanmu akan dipelajari otomatis. Kamu tetap bisa mengedit atau menghapusnya." : "Pembelajaran otomatis sedang nonaktif. Kamu bisa menambahkan kata secara manual.")
-                        .font(BisikTheme.font(12, relativeTo: .caption))
-                        .foregroundStyle(BisikTheme.secondary)
-                        .lineSpacing(4)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 16) {
+                PageTitle(title: "Kamus", subtitle: "Koreksi ejaan.")
+                IconControl(symbol: "plus", label: "Tambah kata ke kamus", highlighted: true) {
+                    editingEntry = nil
+                    showEditor = true
                 }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(BisikTheme.panel, in: RoundedRectangle(cornerRadius: 18))
-                .padding(.horizontal, 24)
-                .padding(.bottom, 16)
+            }.padding(24)
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Belajar dari koreksimu", systemImage: "sparkle")
+                    .font(BisikTheme.font(13, semibold: true))
+                    .foregroundStyle(BisikTheme.ink)
+                Text(model.settings.learnCorrections ? "Koreksi kata di tulisanmu akan dipelajari otomatis. Kamu tetap bisa mengedit atau menghapusnya." : "Pembelajaran otomatis sedang nonaktif. Kamu bisa menambahkan kata secara manual.")
+                    .font(BisikTheme.font(12, relativeTo: .caption))
+                    .foregroundStyle(BisikTheme.secondary)
+                    .lineSpacing(4)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(BisikTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+            .padding(.horizontal, 24)
+            .padding(.bottom, 16)
 
-                if model.dictionary.isEmpty {
-                    EmptyState(symbol: "character.book.closed", title: "Kata yang lebih personal.", message: "Tambahkan nama, istilah kerja, atau ejaan yang sering keliru.")
-                } else if entries.isEmpty {
-                    EmptyState(symbol: "magnifyingglass", title: "Kata belum ditemukan", message: "Cari ejaan awal atau ejaan yang benar.")
-                } else {
-                    List(entries) { entry in
-                        Button {
-                            editingEntry = entry
-                            showEditor = true
-                        } label: {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(spacing: 8) {
-                                    Text(entry.source)
-                                        .foregroundStyle(BisikTheme.secondary)
-                                    Image(systemName: "arrow.right")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(BisikTheme.secondary)
-                                    Text(entry.replacement)
-                                        .foregroundStyle(BisikTheme.ink)
-                                        .font(BisikTheme.font(15, semibold: true))
-                                }
-                                .font(BisikTheme.font(15))
-                                .fixedSize(horizontal: false, vertical: true)
-                                Label(entry.learned ? "Dipelajari dari koreksi" : "Ditambahkan olehmu", systemImage: entry.learned ? "sparkle" : "pencil")
-                                    .font(BisikTheme.font(11, relativeTo: .caption2))
-                                    .foregroundStyle(entry.learned ? BisikTheme.accent : BisikTheme.secondary)
+            if model.dictionary.isEmpty {
+                EmptyState(symbol: "character.book.closed", title: "Kamus masih kosong", message: "Tambahkan ejaan atau edit hasil transkripsi untuk mempelajari koreksi.")
+            } else if entries.isEmpty {
+                EmptyState(symbol: "magnifyingglass", title: "Kata belum ditemukan", message: "Cari ejaan awal atau ejaan yang benar.")
+            } else {
+                List(entries) { entry in
+                    Button {
+                        editingEntry = entry
+                        showEditor = true
+                    } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                Text(entry.source)
+                                    .foregroundStyle(BisikTheme.secondary)
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(BisikTheme.secondary)
+                                Text(entry.replacement)
+                                    .foregroundStyle(BisikTheme.ink)
+                                    .font(BisikTheme.font(15, semibold: true))
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 12)
-                            .contentShape(Rectangle())
+                            .font(BisikTheme.font(15))
+                            .fixedSize(horizontal: false, vertical: true)
+                            Label(entry.learned ? "Dipelajari dari koreksi" : "Ditambahkan olehmu", systemImage: entry.learned ? "sparkle" : "pencil")
+                                .font(BisikTheme.font(11, relativeTo: .caption2))
+                                .foregroundStyle(entry.learned ? BisikTheme.accent : BisikTheme.secondary)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("\(entry.source), menjadi \(entry.replacement)")
-                        .accessibilityHint("Ketuk untuk mengedit.")
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) { deleting = entry } label: {
-                                Label("Hapus", systemImage: "trash")
-                            }
-                        }
-                        .listRowBackground(Color.white)
-                        .listRowSeparatorTint(BisikTheme.line)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(entry.source), menjadi \(entry.replacement)")
+                    .accessibilityHint("Ketuk untuk mengedit.")
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) { deleting = entry } label: {
+                            Label("Hapus", systemImage: "trash")
+                        }
+                    }
+                    .listRowBackground(Color.white)
+                    .listRowSeparatorTint(BisikTheme.line)
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
-            .background(Color.white)
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $search, prompt: "Cari kata di kamus")
-            .sheet(isPresented: $showEditor) {
-                DictionaryEditor(entry: editingEntry).environmentObject(model)
+        }
+        .background(Color.white)
+        .searchable(text: $search, prompt: "Cari kata di kamus")
+        .sheet(isPresented: $showEditor) {
+            DictionaryEditor(entry: editingEntry).environmentObject(model)
+        }
+        .alert("Hapus kata ini?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button("Batal", role: .cancel) { deleting = nil }
+            Button("Hapus", role: .destructive) {
+                if let deleting { model.deleteDictionary(deleting.id) }
+                deleting = nil
             }
-            .alert("Hapus kata ini?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-                Button("Batal", role: .cancel) { deleting = nil }
-                Button("Hapus", role: .destructive) {
-                    if let deleting { model.deleteDictionary(deleting.id) }
-                    deleting = nil
-                }
-            } message: {
-                Text("Koreksi ini tidak lagi digunakan pada rekaman berikutnya.")
-            }
+        } message: {
+            Text("Koreksi ini tidak lagi digunakan pada rekaman berikutnya.")
         }
     }
 }
@@ -129,7 +126,7 @@ private struct DictionaryEditor: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    PageTitle(title: entry == nil ? "Tambah kata" : "Edit kata", subtitle: "Bantu Bisik mengenali ejaan yang tepat.")
+                    PageTitle(title: entry == nil ? "Tambah kata" : "Edit kata", subtitle: "Masukkan ejaan awal dan penggantinya.")
                     VStack(alignment: .leading, spacing: 12) {
                         Text("YANG BIASA TERDENGAR").font(BisikTheme.font(11, semibold: true, relativeTo: .caption2)).foregroundStyle(BisikTheme.secondary)
                         TextField("Ejaan yang kurang tepat", text: $source)

@@ -4,7 +4,8 @@ Project SwiftUI baru di dalam fork OpenWhispr. Buka **Bisik.xcodeproj** di Mac d
 
 ## Yang dibuat
 
-- Layar awal langsung editor transkripsi, tombol keyboard dan copy, serta mikrofon di bawah. Tahan untuk merekam, lepas untuk memproses; batas 5 menit per rekaman atau sisa kuota yang lebih kecil. Waveform berasal dari level audio sungguhan.
+- Home hanya berisi editor transkripsi, tombol copy, waveform dan mikrofon di bawah, tanpa slogan atau kartu kuota. Ketuk kata di editor untuk menempatkan kursor dan membuka keyboard; tombol centang di atas keyboard mengakhiri edit. Tahan mikrofon untuk merekam, lepas untuk memproses. Waveform berasal dari level audio sungguhan.
+- Burger menu di kiri atas membuka Rekam, Riwayat, Kamus, Langganan, Paket & kuota, Pengaturan dan tulisan baru. Informasi Free/Pro dan kuota bulanan berada pada layar Paket & kuota.
 - Pratinjau transkripsi langsung dengan Apple Speech **di perangkat** jika bahasa/perangkat mendukung. Hasil final melalui backend milik developer. Bila preview lokal tidak tersedia, rekaman tetap diproses saat tombol dilepas.
 - Hasil final otomatis disalin ke clipboard (bisa dimatikan), tombol copy berubah centang; clipboard tidak dibaca. Pengguna tinggal menempel di aplikasi lain.
 - History lokal yang bisa dicari, dibuka kembali, diedit, disalin dan dihapus. Audio sementara dihapus sesudah sukses/batal; kegagalan upload bisa dicoba lagi selama app aktif.
@@ -50,6 +51,7 @@ App hanya menggunakan HTTPS. Windows dapat mengembangkan/menguji backend dan men
 | Bisik/Services | Audio, API, Keychain, persistence, StoreKit, AppModel |
 | Bisik/Resources | Info.plist, privacy manifest, font, icon, StoreKit config |
 | BisikTests | Invariant koreksi kata, kuota, state hold dan data lokal |
+| BisikUITests | Navigasi menu, posisi edit, scroll dan penutupan keyboard |
 | backend | API dan test server |
 | scripts/generate_project.py | Generator project tanpa dependency untuk Windows/Mac |
 | docs | Catatan desain dan penyiapan rilis |
@@ -58,7 +60,7 @@ Jika menambah file Swift, jalankan `python ios-native/scripts/generate_project.p
 
 ## Validasi dan batas rilis
 
-Workflow `.github/workflows/native-ios.yml` menjalankan backend tests serta build/XCTest di simulator macOS, lalu menyimpan screenshot UI asli. Lihat hasil workflow, bukan keberadaan source saja, untuk memastikan status build terbaru.
+Workflow `.github/workflows/native-ios.yml` menjalankan backend tests serta build/XCTest dan pengujian interaksi UI di simulator macOS, lalu menyimpan screenshot UI asli. Lihat hasil workflow, bukan keberadaan source saja, untuk memastikan status build terbaru.
 
 Sebelum rilis, wajib isi konfigurasi milik Anda dan lakukan acceptance di perangkat: rekam cepat, tahan/lipat jari, mikrofon ditolak, pindah app/interupsi telepon, offline/retry, clipboard, edit belajar kamus, kuota habis/reset, purchase pending/cancel/refund/expire/restore, penghapusan akun, Dynamic Type dan VoiceOver. Dokumen `docs/RELEASE.md` merinci kebutuhan konkret. Project ini tidak otomatis menerbitkan app ke App Store atau melakukan deployment server.
 

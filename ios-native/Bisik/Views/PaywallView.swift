@@ -28,19 +28,19 @@ struct PaywallView: View {
                         IconControl(symbol: "xmark", label: "Tutup langganan", disabled: model.isPurchasing) { dismiss() }
                     }
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(pro ? "Lebih banyak ruang.\nSudah jadi milikmu." : "Biarkan kata-katamu\nmengalir lebih jauh.")
+                        Text(pro ? "Bisik Pro aktif" : "Langganan Bisik Pro")
                             .font(BisikTheme.font(24, semibold: true, relativeTo: .title))
                             .foregroundStyle(BisikTheme.ink)
                             .fixedSize(horizontal: false, vertical: true)
-                        Text("\(AppConfiguration.proMinutes) menit transkripsi setiap bulan, untuk ide yang terus datang.")
+                        Text("\(AppConfiguration.proMinutes) menit transkripsi setiap bulan.")
                             .font(BisikTheme.font(14))
                             .foregroundStyle(BisikTheme.secondary)
                             .lineSpacing(4)
                     }
                     VStack(alignment: .leading, spacing: 20) {
-                        feature("waveform", title: "Lebih leluasa berbicara", detail: "\(AppConfiguration.proMinutes) menit per bulan. Paket gratis mendapat \(AppConfiguration.freeMinutes) menit.")
-                        feature("sparkle", title: "Tulisan sesuai caramu", detail: "Kamus personal, koreksi yang dipelajari, dan riwayat tetap tersedia di semua paket.")
-                        feature("doc.on.doc", title: "Siap untuk ditempel", detail: "Rekam, edit bila perlu, lalu gunakan tulisanmu di aplikasi lain.")
+                        feature("waveform", title: "Kuota transkripsi", detail: "\(AppConfiguration.proMinutes) menit per bulan. Paket Free mendapat \(AppConfiguration.freeMinutes) menit.")
+                        feature("sparkle", title: "Kamus dan riwayat", detail: "Kamus, pembelajaran koreksi, dan riwayat tersedia di semua paket.")
+                        feature("doc.on.doc", title: "Salin hasil", detail: "Hasil transkripsi dapat diedit dan disalin ke aplikasi lain.")
                     }
                     .padding(20)
                     .frame(maxWidth: .infinity, alignment: .leading)

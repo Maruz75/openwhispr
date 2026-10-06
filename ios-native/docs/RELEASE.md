@@ -49,6 +49,8 @@ Review menggunakan [safaiyeh/app-store-review-skill](https://github.com/safaiyeh
 | Purchase pending/cancel | Tidak memberi Pro sebelum verifikasi sukses |
 | Restore/refund/expire | Entitlement sesuai status Apple terkini |
 | Delete account | Apple credential direvoke, sesi dan data server/local dihapus |
-| Small iPhone/iPad + largest text | Editor, tab, paywall bisa digunakan tanpa clipping |
+| Tap kata, scroll, centang keyboard | Kursor berada pada kata yang diketuk; centang menutup keyboard dan menyimpan koreksi |
+| Burger menu saat edit | Keyboard ditutup, draft dipertahankan, navigasi kuota/langganan dapat dibuka |
+| Small iPhone/iPad + largest text | Editor, burger menu, microphone dan paywall bisa digunakan tanpa clipping |
 
 Build simulator/XCTest mengecek kompilasi dan invariant core; tidak dapat menggantikan pengujian microphone hardware, signing Apple, sandbox subscription dan production HTTPS.

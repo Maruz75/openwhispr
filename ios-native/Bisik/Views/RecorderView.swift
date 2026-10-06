@@ -8,7 +8,6 @@ struct RecorderView: View {
     @FocusState private var editing: Bool
     @State private var holding = false
     @State private var discardPendingAlert = false
-    @State private var discardAndStartNew = false
 
     private var idle: Bool { model.phase == .idle }
     private var editable: Bool { idle && !model.hasPendingRecording }
@@ -16,205 +15,114 @@ struct RecorderView: View {
     private var busy: Bool { model.phase == .preparing || model.phase == .processing }
 
     var body: some View {
-        NavigationStack {
-            GeometryReader { geometry in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        header
-                        transcriptCard(editorHeight: min(220, max(160, geometry.size.height * 0.30)))
-                        if model.learnedCount > 0 {
-                            Label("\(model.learnedCount) koreksi dipelajari di Kamus", systemImage: "sparkle")
-                                .font(BisikTheme.font(12, relativeTo: .caption))
-                                .foregroundStyle(BisikTheme.accent)
-                                .transition(.opacity)
-                        }
-                        if let message = model.errorMessage {
-                            errorCard(message)
-                        }
-                        quotaCard
-                    }
-                    .padding(24)
-                    .frame(maxWidth: 640)
+        VStack(spacing: 16) {
+            transcriptCard
+            if let message = model.errorMessage {
+                errorCard(message)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            // Recording remains reachable when the editor or an error grows.
+            // Hiding the footer during editing leaves room for the keyboard.
+            if !editing {
+                recordingArea
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+                    .padding(.bottom, 20)
                     .frame(maxWidth: .infinity)
-                }
-                .scrollDismissesKeyboard(.interactively)
-            }
-            .background(Color.white)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                // Recording remains reachable when the editor or an error grows.
-                // Hiding the footer during editing leaves room for the keyboard.
-                if !editing {
-                    recordingArea
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.white)
-                        .overlay(alignment: .top) {
-                            Rectangle().fill(BisikTheme.line.opacity(0.6)).frame(height: 1)
-                        }
-                }
-            }
-            .toolbar(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Selesai") {
-                        model.commitEdits()
-                        editing = false
-                    }.font(BisikTheme.font(14, semibold: true))
-                }
-            }
-            .onChange(of: editing) { wasEditing, isEditing in
-                if wasEditing && !isEditing { model.commitEdits() }
-            }
-            .onChange(of: model.phase) { _, phase in
-                if phase == .processing || phase == .idle { holding = false }
-            }
-            .onChange(of: model.needsConsent) { _, presented in if presented { holding = false } }
-            .onChange(of: model.needsSignIn) { _, presented in if presented { holding = false } }
-            .onChange(of: model.showPaywall) { _, presented in if presented { holding = false } }
-            .onChange(of: model.errorMessage) { _, message in
-                if message != nil && idle { holding = false }
-            }
-            .onChange(of: scenePhase) { _, phase in
-                if phase != .active && (holding || model.phase == .recording || model.phase == .preparing) {
-                    holding = false
-                    model.cancelRecording()
-                }
-            }
-            .onDisappear {
-                if holding || model.phase == .recording || model.phase == .preparing {
-                    holding = false
-                    model.cancelRecording()
-                }
-                if editing { model.commitEdits() }
-            }
-            .alert("Hapus rekaman ini?", isPresented: $discardPendingAlert) {
-                Button("Batal", role: .cancel) { discardAndStartNew = false }
-                Button("Hapus rekaman", role: .destructive) {
-                    model.cancelRecording()
-                    if discardAndStartNew { model.newDraft() }
-                    discardAndStartNew = false
-                }
-            } message: {
-                Text("Rekaman yang belum berhasil diproses akan dihapus. Kamu perlu merekam ulang untuk mencoba kembali.")
+                    .background(Color.white)
             }
         }
-    }
-
-    private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(BisikTheme.accent)
-                    Text("bisik").font(BisikTheme.font(24, semibold: true, relativeTo: .title))
-                }
-                Text("Pikiranmu, menjadi tulisan.")
-                    .font(BisikTheme.font())
-                    .foregroundStyle(BisikTheme.secondary)
-            }
-            Spacer()
-            Button {
-                editing = false
-                model.commitEdits()
-                if model.hasPendingRecording {
-                    discardAndStartNew = true
-                    discardPendingAlert = true
-                } else {
-                    model.newDraft()
-                }
-            } label: {
-                Label("Baru", systemImage: "plus")
-                    .font(BisikTheme.font(12, semibold: true, relativeTo: .caption))
-                    .frame(minHeight: 44)
-                    .padding(.horizontal, 12)
-                    .background(BisikTheme.panel, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(!idle)
-            .opacity(idle ? 1 : 0.5)
-            .accessibilityLabel("Buat tulisan baru")
-        }
-        .foregroundStyle(BisikTheme.ink)
-    }
-
-    private func transcriptCard(editorHeight: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                HStack(spacing: 8) {
-                    Circle().fill(recording ? BisikTheme.accent : BisikTheme.secondary.opacity(0.35))
-                        .frame(width: 6, height: 6)
-                    Text(recording ? "MENDENGARKAN" : model.hasPendingRecording ? "PRATINJAU" : "TULISANMU")
-                        .font(BisikTheme.font(11, semibold: true, relativeTo: .caption2))
-                        .foregroundStyle(BisikTheme.secondary)
-                }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                IconControl(symbol: editing ? "keyboard.chevron.compact.down" : "keyboard", label: editing ? "Tutup keyboard" : "Edit tulisan dengan keyboard", highlighted: editing, disabled: !editable) {
-                    editing.toggle()
+                Button {
+                    editing = false
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 44, height: 44)
                 }
+                .accessibilityLabel("Selesai mengedit")
+                .accessibilityIdentifier("transcript.done")
+            }
+        }
+        .onChange(of: editing) { wasEditing, isEditing in
+            if wasEditing && !isEditing { model.commitEdits() }
+        }
+        .onChange(of: model.phase) { _, phase in
+            if phase == .processing || phase == .idle { holding = false }
+        }
+        .onChange(of: model.needsConsent) { _, presented in if presented { holding = false } }
+        .onChange(of: model.needsSignIn) { _, presented in if presented { holding = false } }
+        .onChange(of: model.showPaywall) { _, presented in if presented { holding = false } }
+        .onChange(of: model.errorMessage) { _, message in
+            if message != nil && idle { holding = false }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active && (holding || model.phase == .recording || model.phase == .preparing) {
+                holding = false
+                model.cancelRecording()
+            }
+        }
+        .onDisappear {
+            if holding || model.phase == .recording || model.phase == .preparing {
+                holding = false
+                model.cancelRecording()
+            }
+            model.commitEdits()
+        }
+        .alert("Hapus rekaman ini?", isPresented: $discardPendingAlert) {
+            Button("Batal", role: .cancel) { }
+            Button("Hapus rekaman", role: .destructive) {
+                model.cancelRecording()
+            }
+        } message: {
+            Text("Rekaman yang belum berhasil diproses akan dihapus.")
+        }
+    }
+
+    private var transcriptCard: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
                 IconControl(symbol: model.copied ? "checkmark" : "doc.on.doc", label: model.copied ? "Tulisan tersalin" : "Salin tulisan", highlighted: model.copied, disabled: model.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !editable) {
                     model.commitEdits()
                     model.copyText()
                 }
+                .accessibilityIdentifier("transcript.copy")
             }
-            ZStack(alignment: .topLeading) {
-                if model.text.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Mulai dari satu kata.")
-                            .font(BisikTheme.font(24, semibold: true, relativeTo: .title))
-                            .foregroundStyle(BisikTheme.ink)
-                        Text("Tahan mikrofon dan bicaralah.\nTulisan akan muncul di sini.")
-                            .font(BisikTheme.font(16))
-                            .foregroundStyle(BisikTheme.secondary)
-                            .lineSpacing(6)
-                    }
-                    .padding(.top, 8)
-                    .padding(.leading, 4)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-                }
-                TextEditor(text: $model.text)
-                    .font(BisikTheme.font(18))
-                    .lineSpacing(6)
-                    .foregroundStyle(BisikTheme.ink)
-                    .scrollContentBackground(.hidden)
-                    .focused($editing)
-                    .disabled(!editable)
-                    .frame(height: editorHeight)
-                    .accessibilityLabel("Hasil transkripsi, dapat diedit")
-                    .accessibilityHint("Gunakan tombol keyboard untuk mengoreksi tulisan.")
-            }
-            HStack(spacing: 8) {
-                Image(systemName: model.settings.autoCopy ? "checkmark.circle" : "doc.on.doc")
-                Text(model.hasPendingRecording ? "Pratinjau belum final. Coba proses kembali." : model.settings.autoCopy ? "Tersalin otomatis setelah selesai" : "Ketuk ikon salin untuk menyalin")
-            }
-            .font(BisikTheme.font(11, relativeTo: .caption2))
-            .foregroundStyle(BisikTheme.secondary)
-            .padding(.top, 8)
+            // Native selection places the caret at the tapped word. No gesture
+            // overlay interferes with scrolling, selection, or keyboard focus.
+            TextEditor(text: $model.text)
+                .font(BisikTheme.font(18))
+                .lineSpacing(6)
+                .foregroundStyle(BisikTheme.ink)
+                .scrollContentBackground(.hidden)
+                .scrollDismissesKeyboard(.interactively)
+                .focused($editing)
+                .disabled(!editable)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel("Hasil transkripsi")
+                .accessibilityHint("Ketuk tulisan untuk menempatkan kursor dan mengedit.")
+                .accessibilityIdentifier("transcript.editor")
         }
-        .padding(16)
+        .padding(12)
         .background(BisikTheme.panel, in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(editing ? BisikTheme.focus : BisikTheme.line, lineWidth: editing ? 2 : 1))
     }
 
     private var recordingArea: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 20) {
             LiveWaveform(levels: model.levels, active: recording)
                 .frame(height: 24)
                 .accessibilityHidden(true)
-            VStack(spacing: 4) {
-                Text(statusTitle)
-                    .font(BisikTheme.font(14, semibold: true))
-                    .foregroundStyle(BisikTheme.ink)
-                    .accessibilityAddTraits(.updatesFrequently)
-                Text(recording ? BisikTheme.duration(model.elapsedSeconds) : statusDetail)
-                    .font(BisikTheme.font(12, relativeTo: .caption))
-                    .monospacedDigit()
-                    .foregroundStyle(BisikTheme.secondary)
-            }
-            .multilineTextAlignment(.center)
             ZStack(alignment: .trailing) {
                 Group {
                     if voiceOver {
@@ -249,6 +157,7 @@ struct RecorderView: View {
                 .frame(maxWidth: .infinity)
                 .accessibilityLabel(recording ? "Hentikan rekaman" : "Mulai rekaman")
                 .accessibilityHint(voiceOver ? "Ketuk dua kali untuk mulai atau berhenti." : "Tahan untuk berbicara, lepaskan untuk selesai.")
+                .accessibilityIdentifier("recorder.microphone")
                 if recording || model.phase == .preparing {
                     IconControl(symbol: "xmark", label: "Batalkan rekaman") {
                         holding = false
@@ -257,6 +166,7 @@ struct RecorderView: View {
                 }
             }
         }
+        .frame(maxWidth: 640)
         .frame(maxWidth: .infinity)
     }
 
@@ -283,46 +193,6 @@ struct RecorderView: View {
         .opacity(model.phase == .processing ? 0.7 : 1)
     }
 
-    private var quotaCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(model.quota?.plan == "pro" ? "Bisik Pro" : "Ruang untuk bicara")
-                        .font(BisikTheme.font(12, semibold: true, relativeTo: .caption))
-                        .foregroundStyle(BisikTheme.ink)
-                    if let quota = model.quota {
-                        Text("\(BisikTheme.minutes(quota.remainingSeconds)) tersisa bulan ini")
-                            .font(BisikTheme.font(11, relativeTo: .caption2))
-                            .foregroundStyle(BisikTheme.secondary)
-                    } else {
-                        Text("\(AppConfiguration.freeMinutes) menit gratis setiap bulan")
-                            .font(BisikTheme.font(11, relativeTo: .caption2))
-                            .foregroundStyle(BisikTheme.secondary)
-                    }
-                }
-                Spacer()
-                Button {
-                    model.showPaywall = true
-                } label: {
-                    Text(model.quota?.plan == "pro" ? "Langganan" : "Lihat Pro")
-                        .font(BisikTheme.font(12, semibold: true, relativeTo: .caption))
-                        .foregroundStyle(BisikTheme.accent)
-                        .frame(minHeight: 44)
-                }
-                .buttonStyle(.plain)
-            }
-            if let quota = model.quota {
-                ProgressView(value: min(max(quota.progress, 0), 1))
-                    .tint(BisikTheme.accent)
-                    .accessibilityLabel("Kuota terpakai")
-                    .accessibilityValue("\(BisikTheme.minutes(quota.usedSeconds)) dari \(BisikTheme.minutes(quota.limitSeconds))")
-            }
-        }
-        .padding(16)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(BisikTheme.line, lineWidth: 1))
-    }
-
     private func errorCard(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(message, systemImage: "exclamationmark.circle")
@@ -338,7 +208,6 @@ struct RecorderView: View {
                         .disabled(!idle)
                     Spacer()
                     Button("Hapus rekaman") {
-                        discardAndStartNew = false
                         discardPendingAlert = true
                     }
                         .font(BisikTheme.font(13))
@@ -350,24 +219,6 @@ struct RecorderView: View {
         .padding(16)
         .background(BisikTheme.panel, in: RoundedRectangle(cornerRadius: 18))
         .accessibilityElement(children: .contain)
-    }
-
-    private var statusTitle: String {
-        switch model.phase {
-        case .idle: return model.hasPendingRecording ? "Rekaman perlu diproses kembali" : "Tahan untuk berbicara"
-        case .preparing: return "Menyiapkan mikrofon…"
-        case .recording: return "Lepaskan untuk selesai"
-        case .processing: return "Merapikan tulisanmu…"
-        }
-    }
-
-    private var statusDetail: String {
-        switch model.phase {
-        case .idle: return "Maksimal 5 menit per rekaman."
-        case .preparing: return "Rekaman dimulai saat mikrofon siap."
-        case .recording: return ""
-        case .processing: return "Hasil akan siap untuk ditempel."
-        }
     }
 
     private func toggleAccessibleRecording() {
