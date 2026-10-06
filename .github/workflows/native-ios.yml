@@ -1,0 +1,61 @@
+name: Native iOS
+
+on:
+  push:
+    branches: [feature/native-ios-dictation]
+    paths: ['ios-native/**', '.github/workflows/native-ios.yml']
+  pull_request:
+    paths: ['ios-native/**', '.github/workflows/native-ios.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ios-native/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  ios:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ios-native
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate and inspect project
+        run: |
+          python3 scripts/generate_project.py
+          xcodebuild -list -project Bisik.xcodeproj
+      - name: Select simulator
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for k,vs in d["devices"].items() if "iOS" in k for x in vs if "iPhone" in x["name"]))')
+          echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE_ID" || true
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+      - name: Compile and test on simulator
+        run: xcodebuild test -project Bisik.xcodeproj -scheme Bisik -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath DerivedData -resultBundlePath TestResults.xcresult CODE_SIGNING_ALLOWED=NO
+      - name: Capture actual native UI
+        run: |
+          xcrun simctl install "$DEVICE_ID" DerivedData/Build/Products/Debug-iphonesimulator/Bisik.app
+          xcrun simctl status_bar "$DEVICE_ID" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100
+          xcrun simctl launch "$DEVICE_ID" com.maruz75.bisik
+          sleep 3
+          xcrun simctl io "$DEVICE_ID" screenshot bisik-simulator.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-ios-validation
+          path: |
+            ios-native/TestResults.xcresult
+            ios-native/bisik-simulator.png
+          retention-days: 7

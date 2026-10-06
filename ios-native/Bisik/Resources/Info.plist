@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleDevelopmentRegion</key><string>id</string>
+    <key>CFBundleDisplayName</key><string>Bisik</string>
+    <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>1.0.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>LSRequiresIPhoneOS</key><true/>
+    <key>NSMicrophoneUsageDescription</key><string>Bisik menggunakan mikrofon saat Anda menahan tombol rekam untuk mengubah ucapan menjadi teks.</string>
+    <key>NSSpeechRecognitionUsageDescription</key><string>Bisik menampilkan pratinjau ucapan langsung menggunakan pengenalan suara di perangkat jika tersedia.</string>
+    <key>UILaunchScreen</key><dict/>
+    <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
+    <key>UISupportedInterfaceOrientations~ipad</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationPortraitUpsideDown</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
+    <key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
+    <key>UIAppFonts</key><array><string>Inter-Regular.ttf</string><string>Inter-SemiBold.ttf</string></array>
+    <key>ITSAppUsesNonExemptEncryption</key><false/>
+    <key>BisikAPIBaseURL</key><string>$(BISIK_API_BASE_URL)</string>
+    <key>BisikPrivacyURL</key><string>$(BISIK_PRIVACY_URL)</string>
+    <key>BisikTermsURL</key><string>$(BISIK_TERMS_URL)</string>
+    <key>BisikAIProviderDisclosure</key><string>$(BISIK_AI_PROVIDER_DISCLOSURE)</string>
+    <key>BisikProductIDs</key><array><string>com.maruz75.bisik.pro.monthly</string><string>com.maruz75.bisik.pro.annual</string></array>
+    <key>BisikFreeMinutes</key><integer>15</integer>
+    <key>BisikProMinutes</key><integer>300</integer>
+</dict></plist>

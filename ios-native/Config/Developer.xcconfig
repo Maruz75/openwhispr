@@ -1,0 +1,8 @@
+// Only public deployment values belong here. Provider keys live in backend/.env.
+// For URLs in xcconfig, use https:/$()/api.your-domain.com (// starts a comment).
+BISIK_API_BASE_URL =
+BISIK_PRIVACY_URL =
+BISIK_TERMS_URL =
+BISIK_AI_PROVIDER_DISCLOSURE = OpenAI, melalui server pengembang Bisik. Audio, teks, dan entri kamus yang relevan dikirim hanya untuk transkripsi dan perbaikan ejaan.
+// Set your own Apple team in Xcode Signing & Capabilities.
+DEVELOPMENT_TEAM =

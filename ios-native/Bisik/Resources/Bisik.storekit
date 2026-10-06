@@ -1,0 +1,77 @@
+{
+  "identifier": "Bisik-Local-StoreKit",
+  "nonRenewingSubscriptions": [],
+  "products": [],
+  "settings": {
+    "_applicationInternalID": "0",
+    "_developerTeamID": "",
+    "_failTransactionsEnabled": false,
+    "_locale": "id_ID",
+    "_storefront": "IDN",
+    "_storeKitErrors": [],
+    "_timeRate": 0
+  },
+  "subscriptionGroups": [
+    {
+      "id": "bisik-pro",
+      "localizations": [
+        {
+          "description": "Transkripsi lebih panjang dengan Bisik Pro",
+          "displayName": "Bisik Pro",
+          "locale": "id_ID"
+        }
+      ],
+      "name": "Bisik Pro",
+      "subscriptions": [
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "49000",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "bisik-monthly",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "300 menit transkripsi setiap bulan kalender UTC. Kuota bulanan tidak diakumulasi.",
+              "displayName": "Bisik Pro Bulanan",
+              "locale": "id_ID"
+            }
+          ],
+          "productID": "com.maruz75.bisik.pro.monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Bisik Pro Bulanan",
+          "subscriptionGroupID": "bisik-pro",
+          "type": "RecurringSubscription",
+          "winBackOffers": []
+        },
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "399000",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "bisik-annual",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "300 menit transkripsi setiap bulan kalender UTC. Kuota bulanan tidak diakumulasi.",
+              "displayName": "Bisik Pro Tahunan",
+              "locale": "id_ID"
+            }
+          ],
+          "productID": "com.maruz75.bisik.pro.annual",
+          "recurringSubscriptionPeriod": "P1Y",
+          "referenceName": "Bisik Pro Tahunan",
+          "subscriptionGroupID": "bisik-pro",
+          "type": "RecurringSubscription",
+          "winBackOffers": []
+        }
+      ]
+    }
+  ],
+  "version": {
+    "major": 3,
+    "minor": 0
+  }
+}
