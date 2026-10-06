@@ -32,7 +32,6 @@ export function MeetingNotificationFolderPicker({
 }: Props) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
-  const [filterSpaceId, setFilterSpaceId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const [spaceId, setSpaceId] = useState<number | null>(null);
   const [locationOpen, setLocationOpen] = useState(false);
@@ -50,18 +49,16 @@ export function MeetingNotificationFolderPicker({
     () =>
       folders.filter(
         (folder) =>
-          (filterSpaceId === null || folder.space_id === filterSpaceId) &&
-          (folderMatchesQuery(folder, t, query.trim()) ||
-            (context &&
-              meetingFolderLabel(context, folder, t)
-                .toLowerCase()
-                .includes(query.trim().toLowerCase())))
+          folderMatchesQuery(folder, t, query.trim()) ||
+          (context &&
+            meetingFolderLabel(context, folder, t)
+              .toLowerCase()
+              .includes(query.trim().toLowerCase()))
       ),
-    [context, folders, filterSpaceId, query, t]
+    [context, folders, query, t]
   );
   const groups = useMemo(() => {
-    if (query.trim() || filterSpaceId !== null)
-      return [{ label: t(key("folders")), items: matchingFolders }];
+    if (query.trim()) return [{ label: t(key("folders")), items: matchingFolders }];
     const recent = (context?.recentDestinations ?? []).flatMap((ref) =>
       folders.filter((f) => f.id === ref.folderId && f.space_id === ref.spaceId)
     );
@@ -80,11 +77,11 @@ export function MeetingNotificationFolderPicker({
       { label: t(key("recent")), items: recent },
       { label: t(key("folders")), items: fallback },
     ].filter((g) => g.items.length);
-  }, [context, folders, query, filterSpaceId, matchingFolders, selected, t]);
+  }, [context, folders, query, matchingFolders, selected, t]);
   const visible = groups.flatMap((g) => g.items);
   useEffect(() => {
     setActive(0);
-  }, [query, filterSpaceId]);
+  }, [query]);
   useEffect(() => {
     if (mode === "form" && priorMode.current !== "form") {
       setDraft(matchingFolders.length ? "" : query.trim());
@@ -304,29 +301,6 @@ export function MeetingNotificationFolderPicker({
             </div>
           ) : (
             <>
-              {context.spaces.some((space) => space.kind === "team") && (
-                <div className="meeting-folder-spaces" role="group" aria-label={t(key("location"))}>
-                  <button
-                    type="button"
-                    aria-pressed={filterSpaceId === null}
-                    onClick={() => setFilterSpaceId(null)}
-                  >
-                    {t(key("allSpaces"))}
-                  </button>
-                  {context.spaces.map((space) => (
-                    <button
-                      type="button"
-                      key={space.id}
-                      aria-pressed={filterSpaceId === space.id}
-                      onClick={() => setFilterSpaceId(space.id)}
-                    >
-                      {space.kind === "private"
-                        ? t(key("private"))
-                        : `${space.name} · ${t(key("shared"))}`}
-                    </button>
-                  ))}
-                </div>
-              )}
               <div
                 className="meeting-folder-results"
                 role="listbox"

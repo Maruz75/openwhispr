@@ -92,29 +92,6 @@
   color: var(--color-foreground);
   font-size: 12px;
 }
-.meeting-folder-spaces {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px 3px 0;
-  max-height: 72px;
-  overflow: auto;
-}
-.meeting-folder-spaces button {
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  border-radius: 999px;
-  padding-block: 4px;
-  padding-inline: 8px;
-  font-size: 10px;
-  text-align: start;
-  color: var(--color-muted-foreground);
-  border: 1px solid var(--color-border);
-}
-.meeting-folder-spaces button[aria-pressed="true"] {
-  background: var(--color-muted);
-  color: var(--color-foreground);
-}
 .meeting-folder-results {
   max-height: 240px;
   overflow: auto;

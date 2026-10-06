@@ -135,10 +135,10 @@ The exact existing `ow-meeting-folder-rig-2511` worktree and
   localized folder placeholder and no shortcut badge. Search and Name opt out
   of the global embossed input style so the picker has a single thin focus
   indication. Form fields use logical 10px inset.
-- All spaces / Private / named Shared space filters reveal every folder within
-  the chosen space, including folders outside the five initial suggestions.
-  Filtering never selects or records. Search also matches the displayed
-  space/folder path. Selection retains the exact space and folder IDs, and
+- Private and Shared folders appear together in the results list, with no
+  separate space-filter section. Shared rows identify their teamspace. Search
+  matches the displayed space/folder path across all folders, including those
+  outside the five initial suggestions. Selection retains the exact space and folder IDs, and
   new-folder creation still starts Private after a Shared choice. Matching
   paths do not incorrectly prefill a new folder name.
 - Identical native geometry reports no longer call `setBounds` again. Ownership,
@@ -152,7 +152,7 @@ The exact existing `ow-meeting-folder-rig-2511` worktree and
 
 ### Evidence and limits
 
-Final code: **7,051 tests, 7,036 passed, zero failures, 14 skips, one TODO** with
+At code commit `3067a4dbf`: **7,051 tests, 7,036 passed, zero failures, 14 skips, one TODO** with
 `REQUIRE_DB_TESTS=1` under Node 24.20.0. Two earlier runs encountered the known
 local `better-sqlite3` native cleanup crash. Rebuilding the unchanged dependency
 against official Node 24.18.0 headers produced the successful run; the rig's
@@ -170,7 +170,7 @@ are **browser visual evidence, not native capture or recording acceptance**.
 Light/dark, Arabic RTL, Name padding and a 300px surface were checked. At 300px,
 the picker, search and New folder action have no horizontal overflow.
 
-![Shared folder filter, light](screenshots/meeting-folder-picker/feedback-light-team.png)
+![Private and Shared folders in one list, light](screenshots/meeting-folder-picker/feedback-light-team.png)
 ![Private-first form, light](screenshots/meeting-folder-picker/feedback-light-form.png)
 ![Dark Arabic RTL](screenshots/meeting-folder-picker/feedback-dark-rtl.png)
 ![300px surface](screenshots/meeting-folder-picker/feedback-narrow.png)
@@ -178,8 +178,9 @@ the picker, search and New folder action have no horizontal overflow.
 The live rig was restarted only after restoring its Electron binding. Its
 signed-in staging account/calendar profile remains intact; the installed app
 was not stopped. Native startup and a protected self-rendered compact prompt
-were checked. The preserved runtime-only trigger enters the real detection
-engine with preference, recording and ownership gates intact. No recording or
+were checked. The prior runtime-only trigger entered the real detection engine with
+preference, recording and ownership gates intact; the subsequent normal restart
+removed that hook. No recording or
 folder creation was performed by this feedback verification in the real account.
 
 **Native flash acceptance remains open.** Source tracing and regression tests
@@ -200,14 +201,19 @@ The existing worktree is intentionally kept at Josh's request and remains the
 running dev rig. No new worktree was created. Profile reset/teardown, merge,
 release, deployment and unrelated work were not performed.
 
-At verification, Electron PID `89932` started October 5 at 19:57:02 local time,
-owned by the existing launchd rig. Its process-lifetime-only SIGUSR2 hook is
-recorded by the rig's updated `trigger-pid.txt`; **verify PID, start time and
-executable path before any signal**. A normal restart removes the hook.
-`main.js` was restored byte-for-byte before committing. Local diagnostic state
-and the hook are retained in `.superpowers/sdd/meeting-folder-feedback/` because
-the running probe writes there; they are ignored and are not product changes.
-The original launcher/profile remain at the paths in the Titan kickoff handover.
+The rig was restarted normally after the unified-results correction, preserving
+its existing profile. The prior PID `89932` and process-lifetime SIGUSR2 hook are
+no longer active; the obsolete `trigger-pid.txt` was removed. Do not signal the
+new process. `main.js` remains unchanged. Local diagnostic evidence remains
+ignored in `.superpowers/sdd/meeting-folder-feedback/`. The original launcher
+and profile remain at the paths in the Titan kickoff handover.
+
+The unified-results correction passed 23 focused picker/navigation/refresh tests,
+typecheck, scoped ESLint, locale consistency, formatting and renderer build.
+A fresh Codex review found no actionable regressions. Updated browser captures
+show mixed Private/Shared rows in light, dark Arabic RTL and at 300px. The full
+database suite above predates this narrow correction and was not repeated.
+Josh has not yet tested the native flash behavior.
 
 Next: choose an existing folder and complete Create & select in the native
 notification, confirming only the saved check appears; then perform the pending

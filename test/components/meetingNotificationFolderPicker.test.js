@@ -464,13 +464,15 @@ test("initial surface includes tall localized card layout before entrance animat
   assert.ok(reports.every((report) => report.contentHeight >= 130));
 });
 
-test("teamspace filter reveals its exact folders beyond the five suggestions without selecting", async (t) => {
+test("Shared folders appear alongside Private folders in the same search results", async (t) => {
   const c = await mount(t);
   await c.click(c.byLabel("Choose meeting folder"));
-  await c.click(c.button("Team · Shared"));
+  assert.equal(c.container.querySelector('[role="group"][aria-label="Location"]'), null);
+  await c.type(c.byLabel("Search folders"), "Calls");
   assert.equal(c.calls.length, 0);
+  assert.ok(c.byLabel("Private / Calls 1"));
   assert.ok(c.byLabel("Team / Calls 6 · Shared"));
-  assert.equal(c.container.querySelectorAll('#meeting-folder-results [role="option"]').length, 1);
+  assert.equal(c.container.querySelectorAll('#meeting-folder-results [role="option"]').length, 7);
   await c.click(c.byLabel("Team / Calls 6 · Shared"));
   assert.deepEqual(c.calls, [["select", { folderId: 7, spaceId: 2 }]]);
   await c.click(c.byLabel("Choose meeting folder"));
