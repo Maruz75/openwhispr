@@ -1,5 +1,5 @@
 const { compareVersions } = require("./parakeetCapability");
-const topics = require("../services/help/topics.json");
+const topics = require("../config/productHelpTopics.json");
 const AgentStreamRequestRegistry = require("./agentStreamRequestRegistry");
 
 const ENDPOINT = "https://docs.openwhispr.com/mcp";

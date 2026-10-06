@@ -1,4 +1,4 @@
-import topics from "./topics.json";
+import topics from "../../config/productHelpTopics.json";
 import { getSettings, selectResolvedLLMConfig } from "../../stores/settingsStore";
 import { usePolicyStore } from "../../stores/policyStore";
 import { projectHelpSettings } from "./helpContext";

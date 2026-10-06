@@ -6,7 +6,7 @@ const {
   remoteHelpAllowed,
   registerProductHelpIpc,
 } = require("../../src/helpers/productHelp");
-const topics = require("../../src/services/help/topics.json");
+const topics = require("../../src/config/productHelpTopics.json");
 const controller = () => new AbortController();
 const searchContent = [
   {
@@ -276,4 +276,28 @@ test("managed minimum version is enforced without blocking an up-to-date client"
   assert.equal(remoteHelpAllowed(policy, "1.10.2"), true);
   assert.equal(remoteHelpAllowed(policy, "1.11.0"), true);
   assert.equal(remoteHelpAllowed(policy), false);
+});
+
+test("the main-process helper loads using only files included in desktop packaging", (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "openwhispr-help-package-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const packageFiles = require("../../electron-builder.json").files;
+  for (const directory of ["helpers", "config"]) {
+    assert.ok(packageFiles.includes(`src/${directory}/**/*`));
+    fs.mkdirSync(path.join(root, "src", directory), { recursive: true });
+  }
+  for (const file of [
+    "helpers/productHelp.js",
+    "helpers/agentStreamRequestRegistry.js",
+    "helpers/parakeetCapability.js",
+    "config/productHelpTopics.json",
+  ])
+    fs.copyFileSync(path.join(__dirname, "../../src", file), path.join(root, "src", file));
+  assert.equal(
+    typeof require(path.join(root, "src/helpers/productHelp.js")).createProductHelp,
+    "function"
+  );
 });

@@ -10,7 +10,7 @@ import {
   type HelpResult,
 } from "../../services/help/productHelp";
 import { markdownToPlainText } from "../../helpers/markdownToPlainText";
-import topics from "../../services/help/topics.json";
+import topics from "../../config/productHelpTopics.json";
 
 const labels: Record<string, string> = {
   dictationKey: "settingsPage.general.hotkey.title",
