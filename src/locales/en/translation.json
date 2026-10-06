@@ -4769,6 +4769,7 @@
     "folders": {
       "choose": "Choose meeting folder",
       "search": "Search folders",
+      "allSpaces": "All spaces",
       "clear": "Clear search",
       "private": "Private",
       "shared": "Shared",

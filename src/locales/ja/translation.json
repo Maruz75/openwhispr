@@ -4769,6 +4769,7 @@
     "folders": {
       "choose": "会議フォルダーを選択",
       "search": "フォルダーを検索",
+      "allSpaces": "すべてのスペース",
       "clear": "検索をクリア",
       "private": "プライベート",
       "shared": "共有",

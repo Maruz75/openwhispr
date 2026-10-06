@@ -4769,6 +4769,7 @@
     "folders": {
       "choose": "Besprechungsordner auswählen",
       "search": "Ordner suchen",
+      "allSpaces": "Alle Bereiche",
       "clear": "Suche löschen",
       "private": "Privat",
       "shared": "Geteilt",

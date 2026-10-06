@@ -4769,6 +4769,7 @@
     "folders": {
       "choose": "Elegir carpeta de la reunión",
       "search": "Buscar carpetas",
+      "allSpaces": "Todos los espacios",
       "clear": "Borrar búsqueda",
       "private": "Privado",
       "shared": "Compartido",

@@ -46,7 +46,7 @@
 }
 .meeting-folder-picker button:focus-visible,
 .meeting-folder-picker input:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 1px solid color-mix(in srgb, var(--color-primary) 55%, transparent);
   outline-offset: 1px;
 }
 .meeting-folder-picker button:disabled {
@@ -56,17 +56,64 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 7px 9px;
-  border-bottom: 1px solid var(--color-border);
+  min-height: 32px;
+  margin: 3px;
+  padding-block: 6px;
+  padding-inline: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-foreground) 4%, transparent);
   color: var(--color-muted-foreground);
+}
+.dark .meeting-folder-search {
+  border-color: #ffffff1a;
+  background: #ffffff0d;
+}
+.meeting-folder-search:focus-within {
+  outline: 1px solid color-mix(in srgb, var(--color-primary) 55%, transparent);
+  outline-offset: 1px;
+}
+.meeting-folder-search input:focus-visible {
+  outline: none;
+}
+.meeting-folder-search > button {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  padding: 2px;
+  border-radius: 999px;
 }
 .meeting-folder-search input {
   width: 100%;
   min-width: 0;
+  padding-inline: 2px;
   outline: 0;
   background: transparent;
   color: var(--color-foreground);
   font-size: 12px;
+}
+.meeting-folder-spaces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 3px 0;
+  max-height: 72px;
+  overflow: auto;
+}
+.meeting-folder-spaces button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border-radius: 999px;
+  padding-block: 4px;
+  padding-inline: 8px;
+  font-size: 10px;
+  text-align: start;
+  color: var(--color-muted-foreground);
+  border: 1px solid var(--color-border);
+}
+.meeting-folder-spaces button[aria-pressed="true"] {
+  background: var(--color-muted);
+  color: var(--color-foreground);
 }
 .meeting-folder-results {
   max-height: 240px;
@@ -148,7 +195,8 @@
   min-width: 0;
   width: 100%;
   font-size: 12px;
-  padding: 7px 8px;
+  padding-block: 7px;
+  padding-inline: 10px;
   border-radius: 6px;
   border: 1px solid var(--color-border);
   background: var(--color-background);
@@ -167,7 +215,8 @@
   background: var(--color-background);
   font-size: 11px;
   border-radius: 6px;
-  padding: 7px 8px;
+  padding-block: 7px;
+  padding-inline: 10px;
   text-align: start;
 }
 .meeting-folder-location-trigger > span {

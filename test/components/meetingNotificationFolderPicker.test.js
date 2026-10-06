@@ -463,3 +463,62 @@ test("initial surface includes tall localized card layout before entrance animat
   assert.ok(reports.length);
   assert.ok(reports.every((report) => report.contentHeight >= 130));
 });
+
+test("teamspace filter reveals its exact folders beyond the five suggestions without selecting", async (t) => {
+  const c = await mount(t);
+  await c.click(c.byLabel("Choose meeting folder"));
+  await c.click(c.button("Team · Shared"));
+  assert.equal(c.calls.length, 0);
+  assert.ok(c.byLabel("Team / Calls 6 · Shared"));
+  assert.equal(c.container.querySelectorAll('#meeting-folder-results [role="option"]').length, 1);
+  await c.click(c.byLabel("Team / Calls 6 · Shared"));
+  assert.deepEqual(c.calls, [["select", { folderId: 7, spaceId: 2 }]]);
+  await c.click(c.byLabel("Choose meeting folder"));
+  await c.click(c.button("New folder"));
+  assert.ok(c.button("Private"), "creation still starts Private after Shared selection");
+});
+
+test("search matches the visible teamspace and exact folder path", async (t) => {
+  const c = await mount(t);
+  await c.click(c.byLabel("Choose meeting folder"));
+  await c.type(c.byLabel("Search folders"), "Team");
+  assert.ok(c.byLabel("Team / Calls 6 · Shared"));
+  await c.type(c.byLabel("Search folders"), "Team / Calls 6");
+  await c.click(c.byLabel("Team / Calls 6 · Shared"));
+  assert.deepEqual(c.calls, [["select", { folderId: 7, spaceId: 2 }]]);
+});
+
+test("existing and created selections keep the same visible card with confirmation only", async (t) => {
+  const c = await mount(t);
+  await React.act(async () => new Promise((r) => setTimeout(r, 70)));
+  const card = c.container.querySelector('[data-meeting-region="card"]');
+  const motion = card.parentElement;
+  const surfaceCalls = [];
+  c.api.setMeetingNotificationSurface = async (_id, state) => {
+    surfaceCalls.push(state);
+    return { success: true, value: { width: 416, height: state.contentHeight } };
+  };
+  for (const create of [false, true]) {
+    await c.click(c.byLabel("Choose meeting folder"));
+    if (create) {
+      await c.click(c.button("New folder"));
+      await c.type(c.byLabel("Name"), "New stable folder");
+      await c.click(c.button("Create & select"));
+    } else await c.click(c.byLabel("Private / Calls 1"));
+    assert.equal(c.container.querySelector('[data-meeting-region="card"]'), card);
+    assert.equal(motion.style.opacity, "1");
+    assert.equal(motion.style.transform, "translateX(0) scale(1)");
+    assert.ok(c.byLabel("Choose meeting folder").classList.contains("feedback-enter"));
+    assert.equal(surfaceCalls.at(-1).focus, "release");
+    assert.equal(surfaceCalls.at(-1).mode, "closed");
+  }
+  assert.equal(c.calls.filter(([action]) => action === "start").length, 0);
+});
+
+test("matching a teamspace path does not prefill an existing destination as a new folder", async (t) => {
+  const c = await mount(t);
+  await c.click(c.byLabel("Choose meeting folder"));
+  await c.type(c.byLabel("Search folders"), "Team / Calls 6");
+  await c.click(c.button("New folder"));
+  assert.equal(c.byLabel("Name").value, "");
+});

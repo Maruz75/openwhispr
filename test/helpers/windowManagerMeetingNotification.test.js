@@ -1016,3 +1016,47 @@ test("notification renderer crash retires its owner even while the window surviv
   assert.equal(manager.isMeetingNotificationOwner(owner), false);
   assert.equal(manager.notificationWindow, null);
 });
+
+test("identical layout reports do not resize or show the notification again", async () => {
+  const manager = createNormalWindowManager();
+  try {
+    const { win, owner } = await showOwned(manager);
+    const sizes = [];
+    const initialLoads = win.loadUrlCount;
+    const resize = win.setBounds.bind(win);
+    win.setBounds = (bounds) => {
+      sizes.push(bounds);
+      resize(bounds);
+    };
+    manager.setMeetingNotificationSurface(owner, surface(1, "list", "request"));
+    const opens = win.focusEvents.slice();
+    manager.setMeetingNotificationSurface(owner, surface(2, "list"));
+    assert.equal(sizes.length, 1);
+    manager.setMeetingNotificationSurface(owner, surface(3, "closed", "release"));
+    manager.setMeetingNotificationSurface(owner, surface(4, "closed"));
+    assert.equal(sizes.length, 2);
+    assert.deepEqual(win.focusEvents, [
+      ...opens,
+      "blur",
+      ...(process.platform === "linux" ? [] : ["passive"]),
+    ]);
+    assert.equal(win.loadUrlCount, initialLoads);
+  } finally {
+    manager.dismissMeetingNotification();
+  }
+});
+
+test("closing a destroyed native window does not read its webContents getter", async () => {
+  const manager = createNormalWindowManager();
+  const { win } = await showOwned(manager);
+  const contents = win.webContents;
+  Object.defineProperty(win, "webContents", {
+    get() {
+      if (win.destroyed) throw new Error("Object has been destroyed");
+      return contents;
+    },
+  });
+  assert.doesNotThrow(() => manager.dismissMeetingNotification());
+  assert.equal(contents.listenerCount("destroyed"), 0);
+  assert.equal(contents.listenerCount("render-process-gone"), 0);
+});

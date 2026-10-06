@@ -32,6 +32,7 @@ export function MeetingNotificationFolderPicker({
 }: Props) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
+  const [filterSpaceId, setFilterSpaceId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const [spaceId, setSpaceId] = useState<number | null>(null);
   const [locationOpen, setLocationOpen] = useState(false);
@@ -45,14 +46,22 @@ export function MeetingNotificationFolderPicker({
   const priorMode = useRef(mode);
   const folders = useMemo(() => context?.folders ?? [], [context]);
   const selected = context?.selectedDestination ?? context?.defaultDestination;
+  const matchingFolders = useMemo(
+    () =>
+      folders.filter(
+        (folder) =>
+          (filterSpaceId === null || folder.space_id === filterSpaceId) &&
+          (folderMatchesQuery(folder, t, query.trim()) ||
+            (context &&
+              meetingFolderLabel(context, folder, t)
+                .toLowerCase()
+                .includes(query.trim().toLowerCase())))
+      ),
+    [context, folders, filterSpaceId, query, t]
+  );
   const groups = useMemo(() => {
-    if (query.trim())
-      return [
-        {
-          label: t(key("folders")),
-          items: folders.filter((f) => folderMatchesQuery(f, t, query.trim())),
-        },
-      ];
+    if (query.trim() || filterSpaceId !== null)
+      return [{ label: t(key("folders")), items: matchingFolders }];
     const recent = (context?.recentDestinations ?? []).flatMap((ref) =>
       folders.filter((f) => f.id === ref.folderId && f.space_id === ref.spaceId)
     );
@@ -71,14 +80,14 @@ export function MeetingNotificationFolderPicker({
       { label: t(key("recent")), items: recent },
       { label: t(key("folders")), items: fallback },
     ].filter((g) => g.items.length);
-  }, [context, folders, query, selected, t]);
+  }, [context, folders, query, filterSpaceId, matchingFolders, selected, t]);
   const visible = groups.flatMap((g) => g.items);
   useEffect(() => {
     setActive(0);
-  }, [query]);
+  }, [query, filterSpaceId]);
   useEffect(() => {
     if (mode === "form" && priorMode.current !== "form") {
-      setDraft(folders.some((f) => folderMatchesQuery(f, t, query.trim())) ? "" : query.trim());
+      setDraft(matchingFolders.length ? "" : query.trim());
       setSpaceId(context?.spaces.find((s) => s.kind === "private")?.id ?? null);
       setLocationOpen(false);
       createRequest.current = null;
@@ -87,7 +96,7 @@ export function MeetingNotificationFolderPicker({
     if (focusReady && !busy) {
       (context?.existingNote ? dialogRef : mode === "form" ? nameRef : searchRef).current?.focus();
     }
-  }, [mode, focusReady, busy, context?.spaces, context?.existingNote, folders, query, t]);
+  }, [mode, focusReady, busy, context?.spaces, context?.existingNote, matchingFolders, query]);
   useEffect(() => {
     document
       .getElementById(`meeting-folder-option-${active}`)
@@ -189,6 +198,7 @@ export function MeetingNotificationFolderPicker({
           <label className="meeting-folder-field">
             <span>{t(key("name"))}</span>
             <input
+              className="input-inline"
               dir="auto"
               ref={nameRef}
               aria-label={t(key("name"))}
@@ -264,8 +274,9 @@ export function MeetingNotificationFolderPicker({
       ) : (
         <>
           <div className="meeting-folder-search">
-            <Search className="size-3.5" />
+            <Search className="size-3.5 shrink-0" />
             <input
+              className="input-inline"
               dir="auto"
               ref={searchRef}
               role="combobox"
@@ -293,6 +304,29 @@ export function MeetingNotificationFolderPicker({
             </div>
           ) : (
             <>
+              {context.spaces.some((space) => space.kind === "team") && (
+                <div className="meeting-folder-spaces" role="group" aria-label={t(key("location"))}>
+                  <button
+                    type="button"
+                    aria-pressed={filterSpaceId === null}
+                    onClick={() => setFilterSpaceId(null)}
+                  >
+                    {t(key("allSpaces"))}
+                  </button>
+                  {context.spaces.map((space) => (
+                    <button
+                      type="button"
+                      key={space.id}
+                      aria-pressed={filterSpaceId === space.id}
+                      onClick={() => setFilterSpaceId(space.id)}
+                    >
+                      {space.kind === "private"
+                        ? t(key("private"))
+                        : `${space.name} · ${t(key("shared"))}`}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div
                 className="meeting-folder-results"
                 role="listbox"

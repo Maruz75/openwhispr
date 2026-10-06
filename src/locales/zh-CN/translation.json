@@ -4769,6 +4769,7 @@
     "folders": {
       "choose": "选择会议文件夹",
       "search": "搜索文件夹",
+      "allSpaces": "所有空间",
       "clear": "清除搜索",
       "private": "私密",
       "shared": "共享",

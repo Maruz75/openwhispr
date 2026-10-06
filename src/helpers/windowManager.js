@@ -421,7 +421,9 @@ class WindowManager {
     owner.mode = state.mode;
     owner.surface = state;
     owner.regions = regions;
-    win.setBounds(bounds);
+    const previousBounds = win.getBounds();
+    if (Object.keys(bounds).some((key) => bounds[key] !== previousBounds[key]))
+      win.setBounds(bounds);
     if (process.platform === "linux") win.setShape(regions);
     if (state.focus === "request" && state.mode !== "closed") {
       if (process.platform !== "linux") win.setFocusable(true);
@@ -2286,11 +2288,12 @@ class WindowManager {
       if (this._meetingNotificationOwner !== owner) return;
       this.dismissMeetingNotification();
     };
-    win.webContents.once?.("render-process-gone", retireRenderer);
-    win.webContents.once?.("destroyed", retireRenderer);
+    const notificationContents = win.webContents;
+    notificationContents.once?.("render-process-gone", retireRenderer);
+    notificationContents.once?.("destroyed", retireRenderer);
     win.on("closed", () => {
-      win.webContents.removeListener?.("render-process-gone", retireRenderer);
-      win.webContents.removeListener?.("destroyed", retireRenderer);
+      notificationContents.removeListener?.("render-process-gone", retireRenderer);
+      notificationContents.removeListener?.("destroyed", retireRenderer);
     });
     if (process.platform === "linux") win.setShape(owner.regions);
     win.on("blur", () => {
