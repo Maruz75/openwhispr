@@ -116,7 +116,7 @@
 }
 .meeting-folder-option:hover,
 .meeting-folder-option.active,
-.meeting-folder-locations button:hover {
+.meeting-folder-locations [role="menuitemradio"]:focus {
   background: var(--color-muted);
 }
 .meeting-folder-name {
@@ -203,18 +203,17 @@
   white-space: nowrap;
 }
 .meeting-folder-locations {
-  position: relative;
-  margin-top: 4px;
+  width: var(--radix-dropdown-menu-trigger-width);
   z-index: 5;
   background: var(--color-card);
   padding: 4px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: 0 3px 10px #0002;
-  max-height: 120px;
+  max-height: min(120px, var(--radix-dropdown-menu-content-available-height));
   overflow: auto;
 }
-.meeting-folder-locations button {
+.meeting-folder-locations [role="menuitemradio"] {
   display: flex;
   justify-content: space-between;
   gap: 4px;

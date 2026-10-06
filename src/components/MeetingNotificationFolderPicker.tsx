@@ -6,6 +6,12 @@ import type { MeetingDestinationContext, MeetingError, MeetingFolderRef } from "
 
 const key = (name: string) => `meetingNotification.folders.${name}`;
 import { meetingFolderLabel } from "./meetingFolderLabel";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "./ui/dropdown-menu";
 
 interface Props {
   context: MeetingDestinationContext | null;
@@ -209,47 +215,47 @@ export function MeetingNotificationFolderPicker({
           <div className="meeting-folder-field">
             <span id="meeting-folder-location-label">{t(key("location"))}</span>
             <div className="meeting-folder-location">
-              <button
-                type="button"
-                className="meeting-folder-location-trigger"
-                aria-labelledby="meeting-folder-location-label meeting-folder-location-value"
-                aria-haspopup="listbox"
-                aria-expanded={locationOpen}
-                disabled={busy}
-                onClick={() => setLocationOpen((open) => !open)}
-              >
-                <span id="meeting-folder-location-value">
-                  {context?.spaces.find((s) => s.id === spaceId)?.kind === "team"
-                    ? `${context.spaces.find((s) => s.id === spaceId)?.name} · ${t(key("shared"))}`
-                    : t(key("private"))}
-                </span>
-                <ChevronDown className="size-3" />
-              </button>
-              {locationOpen && (
-                <div
+              <DropdownMenu open={locationOpen} onOpenChange={setLocationOpen} modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="meeting-folder-location-trigger"
+                    aria-labelledby="meeting-folder-location-label meeting-folder-location-value"
+                    disabled={busy}
+                  >
+                    <span id="meeting-folder-location-value">
+                      {context?.spaces.find((s) => s.id === spaceId)?.kind === "team"
+                        ? `${context.spaces.find((s) => s.id === spaceId)?.name} · ${t(key("shared"))}`
+                        : t(key("private"))}
+                    </span>
+                    <ChevronDown className="size-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  container={dialogRef.current}
                   className="meeting-folder-locations"
-                  role="listbox"
                   aria-label={t(key("location"))}
+                  side="top"
+                  align="start"
+                  collisionBoundary={dialogRef.current}
+                  collisionPadding={6}
+                  onEscapeKeyDown={(event) => event.stopPropagation()}
                 >
                   {context?.spaces.map((space) => (
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={space.id === spaceId}
+                    <DropdownMenuItem
                       key={space.id}
-                      onClick={() => {
-                        setSpaceId(space.id);
-                        setLocationOpen(false);
-                      }}
+                      role="menuitemradio"
+                      aria-checked={space.id === spaceId}
+                      onSelect={() => setSpaceId(space.id)}
                     >
                       {space.kind === "private"
                         ? t(key("private"))
                         : `${space.name} · ${t(key("shared"))}`}
                       {space.id === spaceId && <Check className="size-3" />}
-                    </button>
+                    </DropdownMenuItem>
                   ))}
-                </div>
-              )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
           {errorView}

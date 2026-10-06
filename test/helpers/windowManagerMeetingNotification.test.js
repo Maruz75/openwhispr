@@ -777,7 +777,7 @@ test("leaving the card cannot resume an open form countdown", async () => {
   }
 });
 
-test("only deliberate open activates; measurement stays passive and close blurs before disabling", async () => {
+test("only deliberate open activates; closing avoids macOS window restacking", async () => {
   const manager = createNormalWindowManager();
   try {
     const { win, owner } = await showOwned(manager);
@@ -792,7 +792,12 @@ test("only deliberate open activates; measurement stays passive and close blurs 
       process.platform === "linux" ? ["show", "focus"] : ["focusable", "show", "focus"];
     assert.deepEqual(win.focusEvents, activation);
     manager.setMeetingNotificationSurface(owner, surface(3, "closed", "release"));
-    const release = process.platform === "linux" ? ["blur"] : ["blur", "passive"];
+    const release =
+      process.platform === "darwin"
+        ? ["passive"]
+        : process.platform === "linux"
+          ? ["blur"]
+          : ["blur", "passive"];
     assert.deepEqual(win.focusEvents, [...activation, ...release]);
     assert.equal(win.getBounds().height, 84);
   } finally {
@@ -1037,7 +1042,7 @@ test("identical layout reports do not resize or show the notification again", as
     assert.equal(sizes.length, 2);
     assert.deepEqual(win.focusEvents, [
       ...opens,
-      "blur",
+      ...(process.platform === "darwin" ? [] : ["blur"]),
       ...(process.platform === "linux" ? [] : ["passive"]),
     ]);
     assert.equal(win.loadUrlCount, initialLoads);
@@ -1059,4 +1064,31 @@ test("closing a destroyed native window does not read its webContents getter", a
   assert.doesNotThrow(() => manager.dismissMeetingNotification());
   assert.equal(contents.listenerCount("destroyed"), 0);
   assert.equal(contents.listenerCount("render-process-gone"), 0);
+});
+
+test("release preserves macOS stacking while Windows and Linux still blur", async () => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  try {
+    for (const name of ["darwin", "win32", "linux"]) {
+      Object.defineProperty(process, "platform", { value: name });
+      const manager = createNormalWindowManager();
+      try {
+        const { win, owner } = await showOwned(manager);
+        manager.setMeetingNotificationSurface(owner, surface(1, "form", "request"));
+        win.focusEvents = [];
+        manager.setMeetingNotificationSurface(owner, surface(2, "closed", "release"));
+        assert.deepEqual(
+          win.focusEvents,
+          name === "darwin" ? ["passive"] : name === "win32" ? ["blur", "passive"] : ["blur"],
+          name
+        );
+        assert.equal(manager.notificationWindow, win);
+        assert.equal(win.isDestroyed(), false);
+      } finally {
+        manager.dismissMeetingNotification();
+      }
+    }
+  } finally {
+    Object.defineProperty(process, "platform", platform);
+  }
 });

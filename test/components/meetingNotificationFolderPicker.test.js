@@ -37,6 +37,12 @@ async function mount(t, overrides = {}, setupDom = () => {}) {
     "document",
     "navigator",
     "HTMLElement",
+    "HTMLInputElement",
+    "Node",
+    "NodeFilter",
+    "CustomEvent",
+    "MutationObserver",
+    "getComputedStyle",
     "Element",
     "Event",
     "KeyboardEvent",
@@ -50,7 +56,8 @@ async function mount(t, overrides = {}, setupDom = () => {}) {
     original[key] = Object.getOwnPropertyDescriptor(globalThis, key);
     Object.defineProperty(globalThis, key, {
       value:
-        typeof dom[key] === "function" && key.includes("AnimationFrame")
+        typeof dom[key] === "function" &&
+        (key.includes("AnimationFrame") || key === "getComputedStyle")
           ? dom[key].bind(dom)
           : dom[key],
       writable: true,
@@ -523,4 +530,62 @@ test("matching a teamspace path does not prefill an existing destination as a ne
   await c.type(c.byLabel("Search folders"), "Team / Calls 6");
   await c.click(c.button("New folder"));
   assert.equal(c.byLabel("Name").value, "");
+});
+
+test("location dropdown opens with the keyboard and Escape preserves the folder form", async (t) => {
+  const c = await mount(t);
+  await c.click(c.byLabel("Choose meeting folder"));
+  await c.click(c.button("New folder"));
+  const location = c.button("Private");
+  await React.act(async () => {
+    location.focus();
+    location.dispatchEvent(
+      new globalThis.window.KeyboardEvent("keydown", {
+        key: "ArrowDown",
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+  });
+  const menu = c.container.querySelector('[role="menu"]');
+  assert.ok(menu, "location opens as a keyboard-accessible dropdown");
+  await React.act(async () =>
+    menu.dispatchEvent(
+      new globalThis.window.KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      })
+    )
+  );
+  assert.equal(c.container.querySelector('[role="menu"]'), null);
+  assert.ok(c.byLabel("Name"), "Escape only dismisses the location menu");
+  assert.equal(c.calls.length, 0);
+});
+
+test("choosing a Shared location keeps the draft and creates only on submit", async (t) => {
+  const c = await mount(t);
+  await c.click(c.byLabel("Choose meeting folder"));
+  await c.click(c.button("New folder"));
+  await c.type(c.byLabel("Name"), "Team planning");
+  await React.act(async () =>
+    c.button("Private").dispatchEvent(
+      new globalThis.window.KeyboardEvent("keydown", {
+        key: "ArrowDown",
+        bubbles: true,
+        cancelable: true,
+      })
+    )
+  );
+  const option = [...c.container.querySelectorAll('[role="menuitemradio"]')].find((el) =>
+    el.textContent.includes("Team")
+  );
+  await c.click(option);
+  assert.equal(c.container.querySelector('[role="menu"]'), null);
+  assert.equal(c.byLabel("Name").value, "Team planning");
+  assert.equal(c.calls.length, 0);
+  await c.click(c.button("Create & select"));
+  assert.equal(c.calls[0][0], "create");
+  assert.equal(c.calls[0][1].spaceId, 2);
+  assert.equal(c.calls[0][1].name, "Team planning");
 });

@@ -220,3 +220,48 @@ notification, confirming only the saved check appears; then perform the pending
 configured recording/Shared journeys. Use test destinations and preserve all
 recording/account gates. CI status must be read at the published head; historical
 CI above is not evidence for this feedback commit.
+
+
+## Native close and location dropdown follow-up — 2026-10-05
+
+Josh confirmed the combined folder list looked right, but reported that selection
+still looked like a reload and opening the new-folder Location menu expanded the
+form. This follow-up starts at `041dc439e` in the same preserved rig.
+
+- The location selector now uses the existing nonmodal DropdownMenu. It overlays
+  the form, stays within the picker's measured native hit region, scrolls when
+  necessary, and handles keyboard navigation, selection, outside clicks and Escape.
+  Picking a location preserves the draft; creation still requires Create & select.
+- On macOS, closing the picker no longer calls BrowserWindow.blur(). Electron
+  41.10.7 implements that operation with orderOut/orderBack, which removes and
+  restacks the notification. Disabling focusability remains, matching the existing
+  assistant-panel close pattern. Windows/Linux still blur on close.
+  [Pinned Electron implementation](https://github.com/electron/electron/blob/v41.10.7/shell/browser/native_window_mac.mm#L440-L453).
+- The user's latest rig log showed no renderer-load event or window replacement.
+  Later hide/show events began 2.6 seconds after the last resize/blur and can also
+  represent macOS occlusion; they do not independently establish the flash cause.
+  The removed blur call is a confirmed native restacking operation. Physical
+  visual smoothness and keyboard handoff still require acceptance.
+
+Regression checks failed before the change for both macOS blur and keyboard
+opening of Location. All 56 focused picker/navigation/window checks pass after
+it, including all three platform close paths, Escape preserving the form and
+Shared-location creation retaining the correct ID and draft. Typecheck, scoped
+lint and renderer build pass. Independent native and dropdown reviews are
+recorded in the session evidence. The full suite with required database
+coverage passed: **7,054 tests, 7,039 passed, zero failures, 14 skips, one TODO**.
+The unchanged SQLite test binding again used official Node 24.18 headers under
+Node 24.20; the Electron binding was restored before restarting the rig.
+
+Browser measurements showed the old form expanding from 173.30px to 244.30px;
+the updated form remains 173.30px with its location menu open. This is browser
+layout evidence using the actual component and fixture IPC, not native acceptance.
+
+![Location menu overlays the form](screenshots/meeting-folder-picker/feedback-location-dropdown.png)
+![Location menu in narrow dark Arabic RTL](screenshots/meeting-folder-picker/feedback-location-dropdown-rtl.png)
+
+The existing worktree/profile are kept for Josh's next native test. No additional
+worktree was created. Temporary rig diagnostics are ignored, main.js is restored
+after startup, and no recording or real-account folder creation was performed by
+the verification. The popup trigger remains process-specific; verify the current
+probe-pid.txt against the rig executable before any signal.

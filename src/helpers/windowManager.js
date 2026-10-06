@@ -432,7 +432,9 @@ class WindowManager {
       win.show();
       win.focus();
     } else if (state.focus === "release") {
-      win.blur();
+      // macOS blur orders the window out and back, blinking the whole card.
+      // Match the assistant panel: keep it visible while disabling input focus.
+      if (process.platform !== "darwin") win.blur();
       if (process.platform !== "linux") win.setFocusable(false);
     }
     const cursor = screen.getCursorScreenPoint();
