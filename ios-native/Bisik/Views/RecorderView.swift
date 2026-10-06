@@ -215,46 +215,46 @@ struct RecorderView: View {
                     .foregroundStyle(BisikTheme.secondary)
             }
             .multilineTextAlignment(.center)
-            Group {
-                if voiceOver {
-                    Button {
-                        toggleAccessibleRecording()
-                    } label: { microphone }
-                        .buttonStyle(.plain)
-                        .disabled(model.phase == .processing || model.hasPendingRecording)
-                } else {
-                    microphone
-                        .contentShape(Circle())
-                        .gesture(DragGesture(minimumDistance: 0)
-                            .onChanged { _ in
-                                guard !holding, model.phase != .processing, !model.hasPendingRecording else { return }
-                                holding = true
-                                editing = false
-                                model.commitEdits()
-                                Task {
-                                    guard holding else { return }
-                                    await model.beginHold()
+            ZStack(alignment: .trailing) {
+                Group {
+                    if voiceOver {
+                        Button {
+                            toggleAccessibleRecording()
+                        } label: { microphone }
+                            .buttonStyle(.plain)
+                            .disabled(model.phase == .processing || model.hasPendingRecording)
+                    } else {
+                        microphone
+                            .contentShape(Circle())
+                            .gesture(DragGesture(minimumDistance: 0)
+                                .onChanged { _ in
+                                    guard !holding, model.phase != .processing, !model.hasPendingRecording else { return }
+                                    holding = true
+                                    editing = false
+                                    model.commitEdits()
+                                    Task {
+                                        guard holding else { return }
+                                        await model.beginHold()
+                                    }
                                 }
-                            }
-                            .onEnded { _ in
-                                guard holding else { return }
-                                holding = false
-                                Task { await model.endHold() }
-                            })
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityAction { toggleAccessibleRecording() }
+                                .onEnded { _ in
+                                    guard holding else { return }
+                                    holding = false
+                                    Task { await model.endHold() }
+                                })
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction { toggleAccessibleRecording() }
+                    }
                 }
-            }
-            .accessibilityLabel(recording ? "Hentikan rekaman" : "Mulai rekaman")
-            .accessibilityHint(voiceOver ? "Ketuk dua kali untuk mulai atau berhenti." : "Tahan untuk berbicara, lepaskan untuk selesai.")
-            if recording || model.phase == .preparing {
-                Button("Batalkan rekaman") {
-                    holding = false
-                    model.cancelRecording()
+                .frame(maxWidth: .infinity)
+                .accessibilityLabel(recording ? "Hentikan rekaman" : "Mulai rekaman")
+                .accessibilityHint(voiceOver ? "Ketuk dua kali untuk mulai atau berhenti." : "Tahan untuk berbicara, lepaskan untuk selesai.")
+                if recording || model.phase == .preparing {
+                    IconControl(symbol: "xmark", label: "Batalkan rekaman") {
+                        holding = false
+                        model.cancelRecording()
+                    }
                 }
-                .font(BisikTheme.font(12, relativeTo: .caption))
-                .foregroundStyle(BisikTheme.secondary)
-                .frame(minHeight: 44)
             }
         }
         .frame(maxWidth: .infinity)
