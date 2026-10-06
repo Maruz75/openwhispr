@@ -80,11 +80,10 @@ final class InterfaceTests: XCTestCase {
 
     @MainActor
     private func renderOrb(levels: [CGFloat], time: Double, reduced: Bool = false) throws -> UIImage {
-        let content = VoiceOrbView(levels: levels, phase: .recording, pressed: true, previewTime: time)
+        let content = VoiceOrbView(levels: levels, phase: .recording, pressed: true, previewTime: time, previewReduceMotion: reduced)
             .frame(width: 240, height: 240)
             .background(Color.white)
             .environment(\.scenePhase, .active)
-            .environment(\.accessibilityReduceMotion, reduced)
         let renderer = ImageRenderer(content: content)
         renderer.scale = 2
         return try XCTUnwrap(renderer.uiImage)

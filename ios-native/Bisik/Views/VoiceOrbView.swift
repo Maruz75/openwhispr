@@ -9,10 +9,14 @@ struct VoiceOrbView: View {
     var showsMicrophone = true
     // Fixed time is used by previews/render tests, never by production recording.
     var previewTime: Double?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    // iOS exposes this environment value as read-only. Previews can exercise
+    // both appearances; the app always reads the system preference.
+    var previewReduceMotion: Bool?
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
     private var listening: Bool { phase == .recording }
+    private var reduceMotion: Bool { previewReduceMotion ?? systemReduceMotion }
     private var moving: Bool { phase != .idle && !reduceMotion && scenePhase == .active }
     private var energy: CGFloat {
         guard listening, !levels.isEmpty else { return 0 }
