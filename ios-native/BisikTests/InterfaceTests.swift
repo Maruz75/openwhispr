@@ -53,7 +53,7 @@ final class InterfaceTests: XCTestCase {
         let speaking = try renderOrb(levels: Array(repeating: 0.8, count: 32), time: 0)
         XCTAssertNotEqual(silent.pngData(), speaking.pngData(), "The waveform must change with microphone levels")
         let later = try renderOrb(levels: Array(repeating: 0.8, count: 32), time: 2)
-        XCTAssertNotEqual(speaking.pngData(), later.pngData(), "The blue cloud must drift while recording")
+        XCTAssertNotEqual(speaking.pngData(), later.pngData(), "The inner contours must flow while recording")
         let reducedStart = try renderOrb(levels: [0.2, 0.8], time: 0, reduced: true)
         let reducedLater = try renderOrb(levels: [0.2, 0.8], time: 2, reduced: true)
         XCTAssertEqual(reducedStart.pngData(), reducedLater.pngData(), "Reduce Motion removes decorative movement")

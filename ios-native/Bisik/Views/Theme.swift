@@ -4,10 +4,10 @@ import SwiftUI
 enum BisikTheme {
     static let ink = Color(red: 33 / 255, green: 33 / 255, blue: 33 / 255)
     static let secondary = Color(red: 105 / 255, green: 105 / 255, blue: 105 / 255)
-    static let panel = Color(red: 248 / 255, green: 248 / 255, blue: 246 / 255)
-    static let line = Color(red: 218 / 255, green: 219 / 255, blue: 215 / 255)
-    static let accent = Color(red: 34 / 255, green: 87 / 255, blue: 179 / 255)
-    static let focus = Color(red: 94 / 255, green: 106 / 255, blue: 210 / 255)
+    static let panel = Color(white: 0.975)
+    static let line = Color(white: 0.85)
+    static let accent = ink
+    static let focus = ink
     static let danger = Color(red: 163 / 255, green: 38 / 255, blue: 38 / 255)
 
     static func font(_ size: CGFloat = 14, semibold: Bool = false, relativeTo style: Font.TextStyle = .body) -> Font {

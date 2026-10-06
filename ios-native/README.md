@@ -4,7 +4,7 @@ Project SwiftUI baru di dalam fork OpenWhispr. Buka **Bisik.xcodeproj** di Mac d
 
 ## Yang dibuat
 
-- Home hanya berisi editor transkripsi, copy tebal di kanan bawah, serta orb mikrofon biru dengan waveform radial yang menyatu. Tidak ada slogan, heading field atau kartu kuota. Tombol plus berbentuk lingkaran di kanan atas memulai draf baru. Ketuk kata di editor untuk menempatkan kursor dan membuka keyboard; tombol centang di atas keyboard mengakhiri edit. Tahan mikrofon untuk merekam, lepas untuk memproses. Waveform berasal dari level audio sungguhan.
+- Home hanya berisi editor transkripsi, copy tebal di kanan bawah, serta orb hitam tanpa ikon mikrofon, dengan tepi yang merespons audio dan kontur cair di dalamnya. Tidak ada slogan, heading field atau kartu kuota. Tombol plus berbentuk lingkaran di kanan atas memulai draf baru. Ketuk kata di editor untuk menempatkan kursor dan membuka keyboard; tombol centang di atas keyboard mengakhiri edit. Tahan mikrofon untuk merekam, lepas untuk memproses. Waveform berasal dari level audio sungguhan.
 - Burger menu di kiri atas, juga dibuka dengan swipe dari tepi kiri ke kanan, membuka Rekam, Riwayat, Kamus, Langganan, Paket & kuota, Pengaturan dan tulisan baru. Informasi Free/Pro dan kuota bulanan berada pada layar Paket & kuota.
 - Pratinjau transkripsi langsung dengan Apple Speech **di perangkat** jika bahasa/perangkat mendukung. Hasil final melalui backend milik developer. Bila preview lokal tidak tersedia, rekaman tetap diproses saat tombol dilepas.
 - Hasil final otomatis disalin ke clipboard (bisa dimatikan), tombol copy berubah centang; clipboard tidak dibaca. Pengguna tinggal menempel di aplikasi lain.
@@ -14,7 +14,7 @@ Project SwiftUI baru di dalam fork OpenWhispr. Buka **Bisik.xcodeproj** di Mac d
 - Persetujuan pemrosesan cloud sebelum pengiriman audio/teks/kamus, Sign in with Apple untuk identitas kuota, token dalam Keychain, logout dan penghapusan akun.
 - Paywall bulanan/tahunan dengan StoreKit 2, harga lokal dari App Store, restore, manage subscription, privacy dan terms. Tidak ada pembayaran eksternal.
 - Backend FastAPI: pilihan model lewat environment developer, kuota bulanan SQLite yang atomik, durasi terukur ffprobe, idempotency, verifikasi Apple dan pencabutan kredensial akun.
-- Desain putih minimal, Inter berlisensi OFL, SF Symbols, safe area, Dynamic Type dan VoiceOver. Orb memakai SwiftUI TimelineView/Canvas: awan biru bergerak saat merekam atau memproses, waveform mengikuti level audio; Reduce Motion menghentikan gerakan dekoratif. Splash native tampil sekitar satu detik saat cold launch.
+- Desain putih minimal, Inter berlisensi OFL, SF Symbols, safe area, Dynamic Type dan VoiceOver. Orb memakai SwiftUI TimelineView/Canvas: kontur tinta mengalir saat merekam atau memproses, sementara bentuk tepi mengikuti level audio; Reduce Motion menghentikan gerakan dekoratif. Splash native tampil sekitar satu detik saat cold launch.
 
 Default produk awal: **15 menit gratis** / **300 menit Pro** setiap bulan kalender UTC. Paket tahunan juga mendapat 300 menit setiap bulan; menit tidak diakumulasi. Angka ini keputusan awal yang bisa developer ubah bersama pada konfigurasi app dan server.
 
