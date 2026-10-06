@@ -123,3 +123,94 @@ receives dialog focus and emits `focus: release` when Escape closes it.
 The full local 7,022-pass run preceded these two renderer repairs; the focused
 renderer tests, typecheck and rebuilt renderer cover the repaired commit, with
 final-head GitHub CI recorded in the handover.
+
+## Feedback pass — 2026-10-05
+
+Code commit: `3067a4dbf`, based on the original reviewed head `3e7a66605`.
+The exact existing `ow-meeting-folder-rig-2511` worktree and
+`codex/meeting-notification-folder-picker` branch were reused. Refreshed main
+`29d20f636` adds only unrelated Linux Settings and mobile dependency changes.
+
+- Search now uses the main-navigation pill surface, icon and inset, with the
+  localized folder placeholder and no shortcut badge. Search and Name opt out
+  of the global embossed input style so the picker has a single thin focus
+  indication. Form fields use logical 10px inset.
+- All spaces / Private / named Shared space filters reveal every folder within
+  the chosen space, including folders outside the five initial suggestions.
+  Filtering never selects or records. Search also matches the displayed
+  space/folder path. Selection retains the exact space and folder IDs, and
+  new-folder creation still starts Private after a Shared choice. Matching
+  paths do not incorrectly prefill a new folder name.
+- Identical native geometry reports no longer call `setBounds` again. Ownership,
+  layout revision, focus release, hit regions and countdown handling still run.
+  A real destroyed-window cleanup exception was fixed by retaining the
+  webContents reference before the window closes.
+- Both existing and created destination selections retain the same mounted,
+  visible card, close the picker, release input focus and use the existing
+  1,200 ms confirmation. They never invoke Start. The no-link audio test prompt
+  still correctly says “Take notes.”
+
+### Evidence and limits
+
+Final code: **7,051 tests, 7,036 passed, zero failures, 14 skips, one TODO** with
+`REQUIRE_DB_TESTS=1` under Node 24.20.0. Two earlier runs encountered the known
+local `better-sqlite3` native cleanup crash. Rebuilding the unchanged dependency
+against official Node 24.18.0 headers produced the successful run; the rig's
+Electron binding was backed up and restored before restart. No package or
+lockfile changed. The 48 focused picker/window tests pass. Final typecheck,
+lint (existing warnings only), i18n, renderer build and changed-file formatting
+pass. Generated `src/dist` was removed after verification.
+
+Independent read-only native and UI code-quality reviews and the selected
+`codex review --uncommitted` found no remaining actionable code findings. The
+UI review's path-prefill finding was reproduced, repaired, and rechecked.
+Browser visual inspection found and repaired the global focus-shadow conflict.
+The screenshots below render the actual component with fixture IPC/data; they
+are **browser visual evidence, not native capture or recording acceptance**.
+Light/dark, Arabic RTL, Name padding and a 300px surface were checked. At 300px,
+the picker, search and New folder action have no horizontal overflow.
+
+![Shared folder filter, light](screenshots/meeting-folder-picker/feedback-light-team.png)
+![Private-first form, light](screenshots/meeting-folder-picker/feedback-light-form.png)
+![Dark Arabic RTL](screenshots/meeting-folder-picker/feedback-dark-rtl.png)
+![300px surface](screenshots/meeting-folder-picker/feedback-narrow.png)
+
+The live rig was restarted only after restoring its Electron binding. Its
+signed-in staging account/calendar profile remains intact; the installed app
+was not stopped. Native startup and a protected self-rendered compact prompt
+were checked. The preserved runtime-only trigger enters the real detection
+engine with preference, recording and ownership gates intact. No recording or
+folder creation was performed by this feedback verification in the real account.
+
+**Native flash acceptance remains open.** Source tracing and regression tests
+show no card remount, entrance replay, renderer navigation or window recreation
+on selection; duplicate resize calls were reproducible and removed. This does
+not establish that the necessary native contraction/focus release is flash-free.
+Prior rig logs also show real audio detection replacing a synthetic prompt, but
+there is no selection timestamp proving that caused the reported flash. Native
+UI automation could inspect the control panel and a self-render capture but
+could not reliably target the protected notification for this interaction.
+Do not call the reported macOS flash resolved from browser/component tests alone.
+All previously listed recording, Shared sync, IME, focus/hit-test and physical
+platform acceptance gaps remain open.
+
+### Kept rig and next native check
+
+The existing worktree is intentionally kept at Josh's request and remains the
+running dev rig. No new worktree was created. Profile reset/teardown, merge,
+release, deployment and unrelated work were not performed.
+
+At verification, Electron PID `89932` started October 5 at 19:57:02 local time,
+owned by the existing launchd rig. Its process-lifetime-only SIGUSR2 hook is
+recorded by the rig's updated `trigger-pid.txt`; **verify PID, start time and
+executable path before any signal**. A normal restart removes the hook.
+`main.js` was restored byte-for-byte before committing. Local diagnostic state
+and the hook are retained in `.superpowers/sdd/meeting-folder-feedback/` because
+the running probe writes there; they are ignored and are not product changes.
+The original launcher/profile remain at the paths in the Titan kickoff handover.
+
+Next: choose an existing folder and complete Create & select in the native
+notification, confirming only the saved check appears; then perform the pending
+configured recording/Shared journeys. Use test destinations and preserve all
+recording/account gates. CI status must be read at the published head; historical
+CI above is not evidence for this feedback commit.
