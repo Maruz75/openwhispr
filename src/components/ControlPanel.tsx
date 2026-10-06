@@ -126,6 +126,9 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   const [settingsSection, setSettingsSection] = useState<string | undefined>(
     initialSettingsSection
   );
+  // Counts named show-settings requests, so asking again for the section the
+  // modal was opened at still lands there after the user moved elsewhere in it.
+  const [settingsRequest, setSettingsRequest] = useState(0);
   const [aiCTADismissed, setAiCTADismissed] = useState(
     () => localStorage.getItem("aiCTADismissed") === "true"
   );
@@ -432,7 +435,10 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     const cleanup = window.electronAPI?.onShowSettings?.((section) => {
       // A bare request (app-menu Cmd+,) keeps an open modal on its current
       // section; only a named section moves it.
-      if (section) setSettingsSection(section);
+      if (section) {
+        setSettingsSection(section);
+        setSettingsRequest((count) => count + 1);
+      }
       setShowSettings(true);
     });
     return () => cleanup?.();
@@ -913,8 +919,8 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       {showSettings && (
         <Suspense fallback={null}>
           <SettingsModal
-            // SettingsModal reads initialSection only on open, so a new section remounts it.
-            key={settingsSection ?? "default"}
+            // SettingsModal reads initialSection only on open, so a named request remounts it.
+            key={`${settingsSection ?? "default"}-${settingsRequest}`}
             open={showSettings}
             onOpenChange={(open) => {
               setShowSettings(open);
