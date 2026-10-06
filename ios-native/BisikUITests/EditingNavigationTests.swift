@@ -37,6 +37,7 @@ final class EditingNavigationTests: XCTestCase {
         screenshot("Menu - all destinations")
 
         app.buttons["menu.history"].tap()
+        XCTAssertTrue(waitUntilGone(app.buttons["menu.close"]))
         XCTAssertTrue(app.staticTexts["Riwayat"].firstMatch.waitForExistence(timeout: 5))
         navigate("dictionary")
         XCTAssertTrue(app.staticTexts["Kamus"].firstMatch.waitForExistence(timeout: 5))
@@ -51,6 +52,7 @@ final class EditingNavigationTests: XCTestCase {
         app.buttons["menu.subscription"].tap()
         XCTAssertTrue(app.buttons["Tutup langganan"].waitForExistence(timeout: 5))
         app.buttons["Tutup langganan"].tap()
+        XCTAssertTrue(waitUntilGone(app.buttons["Tutup langganan"]))
         XCTAssertTrue(app.staticTexts["Paket & kuota"].firstMatch.waitForExistence(timeout: 5))
 
         navigate("recorder")
@@ -131,6 +133,7 @@ final class EditingNavigationTests: XCTestCase {
     private func navigate(_ destination: String) {
         openMenu()
         app.buttons["menu." + destination].tap()
+        XCTAssertTrue(waitUntilGone(app.buttons["menu.close"]))
     }
 
     private func waitUntilGone(_ element: XCUIElement) -> Bool {
