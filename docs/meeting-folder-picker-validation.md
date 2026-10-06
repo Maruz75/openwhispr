@@ -265,3 +265,16 @@ worktree was created. Temporary rig diagnostics are ignored, main.js is restored
 after startup, and no recording or real-account folder creation was performed by
 the verification. The popup trigger remains process-specific; verify the current
 probe-pid.txt against the rig executable before any signal.
+
+
+## Scroll-edge polish — 2026-10-05
+
+Following Josh's visual feedback, the results list has a 16px soft edge immediately
+below search: a 3px backdrop blur tapers to transparent. The sticky decorative
+layer takes no layout space and ignores pointer input. Browser checks in light
+and dark themes confirmed scrolling, unchanged 240px result height and selection
+of the top visible folder. All 20 picker component tests and formatting pass.
+This CSS-only polish did not rerun the earlier full suite.
+
+![Subtle scroll blur](screenshots/meeting-folder-picker/feedback-scroll-blur.png)
+![Subtle scroll blur in dark mode](screenshots/meeting-folder-picker/feedback-scroll-blur-dark.png)

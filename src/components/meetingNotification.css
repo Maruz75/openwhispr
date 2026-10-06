@@ -98,6 +98,19 @@
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
+.meeting-folder-results::before {
+  content: "";
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: block;
+  height: 16px;
+  margin-bottom: -16px;
+  pointer-events: none;
+  backdrop-filter: blur(3px);
+  background: color-mix(in srgb, var(--color-card) 25%, transparent);
+  mask-image: linear-gradient(#000, transparent);
+}
 .meeting-folder-group {
   font-size: 10px;
   color: var(--color-muted-foreground);
