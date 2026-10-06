@@ -50,8 +50,7 @@ test("a BYOK request that hits its client-side deadline surfaces as PROVIDER_TIM
 
   assert.equal(calls.length, 1, "a deadline is never retried");
   assert.equal(error.code, "PROVIDER_TIMEOUT");
-  assert.equal(error.messageKey, "providerErrors.timeout");
-  assert.equal(error.messageParams.selfHosted, true);
+  assert.equal(error.messageKey, "providerErrors.selfHosted.timeout");
   assert.equal(error.surface, "llm");
   assert.doesNotMatch(error.message, /timed out after/);
 });
@@ -80,8 +79,7 @@ test("a stopped self-hosted server surfaces as PROVIDER_UNREACHABLE, still retri
 
   assert.equal(calls.length, 4, "a network failure keeps its retries");
   assert.equal(error.code, "PROVIDER_UNREACHABLE");
-  assert.equal(error.messageKey, "providerErrors.unreachable");
-  assert.equal(error.messageParams.selfHosted, true);
+  assert.equal(error.messageKey, "providerErrors.selfHosted.unreachable");
   assert.equal(error.surface, "llm");
 });
 

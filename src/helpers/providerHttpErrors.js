@@ -52,23 +52,50 @@ const MESSAGE_KEYS = {
   [C.ERROR]: "providerErrors.unknown",
 };
 
-// English twins of the en locale strings: Error.message is what History rows,
-// logs and key-less surfaces show, so it reads as a sentence, not a status dump.
+// English twins of the en locale strings, by message key: Error.message is what
+// History rows, logs and key-less surfaces show, so it reads as a sentence, not
+// a status dump. The transcription-only hooks keys say "your transcription
+// provider"; their twins name it, since History has no other place to.
 const ENGLISH = {
-  [C.AUTH_FAILED]: "{{provider}} rejected your API key.",
-  [C.ACCESS_DENIED]: "{{provider}} denied access. Your key may not include this model.",
-  [C.QUOTA_EXHAUSTED]: "Your {{provider}} account is out of credit.",
-  [C.RATE_LIMITED]: "{{provider}} rate-limited the request. Wait a moment and try again.",
-  [C.MODEL_NOT_FOUND]: "{{provider}} doesn't recognize the model “{{model}}”.",
-  modelNotFoundNoModel: "{{provider}} doesn't recognize the selected model.",
-  [C.PAYLOAD_TOO_LARGE]: "This recording is too large for {{provider}}.",
-  [C.BAD_REQUEST]: "{{provider}} couldn't process this request.",
-  [C.UNAVAILABLE]: "{{provider}} is having problems right now. Try again shortly.",
-  [C.TIMEOUT]: "{{provider}} took too long to respond.",
-  [C.UNREACHABLE]: "Couldn't reach {{provider}}. Check your connection.",
-  [C.ERROR]: "{{provider}} returned an unexpected error.",
-  [C.KEY_MISSING]: "No API key is set for {{provider}}.",
-  quotaExhaustedSelfHosted: "Your server says the account is out of credit.",
+  "providerErrors.authFailed": "{{provider}} rejected your API key.",
+  "providerErrors.accessDenied": "{{provider}} denied access. Your key may not include this model.",
+  "providerErrors.quotaExhausted": "Your {{provider}} account is out of credit.",
+  "providerErrors.rateLimited":
+    "{{provider}} rate-limited the request. Wait a moment and try again.",
+  "providerErrors.modelNotFound": "{{provider}} doesn't recognize the model “{{model}}”.",
+  "providerErrors.modelNotFoundNoModel": "{{provider}} doesn't recognize the selected model.",
+  "providerErrors.payloadTooLarge": "This recording is too large for {{provider}}.",
+  "providerErrors.requestTooLarge": "This request is too large for {{provider}}.",
+  "providerErrors.badRequest": "{{provider}} couldn't process this request.",
+  "providerErrors.unavailable": "{{provider}} is having problems right now. Try again shortly.",
+  "providerErrors.timeout": "{{provider}} took too long to respond.",
+  "providerErrors.unreachable": "Couldn't reach {{provider}}. Check your connection.",
+  "providerErrors.unknown": "{{provider}} returned an unexpected error.",
+  "providerErrors.keyMissing":
+    "No API key is set for {{provider}}. Add it in Settings → Language Models.",
+  "providerErrors.selfHosted.authFailed": "Your server rejected the API key.",
+  "providerErrors.selfHosted.accessDenied":
+    "Your server denied access. The key may not include this model.",
+  "providerErrors.selfHosted.quotaExhausted": "Your server says the account is out of credit.",
+  "providerErrors.selfHosted.rateLimited":
+    "Your server rate-limited the request. Wait a moment and try again.",
+  "providerErrors.selfHosted.modelNotFound": "Your server doesn't recognize the model “{{model}}”.",
+  "providerErrors.selfHosted.modelNotFoundNoModel":
+    "Your server doesn't recognize the selected model.",
+  "providerErrors.selfHosted.payloadTooLarge": "This recording is too large for your server.",
+  "providerErrors.selfHosted.requestTooLarge": "This request is too large for your server.",
+  "providerErrors.selfHosted.badRequest": "Your server couldn't process this request.",
+  "providerErrors.selfHosted.unavailable":
+    "Your server is having problems right now. Try again shortly.",
+  "providerErrors.selfHosted.timeout": "Your server took too long to respond.",
+  "providerErrors.selfHosted.unreachable": "Couldn't reach your server. Check that it's running.",
+  "providerErrors.selfHosted.unknown": "Your server returned an unexpected error.",
+  "providerErrors.selfHosted.keyMissing":
+    "No API key is set for your server. Add it in Settings → Language Models.",
+  "hooks.audioRecording.errorDescriptions.providerRateLimited":
+    "{{provider}} rate-limited the request. Wait a moment and try again.",
+  "hooks.audioRecording.errorDescriptions.providerKeyMissing":
+    "No API key is set for {{provider}}.",
 };
 
 const SELF_HOSTED_NAME = "Your server";
@@ -185,15 +212,16 @@ function buildClassification(code, { provider, model, surface, selfHosted, techn
         ? "hooks.audioRecording.errorDescriptions.providerKeyMissing"
         : "providerErrors.keyMissing";
   }
-  // The transcription key is the dictation pill's established copy; LLM
-  // surfaces name the provider instead of "your transcription provider".
-  if (code === C.RATE_LIMITED && surface === "llm") messageKey = "providerErrors.rateLimited";
-  if (selfHosted) messageParams.selfHosted = true;
-  // "Your {{provider}} account" reads as "Your Your server account" once
-  // provider is substituted with the self-hosted label — give self-hosted
-  // quota its own sentence instead.
-  if (selfHosted && code === C.QUOTA_EXHAUSTED) {
-    messageKey = "providerErrors.quotaExhaustedSelfHosted";
+  if (surface === "llm") {
+    // The transcription keys are the dictation pill's established copy; LLM
+    // surfaces name the provider and send text, not a recording.
+    if (code === C.RATE_LIMITED) messageKey = "providerErrors.rateLimited";
+    if (code === C.PAYLOAD_TOO_LARGE) messageKey = "providerErrors.requestTooLarge";
+  }
+  // "Your server" takes a different case or article in each sentence in many
+  // languages (Russian, German), so self-hosted errors have their own sentences.
+  if (selfHosted && messageKey.startsWith("providerErrors.")) {
+    messageKey = messageKey.replace("providerErrors.", "providerErrors.selfHosted.");
   }
   const settingsTarget = FIXABLE.has(code) ? SETTINGS_TARGET_BY_SURFACE[surface] : undefined;
   return {
@@ -206,17 +234,8 @@ function buildClassification(code, { provider, model, surface, selfHosted, techn
   };
 }
 
-function englishMessage(classification) {
-  const { code, messageParams } = classification;
-  const template =
-    code === C.MODEL_NOT_FOUND && !messageParams.model
-      ? ENGLISH.modelNotFoundNoModel
-      : code === C.QUOTA_EXHAUSTED && messageParams.selfHosted
-        ? ENGLISH.quotaExhaustedSelfHosted
-        : ENGLISH[code];
-  return template
-    .replace("{{provider}}", messageParams.provider)
-    .replace("{{model}}", messageParams.model ?? "");
+function englishMessage({ messageKey, messageParams }) {
+  return ENGLISH[messageKey].replace(/\{\{(\w+)\}\}/g, (_, name) => messageParams[name] ?? "");
 }
 
 function toError(classification, extra = {}) {

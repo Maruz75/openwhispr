@@ -165,7 +165,7 @@ export interface IpcErrorFields {
   error: string;
   code?: string;
   messageKey?: string;
-  messageParams?: Record<string, string | number | boolean>;
+  messageParams?: Record<string, string | number>;
   settingsTarget?: string;
   technicalDetails?: {
     provider?: string;

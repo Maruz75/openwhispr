@@ -23,16 +23,13 @@ test("a keyed error is translated with its params", async () => {
   assert.deepEqual(out.technicalDetails, { provider: "Mistral", status: 401 });
 });
 
-test("self-hosted params use the translated server name", async () => {
+test("a self-hosted key is translated as is: its sentence names the server itself", async () => {
   const { describeProviderError } = await load();
   const out = describeProviderError(
-    { messageKey: "providerErrors.unknown", messageParams: { provider: "Your server", selfHosted: true } },
+    { messageKey: "providerErrors.selfHosted.unknown", messageParams: { provider: "Your server" } },
     t
   );
-  assert.equal(
-    out.description,
-    'providerErrors.unknown|{"provider":"providerErrors.selfHostedName","selfHosted":true}'
-  );
+  assert.equal(out.description, 'providerErrors.selfHosted.unknown|{"provider":"Your server"}');
 });
 
 test("an unkeyed error renders its message unchanged and offers no settings link", async () => {
@@ -75,6 +72,9 @@ test("providerErrorTitle picks the surface title for provider codes only", async
   const { providerErrorTitle } = await load();
   assert.equal(providerErrorTitle({ code: "PROVIDER_AUTH_FAILED", surface: "transcription" }, t), "providerErrors.titles.transcription");
   assert.equal(providerErrorTitle({ code: "PROVIDER_UNAVAILABLE", surface: "llm" }, t), "providerErrors.titles.llm");
+  assert.equal(providerErrorTitle({ code: "PROVIDER_RATE_LIMITED", surface: "transcription" }, t), undefined);
+  assert.equal(providerErrorTitle({ code: "OFFLINE" }, t), undefined);
+});
 
 function withClipboard(ctx, writeClipboard) {
   const original = globalThis.window;
@@ -145,7 +145,4 @@ test("toast props: a classified error gets actions, an unclassified one stays a 
   assert.deepEqual(providerErrorToastProps(new Error("Network down"), t), {
     description: "Network down",
   });
-});
-  assert.equal(providerErrorTitle({ code: "PROVIDER_RATE_LIMITED", surface: "transcription" }, t), undefined);
-  assert.equal(providerErrorTitle({ code: "OFFLINE" }, t), undefined);
 });

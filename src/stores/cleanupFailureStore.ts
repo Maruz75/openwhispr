@@ -5,7 +5,7 @@ export interface CleanupFailure {
   message: string;
   code?: string;
   messageKey?: string;
-  messageParams?: Record<string, string | number | boolean>;
+  messageParams?: Record<string, string | number>;
   surface?: "transcription" | "llm";
   settingsTarget?: string;
   action?: string;

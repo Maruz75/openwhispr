@@ -59,7 +59,7 @@ test("a single-candidate custom /responses endpoint's 429 insufficient_quota sur
       // English message, which doesn't contain the quota signal text and so
       // reclassified a 429 as a generic rate limit — dropping the requestId.
       assert.equal(error.code, "PROVIDER_QUOTA_EXHAUSTED");
-      assert.equal(error.messageKey, "providerErrors.quotaExhaustedSelfHosted");
+      assert.equal(error.messageKey, "providerErrors.selfHosted.quotaExhausted");
       assert.equal(error.technicalDetails.requestId, "req_classify_1");
       return true;
     }
@@ -86,7 +86,7 @@ test("OpenRouter is classified by its own name, never as self-hosted", async (t)
     (error) => {
       assert.equal(error.code, "PROVIDER_MODEL_NOT_FOUND");
       assert.equal(error.technicalDetails.provider, "OpenRouter");
-      assert.equal(error.messageParams.selfHosted, undefined);
+      assert.doesNotMatch(error.messageKey, /selfHosted/);
       assert.match(error.message, /^OpenRouter /);
       return true;
     }
@@ -119,7 +119,7 @@ test("a custom endpoint's error is classified self-hosted", async (t) => {
     }),
     (error) => {
       assert.equal(error.code, "PROVIDER_AUTH_FAILED");
-      assert.equal(error.messageParams.selfHosted, true);
+      assert.equal(error.messageKey, "providerErrors.selfHosted.authFailed");
       assert.equal(error.technicalDetails.provider, "Your server");
       assert.match(error.message, /^Your server /);
       return true;

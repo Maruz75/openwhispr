@@ -712,7 +712,7 @@ test("retry: a self-hosted timeout names the user's server", async () => {
     })
   );
   assert.equal(result.code, "PROVIDER_TIMEOUT");
-  assert.equal(result.messageParams.selfHosted, true);
+  assert.equal(result.messageKey, "providerErrors.selfHosted.timeout");
 });
 
 test("retry: a cancelled request (net::ERR_ABORTED) is not classified", async () => {

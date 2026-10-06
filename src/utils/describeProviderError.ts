@@ -9,7 +9,7 @@ interface DescribableError {
   code?: string;
   surface?: string;
   messageKey?: string;
-  messageParams?: Record<string, string | number | boolean>;
+  messageParams?: Record<string, string | number>;
   settingsTarget?: string;
   technicalDetails?: TechnicalErrorDetailsData;
 }
@@ -24,11 +24,8 @@ export interface ProviderErrorDescription {
 export function describeProviderError(error: unknown, t: TFunction): ProviderErrorDescription {
   if (typeof error === "string") return { description: error };
   const source = (error ?? {}) as DescribableError;
-  const params = source.messageParams?.selfHosted
-    ? { ...source.messageParams, provider: t("providerErrors.selfHostedName") }
-    : source.messageParams;
   const description = source.messageKey
-    ? String(t(source.messageKey, params))
+    ? String(t(source.messageKey, source.messageParams))
     : source.message || "";
   const settingsTarget = isProviderSettingsTarget(source.settingsTarget)
     ? (source.settingsTarget as ProviderSettingsTarget)
@@ -83,6 +80,9 @@ export function formatProviderErrorDetails(
     .join("\n");
 }
 
+export function openProviderSettings(target: ProviderSettingsTarget): void {
+  void window.electronAPI?.openSettingsSection?.(target);
+}
 
 /**
  * Open Settings (fixable errors) and an icon-only Copy details for a toast or
@@ -138,7 +138,4 @@ export function providerErrorToastProps(
   const { description, technicalDetails, settingsTarget } = describeProviderError(error, t);
   const actions = providerErrorActions({ settingsTarget, technicalDetails }, t);
   return { description, ...(actions.length ? { actions } : {}) };
-}
-export function openProviderSettings(target: ProviderSettingsTarget): void {
-  void window.electronAPI?.openSettingsSection?.(target);
 }

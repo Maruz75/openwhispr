@@ -52,9 +52,8 @@ test("a self-hosted 404 blames the user's server, not OpenAI", async (t) => {
   const error = await rejection(manager.processWithOpenAIAPI(recording()));
 
   assert.equal(error.code, "PROVIDER_ERROR");
-  assert.equal(error.messageKey, "providerErrors.unknown");
-  assert.equal(error.messageParams.selfHosted, true);
-  assert.equal(error.messageParams.provider, "Your server");
+  assert.equal(error.messageKey, "providerErrors.selfHosted.unknown");
+  assert.equal(error.message, "Your server returned an unexpected error.");
   assert.doesNotMatch(error.message, /OpenAI/);
 });
 

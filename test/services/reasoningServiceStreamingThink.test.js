@@ -473,7 +473,7 @@ test("a timeout-owned abort during raw response reading remains a timeout error"
   // A LAN/self-hosted timeout is now classified instead of the generic message.
   await assert.rejects(collectAgentText(stream), (err) => {
     assert.equal(err.code, "PROVIDER_TIMEOUT");
-    assert.equal(err.messageKey, "providerErrors.timeout");
+    assert.equal(err.messageKey, "providerErrors.selfHosted.timeout");
     return true;
   });
 });
@@ -871,7 +871,7 @@ test("a custom BYOK endpoint's provider error part is classified self-hosted, no
 
   await assert.rejects(collectAgentText(stream), (err) => {
     assert.equal(err.code, "PROVIDER_AUTH_FAILED");
-    assert.equal(err.messageParams.selfHosted, true);
+    assert.equal(err.messageKey, "providerErrors.selfHosted.authFailed");
     assert.equal(err.technicalDetails.provider, "Your server");
     assert.match(err.message, /^Your server /);
     return true;

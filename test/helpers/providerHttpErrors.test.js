@@ -75,7 +75,7 @@ test("self-hosted quota exhaustion gets its own sentence instead of \"Your Your 
     surface: "llm",
   });
   assert.equal(err.code, "PROVIDER_QUOTA_EXHAUSTED");
-  assert.equal(err.messageKey, "providerErrors.quotaExhaustedSelfHosted");
+  assert.equal(err.messageKey, "providerErrors.selfHosted.quotaExhausted");
   assert.equal(err.message, "Your server says the account is out of credit.");
   assert.equal(err.message.includes("Your Your server"), false);
 });
@@ -158,7 +158,7 @@ test("404 and model-not-found 400 name the model", async () => {
 test("a self-hosted 404 without a model signal is a generic error, not a model error", async () => {
   const c = await classify({ status: 404, body: "<html>Not Found</html>", selfHosted: true });
   assert.equal(c.code, "PROVIDER_ERROR");
-  assert.equal(c.messageParams.selfHosted, true);
+  assert.equal(c.messageKey, "providerErrors.selfHosted.unknown");
   assert.equal(c.messageParams.provider, "Your server");
 });
 
@@ -312,4 +312,88 @@ test("isProviderSettingsTarget whitelists only the two sections", async () => {
   assert.equal(isProviderSettingsTarget("llms"), true);
   assert.equal(isProviderSettingsTarget("account"), false);
   assert.equal(isProviderSettingsTarget(undefined), false);
+});
+
+test("a 413 is a recording that's too large for transcription and a request that's too large for an AI model", async () => {
+  const { providerHttpError } = await load();
+  const recording = providerHttpError({ provider: "Mistral", status: 413, body: "", surface: "transcription" });
+  assert.equal(recording.messageKey, "providerErrors.payloadTooLarge");
+  assert.equal(recording.message, "This recording is too large for Mistral.");
+  const request = providerHttpError({ provider: "Anthropic", status: 413, body: "", surface: "llm" });
+  assert.equal(request.messageKey, "providerErrors.requestTooLarge");
+  assert.equal(request.message, "This request is too large for Anthropic.");
+  const selfHosted = providerHttpError({
+    provider: "custom",
+    selfHosted: true,
+    status: 413,
+    body: "",
+    surface: "llm",
+  });
+  assert.equal(selfHosted.message, "This request is too large for your server.");
+});
+
+const en = require("../../src/locales/en/translation.json");
+const LOCALES = ["en", "es", "fr", "de", "pt", "it", "ru", "zh-CN", "zh-TW", "ja", "ar"];
+const lookup = (translation, key) => key.split(".").reduce((node, part) => node?.[part], translation);
+
+// Every classification a provider failure can produce, on both surfaces, named and self-hosted.
+async function everyClassification() {
+  const { providerHttpError, providerError, PROVIDER_ERROR_CODES: C } = await load();
+  const errors = [];
+  for (const surface of ["transcription", "llm"]) {
+    for (const selfHosted of [false, true]) {
+      const base = { provider: "Mistral", surface, selfHosted };
+      for (const status of [401, 403, 402, 429, 413, 400, 500, 504, 418]) {
+        errors.push(providerHttpError({ ...base, status, body: "" }));
+      }
+      errors.push(providerHttpError({ ...base, status: 404, body: "model_not_found", model: "m-1" }));
+      errors.push(providerHttpError({ ...base, status: 404, body: "model_not_found" }));
+      for (const code of [C.TIMEOUT, C.UNREACHABLE, C.KEY_MISSING]) {
+        errors.push(providerError(code, base));
+      }
+    }
+  }
+  return errors;
+}
+
+test("each Error.message is the en translation of its messageKey", async () => {
+  for (const error of await everyClassification()) {
+    // The transcription-only hooks keys say "your transcription provider"; their twins name it.
+    if (error.messageKey.startsWith("hooks.")) continue;
+    const template = lookup(en, error.messageKey);
+    assert.equal(typeof template, "string", `${error.messageKey} is missing from en`);
+    const rendered = template.replace(/\{\{(\w+)\}\}/g, (_, name) => error.messageParams[name]);
+    assert.equal(error.message, rendered, error.messageKey);
+  }
+});
+
+test("self-hosted errors use sentences that name the server themselves, in every locale", async () => {
+  const selfHostedKeys = new Set(
+    (await everyClassification())
+      .filter((error) => error.messageParams.provider === "Your server")
+      .map((error) => error.messageKey)
+      .filter((key) => key.startsWith("providerErrors."))
+  );
+  assert.ok(selfHostedKeys.size >= 10);
+  for (const key of selfHostedKeys) {
+    assert.match(key, /^providerErrors\.selfHosted\./);
+    for (const locale of LOCALES) {
+      const sentence = lookup(require(`../../src/locales/${locale}/translation.json`), key);
+      assert.equal(typeof sentence, "string", `${locale}: ${key}`);
+      // A substituted name can't take the case or article each sentence needs.
+      assert.doesNotMatch(sentence, /\{\{provider\}\}/, `${locale}: ${key}`);
+    }
+  }
+});
+
+test("a model name is inserted literally, even with $ patterns", async () => {
+  const { providerHttpError } = await load();
+  const error = providerHttpError({
+    provider: "OpenAI",
+    status: 404,
+    body: "",
+    model: "we$&ird-$'model",
+    surface: "llm",
+  });
+  assert.equal(error.message, "OpenAI doesn't recognize the model “we$&ird-$'model”.");
 });
