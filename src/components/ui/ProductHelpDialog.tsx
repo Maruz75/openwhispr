@@ -150,7 +150,12 @@ export default function ProductHelpDialog({
                   {source.title}
                 </Button>
                 <p className="text-sm whitespace-pre-wrap text-muted-foreground line-clamp-5">
-                  {markdownToPlainText(source.text.replace(/<[^>]*>/g, "")).replace(/\s+/g, " ")}
+                  {markdownToPlainText(
+                    source.text
+                      .split("\n")
+                      .filter((line) => !line.trimStart().startsWith("<"))
+                      .join("\n")
+                  ).replace(/\s+/g, " ")}
                 </p>
               </article>
             ))
