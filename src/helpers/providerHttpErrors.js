@@ -75,9 +75,11 @@ const SELF_HOSTED_NAME = "Your server";
 
 const INVALID_KEY_SIGNAL =
   /invalid[ _-]?(x-)?api[ _-]?key|incorrect api key|api_key_invalid|authentication_error|unauthorized/i;
-// Deliberately not bare "quota": Gemini words per-minute rate limits as "Quota exceeded".
+// Only signals that mean the account is out of credit. Rate-limit 429s use the
+// broader words: Gemini's starts "You exceeded your current quota, please check
+// your plan and billing details" and Groq's links to its /settings/billing page.
 const QUOTA_SIGNAL =
-  /insufficient_quota|exceeded your current quota|billing|credit balance|insufficient (credits|balance|funds)|out of credits|payment required/i;
+  /insufficient_quota|credit balance|insufficient (credits|balance|funds)|out of credits|payment required/i;
 const MODEL_SIGNAL =
   /model_not_found|model[^.\n]{0,80}(not found|does not exist|not available|is not supported)|(unknown|invalid|unsupported) model/i;
 

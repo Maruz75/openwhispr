@@ -80,20 +80,65 @@ test("self-hosted quota exhaustion gets its own sentence instead of \"Your Your 
   assert.equal(err.message.includes("Your Your server"), false);
 });
 
-test("a Gemini per-minute quota 429 stays a rate limit", async () => {
-  const c = await classify({
-    provider: "Gemini",
-    status: 429,
-    body: {
-      error: {
-        status: "RESOURCE_EXHAUSTED",
-        message: "Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_requests per minute",
-      },
-    },
-  });
+// Real bodies: both mention quota and billing, but only ask the user to wait.
+const GEMINI_RATE_LIMIT_BODY = {
+  error: {
+    code: 429,
+    message:
+      "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 10, model: gemini-3.5-flash\nPlease retry in 52.4s.",
+    status: "RESOURCE_EXHAUSTED",
+  },
+};
+const GROQ_RATE_LIMIT_BODY = {
+  error: {
+    message:
+      "Rate limit reached for model `whisper-large-v3-turbo` in organization `org_01` service tier `on_demand` on seconds of audio per hour (ASPH): Limit 7200, Used 7190, Requested 30. Please try again in 10s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing",
+    type: "seconds",
+    code: "rate_limit_exceeded",
+  },
+};
+
+test("a Gemini free-tier quota 429 stays a rate limit", async () => {
+  const c = await classify({ provider: "Gemini", status: 429, body: GEMINI_RATE_LIMIT_BODY });
   assert.equal(c.code, "PROVIDER_RATE_LIMITED");
   assert.equal(c.messageKey, "hooks.audioRecording.errorDescriptions.providerRateLimited");
   assert.equal(c.settingsTarget, undefined);
+});
+
+test("a Groq 429 that links to its billing page stays a rate limit", async () => {
+  const c = await classify({ provider: "Groq", status: 429, body: GROQ_RATE_LIMIT_BODY });
+  assert.equal(c.code, "PROVIDER_RATE_LIMITED");
+  assert.equal(c.settingsTarget, undefined);
+});
+
+test("OpenAI's real out-of-quota 429 shares Gemini's wording but is quota exhaustion", async () => {
+  const c = await classify({
+    provider: "OpenAI",
+    status: 429,
+    body: {
+      error: {
+        message:
+          "You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.",
+        type: "insufficient_quota",
+        param: null,
+        code: "insufficient_quota",
+      },
+    },
+  });
+  assert.equal(c.code, "PROVIDER_QUOTA_EXHAUSTED");
+});
+
+test("rate-limit 429s from Gemini and Groq are still retried on the AI-model path", async () => {
+  const { providerHttpError } = await load();
+  const { createApiRetryStrategy } = await import("../../src/utils/retry.ts");
+  const { shouldRetry } = createApiRetryStrategy();
+  for (const [provider, body] of [
+    ["Gemini", GEMINI_RATE_LIMIT_BODY],
+    ["Groq", GROQ_RATE_LIMIT_BODY],
+  ]) {
+    const error = providerHttpError({ provider, status: 429, body, surface: "llm" });
+    assert.equal(shouldRetry(error), true, `${provider} rate limit should retry`);
+  }
 });
 
 test("404 and model-not-found 400 name the model", async () => {
