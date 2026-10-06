@@ -16,6 +16,8 @@ export interface ToastActionConfig {
   onClick: () => void | boolean | Promise<void | boolean>;
   feedback?: { successLabel: string; failureLabel: string };
   dismissOnClick?: boolean;
+  /** Shown as its icon alone, after the labelled actions; the label becomes its accessible name. */
+  iconOnly?: boolean;
 }
 
 export interface ToastProps {

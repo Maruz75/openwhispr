@@ -6,7 +6,7 @@ import { playStartCue, playStopCue } from "../utils/dictationCues";
 import { getSettings } from "../stores/settingsStore";
 import { expandSnippets } from "../utils/snippets";
 import { getRecordingErrorTitle, getRecordingErrorDescription } from "../utils/recordingErrors";
-import { formatProviderErrorDetails, openProviderSettings } from "../utils/describeProviderError";
+import { providerErrorActions } from "../utils/describeProviderError";
 import { isAccessibilitySkipped } from "../utils/permissions";
 import { needsSttConfigBeforeStart } from "../helpers/sttConfigPolicy";
 import {
@@ -471,36 +471,7 @@ export const useAudioRecording = (toast, options = {}) => {
         },
       ];
 
-      if (settingsTarget) {
-        actions.push({
-          label: t("providerErrors.openSettings"),
-          icon: "settings",
-          onClick: () => openProviderSettings(settingsTarget),
-        });
-      }
-
-      if (technicalDetails) {
-        actions.push({
-          label: t("providerErrors.copyDetails"),
-          icon: "copy",
-          dismissOnClick: false,
-          feedback: {
-            successLabel: t("common.copied"),
-            failureLabel: t("hooks.audioRecording.pastePermission.copyFailed"),
-          },
-          onClick: async () => {
-            if (!isCurrent()) return;
-            try {
-              const result = await window.electronAPI?.writeClipboard?.(
-                formatProviderErrorDetails(technicalDetails, t)
-              );
-              return result?.success === true;
-            } catch {
-              return false;
-            }
-          },
-        });
-      }
+      actions.push(...providerErrorActions({ settingsTarget, technicalDetails }, t, isCurrent));
 
       if (recoverableTranscript) {
         actions.push({

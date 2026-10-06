@@ -83,7 +83,7 @@ import { applyChineseScript, resolveChineseScriptTarget } from "../utils/chinese
 import { getAgentName } from "../utils/agentName";
 import HistoryView from "./HistoryView";
 import BackgroundActionToastListener from "./notes/BackgroundActionToastListener";
-import { providerErrorToastProps } from "./providerErrorToast";
+import { providerErrorToastProps } from "../utils/describeProviderError";
 import SpaceSyncToastListener from "./notes/SpaceSyncToastListener";
 import { syncService } from "../services/SyncService.js";
 import logger from "../utils/logger";

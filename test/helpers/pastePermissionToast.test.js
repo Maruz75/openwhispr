@@ -191,3 +191,106 @@ test("real card keeps copy local, guards pending clicks, resets feedback and ren
   await React.act(async () => t.mock.timers.tick(1801));
   assert.equal(h.container.textContent, "");
 });
+
+test("an icon-only action sits after the labelled ones on a single row and is never primary", async (t) => {
+  const h = await setup(t);
+  const { DictationErrorCard } = await h.vite.ssrLoadModule(
+    "/components/dictation/DictationErrorCard.tsx"
+  );
+  const action = (label, extra = {}) => ({ label, onClick: () => {}, ...extra });
+  const copy = action("Copy details", { icon: "copy", iconOnly: true });
+  const render = (actions) =>
+    h.render(
+      React.createElement(DictationErrorCard, {
+        title: "Transcription failed",
+        description: "Mistral rejected your API key.",
+        actions,
+        onAction: (value) => value.onClick(),
+      })
+    );
+  const button = (label) =>
+    findElement(h.container, (e) => e.tagName === "BUTTON" && e.textContent.trim() === label);
+  const isPrimary = (label) =>
+    /\bbg-foreground text-background\b/.test(button(label).getAttribute("class"));
+
+  await render([action("Retry"), copy, action("Open Settings")]);
+  const row = button("Retry").parentNode;
+  assert.equal(row.style.gridTemplateColumns, "minmax(0, 1fr) minmax(0, 1fr) 2rem");
+  assert.deepEqual(
+    row.childNodes.map((node) => node.textContent.trim()),
+    ["Retry", "Open Settings", "Copy details"]
+  );
+  assert.equal(button("Copy details").getAttribute("title"), "Copy details");
+  assert.ok(findElement(button("Copy details"), (e) => e.getAttribute("class") === "sr-only"));
+  assert.equal(isPrimary("Retry"), true);
+  assert.equal(isPrimary("Copy details"), false);
+
+  await render([copy, action("Open Settings")]);
+  assert.equal(isPrimary("Open Settings"), true, "the first labelled action stays primary");
+
+  await render([action("Retry"), action("Open Settings"), action("View transcript"), copy]);
+  assert.match(button("Retry").parentNode.getAttribute("class"), /\bgrid-cols-2\b/);
+});
+
+test("a standard toast with structured actions shows its description as text and the actions under it", async (t) => {
+  const h = await setup(t);
+  const { ToastProvider } = await h.vite.ssrLoadModule("/components/ui/Toast.tsx");
+  const { useToast } = await h.vite.ssrLoadModule("/components/ui/useToast.ts");
+  let context;
+  function Probe() {
+    context = useToast();
+    return null;
+  }
+  await h.render(React.createElement(ToastProvider, null, React.createElement(Probe)));
+  const clicks = [];
+  await React.act(async () =>
+    context.toast({
+      title: "Failed to re-transcribe",
+      description: "Groq rejected your API key.",
+      variant: "destructive",
+      duration: 0,
+      actions: [
+        {
+          label: "Copy details",
+          icon: "copy",
+          iconOnly: true,
+          dismissOnClick: false,
+          feedback: { successLabel: "Copied", failureLabel: "Copy failed" },
+          onClick: async () => {
+            clicks.push("copy");
+            return true;
+          },
+        },
+        { label: "Open Settings", onClick: () => clicks.push("settings") },
+      ],
+    })
+  );
+  const description = findElement(
+    h.container,
+    (e) => e.tagName === "DIV" && e.textContent === "Groq rejected your API key."
+  );
+  assert.ok(description, "description rendered");
+  assert.doesNotMatch(description.getAttribute("class"), /font-mono/, "not the raw-error box");
+  const buttons = (root) => {
+    const found = [];
+    (function walk(node) {
+      if (node.tagName === "BUTTON") found.push(node);
+      node.childNodes?.forEach(walk);
+    })(root);
+    return found;
+  };
+  const settings = buttons(h.container).find((b) => b.textContent.trim() === "Open Settings");
+  const row = settings.parentNode;
+  assert.deepEqual(
+    buttons(row).map((b) => b.getAttribute("title") || b.textContent.trim()),
+    ["Open Settings", "Copy details"]
+  );
+  const copyButton = buttons(row)[1];
+  await React.act(async () => click(copyButton));
+  assert.equal(copyButton.getAttribute("title"), "Copied");
+  assert.equal(context.toastCount, 1, "Copy details keeps the toast open");
+  await React.act(async () => click(settings));
+  assert.deepEqual(clicks, ["copy", "settings"]);
+  await React.act(() => new Promise((resolve) => setTimeout(resolve, 250)));
+  assert.equal(context.toastCount, 0, "Open Settings dismisses the toast");
+});

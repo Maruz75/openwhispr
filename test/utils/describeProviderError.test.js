@@ -75,6 +75,77 @@ test("providerErrorTitle picks the surface title for provider codes only", async
   const { providerErrorTitle } = await load();
   assert.equal(providerErrorTitle({ code: "PROVIDER_AUTH_FAILED", surface: "transcription" }, t), "providerErrors.titles.transcription");
   assert.equal(providerErrorTitle({ code: "PROVIDER_UNAVAILABLE", surface: "llm" }, t), "providerErrors.titles.llm");
+
+function withClipboard(ctx, writeClipboard) {
+  const original = globalThis.window;
+  globalThis.window = { electronAPI: { writeClipboard } };
+  ctx.after(() => {
+    globalThis.window = original;
+  });
+}
+
+test("a fixable classified error gets Open Settings, then an icon-only Copy details that copies the details", async (ctx) => {
+  const { providerErrorActions } = await load();
+  const written = [];
+  withClipboard(ctx, async (text) => {
+    written.push(text);
+    return { success: true };
+  });
+  const actions = providerErrorActions(
+    { settingsTarget: "llms", technicalDetails: { provider: "OpenAI", status: 401 } },
+    t
+  );
+  assert.deepEqual(
+    actions.map(({ label, icon, iconOnly }) => ({ label, icon, iconOnly })),
+    [
+      { label: "providerErrors.openSettings", icon: "settings", iconOnly: undefined },
+      { label: "providerErrors.copyDetails", icon: "copy", iconOnly: true },
+    ]
+  );
+  assert.equal(actions[1].dismissOnClick, false);
+  assert.equal(await actions[1].onClick(), true);
+  assert.match(written[0], /providerErrors\.details\.provider: OpenAI/);
+});
+
+test("Copy details on a superseded card neither copies nor reports a result", async (ctx) => {
+  const { providerErrorActions } = await load();
+  let current = true;
+  let writes = 0;
+  withClipboard(ctx, async () => {
+    writes += 1;
+    current = false;
+    return { success: true };
+  });
+  const [copy] = providerErrorActions(
+    { technicalDetails: { provider: "Groq", status: 429 } },
+    t,
+    () => current
+  );
+  assert.equal(await copy.onClick(), undefined, "a click that outlived its card reports nothing");
+  assert.equal(await copy.onClick(), undefined);
+  assert.equal(writes, 1, "a click after the card was replaced never writes");
+});
+
+test("toast props: a classified error gets actions, an unclassified one stays a plain message", async () => {
+  const { providerErrorToastProps } = await load();
+  const classified = providerErrorToastProps(
+    {
+      messageKey: "providerErrors.rateLimited",
+      messageParams: { provider: "Groq" },
+      technicalDetails: { provider: "Groq", status: 429 },
+    },
+    t
+  );
+  assert.equal(classified.description, 'providerErrors.rateLimited|{"provider":"Groq"}');
+  assert.deepEqual(
+    classified.actions.map((action) => action.label),
+    ["providerErrors.copyDetails"],
+    "a rate limit has nothing to fix in Settings"
+  );
+  assert.deepEqual(providerErrorToastProps(new Error("Network down"), t), {
+    description: "Network down",
+  });
+});
   assert.equal(providerErrorTitle({ code: "PROVIDER_RATE_LIMITED", surface: "transcription" }, t), undefined);
   assert.equal(providerErrorTitle({ code: "OFFLINE" }, t), undefined);
 });

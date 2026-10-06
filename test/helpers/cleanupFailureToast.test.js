@@ -103,7 +103,7 @@ test("technical AWS details use the selected UI language", async (t) => {
   assert.match(markup, /aria-label="Copiar detalles técnicos"/);
 });
 
-test("cleanup toast for a classified LLM failure shows the provider description and an Open Settings action", async (t) => {
+async function recordClassifiedCleanupFailure(t, { dictationWindow }) {
   let root = null;
   t.after(async () => {
     if (root) await React.act(async () => root.unmount());
@@ -121,7 +121,7 @@ test("cleanup toast for a classified LLM failure shows the provider description 
         });
       `,
       "/utils/windowContext": `
-        export const isDictationPanelWindow = () => false;
+        export const isDictationPanelWindow = () => ${dictationWindow};
       `,
     },
   });
@@ -149,11 +149,31 @@ test("cleanup toast for a classified LLM failure shows the provider description 
       technicalDetails: { provider: "OpenAI", status: 401 },
     })
   );
+  return globalThis.__cleanupFailureToasts.at(-1);
+}
 
-  const toastProps = globalThis.__cleanupFailureToasts.at(-1);
+test("a classified cleanup failure says why, then that the dictation went in raw, with Open Settings and Copy details", async (t) => {
+  const toastProps = await recordClassifiedCleanupFailure(t, { dictationWindow: false });
   assert.equal(toastProps.title, "Cleanup failed");
-  assert.equal(toastProps.description, "OpenAI rejected your API key.");
-  assert.deepEqual(toastProps.technicalDetails, { provider: "OpenAI", status: 401 });
-  assert.ok(toastProps.action, "expected an Open Settings action");
-  assert.match(renderToStaticMarkup(toastProps.action), /Open Settings/);
+  assert.equal(
+    toastProps.description,
+    "OpenAI rejected your API key.\nOriginal dictation pasted without AI cleanup."
+  );
+  assert.deepEqual(
+    toastProps.actions.map(({ label, iconOnly }) => ({ label, iconOnly })),
+    [
+      { label: "Open Settings", iconOnly: undefined },
+      { label: "Copy details", iconOnly: true },
+    ]
+  );
+  assert.equal(toastProps.technicalDetails, undefined, "details are behind Copy details");
+  assert.equal(toastProps.secondaryDescription, undefined);
+  assert.equal(toastProps.presentation, undefined);
+});
+
+test("in the dictation window a classified cleanup failure uses the pill's error card", async (t) => {
+  const toastProps = await recordClassifiedCleanupFailure(t, { dictationWindow: true });
+  assert.equal(toastProps.presentation, "dictation-error");
+  assert.equal(toastProps.duration, 10_000);
+  assert.equal(toastProps.actions.length, 2);
 });

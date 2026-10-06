@@ -144,9 +144,7 @@ test("cleanup validates completed provider output using the request's prompt set
     const settingsModule = await vite.ssrLoadModule("/stores/settingsStore.ts");
     // The retry callback closes over this module-scope import (not a dynamic
     // `import()`), so it must be supplied as a global rather than via `require`.
-    const { providerErrorToastProps } = await vite.ssrLoadModule(
-      "/components/providerErrorToast.tsx"
-    );
+    const { providerErrorToastProps } = await vite.ssrLoadModule("/utils/describeProviderError.ts");
     const toasts = [];
     let displayedRow;
     const retry = vm.runInNewContext(`${code}\nretry`, {

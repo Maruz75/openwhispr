@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import type { TechnicalErrorDetailsData } from "../components/ui/useToast";
+import type { TechnicalErrorDetailsData, ToastActionConfig } from "../components/ui/useToast";
 import { isProviderSettingsTarget } from "../helpers/providerHttpErrors.js";
 
 export type ProviderSettingsTarget = "speechToText" | "llms";
@@ -83,6 +83,62 @@ export function formatProviderErrorDetails(
     .join("\n");
 }
 
+
+/**
+ * Open Settings (fixable errors) and an icon-only Copy details for a toast or
+ * dictation card. `isCurrent` lets a superseded card ignore a late click.
+ */
+export function providerErrorActions(
+  error: { settingsTarget?: string; technicalDetails?: TechnicalErrorDetailsData },
+  t: TFunction,
+  isCurrent: () => boolean = () => true
+): ToastActionConfig[] {
+  const actions: ToastActionConfig[] = [];
+  const { settingsTarget, technicalDetails } = error;
+  if (isProviderSettingsTarget(settingsTarget)) {
+    actions.push({
+      label: t("providerErrors.openSettings"),
+      icon: "settings",
+      onClick: () => openProviderSettings(settingsTarget as ProviderSettingsTarget),
+    });
+  }
+  if (technicalDetails) {
+    actions.push({
+      label: t("providerErrors.copyDetails"),
+      icon: "copy",
+      iconOnly: true,
+      dismissOnClick: false,
+      feedback: {
+        successLabel: t("common.copied"),
+        failureLabel: t("hooks.audioRecording.pastePermission.copyFailed"),
+      },
+      onClick: async () => {
+        if (!isCurrent()) return;
+        let copied = false;
+        try {
+          const result = await window.electronAPI?.writeClipboard?.(
+            formatProviderErrorDetails(technicalDetails, t)
+          );
+          copied = result?.success === true;
+        } catch {
+          copied = false;
+        }
+        if (isCurrent()) return copied;
+      },
+    });
+  }
+  return actions;
+}
+
+/** Description and actions for a standard toast reporting a (possibly classified) error. */
+export function providerErrorToastProps(
+  error: unknown,
+  t: TFunction
+): { description: string; actions?: ToastActionConfig[] } {
+  const { description, technicalDetails, settingsTarget } = describeProviderError(error, t);
+  const actions = providerErrorActions({ settingsTarget, technicalDetails }, t);
+  return { description, ...(actions.length ? { actions } : {}) };
+}
 export function openProviderSettings(target: ProviderSettingsTarget): void {
   void window.electronAPI?.openSettingsSection?.(target);
 }

@@ -10,7 +10,7 @@ import {
   type ActionAppliedEvent,
 } from "../../stores/actionProcessingStore";
 import { getActionName } from "../../stores/actionStore";
-import { providerErrorToastProps } from "../providerErrorToast";
+import { providerErrorToastProps } from "../../utils/describeProviderError";
 
 const UNDO_WINDOW_MS = 6000;
 
