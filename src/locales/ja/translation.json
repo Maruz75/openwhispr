@@ -3830,7 +3830,10 @@
       "copiedToClipboard": "クリップボードにコピーしました",
       "openNote": "ノートを開く",
       "unknownTool": "不明なツール: {{name}}",
-      "invalidArgs": "{{name}} のツール引数が無効です"
+      "invalidArgs": "{{name}} のツール引数が無効です",
+      "search_openwhispr_helpStatus": "公式ドキュメントを検索中…",
+      "read_openwhispr_helpStatus": "公式ドキュメントを検索中…",
+      "get_openwhispr_contextStatus": "現在のアプリ設定"
     }
   },
   "assistant": {
@@ -4770,5 +4773,32 @@
     },
     "start": "メモを取る",
     "join": "参加して文字起こし"
+  },
+  "productHelp": {
+    "title": "OpenWhispr ヘルプ",
+    "description": "公式ガイドと関連設定。アカウントやAIモデルは不要です。",
+    "topics": "ヘルプのトピック",
+    "essentials": "オフラインガイド（英語）",
+    "openArticle": "記事全文を読む",
+    "sources": "公式ドキュメント",
+    "loading": "公式ドキュメントを検索中…",
+    "policyFallback": "組織のポリシーによりオンライン検索が制限されています。オフラインガイドは利用できます。",
+    "offline": "最新のドキュメントを確認できませんでした。オフラインガイドを利用するか、再試行してください。",
+    "refresh": "更新",
+    "settings": "現在のアプリ設定",
+    "settingsNote": "保存済みの選択と既知の権限を読み取り専用で表示します。デバイスの動作確認ではありません。この画面では設定は端末内に留まります。",
+    "policy": "アシスタント許可",
+    "on": "オン",
+    "off": "オフ",
+    "topicsList": {
+      "hotkeys": "ショートカット",
+      "microphone": "マイク",
+      "models": "モデル",
+      "meetings": "会議",
+      "calendar": "カレンダー",
+      "language": "言語",
+      "backup": "バックアップ",
+      "assistant": "アシスタント"
+    }
   }
 }

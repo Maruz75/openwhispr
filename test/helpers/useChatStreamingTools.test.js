@@ -859,7 +859,7 @@ test("a local model too small for tools is told so, with no tool notes in its hi
   const [system, ...history] = sentMessages[0];
   assert.match(
     system.content,
-    /- Tools \(web search, calendar, searching or changing notes, integrations\): the selected model runs without tools .* in Settings → Language Models\. You can still use anything already in this prompt, such as note text/
+    /- Tools \(web search, calendar, searching or changing notes, integrations\): the selected model runs without tools .* in Settings → Language Models\..* You can still use anything already in this prompt, such as note text/
   );
   assert.doesNotMatch(system.content, /Tools used/);
   assert.equal(history[1].content, "Sunny.");
@@ -917,4 +917,33 @@ test("the onboarding demo isn't told to send the user off to enable anything", a
   );
   await captured.sendToAI("Reply with times I'm free", []);
   assert.doesNotMatch(systemPromptOf(sentMessages[0]), /Not available in this conversation/);
+});
+
+test("official help is offered on Cloud Free", async (t) => {
+  const response = {
+    source: "live",
+    retrievedAt: "2026-10-05T12:00:00Z",
+    articles: [
+      {
+        title: "Hotkeys",
+        url: "https://docs.openwhispr.com/help/dictation/hotkeys",
+        path: "/help/dictation/hotkeys",
+        text: "Official help",
+      },
+    ],
+  };
+  const calls = [];
+  const { captured, offeredTools } = await renderChatStreaming(t, CONNECTOR_SURFACE, {
+    subscribed: false,
+    electronAPI: {
+      productHelp: async (id, input) => {
+        calls.push(input);
+        return response;
+      },
+      cancelProductHelp: () => {},
+    },
+  });
+  await captured.sendToAI("How do I change an OpenWhispr shortcut?", []);
+  for (const name of ["search_openwhispr_help", "read_openwhispr_help", "get_openwhispr_context"])
+    assert.ok(offeredTools[0].includes(name));
 });

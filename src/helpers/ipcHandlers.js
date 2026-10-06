@@ -16,6 +16,7 @@ const { resolveFailedGpuBackends } = require("./whisper");
 const { BYOK_API_KEYS } = require("../config/secretKeys");
 const tokenStore = require("./tokenStore");
 const accountScopeBinding = require("./accountScopeBinding");
+const { registerProductHelpIpc, remoteHelpAllowed } = require("./productHelp");
 const { createCloudApiRequestHandler } = require("./cloudApiRequest");
 const { decodeLeaderboardPngDataUrl, leaderboardImageFilename } = require("./leaderboardImage");
 const { withPolicyRequestHeaders } = require("./policyRequestHeaders");
@@ -6138,6 +6139,48 @@ class IPCHandlers {
       tokenStore,
       broadcast: (snapshot) => broadcastToWindows("workspace-policy-changed", snapshot),
       logger: debugLogger,
+    });
+    registerProductHelpIpc({
+      ipcMain,
+      fetch: proxyFetch,
+      canLookup: async (event, signal) => {
+        const generation = tokenStore.getState().generation;
+        try {
+          const authHeaders = await getAuthHeader(event);
+          if (generation !== tokenStore.getState().generation || signal.aborted) return false;
+          if (!Object.keys(authHeaders).length) return true;
+          const snapshot = await workspacePolicyManager.getPolicy({
+            authHeaders,
+            expectedAuthGeneration: generation,
+          });
+          return (
+            !signal.aborted &&
+            generation === tokenStore.getState().generation &&
+            remoteHelpAllowed(snapshot, app.getVersion())
+          );
+        } catch {
+          return false;
+        }
+      },
+      getBasics: () => ({
+        // checkAccess reads the cached permission verdict; it never requests access.
+        systemAudioPermission:
+          process.platform === "darwin"
+            ? this.audioTapManager?.checkAccess()?.status || "unknown"
+            : "unknown",
+        platform: process.platform,
+        version: app.getVersion(),
+        microphonePermission:
+          process.platform === "linux"
+            ? "unknown"
+            : systemPreferences.getMediaAccessStatus("microphone"),
+        accessibilityPermission:
+          process.platform === "darwin"
+            ? systemPreferences.isTrustedAccessibilityClient(false)
+              ? "granted"
+              : "not-granted"
+            : "not-applicable",
+      }),
     });
     if (this.connectorManager) {
       registerConnectorIpc({

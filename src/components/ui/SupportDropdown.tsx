@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useState } from "react";
+import ProductHelpDialog from "./ProductHelpDialog";
 import { useTranslation } from "react-i18next";
 import { Button } from "./button";
 import { HelpCircle, Mail, Bug, BookOpen } from "../icons";
@@ -37,49 +38,59 @@ const openExternal = async (url: string) => {
 
 export default function SupportDropdown({ className, trigger }: SupportDropdownProps) {
   const { t } = useTranslation();
+  const [helpOpen, setHelpOpen] = useState(false);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        {trigger || (
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "text-foreground/70 hover:text-foreground hover:bg-foreground/10",
-              className
-            )}
+    <>
+      <ProductHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          {trigger || (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "text-foreground/70 hover:text-foreground hover:bg-foreground/10",
+                className
+              )}
+            >
+              <HelpCircle size={16} />
+            </Button>
+          )}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => setHelpOpen(true)}>
+            <HelpCircle className="me-2 h-4 w-4" />
+            {t("productHelp.title")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => openExternal("https://docs.openwhispr.com")}>
+            <BookOpen className="me-2 h-4 w-4" />
+            {t("support.documentation")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => openExternal("https://discord.gg/yZWC9WTtX7")}>
+            <DiscordIcon className="me-2 h-4 w-4" />
+            {t("support.joinDiscord")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={async () => {
+              const result = await window.electronAPI?.openExternal(
+                "mailto:support@openwhispr.com"
+              );
+              if (!result?.success) {
+                openExternal("https://mail.google.com/mail/?view=cm&to=support@openwhispr.com");
+              }
+            }}
           >
-            <HelpCircle size={16} />
-          </Button>
-        )}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => openExternal("https://docs.openwhispr.com")}>
-          <BookOpen className="me-2 h-4 w-4" />
-          {t("support.documentation")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => openExternal("https://discord.gg/yZWC9WTtX7")}>
-          <DiscordIcon className="me-2 h-4 w-4" />
-          {t("support.joinDiscord")}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={async () => {
-            const result = await window.electronAPI?.openExternal("mailto:support@openwhispr.com");
-            if (!result?.success) {
-              openExternal("https://mail.google.com/mail/?view=cm&to=support@openwhispr.com");
-            }
-          }}
-        >
-          <Mail className="me-2 h-4 w-4" />
-          {t("support.contactSupport")}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => openExternal("https://github.com/OpenWhispr/openwhispr/issues")}
-        >
-          <Bug className="me-2 h-4 w-4" />
-          {t("support.submitBug")}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+            <Mail className="me-2 h-4 w-4" />
+            {t("support.contactSupport")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => openExternal("https://github.com/OpenWhispr/openwhispr/issues")}
+          >
+            <Bug className="me-2 h-4 w-4" />
+            {t("support.submitBug")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   );
 }

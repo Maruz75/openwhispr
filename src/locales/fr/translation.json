@@ -4001,7 +4001,10 @@
       "copiedToClipboard": "Copié dans le presse-papiers",
       "openNote": "Ouvrir la note",
       "unknownTool": "Outil inconnu : {{name}}",
-      "invalidArgs": "Arguments d'outil invalides pour {{name}}"
+      "invalidArgs": "Arguments d'outil invalides pour {{name}}",
+      "search_openwhispr_helpStatus": "Recherche dans la documentation officielle…",
+      "read_openwhispr_helpStatus": "Recherche dans la documentation officielle…",
+      "get_openwhispr_contextStatus": "Réglages actuels"
     }
   },
   "assistant": {
@@ -4770,5 +4773,32 @@
     },
     "start": "Prendre des notes",
     "join": "Rejoindre et transcrire"
+  },
+  "productHelp": {
+    "title": "Aide OpenWhispr",
+    "description": "Guides officiels et réglages utiles. Aucun compte ni modèle IA requis.",
+    "topics": "Rubriques d’aide",
+    "essentials": "Guide hors ligne (anglais)",
+    "openArticle": "Lire l’article complet",
+    "sources": "Documentation officielle",
+    "loading": "Recherche dans la documentation officielle…",
+    "policyFallback": "La politique de votre organisation limite la recherche en ligne. Le guide hors ligne reste disponible.",
+    "offline": "La documentation actuelle n’a pas pu être consultée. Utilisez le guide hors ligne ou réessayez.",
+    "refresh": "Actualiser",
+    "settings": "Réglages actuels",
+    "settingsNote": "Choix enregistrés et autorisations connues en lecture seule ; aucun test des appareils. Dans cette vue, les réglages restent sur cet appareil.",
+    "policy": "Assistant autorisé",
+    "on": "Activé",
+    "off": "Désactivé",
+    "topicsList": {
+      "hotkeys": "Raccourcis",
+      "microphone": "Microphone",
+      "models": "Modèles",
+      "meetings": "Réunions",
+      "calendar": "Calendriers",
+      "language": "Langues",
+      "backup": "Sauvegarde",
+      "assistant": "Assistant"
+    }
   }
 }

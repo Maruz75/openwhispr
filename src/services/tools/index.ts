@@ -1,3 +1,4 @@
+import { productHelpTools } from "./productHelpTools";
 import { ToolRegistry } from "./ToolRegistry";
 import { createSearchNotesTool } from "./searchNotesTool";
 import { getNoteTool } from "./getNoteTool";
@@ -34,6 +35,7 @@ interface ToolRegistrySettings {
 
 export function createToolRegistry(settings: ToolRegistrySettings): ToolRegistry {
   const registry = new ToolRegistry();
+  for (const tool of productHelpTools) registry.register(tool);
 
   const useCloudSearch = settings.isSignedIn && settings.cloudBackupEnabled;
   registry.register(createSearchNotesTool({ useCloudSearch, fixedScope: settings.searchScope }));

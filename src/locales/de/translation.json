@@ -4001,7 +4001,10 @@
       "copiedToClipboard": "In die Zwischenablage kopiert",
       "openNote": "Notiz öffnen",
       "unknownTool": "Unbekanntes Werkzeug: {{name}}",
-      "invalidArgs": "Ungültige Tool-Argumente für {{name}}"
+      "invalidArgs": "Ungültige Tool-Argumente für {{name}}",
+      "search_openwhispr_helpStatus": "Offizielle Dokumentation wird durchsucht…",
+      "read_openwhispr_helpStatus": "Offizielle Dokumentation wird durchsucht…",
+      "get_openwhispr_contextStatus": "Aktuelle Einstellungen"
     }
   },
   "assistant": {
@@ -4770,5 +4773,32 @@
     },
     "start": "Notizen aufnehmen",
     "join": "Beitreten & transkribieren"
+  },
+  "productHelp": {
+    "title": "OpenWhispr-Hilfe",
+    "description": "Offizielle Anleitungen und passende Einstellungen. Kein Konto oder KI-Modell nötig.",
+    "topics": "Hilfethemen",
+    "essentials": "Offline-Grundlagen (Englisch)",
+    "openArticle": "Vollständigen Artikel lesen",
+    "sources": "Offizielle Dokumentation",
+    "loading": "Offizielle Dokumentation wird durchsucht…",
+    "policyFallback": "Die Richtlinie deiner Organisation beschränkt die Online-Suche. Die Offline-Grundlagen bleiben verfügbar.",
+    "offline": "Die aktuelle Dokumentation konnte nicht geprüft werden. Nutze die Offline-Grundlagen oder versuche es erneut.",
+    "refresh": "Aktualisieren",
+    "settings": "Aktuelle Einstellungen",
+    "settingsNote": "Gespeicherte Auswahl und bekannte Berechtigungen, nur lesbar; kein Gerätetest. In dieser Ansicht bleiben die Einstellungen auf diesem Gerät.",
+    "policy": "Assistent erlaubt",
+    "on": "Ein",
+    "off": "Aus",
+    "topicsList": {
+      "hotkeys": "Tastenkürzel",
+      "microphone": "Mikrofon",
+      "models": "Modelle",
+      "meetings": "Besprechungen",
+      "calendar": "Kalender",
+      "language": "Sprachen",
+      "backup": "Sicherung",
+      "assistant": "Assistent"
+    }
   }
 }

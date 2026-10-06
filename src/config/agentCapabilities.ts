@@ -144,7 +144,7 @@ function describeOne({ name, reason, where }: UnavailableCapability): string {
     case "needsReconnect":
       return `${name}: the connection has expired; the user can reconnect it${at}.`;
     case "modelTooSmall":
-      return `${name}: the selected model runs without tools (small or unrecognized local models do); the user can choose a larger model or a cloud provider${at}. You can still use anything already in this prompt, such as note text, and write any text the user asks for.`;
+      return `${name}: the selected model runs without tools (small or unrecognized local models do); the user can choose a larger model or a cloud provider${at}. For OpenWhispr product questions, the user can open Support → OpenWhispr Help to read documentation and current settings without a model. You can still use anything already in this prompt, such as note text, and write any text the user asks for.`;
   }
 }
 

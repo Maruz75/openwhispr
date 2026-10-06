@@ -3830,7 +3830,10 @@
       "copiedToClipboard": "Copiato negli appunti",
       "openNote": "Apri nota",
       "unknownTool": "Strumento sconosciuto: {{name}}",
-      "invalidArgs": "Argomenti dello strumento non validi per {{name}}"
+      "invalidArgs": "Argomenti dello strumento non validi per {{name}}",
+      "search_openwhispr_helpStatus": "Ricerca nella documentazione ufficiale…",
+      "read_openwhispr_helpStatus": "Ricerca nella documentazione ufficiale…",
+      "get_openwhispr_contextStatus": "Impostazioni attuali"
     }
   },
   "assistant": {
@@ -4770,5 +4773,32 @@
     },
     "start": "Prendi appunti",
     "join": "Partecipa e trascrivi"
+  },
+  "productHelp": {
+    "title": "Aiuto OpenWhispr",
+    "description": "Guide ufficiali e impostazioni pertinenti. Non servono account o modelli IA.",
+    "topics": "Argomenti",
+    "essentials": "Guida offline (inglese)",
+    "openArticle": "Leggi l’articolo completo",
+    "sources": "Documentazione ufficiale",
+    "loading": "Ricerca nella documentazione ufficiale…",
+    "policyFallback": "I criteri della tua organizzazione limitano la ricerca online. La guida offline resta disponibile.",
+    "offline": "Impossibile consultare la documentazione aggiornata. Usa la guida offline o riprova.",
+    "refresh": "Aggiorna",
+    "settings": "Impostazioni attuali",
+    "settingsNote": "Scelte salvate e autorizzazioni note, in sola lettura; nessun test dei dispositivi. In questa vista le impostazioni restano sul dispositivo.",
+    "policy": "Assistente consentito",
+    "on": "Attivo",
+    "off": "Disattivo",
+    "topicsList": {
+      "hotkeys": "Scorciatoie",
+      "microphone": "Microfono",
+      "models": "Modelli",
+      "meetings": "Riunioni",
+      "calendar": "Calendari",
+      "language": "Lingue",
+      "backup": "Backup",
+      "assistant": "Assistente"
+    }
   }
 }

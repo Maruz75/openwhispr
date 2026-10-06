@@ -3830,7 +3830,10 @@
       "copiedToClipboard": "已复制到剪贴板",
       "openNote": "打开笔记",
       "unknownTool": "未知工具：{{name}}",
-      "invalidArgs": "{{name}} 的工具参数无效"
+      "invalidArgs": "{{name}} 的工具参数无效",
+      "search_openwhispr_helpStatus": "正在查询官方文档…",
+      "read_openwhispr_helpStatus": "正在查询官方文档…",
+      "get_openwhispr_contextStatus": "当前应用设置"
     }
   },
   "assistant": {
@@ -4770,5 +4773,32 @@
     },
     "start": "开始记录",
     "join": "加入并转录"
+  },
+  "productHelp": {
+    "title": "OpenWhispr 帮助",
+    "description": "官方指南和相关设置。无需账户或 AI 模型。",
+    "topics": "帮助主题",
+    "essentials": "离线指南（英语）",
+    "openArticle": "阅读完整文章",
+    "sources": "官方文档",
+    "loading": "正在查询官方文档…",
+    "policyFallback": "组织策略限制了在线查询。离线指南仍可使用。",
+    "offline": "无法查询最新文档。请使用离线指南或重试。",
+    "refresh": "刷新",
+    "settings": "当前应用设置",
+    "settingsNote": "只读显示已保存的选项和已知权限，不会测试设备。在此帮助视图中，设置保留在本设备上。",
+    "policy": "允许使用助手",
+    "on": "开启",
+    "off": "关闭",
+    "topicsList": {
+      "hotkeys": "快捷键",
+      "microphone": "麦克风",
+      "models": "模型",
+      "meetings": "会议",
+      "calendar": "日历",
+      "language": "语言",
+      "backup": "备份",
+      "assistant": "助手"
+    }
   }
 }
