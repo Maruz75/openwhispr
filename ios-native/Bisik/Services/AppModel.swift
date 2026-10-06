@@ -6,6 +6,9 @@ import UIKit
 
 @MainActor
 final class AppModel: ObservableObject {
+    @Published var interfaceLanguage = UserDefaults.standard.string(forKey: L10n.preferenceKey) ?? "system" {
+        didSet { UserDefaults.standard.set(interfaceLanguage, forKey: L10n.preferenceKey) }
+    }
     @Published var text = ""
     @Published var phase: RecordingPhase = .idle
     @Published var levels = Array(repeating: CGFloat(0.08), count: 32)
@@ -80,7 +83,7 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self, self.phase != .idle else { return }
                 self.cancelRecording()
-                self.errorMessage = "Rekaman dihentikan karena audio terganggu. Tahan mikrofon untuk merekam kembali."
+                self.errorMessage = L10n.text("Rekaman dihentikan karena audio terganggu. Tahan mikrofon untuk merekam kembali.")
             }
         })
         observers.append(NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] notification in
@@ -89,7 +92,7 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self, self.phase == .recording else { return }
                 self.cancelRecording()
-                self.errorMessage = "Perangkat mikrofon terputus. Tahan mikrofon untuk merekam kembali."
+                self.errorMessage = L10n.text("Perangkat mikrofon terputus. Tahan mikrofon untuk merekam kembali.")
             }
         })
     }
@@ -108,7 +111,7 @@ final class AppModel: ObservableObject {
             }
         } catch {
             self.store = nil
-            errorMessage = "Data lokal belum dapat dibuka. Berkas riwayat tetap dipertahankan dan tidak akan ditimpa."
+            errorMessage = L10n.text("Data lokal belum dapat dibuka. Berkas riwayat tetap dipertahankan dan tidak akan ditimpa.")
         }
         // An unconfigured build cannot authenticate; opening Keychain then adds a
         // misleading account error on unsigned simulator previews. Configured,
@@ -130,11 +133,11 @@ final class AppModel: ObservableObject {
     func beginHold() async {
         guard phase == .idle else { return }
         guard !hasPendingRecording else {
-            errorMessage = "Coba kembali rekaman terakhir, atau hapus draf sebelum merekam lagi."
+            errorMessage = L10n.text("Coba kembali rekaman terakhir, atau hapus draf sebelum merekam lagi.")
             return
         }
         guard isConfigured else {
-            errorMessage = "Layanan dan kebijakan privasi perlu dikonfigurasi oleh pengembang sebelum merekam."
+            errorMessage = L10n.text("Layanan dan kebijakan privasi perlu dikonfigurasi oleh pengembang sebelum merekam.")
             return
         }
         guard settings.consentGranted, settings.consentDisclosure == consentDisclosure else { needsConsent = true; return }
@@ -290,7 +293,7 @@ final class AppModel: ObservableObject {
         let replacement = replacement.trimmingCharacters(in: .whitespacesAndNewlines)
         let entry = DictionaryEntry(source: source, replacement: replacement)
         guard entry.isValidContext else {
-            errorMessage = "Isi kata asli dan koreksinya, masing-masing maksimal 80 karakter."
+            errorMessage = L10n.text("Isi kata asli dan koreksinya, masing-masing maksimal 80 karakter.")
             return
         }
         if let index = dictionary.firstIndex(where: { $0.source.caseInsensitiveCompare(source) == .orderedSame }) { dictionary[index] = entry }
@@ -385,11 +388,11 @@ final class AppModel: ObservableObject {
 
     private func persist() {
         guard let store else {
-            errorMessage = "Data lokal belum tersedia; riwayat baru belum tersimpan. Data lama tetap dipertahankan."
+            errorMessage = L10n.text("Data lokal belum tersedia; riwayat baru belum tersimpan. Data lama tetap dipertahankan.")
             return
         }
         do { try store.save(StoredData(settings: settings, history: history, dictionary: dictionary)) }
-        catch { errorMessage = "Data lokal belum tersimpan. Periksa ruang kosong dan buka kunci iPhone." }
+        catch { errorMessage = L10n.text("Data lokal belum tersimpan. Periksa ruang kosong dan buka kunci iPhone.") }
     }
 
     private func discardPending() {
@@ -427,7 +430,7 @@ final class AppModel: ObservableObject {
             if apiError.isQuotaExceeded { showPaywall = true }
         }
         if error is URLError {
-            errorMessage = "Koneksi ke layanan terputus. Periksa internet dan coba lagi."
+            errorMessage = L10n.text("Koneksi ke layanan terputus. Periksa internet dan coba lagi.")
             return
         }
         if error is DecodingError {

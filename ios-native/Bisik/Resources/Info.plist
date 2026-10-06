@@ -2,6 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
     <key>CFBundleDevelopmentRegion</key><string>id</string>
+    <key>CFBundleLocalizations</key><array><string>en</string><string>id</string></array>
     <key>CFBundleDisplayName</key><string>Bisik</string>
     <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
@@ -23,6 +24,7 @@
     <key>BisikPrivacyURL</key><string>$(BISIK_PRIVACY_URL)</string>
     <key>BisikTermsURL</key><string>$(BISIK_TERMS_URL)</string>
     <key>BisikAIProviderDisclosure</key><string>$(BISIK_AI_PROVIDER_DISCLOSURE)</string>
+    <key>BisikAIProviderDisclosureEnglish</key><string>$(BISIK_AI_PROVIDER_DISCLOSURE_EN)</string>
     <key>BisikProductIDs</key><array><string>com.maruz75.bisik.pro.monthly</string><string>com.maruz75.bisik.pro.annual</string></array>
     <key>BisikFreeMinutes</key><integer>15</integer>
     <key>BisikProMinutes</key><integer>300</integer>

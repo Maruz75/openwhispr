@@ -14,12 +14,12 @@ struct HistoryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageTitle(title: "Riwayat", subtitle: "Tulisan yang tersimpan.")
+            PageTitle(title: L10n.text("Riwayat"), subtitle: L10n.text("Tulisan yang tersimpan."))
                 .padding(24)
             if model.history.isEmpty {
-                EmptyState(symbol: "clock", title: "Belum ada riwayat", message: model.settings.saveHistory ? "Hasil transkripsi tersimpan di sini." : "Penyimpanan riwayat sedang nonaktif. Aktifkan di Pengaturan untuk menyimpan hasil baru.")
+                EmptyState(symbol: "clock", title: L10n.text("Belum ada riwayat"), message: model.settings.saveHistory ? L10n.text("Hasil transkripsi tersimpan di sini.") : L10n.text("Penyimpanan riwayat sedang nonaktif. Aktifkan di Pengaturan untuk menyimpan hasil baru."))
             } else if filtered.isEmpty {
-                EmptyState(symbol: "magnifyingglass", title: "Belum ditemukan", message: "Coba cari dengan kata lain.")
+                EmptyState(symbol: "magnifyingglass", title: L10n.text("Belum ditemukan"), message: L10n.text("Coba cari dengan kata lain."))
             } else {
                 List {
                     Section {
@@ -29,7 +29,7 @@ struct HistoryView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 12) {
                                     HStack {
-                                        Text(record.createdAt.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(Locale(identifier: "id_ID"))))
+                                        Text(record.createdAt.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale)))
                                         Spacer()
                                         Text(BisikTheme.duration(record.durationSeconds)).monospacedDigit()
                                     }
@@ -41,7 +41,7 @@ struct HistoryView: View {
                                         .lineLimit(4)
                                         .lineSpacing(4)
                                     HStack(spacing: 4) {
-                                        Text("Buka & edit")
+                                        Text(L10n.text("Buka & edit"))
                                         Image(systemName: "arrow.up.right")
                                     }
                                     .font(BisikTheme.font(11, semibold: true, relativeTo: .caption2))
@@ -52,25 +52,25 @@ struct HistoryView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityHint("Membuka tulisan di halaman Rekam untuk diedit atau disalin.")
+                            .accessibilityHint(L10n.text("Membuka tulisan di halaman Rekam untuk diedit atau disalin."))
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) { deleting = record } label: {
-                                    Label("Hapus", systemImage: "trash")
+                                    Label(L10n.text("Hapus"), systemImage: "trash")
                                 }
                             }
                             .contextMenu {
                                 Button {
                                     open(record)
-                                } label: { Label("Buka & edit", systemImage: "square.and.pencil") }
+                                } label: { Label(L10n.text("Buka & edit"), systemImage: "square.and.pencil") }
                                 Button(role: .destructive) { deleting = record } label: {
-                                    Label("Hapus", systemImage: "trash")
+                                    Label(L10n.text("Hapus"), systemImage: "trash")
                                 }
                             }
                             .listRowBackground(Color.white)
                             .listRowSeparatorTint(BisikTheme.line)
                         }
                     } header: {
-                        Text("\(filtered.count) tulisan")
+                        Text(filtered.count == 1 ? L10n.text("1 tulisan") : L10n.format("%@ tulisan", filtered.count))
                             .font(BisikTheme.font(11, semibold: true, relativeTo: .caption2))
                             .textCase(nil)
                     }
@@ -80,19 +80,19 @@ struct HistoryView: View {
             }
         }
         .background(Color.white)
-        .searchable(text: $search, prompt: "Cari dalam riwayat")
-        .alert("Hapus tulisan ini?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-            Button("Batal", role: .cancel) { deleting = nil }
-            Button("Hapus", role: .destructive) {
+        .searchable(text: $search, prompt: L10n.text("Cari dalam riwayat"))
+        .alert(L10n.text("Hapus tulisan ini?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button(L10n.text("Batal"), role: .cancel) { deleting = nil }
+            Button(L10n.text("Hapus"), role: .destructive) {
                 if let deleting { model.deleteHistory(deleting.id) }
                 deleting = nil
             }
         } message: {
-            Text("Tulisan akan dihapus dari riwayat di iPhone ini.")
+            Text(L10n.text("Tulisan akan dihapus dari riwayat di iPhone ini."))
         }
-        .alert("Buka tulisan lain?", isPresented: Binding(get: { pendingOpen != nil }, set: { if !$0 { pendingOpen = nil } })) {
-            Button("Batal", role: .cancel) { pendingOpen = nil }
-            Button("Hapus rekaman & buka", role: .destructive) {
+        .alert(L10n.text("Buka tulisan lain?"), isPresented: Binding(get: { pendingOpen != nil }, set: { if !$0 { pendingOpen = nil } })) {
+            Button(L10n.text("Batal"), role: .cancel) { pendingOpen = nil }
+            Button(L10n.text("Hapus rekaman & buka"), role: .destructive) {
                 if let record = pendingOpen {
                     model.openHistory(record)
                     onOpen()
@@ -100,7 +100,7 @@ struct HistoryView: View {
                 pendingOpen = nil
             }
         } message: {
-            Text("Rekaman yang belum berhasil diproses akan dihapus saat membuka tulisan lain.")
+            Text(L10n.text("Rekaman yang belum berhasil diproses akan dihapus saat membuka tulisan lain."))
         }
     }
 

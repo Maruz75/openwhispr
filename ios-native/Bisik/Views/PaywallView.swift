@@ -23,24 +23,24 @@ struct PaywallView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     HStack {
-                        Text("BISIK PRO").font(BisikTheme.font(11, semibold: true, relativeTo: .caption2)).foregroundStyle(BisikTheme.accent)
+                        Text(L10n.text("BISIK PRO")).font(BisikTheme.font(11, semibold: true, relativeTo: .caption2)).foregroundStyle(BisikTheme.accent)
                         Spacer()
-                        IconControl(symbol: "xmark", label: "Tutup langganan", disabled: model.isPurchasing) { dismiss() }
+                        IconControl(symbol: "xmark", label: L10n.text("Tutup langganan"), disabled: model.isPurchasing) { dismiss() }
                     }
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(pro ? "Bisik Pro aktif" : "Langganan Bisik Pro")
+                        Text(pro ? L10n.text("Bisik Pro aktif") : L10n.text("Langganan Bisik Pro"))
                             .font(BisikTheme.font(24, semibold: true, relativeTo: .title))
                             .foregroundStyle(BisikTheme.ink)
                             .fixedSize(horizontal: false, vertical: true)
-                        Text("\(AppConfiguration.proMinutes) menit transkripsi setiap bulan.")
+                        Text(L10n.format("%@ menit transkripsi setiap bulan.", AppConfiguration.proMinutes))
                             .font(BisikTheme.font(14))
                             .foregroundStyle(BisikTheme.secondary)
                             .lineSpacing(4)
                     }
                     VStack(alignment: .leading, spacing: 20) {
-                        feature("waveform", title: "Kuota transkripsi", detail: "\(AppConfiguration.proMinutes) menit per bulan. Paket Free mendapat \(AppConfiguration.freeMinutes) menit.")
-                        feature("sparkle", title: "Kamus dan riwayat", detail: "Kamus, pembelajaran koreksi, dan riwayat tersedia di semua paket.")
-                        feature("doc.on.doc", title: "Salin hasil", detail: "Hasil transkripsi dapat diedit dan disalin ke aplikasi lain.")
+                        feature("waveform", title: L10n.text("Kuota transkripsi"), detail: L10n.format("%@ menit per bulan. Paket Free mendapat %@ menit.", AppConfiguration.proMinutes, AppConfiguration.freeMinutes))
+                        feature("sparkle", title: L10n.text("Kamus dan riwayat"), detail: L10n.text("Kamus, pembelajaran koreksi, dan riwayat tersedia di semua paket."))
+                        feature("doc.on.doc", title: L10n.text("Salin hasil"), detail: L10n.text("Hasil transkripsi dapat diedit dan disalin ke aplikasi lain."))
                     }
                     .padding(20)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -48,10 +48,10 @@ struct PaywallView: View {
 
                     if products.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Label("Paket belum tersedia", systemImage: "info.circle")
+                            Label(L10n.text("Paket belum tersedia"), systemImage: "info.circle")
                                 .font(BisikTheme.font(14, semibold: true))
                                 .foregroundStyle(BisikTheme.ink)
-                            Text("Harga langganan akan muncul setelah terhubung dengan App Store. Kamu tetap dapat menggunakan kuota gratis yang tersedia.")
+                            Text(L10n.text("Harga langganan akan muncul setelah terhubung dengan App Store. Kamu tetap dapat menggunakan kuota gratis yang tersedia."))
                                 .font(BisikTheme.font(12, relativeTo: .caption))
                                 .foregroundStyle(BisikTheme.secondary)
                                 .lineSpacing(4)
@@ -70,7 +70,7 @@ struct PaywallView: View {
                     }
                     VStack(spacing: 12) {
                         if pro {
-                            Button("Kelola langganan") { manageSubscriptions = true }
+                            Button(L10n.text("Kelola langganan")) { manageSubscriptions = true }
                                 .buttonStyle(BisikButtonStyle())
                         } else {
                             Button {
@@ -83,7 +83,7 @@ struct PaywallView: View {
                             } label: {
                                 HStack(spacing: 12) {
                                     if model.isPurchasing { ProgressView().tint(.white) }
-                                    Text(model.isPurchasing ? "Memproses pembelian…" : model.isSignedIn ? "Berlangganan Pro" : "Masuk untuk berlangganan")
+                                    Text(model.isPurchasing ? L10n.text("Memproses pembelian…") : model.isSignedIn ? L10n.text("Berlangganan Pro") : L10n.text("Masuk untuk berlangganan"))
                                 }
                             }
                             .buttonStyle(BisikButtonStyle())
@@ -91,19 +91,19 @@ struct PaywallView: View {
                             .opacity(readyToPurchase ? 1 : 0.5)
                         }
                         if let product = selectedProduct, !pro {
-                            Text("\(product.displayPrice) \(periodDescription(product)). Langganan diperpanjang otomatis sampai kamu membatalkannya melalui App Store. Kuota diperbarui setiap bulan dan tidak diakumulasi.")
+                            Text(L10n.format("%@ %@. Langganan diperpanjang otomatis sampai kamu membatalkannya melalui App Store. Kuota diperbarui setiap bulan dan tidak diakumulasi.", product.displayPrice, periodDescription(product)))
                                 .font(BisikTheme.font(11, relativeTo: .caption2))
                                 .foregroundStyle(BisikTheme.secondary)
                                 .multilineTextAlignment(.center)
                                 .lineSpacing(4)
                         }
-                        Button("Pulihkan pembelian") { Task { await model.restorePurchases() } }
+                        Button(L10n.text("Pulihkan pembelian")) { Task { await model.restorePurchases() } }
                             .font(BisikTheme.font(13, semibold: true))
                             .foregroundStyle(BisikTheme.ink)
                             .frame(minHeight: 44)
                             .disabled(model.isPurchasing)
                         if !pro {
-                            Button("Kelola langganan App Store") { manageSubscriptions = true }
+                            Button(L10n.text("Kelola langganan App Store")) { manageSubscriptions = true }
                                 .font(BisikTheme.font(12, relativeTo: .caption))
                                 .foregroundStyle(BisikTheme.secondary)
                                 .frame(minHeight: 44)
@@ -139,7 +139,7 @@ struct PaywallView: View {
                     .foregroundStyle(selected ? BisikTheme.accent : BisikTheme.secondary)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(periodTitle(product)).font(BisikTheme.font(14, semibold: true)).foregroundStyle(BisikTheme.ink)
-                    Text("\(AppConfiguration.proMinutes) menit diperbarui setiap bulan")
+                    Text(L10n.format("%@ menit diperbarui setiap bulan", AppConfiguration.proMinutes))
                         .font(BisikTheme.font(11, relativeTo: .caption2))
                         .foregroundStyle(BisikTheme.secondary)
                 }
@@ -177,24 +177,24 @@ struct PaywallView: View {
     private func periodTitle(_ product: Product) -> String {
         guard let period = product.subscription?.subscriptionPeriod else { return product.displayName }
         switch period.unit {
-        case .month: return period.value == 1 ? "Bulanan" : "\(period.value) bulan"
-        case .year: return period.value == 1 ? "Tahunan" : "\(period.value) tahun"
-        case .week: return period.value == 1 ? "Mingguan" : "\(period.value) minggu"
-        case .day: return "\(period.value) hari"
+        case .month: return period.value == 1 ? L10n.text("Bulanan") : L10n.format("%@ bulan", period.value)
+        case .year: return period.value == 1 ? L10n.text("Tahunan") : L10n.format("%@ tahun", period.value)
+        case .week: return period.value == 1 ? L10n.text("Mingguan") : L10n.format("%@ minggu", period.value)
+        case .day: return L10n.format("%@ hari", period.value)
         @unknown default: return product.displayName
         }
     }
 
     private func periodDescription(_ product: Product) -> String {
-        guard let period = product.subscription?.subscriptionPeriod else { return "sesuai paket" }
+        guard let period = product.subscription?.subscriptionPeriod else { return L10n.text("sesuai paket") }
         let unit: String
         switch period.unit {
-        case .day: unit = "hari"
-        case .week: unit = "minggu"
-        case .month: unit = "bulan"
-        case .year: unit = "tahun"
-        @unknown default: return "sesuai paket"
+        case .day: unit = L10n.text(period.value == 1 ? "hari" : "hari jamak")
+        case .week: unit = L10n.text(period.value == 1 ? "minggu" : "minggu jamak")
+        case .month: unit = L10n.text(period.value == 1 ? "bulan" : "bulan jamak")
+        case .year: unit = L10n.text(period.value == 1 ? "tahun" : "tahun jamak")
+        @unknown default: return L10n.text("sesuai paket")
         }
-        return period.value == 1 ? "per \(unit)" : "setiap \(period.value) \(unit)"
+        return period.value == 1 ? L10n.format("per %@", unit) : L10n.format("setiap %@ %@", period.value, unit)
     }
 }

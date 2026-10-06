@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "Bisik";
+"NSMicrophoneUsageDescription" = "Bisik menggunakan mikrofon saat Anda menahan tombol rekam untuk mengubah ucapan menjadi teks.";
+"NSSpeechRecognitionUsageDescription" = "Bisik menampilkan pratinjau ucapan langsung menggunakan pengenalan suara di perangkat jika tersedia.";

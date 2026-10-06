@@ -7,19 +7,19 @@ struct QuotaView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                PageTitle(title: "Paket & kuota", subtitle: "Penggunaan transkripsi bulanan.")
+                PageTitle(title: L10n.text("Paket & kuota"), subtitle: L10n.text("Penggunaan transkripsi bulanan."))
                 if let quota = model.quota {
                     usageCard(quota)
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
-                        Text(model.isSignedIn ? "Kuota belum tersedia" : "Paket Free")
+                        Text(model.isSignedIn ? L10n.text("Kuota belum tersedia") : L10n.text("Paket Free"))
                             .font(BisikTheme.font(20, semibold: true, relativeTo: .title2))
-                        Text(model.isSignedIn ? "Perbarui untuk melihat paket dan sisa kuotamu." : "\(AppConfiguration.freeMinutes) menit gratis setiap bulan. Masuk untuk melihat penggunaan dan sisa kuota.")
+                        Text(model.isSignedIn ? L10n.text("Perbarui untuk melihat paket dan sisa kuotamu.") : L10n.format("%@ menit gratis setiap bulan. Masuk untuk melihat penggunaan dan sisa kuota.", AppConfiguration.freeMinutes))
                             .font(BisikTheme.font(14))
                             .foregroundStyle(BisikTheme.secondary)
                             .lineSpacing(4)
                         if !model.isSignedIn {
-                            Button("Masuk dengan Apple") { model.needsSignIn = true }
+                            Button(L10n.text("Masuk dengan Apple")) { model.needsSignIn = true }
                                 .buttonStyle(BisikButtonStyle(primary: false))
                                 .accessibilityIdentifier("quota.signIn")
                         }
@@ -35,7 +35,7 @@ struct QuotaView: View {
                     } label: {
                         HStack(spacing: 12) {
                             if refreshing { ProgressView() } else { Image(systemName: "arrow.clockwise") }
-                            Text(refreshing ? "Memperbarui…" : "Perbarui kuota")
+                            Text(refreshing ? L10n.text("Memperbarui…") : L10n.text("Perbarui kuota"))
                         }
                     }
                     .buttonStyle(BisikButtonStyle(primary: false))
@@ -51,19 +51,19 @@ struct QuotaView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(model.quota?.plan == "pro" ? "Bisik Pro" : "Butuh lebih banyak menit?")
+                    Text(model.quota?.plan == "pro" ? L10n.text("Bisik Pro") : L10n.text("Butuh lebih banyak menit?"))
                         .font(BisikTheme.font(20, semibold: true, relativeTo: .title2))
-                    Text("Bisik Pro menyediakan \(AppConfiguration.proMinutes) menit transkripsi per bulan. Riwayat, kamus, dan fitur edit tersedia pada semua paket.")
+                    Text(L10n.format("Bisik Pro menyediakan %@ menit transkripsi per bulan. Riwayat, kamus, dan fitur edit tersedia pada semua paket.", AppConfiguration.proMinutes))
                         .font(BisikTheme.font(14))
                         .foregroundStyle(BisikTheme.secondary)
                         .lineSpacing(4)
-                    Button(model.quota?.plan == "pro" ? "Kelola langganan" : "Lihat langganan") {
+                    Button(model.quota?.plan == "pro" ? L10n.text("Kelola langganan") : L10n.text("Lihat langganan")) {
                         model.showPaywall = true
                     }
                     .buttonStyle(BisikButtonStyle())
                     .accessibilityIdentifier("quota.openPaywall")
                 }
-                Text("Kuota diperbarui setiap bulan dan tidak diakumulasi. Paket Free mendapat \(AppConfiguration.freeMinutes) menit gratis per bulan.")
+                Text(L10n.format("Kuota diperbarui setiap bulan dan tidak diakumulasi. Paket Free mendapat %@ menit gratis per bulan.", AppConfiguration.freeMinutes))
                     .font(BisikTheme.font(12, relativeTo: .caption))
                     .foregroundStyle(BisikTheme.secondary)
                     .lineSpacing(4)
@@ -82,16 +82,16 @@ struct QuotaView: View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(quota.plan == "pro" ? "Bisik Pro" : "Paket Free")
+                    Text(quota.plan == "pro" ? L10n.text("Bisik Pro") : L10n.text("Paket Free"))
                         .font(BisikTheme.font(20, semibold: true, relativeTo: .title2))
-                    Text("\(BisikTheme.minutes(quota.limitSeconds)) per bulan")
+                    Text(L10n.format("%@ per bulan", BisikTheme.minutes(quota.limitSeconds)))
                         .font(BisikTheme.font(13))
                         .foregroundStyle(BisikTheme.secondary)
                 }
                 Spacer()
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text("Sisa kuota").font(BisikTheme.font(12, relativeTo: .caption)).foregroundStyle(BisikTheme.secondary)
+                Text(L10n.text("Sisa kuota")).font(BisikTheme.font(12, relativeTo: .caption)).foregroundStyle(BisikTheme.secondary)
                 Text(BisikTheme.minutes(quota.remainingSeconds))
                     .font(BisikTheme.font(24, semibold: true, relativeTo: .title))
                     .monospacedDigit()
@@ -99,10 +99,10 @@ struct QuotaView: View {
             VStack(alignment: .leading, spacing: 12) {
                 ProgressView(value: quota.progress)
                     .tint(BisikTheme.accent)
-                    .accessibilityLabel("Kuota terpakai")
-                    .accessibilityValue("\(BisikTheme.minutes(quota.usedSeconds)) dari \(BisikTheme.minutes(quota.limitSeconds))")
+                    .accessibilityLabel(L10n.text("Kuota terpakai"))
+                    .accessibilityValue(L10n.format("%@ dari %@", BisikTheme.minutes(quota.usedSeconds), BisikTheme.minutes(quota.limitSeconds)))
                 HStack {
-                    Text("Terpakai")
+                    Text(L10n.text("Terpakai"))
                     Spacer()
                     Text("\(BisikTheme.minutes(quota.usedSeconds)) / \(BisikTheme.minutes(quota.limitSeconds))").monospacedDigit()
                 }
@@ -111,9 +111,9 @@ struct QuotaView: View {
             }
             Divider().overlay(BisikTheme.line)
             HStack(alignment: .top) {
-                Text("Diperbarui")
+                Text(L10n.text("Diperbarui"))
                 Spacer()
-                Text(quota.resetAt.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "id_ID"))))
+                Text(quota.resetAt.formatted(.dateTime.day().month(.wide).year().locale(L10n.locale)))
                     .multilineTextAlignment(.trailing)
             }
             .font(BisikTheme.font(12, relativeTo: .caption))

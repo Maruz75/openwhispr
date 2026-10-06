@@ -4,5 +4,6 @@ BISIK_API_BASE_URL =
 BISIK_PRIVACY_URL =
 BISIK_TERMS_URL =
 BISIK_AI_PROVIDER_DISCLOSURE = OpenAI, melalui server pengembang Bisik. Audio, teks, dan entri kamus yang relevan dikirim hanya untuk transkripsi dan perbaikan ejaan.
+BISIK_AI_PROVIDER_DISCLOSURE_EN = OpenAI, through the Bisik developer's server. Audio, text, and relevant dictionary entries are sent only for transcription and spelling corrections.
 // Set your own Apple team in Xcode Signing & Capabilities.
 DEVELOPMENT_TEAM =

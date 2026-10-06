@@ -6,11 +6,11 @@ enum BisikScreen: String, Hashable {
 
     var title: String {
         switch self {
-        case .recorder: return "Rekam"
-        case .history: return "Riwayat"
-        case .dictionary: return "Kamus"
-        case .quota: return "Paket & kuota"
-        case .settings: return "Pengaturan"
+        case .recorder: return L10n.text("Rekam")
+        case .history: return L10n.text("Riwayat")
+        case .dictionary: return L10n.text("Kamus")
+        case .quota: return L10n.text("Paket & kuota")
+        case .settings: return L10n.text("Pengaturan")
         }
     }
 
@@ -29,6 +29,7 @@ struct ContentView: View {
     @EnvironmentObject var model: AppModel
     @State private var screen: BisikScreen = .recorder
     @State private var menuPresented = false
+    @State private var discardPendingAlert = false
 
     private var menuDisabled: Bool {
         model.phase == .preparing || model.phase == .recording
@@ -55,14 +56,48 @@ struct ContentView: View {
                 .toolbarBackground(.visible, for: .navigationBar)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        IconControl(symbol: "line.3.horizontal", label: "Buka menu", disabled: menuDisabled) {
-                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                            model.commitEdits()
-                            menuPresented = true
+                        IconControl(symbol: "line.3.horizontal", label: L10n.text("Buka menu"), disabled: menuDisabled) {
+                            openMenu()
                         }
                         .accessibilityIdentifier("navigation.menu")
                     }
+                    if screen == .recorder {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button {
+                                endEditing()
+                                if model.hasPendingRecording { discardPendingAlert = true } else { newDraft() }
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 20, weight: .medium))
+                                    .frame(width: 44, height: 44)
+                                    .background(BisikTheme.panel, in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(model.phase != .idle)
+                            .opacity(model.phase == .idle ? 1 : 0.5)
+                            .accessibilityLabel(L10n.text("Buat tulisan baru"))
+                            .accessibilityIdentifier("navigation.newDraft")
+                        }
+                    }
                 }
+        }
+        .overlay(alignment: .leading) {
+            // Reserve only the outer margin, so native editor scrolling/selection
+            // remains intact. VoiceOver users keep the equivalent menu button.
+            Color.clear.frame(width: 20)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 24).onEnded { value in
+                    guard value.translation.width > 64,
+                          abs(value.translation.height) < value.translation.width * 0.6 else { return }
+                    openMenu()
+                })
+                .accessibilityHidden(true)
+        }
+        .alert(L10n.text("Hapus rekaman yang belum selesai?"), isPresented: $discardPendingAlert) {
+            Button(L10n.text("Batal"), role: .cancel) { }
+            Button(L10n.text("Hapus & buat baru"), role: .destructive) { newDraft() }
+        } message: {
+            Text(L10n.text("Rekaman yang belum berhasil diproses akan dihapus saat membuat tulisan baru."))
         }
         .tint(BisikTheme.ink)
         .font(BisikTheme.font())
@@ -110,6 +145,17 @@ struct ContentView: View {
         model.commitEdits()
         screen = destination
         menuPresented = false
+    }
+
+    private func endEditing() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        model.commitEdits()
+    }
+
+    private func openMenu() {
+        guard !menuDisabled, !modalPresented.wrappedValue else { return }
+        endEditing()
+        menuPresented = true
     }
 
     private func newDraft() {

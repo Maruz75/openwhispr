@@ -5,7 +5,12 @@ enum AppConfiguration {
     static let apiBaseURL = secureURL("BisikAPIBaseURL")
     static let privacyURL = secureURL("BisikPrivacyURL")
     static let termsURL = secureURL("BisikTermsURL")
-    static let aiProviderDisclosure = Bundle.main.object(forInfoDictionaryKey: "BisikAIProviderDisclosure") as? String ?? "Audio dan teks dikirim ke server Bisik serta penyedia AI yang dikelola pengembang untuk menghasilkan transkripsi."
+    static var aiProviderDisclosure: String {
+        let key = L10n.language == "en" ? "BisikAIProviderDisclosureEnglish" : "BisikAIProviderDisclosure"
+        if let disclosure = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+           !disclosure.isEmpty, !disclosure.contains("$(") { return disclosure }
+        return L10n.text("Audio dan teks dikirim ke server Bisik serta penyedia AI yang dikelola pengembang untuk menghasilkan transkripsi.")
+    }
     static let productIDs = Bundle.main.object(forInfoDictionaryKey: "BisikProductIDs") as? [String] ?? []
     static let freeMinutes = Bundle.main.object(forInfoDictionaryKey: "BisikFreeMinutes") as? Int ?? 15
     static let proMinutes = Bundle.main.object(forInfoDictionaryKey: "BisikProMinutes") as? Int ?? 300

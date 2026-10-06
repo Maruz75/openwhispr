@@ -6,10 +6,10 @@ enum RecorderError: LocalizedError {
     case microphoneDenied, noInput, emptyAudio, writeFailed
     var errorDescription: String? {
         switch self {
-        case .microphoneDenied: return "Akses mikrofon diperlukan untuk merekam. Buka Pengaturan iPhone untuk mengizinkannya."
-        case .noInput: return "Mikrofon tidak tersedia. Periksa perangkat audio lalu coba lagi."
-        case .emptyAudio: return "Rekaman terlalu singkat. Tahan mikrofon sambil berbicara."
-        case .writeFailed: return "Rekaman tidak dapat disimpan. Periksa ruang kosong iPhone."
+        case .microphoneDenied: return L10n.text("Akses mikrofon diperlukan untuk merekam. Buka Pengaturan iPhone untuk mengizinkannya.")
+        case .noInput: return L10n.text("Mikrofon tidak tersedia. Periksa perangkat audio lalu coba lagi.")
+        case .emptyAudio: return L10n.text("Rekaman terlalu singkat. Tahan mikrofon sambil berbicara.")
+        case .writeFailed: return L10n.text("Rekaman tidak dapat disimpan. Periksa ruang kosong iPhone.")
         }
     }
 }

@@ -32,7 +32,7 @@ struct AppSettings: Codable, Equatable {
     var learnCorrections: Bool = true
     var haptics: Bool = true
     var saveHistory: Bool = true
-    var language: String = "id-ID"
+    var language: String = L10n.language == "id" ? "id-ID" : "en-US"
     var consentGranted: Bool = false
     var consentDisclosure: String?
 }

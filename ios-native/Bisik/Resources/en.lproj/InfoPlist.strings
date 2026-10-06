@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "Bisik";
+"NSMicrophoneUsageDescription" = "Bisik uses the microphone while you hold the record button to turn speech into text.";
+"NSSpeechRecognitionUsageDescription" = "Bisik shows a live speech preview using on-device speech recognition when available.";

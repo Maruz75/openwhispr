@@ -5,7 +5,7 @@ Source bukan bukti app sudah siap submit. Berikut konfigurasi eksternal yang har
 ## Identitas, backend dan model
 
 - Bundle ID dan Team di Xcode sama dengan Sign in with Apple audience dan App Store verifier pada server.
-- URL API HTTPS aktif, domain legal aktif, disclosure provider akurat sesuai STT/cleanup yang dipakai. Perubahan vendor memerlukan pembaruan disclosure/consent, bukan hanya menyembunyikan model dari UI.
+- URL API HTTPS aktif, domain legal aktif, disclosure provider bahasa Indonesia dan Inggris akurat sesuai STT/cleanup yang dipakai. Perubahan vendor memerlukan pembaruan disclosure/consent, bukan hanya menyembunyikan model dari UI.
 - Kunci AI hanya di environment server. App mengirim audio, teks dan entri kamus relevan setelah persetujuan. Tidak menaruh provider key pada Info.plist atau xcconfig.
 - Server memerlukan ffprobe, penyimpanan SQLite yang persisten, clock UTC benar, backup sesuai kebijakan, rate limiting dan TLS dari ingress. Untuk banyak instance gunakan storage/database yang koordinasinya sama; jangan memasang beberapa server dengan DB terpisah.
 - Sesuaikan retention idempotency, vendor data retention dan logging tanpa audio/teks/token. Privacy policy harus menjelaskan provider dan retention nyata, tidak menjanjikan zero retention tanpa perjanjian provider.
@@ -28,7 +28,8 @@ Source bukan bukti app sudah siap submit. Berikut konfigurasi eksternal yang har
 Review menggunakan [safaiyeh/app-store-review-skill](https://github.com/safaiyeh/app-store-review-skill), khususnya aturan business/privacy, dan [Apple Review Guidelines](https://developer.apple.com/app-store/review/guidelines/). Pemakaian skill tidak menjamin approval Apple.
 
 - Persetujuan pemrosesan cloud menyebut provider penerima data sebelum upload. Izin mikrofon dan speech memakai prompt sistem dengan purpose string spesifik. Preview Speech hanya dipakai bila dapat berjalan di perangkat.
-- Tidak ada tracking/ad SDK; app tidak membaca clipboard. Privacy manifest mencantumkan audio, konten, user ID dan transaksi yang terkait akun. Audit manifest terhadap implementasi terakhir dan App Privacy di Connect.
+- Uji UI Indonesia/Inggris, pergantian bahasa tanpa kehilangan draf, dan izin sistem pada kedua bahasa. Bahasa ucapan tidak berubah ketika bahasa UI diganti. Splash sekitar satu detik, swipe tepi membuka menu, copy di kanan bawah, animasi mengikuti level suara dan Reduce Motion.
+- Tidak ada tracking/ad SDK; app tidak membaca clipboard. Privacy manifest mencantumkan audio, konten, user ID dan transaksi yang terkait akun. UserDefaults untuk preferensi bahasa memakai alasan CA92.1 pada privacy manifest. Audit manifest terhadap implementasi terakhir dan App Privacy di Connect.
 - History/kamus tersimpan lokal dengan file protection; audio hanya sementara untuk rekam/retry. Pengguna bisa menonaktifkan penyimpanan, menghapus data dan mencabut persetujuan.
 - Penghapusan akun ada dalam app. Backend gagal dengan error bila pencabutan Apple belum terkonfigurasi; selesaikan konfigurasi ini sebelum rilis.
 - Siapkan URL support, privacy, terms/EULA dan metadata produk asli. Brand/icon baru dan atribusi MIT/OFL disertakan. Jangan submit harga/contoh/domain kosong dari project awal.

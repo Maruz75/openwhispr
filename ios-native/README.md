@@ -4,17 +4,17 @@ Project SwiftUI baru di dalam fork OpenWhispr. Buka **Bisik.xcodeproj** di Mac d
 
 ## Yang dibuat
 
-- Home hanya berisi editor transkripsi, tombol copy, waveform dan mikrofon di bawah, tanpa slogan atau kartu kuota. Ketuk kata di editor untuk menempatkan kursor dan membuka keyboard; tombol centang di atas keyboard mengakhiri edit. Tahan mikrofon untuk merekam, lepas untuk memproses. Waveform berasal dari level audio sungguhan.
-- Burger menu di kiri atas membuka Rekam, Riwayat, Kamus, Langganan, Paket & kuota, Pengaturan dan tulisan baru. Informasi Free/Pro dan kuota bulanan berada pada layar Paket & kuota.
+- Home hanya berisi editor transkripsi, copy tebal di kanan bawah, serta orb mikrofon biru dengan waveform radial yang menyatu. Tidak ada slogan, heading field atau kartu kuota. Tombol plus berbentuk lingkaran di kanan atas memulai draf baru. Ketuk kata di editor untuk menempatkan kursor dan membuka keyboard; tombol centang di atas keyboard mengakhiri edit. Tahan mikrofon untuk merekam, lepas untuk memproses. Waveform berasal dari level audio sungguhan.
+- Burger menu di kiri atas, juga dibuka dengan swipe dari tepi kiri ke kanan, membuka Rekam, Riwayat, Kamus, Langganan, Paket & kuota, Pengaturan dan tulisan baru. Informasi Free/Pro dan kuota bulanan berada pada layar Paket & kuota.
 - Pratinjau transkripsi langsung dengan Apple Speech **di perangkat** jika bahasa/perangkat mendukung. Hasil final melalui backend milik developer. Bila preview lokal tidak tersedia, rekaman tetap diproses saat tombol dilepas.
 - Hasil final otomatis disalin ke clipboard (bisa dimatikan), tombol copy berubah centang; clipboard tidak dibaca. Pengguna tinggal menempel di aplikasi lain.
 - History lokal yang bisa dicari, dibuka kembali, diedit, disalin dan dihapus. Audio sementara dihapus sesudah sukses/batal; kegagalan upload bisa dicoba lagi selama app aktif.
 - Kamus manual dan pembelajaran koreksi kata dari editor. Pembelajaran ini berupa memori kosakata, bukan pelatihan ulang model. Perubahan kalimat besar tidak dijadikan kamus. Kosakata dipakai sebagai konteks untuk STT dan pemetaan ejaan yang konservatif.
-- Pengaturan yang relevan: salin otomatis, belajar koreksi, haptics, simpan history dan bahasa. Tidak ada menu pemilihan AI/STT, API key atau endpoint untuk pengguna.
+- UI tersedia dalam bahasa Indonesia dan Inggris, mengikuti bahasa sistem atau pilihan Bahasa aplikasi. Bahasa ucapan diatur terpisah; teks pengguna tidak diterjemahkan. Pengaturan lain: salin otomatis, belajar koreksi, haptics dan simpan history. Tidak ada menu pemilihan AI/STT, API key atau endpoint untuk pengguna.
 - Persetujuan pemrosesan cloud sebelum pengiriman audio/teks/kamus, Sign in with Apple untuk identitas kuota, token dalam Keychain, logout dan penghapusan akun.
 - Paywall bulanan/tahunan dengan StoreKit 2, harga lokal dari App Store, restore, manage subscription, privacy dan terms. Tidak ada pembayaran eksternal.
 - Backend FastAPI: pilihan model lewat environment developer, kuota bulanan SQLite yang atomik, durasi terukur ffprobe, idempotency, verifikasi Apple dan pencabutan kredensial akun.
-- Desain putih minimal, Inter berlisensi OFL, SF Symbols, safe area, Dynamic Type, VoiceOver, feedback scale/opacity singkat dan Reduce Motion.
+- Desain putih minimal, Inter berlisensi OFL, SF Symbols, safe area, Dynamic Type dan VoiceOver. Orb memakai SwiftUI TimelineView/Canvas: awan biru bergerak saat merekam atau memproses, waveform mengikuti level audio; Reduce Motion menghentikan gerakan dekoratif. Splash native tampil sekitar satu detik saat cold launch.
 
 Default produk awal: **15 menit gratis** / **300 menit Pro** setiap bulan kalender UTC. Paket tahunan juga mendapat 300 menit setiap bulan; menit tidak diakumulasi. Angka ini keputusan awal yang bisa developer ubah bersama pada konfigurasi app dan server.
 
@@ -23,7 +23,7 @@ Default produk awal: **15 menit gratis** / **300 menit Pro** setiap bulan kalend
 1. Pindahkan/clone fork ke Mac. Buka `ios-native/Bisik.xcodeproj`.
 2. Pilih target **Bisik → Signing & Capabilities**, ganti Bundle ID dan Development Team dengan milik Anda. Aktifkan Sign in with Apple pada App ID. Perbarui audience/bundle ID yang sama di backend.
 3. Deploy backend HTTPS mengikuti `backend/README.md`. Kunci provider dan Apple hanya berada di server.
-4. Isi `Config/Developer.xcconfig`: URL API, privacy, terms dan nama provider yang menerima data. Format URL xcconfig: `https:/$()/api.domain-anda.com` (karena `//` memulai komentar).
+4. Isi `Config/Developer.xcconfig`: URL API, privacy, terms dan disclosure provider dalam kedua bahasa (`BISIK_AI_PROVIDER_DISCLOSURE` / `_EN`). Format URL xcconfig: `https:/$()/api.domain-anda.com` (karena `//` memulai komentar).
 5. Samakan ID produk di Info.plist, StoreKit config dan backend dengan App Store Connect Anda. Atur plan bulanan dan tahunan dalam satu subscription group; harga nyata ditentukan di App Store Connect.
 6. Pilih scheme **Bisik**, simulator atau iPhone, lalu Run. Konfigurasi belum lengkap ditampilkan jelas; app tidak mengarang hasil transkripsi atau memberi kuota berbayar palsu.
 
@@ -50,8 +50,8 @@ App hanya menggunakan HTTPS. Windows dapat mengembangkan/menguji backend dan men
 | Bisik/Core | Model, konfigurasi developer, pembelajaran kata, state hold |
 | Bisik/Services | Audio, API, Keychain, persistence, StoreKit, AppModel |
 | Bisik/Resources | Info.plist, privacy manifest, font, icon, StoreKit config |
-| BisikTests | Invariant koreksi kata, kuota, state hold dan data lokal |
-| BisikUITests | Navigasi menu, posisi edit, scroll dan penutupan keyboard |
+| BisikTests | Invariant koreksi kata, kuota, state hold, data lokal, localization dan render orb |
+| BisikUITests | Navigasi/swipe, copy/plus, posisi edit, scroll, keyboard dan pergantian bahasa |
 | backend | API dan test server |
 | scripts/generate_project.py | Generator project tanpa dependency untuk Windows/Mac |
 | docs | Catatan desain dan penyiapan rilis |

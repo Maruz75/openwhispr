@@ -7,7 +7,7 @@ final class EditingNavigationTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments = ["-AppleLanguages", "(id)", "-AppleLocale", "id_ID"]
         app.launch()
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
     }
@@ -22,6 +22,8 @@ final class EditingNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["navigation.menu"].isHittable)
         XCTAssertTrue(element("transcript.copy").exists)
         XCTAssertTrue(element("recorder.microphone").exists)
+        XCTAssertTrue(app.buttons["navigation.newDraft"].exists)
+        XCTAssertFalse(app.staticTexts["Baru"].exists)
         for oldLabel in ["bisik", "Pikiranmu, menjadi tulisan.", "TULISANMU", "Tahan untuk berbicara", "Ruang untuk bicara"] {
             XCTAssertFalse(app.staticTexts[oldLabel].exists)
         }
@@ -102,6 +104,65 @@ final class EditingNavigationTests: XCTestCase {
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         XCTAssertEqual(editor.value as? String, beforeScrolling)
         XCTAssertFalse(app.keyboards.firstMatch.exists)
+    }
+
+    func testEdgeSwipeCopyAndPlusUseReachableControls() {
+        let draft = "A short editable draft."
+        typeDraft(draft)
+        dismissKeyboard()
+        let copy = app.buttons["transcript.copy"]
+        XCTAssertGreaterThan(copy.frame.midY, editor.frame.maxY, "Copy belongs below the text area")
+        XCTAssertGreaterThan(copy.frame.midX, editor.frame.midX, "Copy belongs on the right")
+        XCTAssertGreaterThanOrEqual(copy.frame.width, 48)
+        copy.tap()
+        XCTAssertTrue(app.buttons["Tulisan tersalin"].waitForExistence(timeout: 3))
+        screenshot("Home - bottom copy confirmation and integrated orb")
+
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.40)).withOffset(CGVector(dx: 5, dy: 0))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.40))
+        start.press(forDuration: 0.05, thenDragTo: end)
+        XCTAssertTrue(app.buttons["menu.close"].waitForExistence(timeout: 5), "An inward swipe from the left edge opens the menu")
+        app.buttons["menu.close"].tap()
+        XCTAssertTrue(waitUntilGone(app.buttons["menu.close"]))
+        XCTAssertEqual(editor.value as? String, draft)
+        app.buttons["navigation.newDraft"].tap()
+        XCTAssertEqual(editor.value as? String, "")
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+    }
+
+    func testSwitchToEnglishPreservesDraftAndSpeechLanguage() {
+        let draft = "Tulisan ini tidak diterjemahkan."
+        typeDraft(draft)
+        dismissKeyboard()
+        navigate("settings")
+        app.buttons["settings.interfaceLanguage"].tap()
+        app.buttons["English"].tap()
+        XCTAssertTrue(app.staticTexts["Settings"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["settings.interfaceLanguage"].label.contains("App language"))
+        XCTAssertTrue(app.buttons["settings.speechLanguage"].label.contains("Speech language"))
+        // Interface selection must not change the stored speech-recognition locale.
+        let speech = app.buttons["settings.speechLanguage"]
+        XCTAssertTrue((speech.label + " " + (speech.value as? String ?? "")).contains("Indonesian"))
+        screenshot("English - settings and separate speech language")
+
+        openMenu()
+        for (destination, label) in [("recorder", "Record"), ("history", "History"), ("dictionary", "Dictionary"), ("subscription", "Subscription"), ("quota", "Plan & quota"), ("settings", "Settings")] {
+            XCTAssertEqual(app.buttons["menu." + destination].label, label)
+        }
+        screenshot("English - all menu destinations")
+        app.buttons["menu.quota"].tap()
+        XCTAssertTrue(waitUntilGone(app.buttons["menu.close"]))
+        XCTAssertTrue(app.staticTexts["Plan & quota"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Free plan"].firstMatch.exists)
+        screenshot("English - dedicated free plan and quota")
+        navigate("recorder")
+        XCTAssertEqual(editor.value as? String, draft)
+        XCTAssertEqual(editor.label, "Transcription")
+
+        navigate("settings")
+        app.buttons["settings.interfaceLanguage"].tap()
+        app.buttons["System default"].tap()
+        XCTAssertTrue(app.staticTexts["Pengaturan"].firstMatch.waitForExistence(timeout: 5))
     }
 
     private var editor: XCUIElement { app.textViews["transcript.editor"] }

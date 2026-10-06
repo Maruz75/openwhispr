@@ -29,7 +29,8 @@ source_ids, resource_ids, test_ids, ui_test_ids, file_ids = [], [], [], [], []
 paths = sorted((ROOT / 'Bisik').rglob('*.swift')) + sorted((ROOT / 'BisikTests').rglob('*.swift')) + sorted((ROOT / 'BisikUITests').rglob('*.swift'))
 paths += [ROOT / 'Bisik/Resources/Inter-Regular.ttf', ROOT / 'Bisik/Resources/Inter-SemiBold.ttf', ROOT / 'Bisik/Resources/Inter-LICENSE.txt', ROOT / 'Bisik/Resources/PrivacyInfo.xcprivacy', ROOT / 'Bisik/Resources/Assets.xcassets']
 paths += [ROOT / 'Bisik/Resources/Info.plist', ROOT / 'Bisik/Resources/Bisik.entitlements', ROOT / 'Config/Developer.xcconfig', ROOT / 'Bisik/Resources/Bisik.storekit']
-types = {'.swift': 'sourcecode.swift', '.ttf': 'file', '.plist': 'text.plist.xml', '.xcprivacy': 'text.xml', '.entitlements': 'text.plist.entitlements', '.xcconfig': 'text.xcconfig', '.storekit': 'text', '.xcassets': 'folder.assetcatalog'}
+paths += sorted((ROOT / 'Bisik/Resources').glob('*.lproj'))
+types = {'.swift': 'sourcecode.swift', '.ttf': 'file', '.plist': 'text.plist.xml', '.xcprivacy': 'text.xml', '.entitlements': 'text.plist.entitlements', '.xcconfig': 'text.xcconfig', '.storekit': 'text', '.xcassets': 'folder.assetcatalog', '.lproj': 'folder'}
 for path in paths:
     rel = path.relative_to(ROOT).as_posix()
     ref = obj('file:' + rel, 'PBXFileReference', lastKnownFileType=q(types.get(path.suffix, 'text')), path=q(rel), sourceTree=q('<group>'))
@@ -42,7 +43,7 @@ for path in paths:
             test_ids.append(build)
         else:
             source_ids.append(build)
-    elif path.suffix in ('.ttf', '.xcprivacy', '.xcassets') or path.name == 'Inter-LICENSE.txt':
+    elif path.suffix in ('.ttf', '.xcprivacy', '.xcassets', '.lproj') or path.name == 'Inter-LICENSE.txt':
         resource_ids.append(obj('build:' + rel, 'PBXBuildFile', fileRef=ref))
 
 app_product = obj('app-product', 'PBXFileReference', explicitFileType=q('wrapper.application'), includeInIndex='0', path=q('Bisik.app'), sourceTree=q('BUILT_PRODUCTS_DIR'))

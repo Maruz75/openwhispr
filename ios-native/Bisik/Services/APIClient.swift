@@ -7,9 +7,9 @@ enum APIError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unconfigured: return "Layanan Bisik belum dikonfigurasi oleh pengembang."
-        case .server(_, let message, _): return message
-        case .invalidResponse: return "Jawaban server tidak valid. Coba lagi."
+        case .unconfigured: return L10n.text("Layanan Bisik belum dikonfigurasi oleh pengembang.")
+        case .server(_, let message, _): return L10n.text(message)
+        case .invalidResponse: return L10n.text("Jawaban server tidak valid. Coba lagi.")
         }
     }
 
@@ -120,7 +120,7 @@ final class APIClient {
             struct ServerFailure: Decodable { let code: String; let message: String }
             let error = try? JSONDecoder().decode(ServerFailure.self, from: data)
             throw APIError.server(code: error?.code ?? "request_failed",
-                                  message: error?.message ?? "Layanan tidak dapat dihubungi. Coba lagi.", status: response.statusCode)
+                                  message: error?.message ?? L10n.text("Layanan tidak dapat dihubungi. Coba lagi."), status: response.statusCode)
         }
     }
 

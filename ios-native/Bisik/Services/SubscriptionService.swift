@@ -5,11 +5,11 @@ enum SubscriptionError: LocalizedError {
     case unverified, pending, noAccount, accountMismatch, unavailable
     var errorDescription: String? {
         switch self {
-        case .unverified: return "Pembelian belum dapat diverifikasi oleh App Store."
-        case .pending: return "Pembelian menunggu persetujuan App Store. Kuota diperbarui setelah disetujui."
-        case .noAccount: return "Masuk dengan Apple sebelum berlangganan atau memulihkan pembelian."
-        case .accountMismatch: return "Pembelian ini terhubung ke akun Bisik lain. Masuk dengan akun Apple yang digunakan saat membeli."
-        case .unavailable: return "Langganan belum tersedia. Coba lagi nanti."
+        case .unverified: return L10n.text("Pembelian belum dapat diverifikasi oleh App Store.")
+        case .pending: return L10n.text("Pembelian menunggu persetujuan App Store. Kuota diperbarui setelah disetujui.")
+        case .noAccount: return L10n.text("Masuk dengan Apple sebelum berlangganan atau memulihkan pembelian.")
+        case .accountMismatch: return L10n.text("Pembelian ini terhubung ke akun Bisik lain. Masuk dengan akun Apple yang digunakan saat membeli.")
+        case .unavailable: return L10n.text("Langganan belum tersedia. Coba lagi nanti.")
         }
     }
 }

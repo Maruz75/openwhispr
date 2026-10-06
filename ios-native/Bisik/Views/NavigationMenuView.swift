@@ -13,9 +13,9 @@ struct NavigationMenuView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Menu").font(BisikTheme.font(24, semibold: true, relativeTo: .title))
+                    Text(L10n.text("Menu")).font(BisikTheme.font(24, semibold: true, relativeTo: .title))
                     Spacer()
-                    IconControl(symbol: "xmark", label: "Tutup menu", action: onClose)
+                    IconControl(symbol: "xmark", label: L10n.text("Tutup menu"), action: onClose)
                         .accessibilityIdentifier("menu.close")
                 }
                 .padding(.bottom, 8)
@@ -24,7 +24,7 @@ struct NavigationMenuView: View {
                 Button {
                     if model.hasPendingRecording { discardPendingAlert = true } else { onNewDraft() }
                 } label: {
-                    row("Tulisan baru", symbol: "plus", selected: false)
+                    row(L10n.text("Tulisan baru"), symbol: "plus", selected: false)
                 }
                 .buttonStyle(.plain)
                 .disabled(model.phase != .idle)
@@ -37,7 +37,7 @@ struct NavigationMenuView: View {
                 separator
                 destination(.quota)
                 Button(action: onSubscription) {
-                    row("Langganan", symbol: "sparkles", selected: false)
+                    row(L10n.text("Langganan"), symbol: "sparkles", selected: false)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("menu.subscription")
@@ -50,11 +50,11 @@ struct NavigationMenuView: View {
         }
         .foregroundStyle(BisikTheme.ink)
         .background(Color.white)
-        .alert("Hapus rekaman yang belum selesai?", isPresented: $discardPendingAlert) {
-            Button("Batal", role: .cancel) { }
-            Button("Hapus & buat baru", role: .destructive) { onNewDraft() }
+        .alert(L10n.text("Hapus rekaman yang belum selesai?"), isPresented: $discardPendingAlert) {
+            Button(L10n.text("Batal"), role: .cancel) { }
+            Button(L10n.text("Hapus & buat baru"), role: .destructive) { onNewDraft() }
         } message: {
-            Text("Rekaman yang belum berhasil diproses akan dihapus saat membuat tulisan baru.")
+            Text(L10n.text("Rekaman yang belum berhasil diproses akan dihapus saat membuat tulisan baru."))
         }
     }
 

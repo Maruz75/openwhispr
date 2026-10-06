@@ -19,8 +19,8 @@ struct AppleSignInView: View {
                         .frame(width: 72, height: 72)
                         .background(BisikTheme.panel, in: RoundedRectangle(cornerRadius: 22))
                         .accessibilityHidden(true)
-                    PageTitle(title: "Satu akun untuk suaramu", subtitle: "Masuk untuk menggunakan kuota gratis dan menghubungkan langgananmu.")
-                    Text("Bisik menggunakan identitas Apple untuk akunmu. Riwayat dan kamus tetap tersimpan di iPhone ini.")
+                    PageTitle(title: L10n.text("Masuk dengan Apple"), subtitle: L10n.text("Masuk untuk menggunakan kuota gratis dan menghubungkan langgananmu."))
+                    Text(L10n.text("Bisik menggunakan identitas Apple untuk akunmu. Riwayat dan kamus tetap tersimpan di iPhone ini."))
                         .font(BisikTheme.font(14))
                         .foregroundStyle(BisikTheme.secondary)
                         .lineSpacing(4)
@@ -30,11 +30,11 @@ struct AppleSignInView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                         .disabled(authorizing || !model.isConfigured)
                         .opacity(authorizing || !model.isConfigured ? 0.5 : 1)
-                        .accessibilityLabel("Masuk dengan Apple")
+                        .accessibilityLabel(L10n.text("Masuk dengan Apple"))
                     if authorizing {
                         HStack(spacing: 12) {
                             ProgressView()
-                            Text("Menghubungkan akun…").font(BisikTheme.font(13)).foregroundStyle(BisikTheme.secondary)
+                            Text(L10n.text("Menghubungkan akun…")).font(BisikTheme.font(13)).foregroundStyle(BisikTheme.secondary)
                         }
                     }
                     if let error = localError ?? model.errorMessage {
@@ -43,11 +43,11 @@ struct AppleSignInView: View {
                             .foregroundStyle(BisikTheme.danger)
                     }
                     if !model.isConfigured {
-                        Text("Layanan akun belum tersedia. Coba kembali nanti.")
+                        Text(L10n.text("Layanan akun belum tersedia. Coba kembali nanti."))
                             .font(BisikTheme.font(13))
                             .foregroundStyle(BisikTheme.danger)
                     }
-                    Button("Nanti saja") { model.needsSignIn = false }
+                    Button(L10n.text("Nanti saja")) { model.needsSignIn = false }
                         .font(BisikTheme.font(14))
                         .foregroundStyle(BisikTheme.secondary)
                         .frame(maxWidth: .infinity, minHeight: 48)
@@ -72,7 +72,7 @@ struct AppleSignInView: View {
         var bytes = [UInt8](repeating: 0, count: 32)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
             rawNonce = nil
-            localError = "Verifikasi keamanan belum siap. Coba masuk kembali."
+            localError = L10n.text("Verifikasi keamanan belum siap. Coba masuk kembali.")
             return
         }
         let nonce = bytes.map { String(format: "%02x", $0) }.joined()
@@ -88,7 +88,7 @@ struct AppleSignInView: View {
                   let tokenData = credential.identityToken,
                   let token = String(data: tokenData, encoding: .utf8),
                   let nonce = rawNonce else {
-                localError = "Apple belum mengirim identitas yang valid. Coba masuk kembali."
+                localError = L10n.text("Apple belum mengirim identitas yang valid. Coba masuk kembali.")
                 return
             }
             let code = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
@@ -103,7 +103,7 @@ struct AppleSignInView: View {
             if let appleError = error as? ASAuthorizationError, appleError.code == .canceled {
                 localError = nil
             } else {
-                localError = "Belum bisa masuk dengan Apple. Coba lagi sebentar."
+                localError = L10n.text("Belum bisa masuk dengan Apple. Coba lagi sebentar.")
             }
         }
     }

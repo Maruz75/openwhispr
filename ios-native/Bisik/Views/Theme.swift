@@ -6,7 +6,7 @@ enum BisikTheme {
     static let secondary = Color(red: 105 / 255, green: 105 / 255, blue: 105 / 255)
     static let panel = Color(red: 248 / 255, green: 248 / 255, blue: 246 / 255)
     static let line = Color(red: 218 / 255, green: 219 / 255, blue: 215 / 255)
-    static let accent = Color(red: 20 / 255, green: 101 / 255, blue: 81 / 255)
+    static let accent = Color(red: 34 / 255, green: 87 / 255, blue: 179 / 255)
     static let focus = Color(red: 94 / 255, green: 106 / 255, blue: 210 / 255)
     static let danger = Color(red: 163 / 255, green: 38 / 255, blue: 38 / 255)
 
@@ -21,7 +21,9 @@ enum BisikTheme {
 
     static func minutes(_ seconds: Int) -> String {
         let value = max(0, seconds)
-        return value < 60 ? "\(value) detik" : "\(Int(ceil(Double(value) / 60))) menit"
+        if value < 60 { return value == 1 ? L10n.text("1 detik") : L10n.format("%@ detik", value) }
+        let minutes = Int(ceil(Double(value) / 60))
+        return minutes == 1 ? L10n.text("1 menit") : L10n.format("%@ menit", minutes)
     }
 }
 
@@ -46,16 +48,20 @@ struct IconControl: View {
     let symbol: String
     let label: String
     var highlighted = false
+    var prominent = false
     var disabled = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 18, weight: .regular))
-                .frame(width: 44, height: 44)
-                .foregroundStyle(highlighted ? BisikTheme.accent : BisikTheme.secondary)
-                .background(highlighted ? BisikTheme.panel : Color.clear, in: RoundedRectangle(cornerRadius: 16))
+                .font(.system(size: prominent ? 22 : 18, weight: prominent ? .semibold : .regular))
+                .frame(width: prominent ? 48 : 44, height: prominent ? 48 : 44)
+                .foregroundStyle(prominent ? Color.white : highlighted ? BisikTheme.accent : BisikTheme.secondary)
+                .background {
+                    if prominent { Circle().fill(highlighted ? BisikTheme.accent : BisikTheme.ink) }
+                    else { RoundedRectangle(cornerRadius: 16).fill(highlighted ? BisikTheme.panel : Color.clear) }
+                }
         }
         .buttonStyle(.plain)
         .disabled(disabled)
@@ -109,10 +115,10 @@ struct LegalLinks: View {
     var body: some View {
         HStack(spacing: 20) {
             if let url = AppConfiguration.privacyURL {
-                Link("Privasi", destination: url)
+                Link(L10n.text("Privasi"), destination: url)
             }
             if let url = AppConfiguration.termsURL {
-                Link("Ketentuan", destination: url)
+                Link(L10n.text("Ketentuan"), destination: url)
             }
         }
         .font(BisikTheme.font(12, relativeTo: .caption))

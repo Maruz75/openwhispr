@@ -16,17 +16,17 @@ struct DictionaryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 16) {
-                PageTitle(title: "Kamus", subtitle: "Koreksi ejaan.")
-                IconControl(symbol: "plus", label: "Tambah kata ke kamus", highlighted: true) {
+                PageTitle(title: L10n.text("Kamus"), subtitle: L10n.text("Koreksi ejaan."))
+                IconControl(symbol: "plus", label: L10n.text("Tambah kata ke kamus"), highlighted: true) {
                     editingEntry = nil
                     showEditor = true
                 }
             }.padding(24)
             VStack(alignment: .leading, spacing: 8) {
-                Label("Belajar dari koreksimu", systemImage: "sparkle")
+                Label(L10n.text("Belajar dari koreksimu"), systemImage: "sparkle")
                     .font(BisikTheme.font(13, semibold: true))
                     .foregroundStyle(BisikTheme.ink)
-                Text(model.settings.learnCorrections ? "Koreksi kata di tulisanmu akan dipelajari otomatis. Kamu tetap bisa mengedit atau menghapusnya." : "Pembelajaran otomatis sedang nonaktif. Kamu bisa menambahkan kata secara manual.")
+                Text(model.settings.learnCorrections ? L10n.text("Koreksi kata di tulisanmu akan dipelajari otomatis. Kamu tetap bisa mengedit atau menghapusnya.") : L10n.text("Pembelajaran otomatis sedang nonaktif. Kamu bisa menambahkan kata secara manual."))
                     .font(BisikTheme.font(12, relativeTo: .caption))
                     .foregroundStyle(BisikTheme.secondary)
                     .lineSpacing(4)
@@ -38,9 +38,9 @@ struct DictionaryView: View {
             .padding(.bottom, 16)
 
             if model.dictionary.isEmpty {
-                EmptyState(symbol: "character.book.closed", title: "Kamus masih kosong", message: "Tambahkan ejaan atau edit hasil transkripsi untuk mempelajari koreksi.")
+                EmptyState(symbol: "character.book.closed", title: L10n.text("Kamus masih kosong"), message: L10n.text("Tambahkan ejaan atau edit hasil transkripsi untuk mempelajari koreksi."))
             } else if entries.isEmpty {
-                EmptyState(symbol: "magnifyingglass", title: "Kata belum ditemukan", message: "Cari ejaan awal atau ejaan yang benar.")
+                EmptyState(symbol: "magnifyingglass", title: L10n.text("Kata belum ditemukan"), message: L10n.text("Cari ejaan awal atau ejaan yang benar."))
             } else {
                 List(entries) { entry in
                     Button {
@@ -60,7 +60,7 @@ struct DictionaryView: View {
                             }
                             .font(BisikTheme.font(15))
                             .fixedSize(horizontal: false, vertical: true)
-                            Label(entry.learned ? "Dipelajari dari koreksi" : "Ditambahkan olehmu", systemImage: entry.learned ? "sparkle" : "pencil")
+                            Label(entry.learned ? L10n.text("Dipelajari dari koreksi") : L10n.text("Ditambahkan olehmu"), systemImage: entry.learned ? "sparkle" : "pencil")
                                 .font(BisikTheme.font(11, relativeTo: .caption2))
                                 .foregroundStyle(entry.learned ? BisikTheme.accent : BisikTheme.secondary)
                         }
@@ -69,11 +69,11 @@ struct DictionaryView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(entry.source), menjadi \(entry.replacement)")
-                    .accessibilityHint("Ketuk untuk mengedit.")
+                    .accessibilityLabel(L10n.format("%@, menjadi %@", entry.source, entry.replacement))
+                    .accessibilityHint(L10n.text("Ketuk untuk mengedit."))
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) { deleting = entry } label: {
-                            Label("Hapus", systemImage: "trash")
+                            Label(L10n.text("Hapus"), systemImage: "trash")
                         }
                     }
                     .listRowBackground(Color.white)
@@ -84,18 +84,18 @@ struct DictionaryView: View {
             }
         }
         .background(Color.white)
-        .searchable(text: $search, prompt: "Cari kata di kamus")
+        .searchable(text: $search, prompt: L10n.text("Cari kata di kamus"))
         .sheet(isPresented: $showEditor) {
             DictionaryEditor(entry: editingEntry).environmentObject(model)
         }
-        .alert("Hapus kata ini?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-            Button("Batal", role: .cancel) { deleting = nil }
-            Button("Hapus", role: .destructive) {
+        .alert(L10n.text("Hapus kata ini?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button(L10n.text("Batal"), role: .cancel) { deleting = nil }
+            Button(L10n.text("Hapus"), role: .destructive) {
                 if let deleting { model.deleteDictionary(deleting.id) }
                 deleting = nil
             }
         } message: {
-            Text("Koreksi ini tidak lagi digunakan pada rekaman berikutnya.")
+            Text(L10n.text("Koreksi ini tidak lagi digunakan pada rekaman berikutnya."))
         }
     }
 }
@@ -126,10 +126,10 @@ private struct DictionaryEditor: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    PageTitle(title: entry == nil ? "Tambah kata" : "Edit kata", subtitle: "Masukkan ejaan awal dan penggantinya.")
+                    PageTitle(title: entry == nil ? L10n.text("Tambah kata") : L10n.text("Edit kata"), subtitle: L10n.text("Masukkan ejaan awal dan penggantinya."))
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("YANG BIASA TERDENGAR").font(BisikTheme.font(11, semibold: true, relativeTo: .caption2)).foregroundStyle(BisikTheme.secondary)
-                        TextField("Ejaan yang kurang tepat", text: $source)
+                        Text(L10n.text("YANG BIASA TERDENGAR")).font(BisikTheme.font(11, semibold: true, relativeTo: .caption2)).foregroundStyle(BisikTheme.secondary)
+                        TextField(L10n.text("Ejaan yang kurang tepat"), text: $source)
                             .focused($focusedField, equals: .source)
                             .font(BisikTheme.font(16))
                             .padding(16)
@@ -137,11 +137,11 @@ private struct DictionaryEditor: View {
                             .overlay(RoundedRectangle(cornerRadius: 18).stroke(focusedField == .source ? BisikTheme.focus : BisikTheme.line, lineWidth: focusedField == .source ? 2 : 1))
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
-                            .accessibilityLabel("Ejaan awal")
+                            .accessibilityLabel(L10n.text("Ejaan awal"))
                     }
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("GANTI MENJADI").font(BisikTheme.font(11, semibold: true, relativeTo: .caption2)).foregroundStyle(BisikTheme.secondary)
-                        TextField("Ejaan yang benar", text: $replacement)
+                        Text(L10n.text("GANTI MENJADI")).font(BisikTheme.font(11, semibold: true, relativeTo: .caption2)).foregroundStyle(BisikTheme.secondary)
+                        TextField(L10n.text("Ejaan yang benar"), text: $replacement)
                             .focused($focusedField, equals: .replacement)
                             .font(BisikTheme.font(16))
                             .padding(16)
@@ -149,13 +149,13 @@ private struct DictionaryEditor: View {
                             .overlay(RoundedRectangle(cornerRadius: 18).stroke(focusedField == .replacement ? BisikTheme.focus : BisikTheme.line, lineWidth: focusedField == .replacement ? 2 : 1))
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
-                            .accessibilityLabel("Ejaan pengganti")
+                            .accessibilityLabel(L10n.text("Ejaan pengganti"))
                     }
-                    Text("Kata ini akan digunakan pada hasil transkripsi berikutnya. Maksimal 80 karakter untuk setiap ejaan.")
+                    Text(L10n.text("Kata ini akan digunakan pada hasil transkripsi berikutnya. Maksimal 80 karakter untuk setiap ejaan."))
                         .font(BisikTheme.font(12, relativeTo: .caption))
                         .foregroundStyle(BisikTheme.secondary)
                         .lineSpacing(4)
-                    Button("Simpan kata") {
+                    Button(L10n.text("Simpan kata")) {
                         if let entry { model.deleteDictionary(entry.id) }
                         model.addDictionary(source: source.trimmingCharacters(in: .whitespacesAndNewlines), replacement: replacement.trimmingCharacters(in: .whitespacesAndNewlines))
                         dismiss()
@@ -169,7 +169,7 @@ private struct DictionaryEditor: View {
             .background(Color.white)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Batal") { dismiss() }.foregroundStyle(BisikTheme.secondary)
+                    Button(L10n.text("Batal")) { dismiss() }.foregroundStyle(BisikTheme.secondary)
                 }
             }
             .task { if entry == nil { focusedField = .source } }

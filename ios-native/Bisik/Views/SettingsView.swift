@@ -13,76 +13,83 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageTitle(title: "Pengaturan", subtitle: "Preferensi aplikasi.")
+            PageTitle(title: L10n.text("Pengaturan"), subtitle: L10n.text("Preferensi aplikasi."))
                 .padding(24)
             Form {
                 Section {
+                    Picker(L10n.text("Bahasa aplikasi"), selection: $model.interfaceLanguage) {
+                        Text(L10n.text("Ikuti sistem")).tag("system")
+                        Text(L10n.text("Bahasa Indonesia")).tag("id")
+                        Text("English").tag("en")
+                    }
+                    .accessibilityIdentifier("settings.interfaceLanguage")
                     Toggle(isOn: $model.settings.autoCopy) {
-                        settingsLabel("Salin otomatis", detail: "Salin hasil saat rekaman selesai.", symbol: "doc.on.doc")
+                        settingsLabel(L10n.text("Salin otomatis"), detail: L10n.text("Salin hasil saat rekaman selesai."), symbol: "doc.on.doc")
                     }
                     Toggle(isOn: $model.settings.learnCorrections) {
-                        settingsLabel("Pelajari koreksi", detail: "Tambahkan koreksi kata ke kamus.", symbol: "sparkle")
+                        settingsLabel(L10n.text("Pelajari koreksi"), detail: L10n.text("Tambahkan koreksi kata ke kamus."), symbol: "sparkle")
                     }
                     Toggle(isOn: $model.settings.haptics) {
-                        settingsLabel("Getaran halus", detail: "Umpan balik saat mulai dan selesai.", symbol: "hand.tap")
+                        settingsLabel(L10n.text("Getaran halus"), detail: L10n.text("Umpan balik saat mulai dan selesai."), symbol: "hand.tap")
                     }
                     Toggle(isOn: $model.settings.saveHistory) {
-                        settingsLabel("Simpan riwayat", detail: "Simpan tulisan di iPhone ini.", symbol: "clock")
+                        settingsLabel(L10n.text("Simpan riwayat"), detail: L10n.text("Simpan tulisan di iPhone ini."), symbol: "clock")
                     }
                     Picker(selection: $model.settings.language) {
-                        Text("Bahasa Indonesia").tag("id-ID")
+                        Text(L10n.text("Bahasa Indonesia")).tag("id-ID")
                         Text("English").tag("en-US")
-                        Text("Bahasa Melayu").tag("ms-MY")
+                        Text(L10n.text("Bahasa Melayu")).tag("ms-MY")
                         Text("日本語").tag("ja-JP")
                         Text("한국어").tag("ko-KR")
                         Text("中文").tag("zh-CN")
                         Text("Español").tag("es-ES")
                     } label: {
-                        Label("Bahasa ucapan", systemImage: "globe")
+                        Label(L10n.text("Bahasa ucapan"), systemImage: "globe")
                     }
                     .font(BisikTheme.font(14))
-                } header: { sectionTitle("PREFERENSI") }
+                    .accessibilityIdentifier("settings.speechLanguage")
+                } header: { sectionTitle(L10n.text("PREFERENSI")) }
 
                 Section {
                     Button { model.showPaywall = true } label: {
                         HStack {
-                            settingsLabel("Bisik Pro", detail: "Paket langganan transkripsi.", symbol: "sparkles")
+                            settingsLabel(L10n.text("Bisik Pro"), detail: L10n.text("Paket langganan transkripsi."), symbol: "sparkles")
                             Spacer()
                             Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(BisikTheme.secondary)
                         }
                     }
-                    Button("Pulihkan pembelian") { Task { await model.restorePurchases() } }
+                    Button(L10n.text("Pulihkan pembelian")) { Task { await model.restorePurchases() } }
                         .disabled(model.isPurchasing)
-                    Button("Kelola langganan App Store") { manageSubscriptions = true }
-                } header: { sectionTitle("LANGGANAN") }
+                    Button(L10n.text("Kelola langganan App Store")) { manageSubscriptions = true }
+                } header: { sectionTitle(L10n.text("LANGGANAN")) }
 
                 Section {
                     if model.isSignedIn {
-                        Label("Terhubung dengan Apple", systemImage: "checkmark.circle")
+                        Label(L10n.text("Terhubung dengan Apple"), systemImage: "checkmark.circle")
                             .foregroundStyle(BisikTheme.accent)
-                        Button("Keluar dari akun") {
+                        Button(L10n.text("Keluar dari akun")) {
                             if model.hasPendingRecording { signOutAlert = true } else { model.signOut() }
                         }
                         Button(role: .destructive) { deleteAccountAlert = true } label: {
                             HStack {
-                                Text("Hapus akun & data")
+                                Text(L10n.text("Hapus akun & data"))
                                 Spacer()
                                 if deletingAccount { ProgressView() }
                             }
                         }.disabled(deletingAccount)
                     } else {
                         Button { model.needsSignIn = true } label: {
-                            settingsLabel("Masuk dengan Apple", detail: "Untuk kuota dan pembelianmu.", symbol: "apple.logo")
+                            settingsLabel(L10n.text("Masuk dengan Apple"), detail: L10n.text("Untuk kuota dan pembelianmu."), symbol: "apple.logo")
                         }
                     }
                     if let message = model.errorMessage {
                         Text(message).font(BisikTheme.font(12, relativeTo: .caption)).foregroundStyle(BisikTheme.danger)
                     }
-                } header: { sectionTitle("AKUN") }
+                } header: { sectionTitle(L10n.text("AKUN")) }
 
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
-                        Label(model.settings.consentGranted ? "Pemrosesan suara disetujui" : "Pemrosesan suara belum disetujui", systemImage: "lock.shield")
+                        Label(model.settings.consentGranted ? L10n.text("Pemrosesan suara disetujui") : L10n.text("Pemrosesan suara belum disetujui"), systemImage: "lock.shield")
                             .font(BisikTheme.font(14))
                         Text(AppConfiguration.aiProviderDisclosure)
                             .font(BisikTheme.font(12, relativeTo: .caption))
@@ -90,20 +97,20 @@ struct SettingsView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }.padding(.vertical, 8)
                     if model.settings.consentGranted {
-                        Button("Cabut persetujuan pemrosesan") { revokeConsentAlert = true }
+                        Button(L10n.text("Cabut persetujuan pemrosesan")) { revokeConsentAlert = true }
                     } else {
-                        Button("Tinjau persetujuan pemrosesan") { model.needsConsent = true }
+                        Button(L10n.text("Tinjau persetujuan pemrosesan")) { model.needsConsent = true }
                     }
                     if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
-                        Link("Izin mikrofon & pengenalan suara", destination: settingsURL)
+                        Link(L10n.text("Izin mikrofon & pengenalan suara"), destination: settingsURL)
                     }
                     Button(role: .destructive) { clearHistoryAlert = true } label: {
-                        Text("Hapus seluruh riwayat")
+                        Text(L10n.text("Hapus seluruh riwayat"))
                     }.disabled(model.history.isEmpty)
-                    if let privacy = AppConfiguration.privacyURL { Link("Kebijakan privasi", destination: privacy) }
-                    if let terms = AppConfiguration.termsURL { Link("Ketentuan penggunaan", destination: terms) }
-                } header: { sectionTitle("PRIVASI & DATA") } footer: {
-                    Text("Riwayat dan kamus tersimpan di perangkat ini. Rekaman dikirim untuk pemrosesan hanya setelah kamu memberi persetujuan.")
+                    if let privacy = AppConfiguration.privacyURL { Link(L10n.text("Kebijakan privasi"), destination: privacy) }
+                    if let terms = AppConfiguration.termsURL { Link(L10n.text("Ketentuan penggunaan"), destination: terms) }
+                } header: { sectionTitle(L10n.text("PRIVASI & DATA")) } footer: {
+                    Text(L10n.text("Riwayat dan kamus tersimpan di perangkat ini. Rekaman dikirim untuk pemrosesan hanya setelah kamu memberi persetujuan."))
                         .font(BisikTheme.font(11, relativeTo: .caption2))
                         .foregroundStyle(BisikTheme.secondary)
                 }
@@ -129,27 +136,27 @@ struct SettingsView: View {
         .onChange(of: model.settings.haptics) { _, _ in model.saveSettings() }
         .onChange(of: model.settings.saveHistory) { _, _ in model.saveSettings() }
         .onChange(of: model.settings.language) { _, _ in model.saveSettings() }
-        .alert("Hapus seluruh riwayat?", isPresented: $clearHistoryAlert) {
-            Button("Batal", role: .cancel) { }
-            Button("Hapus riwayat", role: .destructive) { model.clearHistory() }
+        .alert(L10n.text("Hapus seluruh riwayat?"), isPresented: $clearHistoryAlert) {
+            Button(L10n.text("Batal"), role: .cancel) { }
+            Button(L10n.text("Hapus riwayat"), role: .destructive) { model.clearHistory() }
         } message: {
-            Text("Semua tulisan tersimpan akan dihapus dari iPhone ini. Kamusmu tetap tersedia.")
+            Text(L10n.text("Semua tulisan tersimpan akan dihapus dari iPhone ini. Kamusmu tetap tersedia."))
         }
-        .alert("Cabut persetujuan?", isPresented: $revokeConsentAlert) {
-            Button("Batal", role: .cancel) { }
-            Button("Cabut persetujuan", role: .destructive) { model.revokeConsent() }
+        .alert(L10n.text("Cabut persetujuan?"), isPresented: $revokeConsentAlert) {
+            Button(L10n.text("Batal"), role: .cancel) { }
+            Button(L10n.text("Cabut persetujuan"), role: .destructive) { model.revokeConsent() }
         } message: {
-            Text("Bisik berhenti mengirim rekaman untuk pemrosesan. Rekaman yang sedang berlangsung akan dibatalkan. Kamu dapat menyetujui kembali saat ingin merekam.")
+            Text(L10n.text("Bisik berhenti mengirim rekaman untuk pemrosesan. Rekaman yang sedang berlangsung akan dibatalkan. Kamu dapat menyetujui kembali saat ingin merekam."))
         }
-        .alert("Keluar dari akun?", isPresented: $signOutAlert) {
-            Button("Batal", role: .cancel) { }
-            Button("Hapus rekaman & keluar", role: .destructive) { model.signOut() }
+        .alert(L10n.text("Keluar dari akun?"), isPresented: $signOutAlert) {
+            Button(L10n.text("Batal"), role: .cancel) { }
+            Button(L10n.text("Hapus rekaman & keluar"), role: .destructive) { model.signOut() }
         } message: {
-            Text("Rekaman yang belum berhasil diproses akan dihapus saat kamu keluar dari akun.")
+            Text(L10n.text("Rekaman yang belum berhasil diproses akan dihapus saat kamu keluar dari akun."))
         }
-        .alert("Hapus akun & data?", isPresented: $deleteAccountAlert) {
-            Button("Batal", role: .cancel) { }
-            Button("Hapus akun", role: .destructive) {
+        .alert(L10n.text("Hapus akun & data?"), isPresented: $deleteAccountAlert) {
+            Button(L10n.text("Batal"), role: .cancel) { }
+            Button(L10n.text("Hapus akun"), role: .destructive) {
                 deletingAccount = true
                 Task {
                     await model.deleteAccount()
@@ -157,7 +164,7 @@ struct SettingsView: View {
                 }
             }
         } message: {
-            Text("Akun, riwayat, dan kamusmu akan dihapus. Tindakan ini tidak dapat dibatalkan. Langganan App Store tetap aktif sampai kamu membatalkannya melalui Kelola langganan.")
+            Text(L10n.text("Akun, riwayat, dan kamusmu akan dihapus. Tindakan ini tidak dapat dibatalkan. Langganan App Store tetap aktif sampai kamu membatalkannya melalui Kelola langganan."))
         }
     }
 

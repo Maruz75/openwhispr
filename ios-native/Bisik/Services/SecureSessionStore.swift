@@ -40,5 +40,5 @@ final class SecureSessionStore {
 
 struct KeychainError: LocalizedError {
     let status: OSStatus
-    var errorDescription: String? { "Sesi akun tidak dapat disimpan dengan aman. Coba masuk kembali." }
+    var errorDescription: String? { L10n.text("Sesi akun tidak dapat disimpan dengan aman. Coba masuk kembali.") }
 }
