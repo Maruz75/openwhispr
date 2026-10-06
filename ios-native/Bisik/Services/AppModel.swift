@@ -110,8 +110,13 @@ final class AppModel: ObservableObject {
             self.store = nil
             errorMessage = "Data lokal belum dapat dibuka. Berkas riwayat tetap dipertahankan dan tidak akan ditimpa."
         }
-        do { session = try keychain.load(); isSignedIn = session != nil }
-        catch { handle(error) }
+        // An unconfigured build cannot authenticate; opening Keychain then adds a
+        // misleading account error on unsigned simulator previews. Configured,
+        // signed builds always use the real Keychain, including its error handling.
+        if isConfigured {
+            do { session = try keychain.load(); isSignedIn = session != nil }
+            catch { handle(error) }
+        }
         cleanOrphanedAudio()
         subscriptions.startObserving()
         do { products = try await subscriptions.loadProducts() }

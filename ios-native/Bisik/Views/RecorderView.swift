@@ -19,9 +19,9 @@ struct RecorderView: View {
         NavigationStack {
             GeometryReader { geometry in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 20) {
                         header
-                        transcriptCard
+                        transcriptCard(editorHeight: min(220, max(160, geometry.size.height * 0.30)))
                         if model.learnedCount > 0 {
                             Label("\(model.learnedCount) koreksi dipelajari di Kamus", systemImage: "sparkle")
                                 .font(BisikTheme.font(12, relativeTo: .caption))
@@ -31,18 +31,29 @@ struct RecorderView: View {
                         if let message = model.errorMessage {
                             errorCard(message)
                         }
-                        Spacer(minLength: 8)
-                        recordingArea
                         quotaCard
                     }
                     .padding(24)
                     .frame(maxWidth: 640)
-                    .frame(minHeight: geometry.size.height, alignment: .top)
                     .frame(maxWidth: .infinity)
                 }
                 .scrollDismissesKeyboard(.interactively)
             }
             .background(Color.white)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                // Recording remains reachable when the editor or an error grows.
+                // Hiding the footer during editing leaves room for the keyboard.
+                if !editing {
+                    recordingArea
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white)
+                        .overlay(alignment: .top) {
+                            Rectangle().fill(BisikTheme.line.opacity(0.6)).frame(height: 1)
+                        }
+                }
+            }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
@@ -129,7 +140,7 @@ struct RecorderView: View {
         .foregroundStyle(BisikTheme.ink)
     }
 
-    private var transcriptCard: some View {
+    private func transcriptCard(editorHeight: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 HStack(spacing: 8) {
@@ -171,7 +182,7 @@ struct RecorderView: View {
                     .scrollContentBackground(.hidden)
                     .focused($editing)
                     .disabled(!editable)
-                    .frame(minHeight: 208, maxHeight: 280)
+                    .frame(height: editorHeight)
                     .accessibilityLabel("Hasil transkripsi, dapat diedit")
                     .accessibilityHint("Gunakan tombol keyboard untuk mengoreksi tulisan.")
             }
@@ -189,18 +200,21 @@ struct RecorderView: View {
     }
 
     private var recordingArea: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 8) {
             LiveWaveform(levels: model.levels, active: recording)
-                .frame(height: 40)
+                .frame(height: 24)
                 .accessibilityHidden(true)
-            Text(statusTitle)
-                .font(BisikTheme.font(14, semibold: true))
-                .foregroundStyle(BisikTheme.ink)
-                .accessibilityAddTraits(.updatesFrequently)
-            Text(recording ? BisikTheme.duration(model.elapsedSeconds) : statusDetail)
-                .font(BisikTheme.font(12, relativeTo: .caption))
-                .monospacedDigit()
-                .foregroundStyle(BisikTheme.secondary)
+            VStack(spacing: 4) {
+                Text(statusTitle)
+                    .font(BisikTheme.font(14, semibold: true))
+                    .foregroundStyle(BisikTheme.ink)
+                    .accessibilityAddTraits(.updatesFrequently)
+                Text(recording ? BisikTheme.duration(model.elapsedSeconds) : statusDetail)
+                    .font(BisikTheme.font(12, relativeTo: .caption))
+                    .monospacedDigit()
+                    .foregroundStyle(BisikTheme.secondary)
+            }
+            .multilineTextAlignment(.center)
             Group {
                 if voiceOver {
                     Button {
@@ -243,19 +257,18 @@ struct RecorderView: View {
                 .frame(minHeight: 44)
             }
         }
-        .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
     }
 
     private var microphone: some View {
         ZStack {
             Circle().fill(BisikTheme.accent.opacity(0.08))
-                .frame(width: 104, height: 104)
+                .frame(width: 92, height: 92)
                 .scaleEffect(recording && !reduceMotion ? 1.08 : 1)
                 .opacity(recording ? 1 : 0)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: recording)
             Circle().fill(recording ? BisikTheme.accent : BisikTheme.ink)
-                .frame(width: 80, height: 80)
+                .frame(width: 76, height: 76)
             if busy {
                 ProgressView().tint(.white).accessibilityLabel("Memproses")
             } else {
@@ -264,7 +277,7 @@ struct RecorderView: View {
                     .foregroundStyle(.white)
             }
         }
-        .frame(width: 112, height: 112)
+        .frame(width: 100, height: 100)
         .scaleEffect(holding && !reduceMotion ? 0.96 : 1)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: holding)
         .opacity(model.phase == .processing ? 0.7 : 1)
@@ -379,7 +392,7 @@ private struct LiveWaveform: View {
                 Capsule()
                     .fill(BisikTheme.accent)
                     .opacity(active ? 1 : 0.25)
-                    .frame(width: 4, height: 36)
+                    .frame(width: 4, height: 24)
                     .scaleEffect(x: 1, y: barScale(index), anchor: .center)
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: levels)
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: active)
