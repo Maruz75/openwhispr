@@ -1092,3 +1092,21 @@ test("typing at the end of a long note keeps the caret clear of the note's botto
   }
   assert.deepEqual(notes.errors, []);
 });
+
+test("the empty-line toolbar stays on the caret when Enter scrolls the note", async (t) => {
+  const notes = await mountNotes(t, LONG_NOTE);
+  const caret = fakeLayout(t, notes.editor());
+  const scroller = notes.editor().view.dom.parentElement;
+  await notes.act(() => notes.editor().commands.focus("end"));
+  const scrolledBefore = scroller.scrollTop;
+
+  await notes.act(() => pressKey(notes.editor(), "Enter"));
+  assert.ok(scroller.scrollTop > scrolledBefore, "Enter scrolled the editor");
+  const menu = happyWindow.document.querySelector(".rich-text-editor-line-menu");
+  assert.equal(!!menu?.isConnected, true, "the toolbar shows on the new empty line");
+  // Floating UI finds no offset parent in happy-dom, so it places the toolbar in
+  // viewport coordinates: beside the caret, centered on it (it has no height here).
+  const { top, bottom } = caret();
+  assert.equal(parseFloat(menu.style.top), (top + bottom) / 2);
+  assert.deepEqual(notes.errors, []);
+});
