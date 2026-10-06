@@ -37,13 +37,13 @@ final class EditingNavigationTests: XCTestCase {
         screenshot("Menu - all destinations")
 
         app.buttons["menu.history"].tap()
-        XCTAssertTrue(element("screen.history").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Riwayat"].firstMatch.waitForExistence(timeout: 5))
         navigate("dictionary")
-        XCTAssertTrue(element("screen.dictionary").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Kamus"].firstMatch.waitForExistence(timeout: 5))
         navigate("settings")
-        XCTAssertTrue(element("screen.settings").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Pengaturan"].firstMatch.waitForExistence(timeout: 5))
         navigate("quota")
-        XCTAssertTrue(element("screen.quota").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Paket & kuota"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["quota.openPaywall"].exists)
         screenshot("Quota - dedicated package screen")
 
@@ -51,7 +51,7 @@ final class EditingNavigationTests: XCTestCase {
         app.buttons["menu.subscription"].tap()
         XCTAssertTrue(app.buttons["Tutup langganan"].waitForExistence(timeout: 5))
         app.buttons["Tutup langganan"].tap()
-        XCTAssertTrue(element("screen.quota").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Paket & kuota"].firstMatch.waitForExistence(timeout: 5))
 
         navigate("recorder")
         XCTAssertTrue(editor.waitForExistence(timeout: 5))

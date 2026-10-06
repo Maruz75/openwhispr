@@ -94,15 +94,15 @@ struct ContentView: View {
     private var destination: some View {
         switch screen {
         case .recorder:
-            RecorderView().accessibilityIdentifier("screen.recorder")
+            RecorderView()
         case .history:
-            HistoryView { screen = .recorder }.accessibilityIdentifier("screen.history")
+            HistoryView { screen = .recorder }
         case .dictionary:
-            DictionaryView().accessibilityIdentifier("screen.dictionary")
+            DictionaryView()
         case .quota:
-            QuotaView().accessibilityIdentifier("screen.quota")
+            QuotaView()
         case .settings:
-            SettingsView().accessibilityIdentifier("screen.settings")
+            SettingsView()
         }
     }
 
