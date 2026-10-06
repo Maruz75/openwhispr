@@ -188,8 +188,10 @@ def create_app(settings: Settings | None = None, *, database=None, identity=None
     async def verify_subscription(payload: SubscriptionRequest, account=Depends(session)):
         result = await subscriptions.verify(payload.signedTransaction, account["id"])
         if result is None:
-            await asyncio.to_thread(database.subscription, account["id"], account["subscription_id"], 0)
-            raise APIError(400, "subscription_inactive", "Langganan belum aktif atau sudah berakhir.")
+            # A verified matching expired transaction can be finished by StoreKit.
+            # It must not demote a different, independently active subscription.
+            await refresh_entitlement(account)
+            return {"quota": await asyncio.to_thread(database.quota, account["id"])}
         await asyncio.to_thread(database.subscription, account["id"], result.original_id, result.expires)
         return {"quota": await asyncio.to_thread(database.quota, account["id"])}
 

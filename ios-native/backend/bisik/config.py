@@ -37,6 +37,7 @@ class Settings:
     signin_key_id: str = ""
     signin_private_key_path: str = ""
     refresh_encryption_key: str = ""
+    account_id_key: str = ""
 
     @classmethod
     def from_env(cls):
@@ -88,5 +89,5 @@ class Settings:
                     and (self.environment != "production" or self.apple_environment == "Production"))
 
     def signin_ready(self) -> bool:
-        return bool(self.bundle_id and self.signin_team_id and self.signin_key_id
+        return bool(self.bundle_id and len(self.account_id_key.encode()) >= 32 and self.signin_team_id and self.signin_key_id
                     and Path(self.signin_private_key_path).is_file() and self.refresh_encryption_key)

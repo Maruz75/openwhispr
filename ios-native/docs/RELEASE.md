@@ -18,6 +18,8 @@ Source bukan bukti app sudah siap submit. Berikut konfigurasi eksternal yang har
 - Samakan semua ID produk/bundle/team pada app, server, StoreKit config. Root certificate Apple untuk verifier diambil dari Apple PKI, disimpan di server, bukan certificate arbitrer dari JWS.
 - Environment Sandbox untuk TestFlight/sandbox, Production untuk rilis. `appAppleId` diperlukan saat production. Server API private key, key ID, issuer ID dan trusted roots harus diisi untuk pemeriksaan subscription terkini.
 - Verifikasi purchase, pending, cancel, restore, expiry, refund/revoke dan login ke akun Apple app yang berbeda. Entitlement tidak boleh diberikan jika token akun mismatch/verifier/API Apple gagal. Transaction baru di-finish setelah sync server berhasil.
+- Biarkan Billing Grace Period dan Family Sharing **nonaktif** di App Store Connect untuk konfigurasi awal ini. Backend menerima subscription aktif; mendukung grace memerlukan verifikasi signed renewal info dan masa grace sesuai [panduan Apple](https://developer.apple.com/help/app-store-connect/manage-subscriptions/enable-billing-grace-period-for-auto-renewable-subscriptions/).
+- Simpan `BISIK_ACCOUNT_ID_KEY` dengan aman dan stabil. Identitas akun diturunkan dari HMAC agar pengguna yang menghapus lalu membuat ulang akun Apple yang sama dapat memulihkan langganan yang masih aktif, tanpa menyimpan data akun lama.
 - Kuota gratis dan Pro reset pada awal bulan kalender UTC. Paket tahunan menggunakan batas bulanan yang sama. Harga pada file `.storekit` adalah contoh test; harga pembelian pengguna dibaca dari StoreKit.
 - Privacy policy dan Terms/EULA dapat dibuka dari paywall; restore dan manage subscription tersedia. Jelaskan bahwa renewal otomatis hingga dibatalkan lewat App Store.
 

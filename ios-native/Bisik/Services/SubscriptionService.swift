@@ -2,12 +2,13 @@ import Foundation
 import StoreKit
 
 enum SubscriptionError: LocalizedError {
-    case unverified, pending, noAccount, unavailable
+    case unverified, pending, noAccount, accountMismatch, unavailable
     var errorDescription: String? {
         switch self {
         case .unverified: return "Pembelian belum dapat diverifikasi oleh App Store."
         case .pending: return "Pembelian menunggu persetujuan App Store. Kuota diperbarui setelah disetujui."
         case .noAccount: return "Masuk dengan Apple sebelum berlangganan atau memulihkan pembelian."
+        case .accountMismatch: return "Pembelian ini terhubung ke akun Bisik lain. Masuk dengan akun Apple yang digunakan saat membeli."
         case .unavailable: return "Langganan belum tersedia. Coba lagi nanti."
         }
     }
@@ -15,17 +16,18 @@ enum SubscriptionError: LocalizedError {
 
 @MainActor
 final class SubscriptionService {
-    var synchronize: ((Transaction, String) async throws -> Void)?
+    /// True means the server confirmed an active subscription, after online Apple verification.
+    var synchronize: ((Transaction, String) async throws -> Bool)?
     var onError: ((Error) -> Void)?
     private var updatesTask: Task<Void, Never>?
-    private var inFlight: [UInt64: Task<Void, Error>] = [:]
+    private var inFlight: [UInt64: Task<Bool, Error>] = [:]
 
     func startObserving() {
         guard updatesTask == nil else { return }
         updatesTask = Task { [weak self] in
             for await result in Transaction.updates {
                 guard !Task.isCancelled else { return }
-                do { try await self?.process(result) }
+                do { _ = try await self?.process(result) }
                 catch { self?.onError?(error) }
             }
         }
@@ -39,7 +41,7 @@ final class SubscriptionService {
     func purchase(_ product: Product, accountToken: UUID) async throws {
         guard AppConfiguration.productIDs.contains(product.id) else { throw SubscriptionError.unavailable }
         switch try await product.purchase(options: [.appAccountToken(accountToken)]) {
-        case .success(let result): try await process(result)
+        case .success(let result): _ = try await process(result)
         case .userCancelled: break
         case .pending: throw SubscriptionError.pending
         @unknown default: throw SubscriptionError.unavailable
@@ -53,25 +55,37 @@ final class SubscriptionService {
 
     /// Server errors leave the Apple transaction unfinished for automatic retry on next launch/login.
     func reconcile() async throws {
-        for await result in Transaction.unfinished { try await process(result) }
-        for await result in Transaction.currentEntitlements { try await process(result) }
+        var firstError: Error?
+        var synchronizedActive = false
+        for await result in Transaction.unfinished {
+            do { if try await process(result) { synchronizedActive = true } }
+            catch SubscriptionError.accountMismatch { continue }
+            catch { if firstError == nil { firstError = error } }
+        }
+        for await result in Transaction.currentEntitlements {
+            do { if try await process(result) { synchronizedActive = true } }
+            catch SubscriptionError.accountMismatch { continue }
+            catch { if firstError == nil { firstError = error } }
+        }
+        if !synchronizedActive, let firstError { throw firstError }
     }
 
-    private func process(_ result: VerificationResult<Transaction>) async throws {
+    private func process(_ result: VerificationResult<Transaction>) async throws -> Bool {
         guard case .verified(let transaction) = result else { throw SubscriptionError.unverified }
-        guard AppConfiguration.productIDs.contains(transaction.productID) else { return }
-        if let existing = inFlight[transaction.id] { try await existing.value; return }
+        guard AppConfiguration.productIDs.contains(transaction.productID) else { return false }
+        if let existing = inFlight[transaction.id] { return try await existing.value }
         guard let synchronize else { throw SubscriptionError.noAccount }
         let signedTransaction = result.jwsRepresentation
         let task = Task {
-            try await synchronize(transaction, signedTransaction)
+            let active = try await synchronize(transaction, signedTransaction)
             try Task.checkCancellation()
             // Finishing happens only after server Apple verification and quota update succeed.
             await transaction.finish()
+            return active
         }
         inFlight[transaction.id] = task
         defer { inFlight[transaction.id] = nil }
-        try await task.value
+        return try await task.value
     }
 
     deinit {

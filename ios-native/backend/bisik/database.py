@@ -1,14 +1,15 @@
 import hashlib
+import hmac
 import secrets
 import sqlite3
 import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from .config import Settings
-from .errors import APIError, unauthorized
+from .errors import APIError, unauthorized, unavailable
 
 
 def month_window(now: float) -> tuple[str, str]:
@@ -40,7 +41,8 @@ class Database:
                 expires REAL NOT NULL
             );
             CREATE TABLE IF NOT EXISTS signins (
-                hash TEXT PRIMARY KEY, expires REAL NOT NULL
+                hash TEXT PRIMARY KEY, expires REAL NOT NULL,
+                account_id TEXT REFERENCES accounts(id) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS usage (
                 account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -63,6 +65,9 @@ class Database:
                 db.execute("ALTER TABLE accounts ADD COLUMN deleting_until REAL NOT NULL DEFAULT 0")
             if "credential_revoked" not in columns:
                 db.execute("ALTER TABLE accounts ADD COLUMN credential_revoked INTEGER NOT NULL DEFAULT 0")
+            signin_columns = {row["name"] for row in db.execute("PRAGMA table_info(signins)")}
+            if "account_id" not in signin_columns:
+                db.execute("ALTER TABLE signins ADD COLUMN account_id TEXT REFERENCES accounts(id) ON DELETE CASCADE")
 
     @contextmanager
     def connection(self):
@@ -119,14 +124,22 @@ class Database:
             if not row:
                 if not refresh_ciphertext:
                     raise APIError(401, "authorization_required", "Masuk kembali agar akun dapat dikelola dengan aman.")
-                account = str(uuid4())
+                key = self.settings.account_id_key.encode()
+                if len(key) < 32:
+                    raise unavailable()
+                # Same Apple identity recreates the appAccountToken after full deletion,
+                # enabling StoreKit restore without keeping a deleted user record.
+                material = ("https://appleid.apple.com|" + self.settings.bundle_id + "|" + subject).encode()
+                account = str(UUID(bytes=hmac.new(key, material, hashlib.sha256).digest()[:16], version=4))
                 db.execute("INSERT INTO accounts(id,apple_subject_hash,refresh_ciphertext) VALUES(?,?,?)",
                            (account, digest(subject), refresh_ciphertext))
             else:
                 account = row["id"]
+                if row["credential_revoked"] and not refresh_ciphertext:
+                    raise unauthorized()
                 if refresh_ciphertext:
                     db.execute("UPDATE accounts SET refresh_ciphertext=?,credential_revoked=0 WHERE id=?", (refresh_ciphertext, account))
-            db.execute("INSERT INTO signins VALUES(?,?)", (digest(identity_token), expires))
+            db.execute("INSERT INTO signins(hash,expires,account_id) VALUES(?,?,?)", (digest(identity_token), expires, account))
             db.execute("INSERT INTO sessions VALUES(?,?,?)", (digest(token), account, self.clock() + self.settings.session_seconds))
         return token, account
 

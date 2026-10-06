@@ -9,7 +9,7 @@ services:
       - bisik-data:/app/data
       - ./secrets:/run/secrets:ro
     tmpfs:
-      - /tmp:size=64m,mode=1777
+      - /tmp:size=128m,mode=1777
     security_opt:
       - no-new-privileges:true
     cap_drop:

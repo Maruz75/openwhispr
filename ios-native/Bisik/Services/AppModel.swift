@@ -57,11 +57,12 @@ final class AppModel: ObservableObject {
         }
         subscriptions.synchronize = { [weak self] transaction, signedTransaction in
             guard let self, let session = self.session else { throw SubscriptionError.noAccount }
-            guard transaction.appAccountToken == session.accountToken else { throw SubscriptionError.noAccount }
+            guard transaction.appAccountToken == session.accountToken else { throw SubscriptionError.accountMismatch }
             let generation = self.accountGeneration
             let response = try await self.api.verifySubscription(signedTransaction: signedTransaction, token: session.accessToken)
             guard generation == self.accountGeneration else { throw CancellationError() }
             self.quota = response.quota
+            return response.quota.plan == "pro"
         }
         subscriptions.onError = { [weak self] error in
             guard self?.isSignedIn == true else { return }

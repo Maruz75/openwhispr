@@ -18,7 +18,7 @@ def q(value):
     return json.dumps(str(value))
 
 def arr(values):
-    return '(' + ', '.join(values) + ',)'
+    return '(' + ', '.join(values) + ',)' if values else '()'
 
 def obj(object_key, isa, **fields):
     ident = uid(object_key)

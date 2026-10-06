@@ -39,7 +39,8 @@ def wav_audio(seconds=1):
 @pytest.fixture
 def settings(tmp_path):
     return Settings(database_path=str(tmp_path / "test.sqlite3"), environment="test",
-                    bundle_id="com.bisik.test", free_seconds=10, cache_seconds=5)
+                    bundle_id="com.bisik.test", free_seconds=10, cache_seconds=5,
+                    account_id_key="stable-test-secret-32bytes-minimum-not-production")
 
 
 @pytest.fixture
@@ -170,7 +171,7 @@ def test_delete_cascades_accounts_sessions_usage_jobs_and_blocks_inflight(db):
     db.delete_account(account)
     db.compensate(account, "id", owner)
     with db.connection() as sql:
-        for table in ("accounts", "sessions", "usage", "jobs"):
+        for table in ("accounts", "sessions", "signins", "usage", "jobs"):
             assert sql.execute("SELECT count(*) FROM " + table).fetchone()[0] == 0
 
 
@@ -200,6 +201,13 @@ def test_account_scoped_request_id(db):
     owner_b = db.reserve(b, "same-id", "fp", 2)
     assert isinstance(owner_b, str)
     assert db.finish(b, "same-id", owner_b, "B private text")["text"] == "B private text"
+
+
+def test_new_account_fails_closed_without_stable_id_key(settings):
+    db = Database(replace(settings, account_id_key=""))
+    with pytest.raises(APIError) as error:
+        user(db)
+    assert error.value.status == 503
 
 
 def test_dictionary_whole_words_longest_match_no_cascade():
@@ -552,6 +560,38 @@ async def test_receipt_account_binding_and_signature_error_are_sanitized(setting
         await subscriptions.verify("forged-transaction", account)
     assert invalid.value.code == "invalid_transaction" and "SECRET" not in invalid.value.message
     assert api.closed
+
+
+@pytest.mark.asyncio
+async def test_deleted_account_recreation_regenerates_same_token_and_can_restore(db, settings):
+    _, original_account = user(db, "same-apple-person")
+    db.subscription(original_account, "original-123", time.time() + 3600)
+    db.delete_account(original_account)
+    with db.connection() as sql:
+        for table in ("accounts", "sessions", "signins", "usage", "jobs"):
+            assert sql.execute("SELECT COUNT(*) FROM " + table).fetchone()[0] == 0
+    _, recreated = user(db, "same-apple-person")
+    _, other_person = user(db, "another-person")
+    assert recreated == original_account and other_person != recreated
+    subscriptions, _, _ = signed_fixture(settings, original_account)
+    verified = await subscriptions.verify("client-old-signed", recreated)
+    db.subscription(recreated, verified.original_id, verified.expires)
+    assert db.quota(recreated)["plan"] == "pro"
+
+
+@pytest.mark.asyncio
+async def test_verified_inactive_receipt_success_free_and_preserves_other_active_subscription(context):
+    async with client(context) as http:
+        inactive = await http.post("/v1/subscriptions/verify", json={"signedTransaction": "signed-inactive-transaction"})
+        assert inactive.status_code == 200
+        assert inactive.json()["quota"]["plan"] == "free"
+        context.db.subscription(context.account, "independent-active", time.time() + 3600)
+        async def current_active(original_id, account):
+            assert original_id == "independent-active"
+            return Entitlement(original_id, time.time() + 3600)
+        context.subscriptions.refresh = current_active
+        old = await http.post("/v1/subscriptions/verify", json={"signedTransaction": "signed-inactive-transaction"})
+        assert old.status_code == 200 and old.json()["quota"]["plan"] == "pro"
 
 
 @pytest.mark.asyncio
