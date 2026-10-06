@@ -815,20 +815,47 @@ test("the formatting toolbar shows on selected text and empty lines only", async
   assert.deepEqual(notes.errors, []);
 });
 
-test("the empty-line toolbar sits below the caret, not beside it", async (t) => {
+test("the empty-line toolbar sits below the caret, and above it with no room below", async (t) => {
   const notes = await mountNotes(t, "Intro text");
-  // happy-dom has no layout: give the page a size and the caret a spot on it.
+  // happy-dom has no layout: give the page and the toolbar a size, and the caret a
+  // spot on the page. Without a toolbar size, start, centre and end alignment all
+  // land on the caret, and the toolbar never needs to flip.
   const page = happyWindow.document.documentElement;
-  for (const [key, value] of [["clientWidth", 1024], ["clientHeight", 768]]) {
+  const proto = happyWindow.HTMLElement.prototype;
+  const pageSize = { clientWidth: 1024, clientHeight: 768 };
+  const menuSize = { offsetWidth: 320, offsetHeight: 40 };
+  for (const [key, value] of Object.entries(pageSize)) {
     Object.defineProperty(page, key, { value, configurable: true });
   }
-  t.after(() => ["clientWidth", "clientHeight"].forEach((key) => delete page[key]));
-  const caret = { left: 120, right: 120, top: 300, bottom: 320 };
+  const originals = {};
+  for (const [key, value] of Object.entries(menuSize)) {
+    originals[key] = Object.getOwnPropertyDescriptor(proto, key);
+    Object.defineProperty(proto, key, {
+      configurable: true,
+      get() {
+        return this.classList.contains("rich-text-editor-line-menu")
+          ? value
+          : originals[key].get.call(this);
+      },
+    });
+  }
+  t.after(() => {
+    for (const key of Object.keys(pageSize)) delete page[key];
+    for (const [key, descriptor] of Object.entries(originals)) {
+      Object.defineProperty(proto, key, descriptor);
+    }
+  });
+  let caret = { left: 500, right: 500, top: 300, bottom: 320 };
   notes.editor().view.coordsAtPos = () => caret;
   await notes.act(() => addEmptyLastLine(notes.editor()));
   const menu = happyWindow.document.querySelector(".rich-text-editor-line-menu");
-  assert.equal(parseFloat(menu.style.left), caret.left, "lined up with the caret");
-  assert.ok(parseFloat(menu.style.top) > caret.bottom, `below the line (top ${menu.style.top})`);
+  const top = () => parseFloat(menu.style.top);
+  assert.equal(parseFloat(menu.style.left), caret.left, "starts at the caret");
+  assert.ok(top() > caret.bottom, `below the line (top ${top()})`);
+
+  caret = { left: 500, right: 500, top: 740, bottom: 760 };
+  await notes.act(() => addEmptyLastLine(notes.editor()));
+  assert.ok(top() + menuSize.offsetHeight < caret.top, `above the line (top ${top()})`);
   assert.deepEqual(notes.errors, []);
 });
 
